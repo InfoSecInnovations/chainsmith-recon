@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chainsmith Recon - Profiles</title>
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .profiles-container {
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .profiles-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .profiles-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .profiles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        /* Profile Card */
+        .profile-card {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .profile-card:hover {
+            border-color: var(--accent);
+        }
+
+        .profile-card.active {
+            border-color: var(--success);
+            box-shadow: 0 0 0 1px var(--success);
+        }
+
+        .profile-card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .profile-name {
+            font-size: 1.125rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .profile-badge {
+            font-size: 0.6875rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .profile-badge.active {
+            background: rgba(74, 222, 128, 0.15);
+            color: var(--success);
+        }
+
+        .profile-badge.builtin {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+
+        .profile-card-body {
+            padding: 16px 20px;
+        }
+
+        .profile-desc {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 16px;
+            min-height: 40px;
+        }
+
+        .profile-settings {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .setting-badge {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            color: var(--text-secondary);
+        }
+
+        .setting-badge.highlight {
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+        }
+
+        .profile-card-actions {
+            display: flex;
+            gap: 8px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .profile-card-actions .btn {
+            flex: 1;
+            padding: 8px;
+            font-size: 0.8125rem;
+        }
+
+        /* New Profile Card */
+        .profile-card.new-profile {
+            border-style: dashed;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 280px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .profile-card.new-profile:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent);
+        }
+
+        .new-profile-icon {
+            width: 48px;
+            height: 48px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .new-profile-text {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        /* Form elements */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-hint {
+            margin-top: 4px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Comparison view */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8125rem;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comparison-table th {
+            background: var(--bg-tertiary);
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .comparison-table td.diff {
+            color: var(--warning);
+        }
+
+        /* Override section in modal */
+        .overrides-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .overrides-title {
+            font-weight: 500;
+            font-size: 0.875rem;
+            margin-bottom: 12px;
+            color: var(--text-secondary);
+        }
+
+        .override-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 0.8125rem;
+        }
+
+        .override-key {
+            color: var(--text-secondary);
+        }
+
+        .override-value {
+            color: var(--accent);
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <a href="index.html" class="brand">
+                <span class="brand-name"><span class="accent">Chainsmith</span> Recon</span>
+                <span class="brand-tagline">Recon for the AI Era</span>
+            </a>
+        </div>
+        <div class="header-right">
+            <a href="settings.html" class="btn btn-secondary" style="padding: 8px 16px;">
+                ← Back to Settings
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="profiles-container">
+        <div class="profiles-header">
+            <h1 class="profiles-title">Scan Profiles</h1>
+        </div>
+
+        <div class="profiles-grid" id="profiles-grid">
+            <!-- Profiles will be loaded here -->
+        </div>
+    </main>
+
+    <!-- Create/Edit Modal -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modal-title">Create Profile</h3>
+                <button class="modal-close" id="modal-close">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Profile Name</label>
+                    <input type="text" class="form-input" id="input-name" placeholder="my-custom-profile">
+                    <div class="form-hint">Use lowercase letters, numbers, and hyphens only</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <input type="text" class="form-input" id="input-desc" placeholder="A brief description of this profile">
+                </div>
+                <div class="form-group" id="base-group">
+                    <label class="form-label">Based On</label>
+                    <select class="form-input" id="input-base">
+                        <option value="default">default</option>
+                    </select>
+                    <div class="form-hint">Inherit settings from an existing profile</div>
+                </div>
+                <div class="overrides-section" id="overrides-section" style="display: none;">
+                    <div class="overrides-title">Current Overrides</div>
+                    <div id="overrides-list"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel">Cancel</button>
+                <button class="btn btn-primary" id="btn-submit">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="delete-modal">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Delete Profile</h3>
+                <button class="modal-close" id="delete-modal-close">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="delete-message">Are you sure you want to delete this profile?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-delete-cancel">Cancel</button>
+                <button class="btn btn-primary" style="background: var(--error); border-color: var(--error);" id="btn-delete-confirm">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Message -->
+    <div class="status-message" id="status-message"></div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        let profiles = [];
+        let editingProfile = null;
+        let deletingProfile = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            loadTheme();
+            await loadProfiles();
+            initEventListeners();
+        });
+
+        async function loadProfiles() {
+            try {
+                const data = await api.getProfiles();
+                profiles = data.profiles || [];
+                renderProfiles();
+            } catch (e) {
+                showStatus('Failed to load profiles', 'error');
+            }
+        }
+
+        function renderProfiles() {
+            const grid = document.getElementById('profiles-grid');
+            
+            // Sort: active first, then built-in, then custom alphabetically
+            const sorted = [...profiles].sort((a, b) => {
+                if (a.active && !b.active) return -1;
+                if (!a.active && b.active) return 1;
+                if (a.built_in && !b.built_in) return -1;
+                if (!a.built_in && b.built_in) return 1;
+                return a.name.localeCompare(b.name);
+            });
+
+            grid.innerHTML = sorted.map(p => renderProfileCard(p)).join('') + renderNewProfileCard();
+        }
+
+        function renderProfileCard(profile) {
+            const isActive = profile.active;
+            const isBuiltin = profile.built_in;
+            
+            // Get resolved preferences for badges
+            const badges = [];
+            if (profile.overrides?.network?.timeout_seconds) {
+                badges.push(`Timeout: ${profile.overrides.network.timeout_seconds}s`);
+            }
+            if (profile.overrides?.rate_limiting?.requests_per_second) {
+                badges.push(`Rate: ${profile.overrides.rate_limiting.requests_per_second}/s`);
+            }
+            if (profile.overrides?.network?.max_concurrent_requests) {
+                badges.push(`Concurrent: ${profile.overrides.network.max_concurrent_requests}`);
+            }
+            if (profile.overrides?.advanced?.waf_evasion) {
+                badges.push({ text: 'WAF Evasion', highlight: true });
+            }
+            if (profile.overrides?.rate_limiting?.respect_robots_txt) {
+                badges.push('robots.txt');
+            }
+
+            const badgesHtml = badges.map(b => {
+                if (typeof b === 'object') {
+                    return `<span class="setting-badge highlight">${b.text}</span>`;
+                }
+                return `<span class="setting-badge">${b}</span>`;
+            }).join('');
+
+            return `
+                <div class="profile-card ${isActive ? 'active' : ''}" data-name="${profile.name}">
+                    <div class="profile-card-header">
+                        <span class="profile-name">
+                            ${profile.name}
+                            ${isActive ? '<span class="profile-badge active">Active</span>' : ''}
+                            ${isBuiltin ? '<span class="profile-badge builtin">Built-in</span>' : ''}
+                        </span>
+                    </div>
+                    <div class="profile-card-body">
+                        <div class="profile-desc">${profile.description || 'No description'}</div>
+                        <div class="profile-settings">
+                            ${badgesHtml || '<span class="setting-badge">Uses defaults</span>'}
+                        </div>
+                        <div class="profile-card-actions">
+                            ${!isActive ? `<button class="btn btn-primary" onclick="activateProfile('${profile.name}')">Activate</button>` : '<button class="btn btn-secondary" disabled>Active</button>'}
+                            <button class="btn btn-secondary" onclick="editProfile('${profile.name}')">Edit</button>
+                            <button class="btn btn-secondary" onclick="copyProfile('${profile.name}')">Copy</button>
+                            ${!isActive ? `<button class="btn btn-secondary" onclick="deleteProfile('${profile.name}', ${isBuiltin})" style="color: var(--error);">
+                                ${isBuiltin ? 'Reset' : 'Delete'}
+                            </button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderNewProfileCard() {
+            return `
+                <div class="profile-card new-profile" onclick="openCreateModal()">
+                    <svg class="new-profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="16"></line>
+                        <line x1="8" y1="12" x2="16" y2="12"></line>
+                    </svg>
+                    <span class="new-profile-text">Create New Profile</span>
+                </div>
+            `;
+        }
+
+        function initEventListeners() {
+            // Modal close buttons
+            document.getElementById('modal-close').addEventListener('click', closeModal);
+            document.getElementById('btn-cancel').addEventListener('click', closeModal);
+            document.getElementById('modal-overlay').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) closeModal();
+            });
+
+            // Delete modal
+            document.getElementById('delete-modal-close').addEventListener('click', closeDeleteModal);
+            document.getElementById('btn-delete-cancel').addEventListener('click', closeDeleteModal);
+            document.getElementById('delete-modal').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) closeDeleteModal();
+            });
+            document.getElementById('btn-delete-confirm').addEventListener('click', confirmDelete);
+
+            // Submit button
+            document.getElementById('btn-submit').addEventListener('click', submitForm);
+
+            // Name validation
+            document.getElementById('input-name').addEventListener('input', (e) => {
+                e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+            });
+        }
+
+        function openCreateModal() {
+            editingProfile = null;
+            document.getElementById('modal-title').textContent = 'Create Profile';
+            document.getElementById('btn-submit').textContent = 'Create';
+            document.getElementById('input-name').value = '';
+            document.getElementById('input-name').disabled = false;
+            document.getElementById('input-desc').value = '';
+            document.getElementById('base-group').style.display = 'block';
+            document.getElementById('overrides-section').style.display = 'none';
+            
+            // Populate base selector
+            const baseSelect = document.getElementById('input-base');
+            baseSelect.innerHTML = profiles.map(p => 
+                `<option value="${p.name}">${p.name}</option>`
+            ).join('');
+            
+            document.getElementById('modal-overlay').classList.add('open');
+        }
+
+        async function editProfile(name) {
+            const profile = profiles.find(p => p.name === name);
+            if (!profile) return;
+
+            editingProfile = name;
+            document.getElementById('modal-title').textContent = 'Edit Profile';
+            document.getElementById('btn-submit').textContent = 'Save';
+            document.getElementById('input-name').value = name;
+            document.getElementById('input-name').disabled = true;
+            document.getElementById('input-desc').value = profile.description || '';
+            document.getElementById('base-group').style.display = 'none';
+
+            // Show current overrides
+            const overridesSection = document.getElementById('overrides-section');
+            const overridesList = document.getElementById('overrides-list');
+            
+            if (profile.overrides && Object.keys(profile.overrides).length > 0) {
+                overridesSection.style.display = 'block';
+                overridesList.innerHTML = renderOverrides(profile.overrides);
+            } else {
+                overridesSection.style.display = 'none';
+            }
+
+            document.getElementById('modal-overlay').classList.add('open');
+        }
+
+        function renderOverrides(overrides, prefix = '') {
+            let html = '';
+            for (const [key, value] of Object.entries(overrides)) {
+                const fullKey = prefix ? `${prefix}.${key}` : key;
+                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    html += renderOverrides(value, fullKey);
+                } else {
+                    html += `
+                        <div class="override-item">
+                            <span class="override-key">${fullKey}</span>
+                            <span class="override-value">${JSON.stringify(value)}</span>
+                        </div>
+                    `;
+                }
+            }
+            return html;
+        }
+
+        async function copyProfile(name) {
+            const profile = profiles.find(p => p.name === name);
+            if (!profile) return;
+
+            editingProfile = null;
+            document.getElementById('modal-title').textContent = 'Copy Profile';
+            document.getElementById('btn-submit').textContent = 'Create Copy';
+            document.getElementById('input-name').value = '';
+            document.getElementById('input-name').disabled = false;
+            document.getElementById('input-name').placeholder = `${name}-copy`;
+            document.getElementById('input-desc').value = `Copy of ${profile.description || name}`;
+            document.getElementById('base-group').style.display = 'block';
+            document.getElementById('overrides-section').style.display = 'none';
+            
+            // Set base to the copied profile
+            const baseSelect = document.getElementById('input-base');
+            baseSelect.innerHTML = profiles.map(p => 
+                `<option value="${p.name}" ${p.name === name ? 'selected' : ''}>${p.name}</option>`
+            ).join('');
+
+            document.getElementById('modal-overlay').classList.add('open');
+        }
+
+        function closeModal() {
+            document.getElementById('modal-overlay').classList.remove('open');
+            editingProfile = null;
+        }
+
+        async function submitForm() {
+            const name = document.getElementById('input-name').value.trim();
+            const desc = document.getElementById('input-desc').value.trim();
+            const base = document.getElementById('input-base').value;
+
+            if (!editingProfile && !name) {
+                showStatus('Profile name is required', 'error');
+                return;
+            }
+
+            try {
+                if (editingProfile) {
+                    // Update existing profile
+                    await fetch(`/api/profiles/${editingProfile}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ description: desc })
+                    });
+                    showStatus('Profile updated', 'success');
+                } else {
+                    // Create new profile
+                    const res = await fetch('/api/profiles', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, description: desc, base })
+                    });
+                    if (!res.ok) {
+                        const data = await res.json();
+                        throw new Error(data.detail || 'Failed to create profile');
+                    }
+                    showStatus('Profile created', 'success');
+                }
+                closeModal();
+                await loadProfiles();
+            } catch (e) {
+                showStatus(e.message, 'error');
+            }
+        }
+
+        async function activateProfile(name) {
+            try {
+                await api.activateProfile(name);
+                showStatus(`Activated profile: ${name}`, 'success');
+                await loadProfiles();
+            } catch (e) {
+                showStatus('Failed to activate profile', 'error');
+            }
+        }
+
+        function deleteProfile(name, isBuiltin) {
+            deletingProfile = name;
+            const message = isBuiltin
+                ? `Reset "${name}" to its default settings? This will clear any customizations.`
+                : `Delete profile "${name}"? This cannot be undone.`;
+            document.getElementById('delete-message').textContent = message;
+            document.getElementById('btn-delete-confirm').textContent = isBuiltin ? 'Reset' : 'Delete';
+            document.getElementById('delete-modal').classList.add('open');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.remove('open');
+            deletingProfile = null;
+        }
+
+        async function confirmDelete() {
+            if (!deletingProfile) return;
+
+            try {
+                await fetch(`/api/profiles/${deletingProfile}`, { method: 'DELETE' });
+                const profile = profiles.find(p => p.name === deletingProfile);
+                const action = profile?.built_in ? 'reset' : 'deleted';
+                showStatus(`Profile ${action}: ${deletingProfile}`, 'success');
+                closeDeleteModal();
+                await loadProfiles();
+            } catch (e) {
+                showStatus('Failed to delete profile', 'error');
+            }
+        }
+
+        // showStatus() provided by api.js
+    </script>
+</body>
+</html>

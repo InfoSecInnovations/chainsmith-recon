@@ -1,0 +1,34 @@
+# simulations/mcp/mcp_discovery_auth_required.yaml
+#
+# Simulates discovery of an MCP server that requires authentication.
+# Server is present but returns 401 on access attempts.
+
+suite: mcp
+emulates: mcp_discovery
+target: "secure-mcp.fakobanko.local"
+disposition: auth_required
+
+output:
+  mcp_servers:
+    - url: "http://secure-mcp.fakobanko.local:3000/.well-known/mcp"
+      path: "/.well-known/mcp"
+      transport: "http"
+      capabilities: []
+      auth_required: true
+      server_info: {}
+      service:
+        url: "http://secure-mcp.fakobanko.local:3000"
+        host: "secure-mcp.fakobanko.local"
+        port: 3000
+        scheme: "http"
+        service_type: "api"
+
+findings:
+  - title: "MCP server discovered: /.well-known/mcp"
+    description: "MCP server endpoint discovered. Transport: http. Authentication required (401 response)."
+    severity: "info"
+    evidence: |
+      Path: /.well-known/mcp
+      Method: GET
+      Status: 401
+      Indicators: header:www-authenticate, auth-required

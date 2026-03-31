@@ -1,0 +1,57 @@
+# simulations/network/dns_fakobanko.yaml
+# Fakobanko scenario: DNS enumeration discovers 10 hosts
+# This simulation seeds the context with hostnames for port scanning
+# DNS only outputs hostnames and IP mappings — no Services or ports
+
+suite: network
+emulates: dns_enumeration
+target: "fakobanko.local"
+disposition: hosts_found
+
+behavior:
+  latency_ms: 350  # Simulate realistic DNS enumeration time
+
+output:
+  base_domain: fakobanko.local
+  target_hosts:
+    # Base services (always running)
+    - www.fakobanko.local
+    - chat.fakobanko.local
+    - api.fakobanko.local
+    - docs.fakobanko.local
+    # Optional services (profile-activated)
+    - ml.fakobanko.local
+    - internal.fakobanko.local
+    - admin.fakobanko.local
+    - vector.fakobanko.local
+    - agent.fakobanko.local
+    - mcp.fakobanko.local
+  dns_records:
+    www.fakobanko.local: "10.0.1.10"
+    chat.fakobanko.local: "10.0.1.11"
+    api.fakobanko.local: "10.0.1.12"
+    docs.fakobanko.local: "10.0.1.13"
+    ml.fakobanko.local: "10.0.1.14"
+    internal.fakobanko.local: "10.0.1.15"
+    admin.fakobanko.local: "10.0.1.16"
+    vector.fakobanko.local: "10.0.1.17"
+    agent.fakobanko.local: "10.0.1.18"
+    mcp.fakobanko.local: "10.0.1.19"
+
+findings:
+  - title: "DNS enumeration: 10 hosts discovered"
+    description: "DNS enumeration discovered 10 subdomains for fakobanko.local including AI services (chat, ml, vector, agent, mcp), API, docs, internal portals, and www."
+    severity: "info"
+    evidence: |
+      Discovered hosts:
+        - www.fakobanko.local (10.0.1.10)
+        - chat.fakobanko.local (10.0.1.11)
+        - api.fakobanko.local (10.0.1.12)
+        - docs.fakobanko.local (10.0.1.13)
+        - ml.fakobanko.local (10.0.1.14)
+        - internal.fakobanko.local (10.0.1.15)
+        - admin.fakobanko.local (10.0.1.16)
+        - vector.fakobanko.local (10.0.1.17)
+        - agent.fakobanko.local (10.0.1.18)
+        - mcp.fakobanko.local (10.0.1.19)
+    check_name: "dns_enumeration"

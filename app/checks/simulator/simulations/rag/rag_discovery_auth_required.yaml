@@ -1,0 +1,36 @@
+# simulations/rag/rag_discovery_auth_required.yaml
+#
+# Simulates discovery of a secured RAG endpoint requiring authentication.
+
+suite: rag
+emulates: rag_discovery
+target: "secure-rag.fakobanko.local"
+disposition: auth_required
+
+output:
+  rag_endpoints:
+    - url: "http://secure-rag.fakobanko.local:8000/api/search"
+      path: "/api/search"
+      method: "POST"
+      status_code: 401
+      indicators:
+        - "path:query-endpoint"
+      auth_required: true
+      service:
+        url: "http://secure-rag.fakobanko.local:8000"
+        host: "secure-rag.fakobanko.local"
+        port: 8000
+        scheme: "http"
+        service_type: "api"
+      endpoint_type: "rag_query"
+
+  vector_stores: []
+
+findings:
+  - title: "RAG endpoint: /api/search"
+    description: "RAG query endpoint discovered at /api/search. Authentication required."
+    severity: "info"
+    evidence: |
+      Path: /api/search
+      Status: 401
+      Indicators: path:query-endpoint

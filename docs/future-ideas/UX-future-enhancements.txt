@@ -1,0 +1,59 @@
+UX Future Enhancements — Chainsmith WebUI
+==========================================
+Captured 2026-03-31. Items marked [DONE] have been addressed.
+
+
+[DONE] Low-Contrast Muted Text
+    --text-muted bumped from #666 to #999 (dark) and #888 to #777 (light)
+    to meet WCAG AA 4.5:1 minimum contrast ratio.
+
+[DONE] Pixel-Only Font Sizes
+    All font-size declarations converted from px to rem so text respects
+    the user's browser font-size preference (WCAG 1.4.4 text resize).
+
+
+--- Pending ---
+
+1. No Mobile / Responsive Layout
+   Findings, Trends, and Reports pages use fixed-width sidebars (300-400px)
+   that don't collapse on narrow viewports. Only one media query exists
+   (768px, for the header tagline). No hamburger nav, no sidebar collapse,
+   no stacked layouts for phones or small tablets.
+
+2. Missing ARIA / Semantic HTML
+   - Icon-only buttons (e.g. Settings) lack aria-label.
+   - Modals and drawers have no role="dialog" or aria-modal="true".
+   - Accordion suite headers are <div> with click handlers instead of <button>.
+   - Some custom inputs (chip input, datetime fields) lack proper labels.
+
+3. No Visible Focus Rings
+   Buttons have no visible focus indicator for keyboard-only users.
+   Only form inputs change border-color on focus.
+
+4. Color as Sole Indicator
+   Status badges (running / complete / error) and the active nav item
+   rely only on color. No icons or text labels for colorblind users.
+
+5. No prefers-reduced-motion Support
+   The status-throb animation and progress-bar shimmer run unconditionally.
+   Users with motion sensitivity have no way to disable them.
+
+6. Intrusive Check Cascade is Confusing
+   The three-tier lock system (global toggle -> per-suite toggle -> per-check)
+   doesn't clearly communicate *why* something is locked or which parent
+   toggle controls it. No tooltip or explanation links the states.
+
+7. Suite Badges are Cryptic
+   Labels like "critical-skip" and "critical-stop" on suite headers assume
+   prior knowledge. No tooltip or legend explains their meaning at a glance.
+
+8. No Form Validation Feedback
+   No red borders, inline error messages, or field-level feedback when
+   validation fails. The user is blocked with no clear indication of the
+   problem.
+
+9. Minor Inconsistencies
+   - Border radius uses 4 scales (4/6/8/12px) without clear logic.
+   - line-height is never set on body text; relies on browser defaults.
+   - Shadow CSS variable defined but barely used.
+   - Font-weight usage is ad-hoc (400/500/600/700 without a clear system).

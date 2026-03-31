@@ -1,0 +1,68 @@
+# simulations/mcp/TEMPLATE.yaml
+#
+# Simulation config template for MCP suite checks.
+# Copy this file, rename it, and fill in the values for your scenario.
+#
+# Required fields:
+#   suite        - always "mcp" for this directory
+#   emulates     - the check name this config impersonates
+#   target       - hostname or URL of the simulated MCP server
+#   disposition  - short label for the simulated outcome
+#   output       - dict consumed by the check's execute() method
+#
+# Example checks and their expected output shapes:
+
+# ── mcp_discovery ──────────────────────────────────────────────
+# suite: mcp
+# emulates: mcp_discovery
+# target: "mcp.example.local"
+# disposition: server_found
+# output:
+#   server_url: "http://mcp.example.local:3000"
+#   transport: "http"          # http | sse | websocket
+#   auth_required: false
+#   capabilities:
+#     - tools
+#     - resources
+#     - sampling
+
+# ── mcp_tool_enumeration ───────────────────────────────────────
+# suite: mcp
+# emulates: mcp_tool_enumeration
+# target: "mcp.example.local"
+# disposition: tools_found
+# output:
+#   tools:
+#     - name: "read_file"
+#       description: "Read a file from the filesystem"
+#       input_schema:
+#         type: object
+#         properties:
+#           path: {type: string}
+#     - name: "execute_command"
+#       description: "Run a shell command"
+#       input_schema:
+#         type: object
+#         properties:
+#           command: {type: string}
+#   high_risk_tools: ["execute_command"]
+
+# ── mcp_server_auth ────────────────────────────────────────────
+# suite: mcp
+# emulates: mcp_server_auth
+# target: "mcp.example.local"
+# disposition: auth_missing
+# output:
+#   auth_present: false
+#   unauthenticated_tools_accessible: true
+#   tested_endpoints:
+#     - "/mcp/tools/list"
+#     - "/mcp/tools/call"
+
+# --- Fill in below ---
+suite: mcp
+emulates: ""      # e.g. mcp_discovery
+target: ""        # e.g. mcp.example.local
+disposition: ""   # e.g. server_found
+
+output: {}        # populate per check's expected output shape

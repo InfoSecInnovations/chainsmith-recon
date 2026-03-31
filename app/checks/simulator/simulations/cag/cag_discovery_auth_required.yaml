@@ -1,0 +1,35 @@
+# simulations/cag/cag_discovery_auth_required.yaml
+#
+# Simulates discovery of a secured CAG endpoint requiring authentication.
+
+suite: cag
+emulates: cag_discovery
+target: "secure-cag.fakobanko.local"
+disposition: auth_required
+
+output:
+  cag_endpoints:
+    - url: "http://secure-cag.fakobanko.local:8000/cache/warm"
+      path: "/cache/warm"
+      status_code: 401
+      indicators:
+        - "body:cache"
+      auth_required: true
+      service:
+        url: "http://secure-cag.fakobanko.local:8000"
+        host: "secure-cag.fakobanko.local"
+        port: 8000
+        scheme: "http"
+        service_type: "api"
+      endpoint_type: "cag_endpoint"
+
+  cache_infrastructure: []
+
+findings:
+  - title: "CAG endpoint: /cache/warm"
+    description: "CAG endpoint discovered at /cache/warm. Authentication required."
+    severity: "info"
+    evidence: |
+      Path: /cache/warm
+      Status: 401
+      Indicators: body:cache

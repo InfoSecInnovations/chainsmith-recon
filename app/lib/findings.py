@@ -1,0 +1,143 @@
+"""
+app/lib/findings.py - Finding Builder
+
+Stable finding ID generation and structured finding construction.
+
+ID Format: {check_id}-{host}-{discriminator}
+  - check_id:      check name, e.g. "headers"
+  - host:          target hostname, e.g. "www.example.com"
+  - discriminator: per-check qualifier, e.g. "missing-csp" (optional)
+
+Examples:
+  dns-www.example.com
+  headers-www.example.com-missing-csp
+  headers-www.example.com-missing-hsts
+  llm_endpoint-chat.example.com
+"""
+
+import hashlib
+import re
+from typing import Optional
+
+from app.checks.base import Finding, Service
+
+
+def _slugify(value: str) -> str:
+    """Convert a value to a safe slug for use in finding IDs."""
+    value = value.lower().strip()
+    # Replace colons and slashes (ports, paths) with dashes
+    value = re.sub(r"[:/]", "-", value)
+    # Remove any character that isn't alphanumeric, dash, or dot
+    value = re.sub(r"[^a-z0-9_\-.]", "", value)
+    # Collapse multiple dashes
+    value = re.sub(r"-{2,}", "-", value)
+    return value.strip("-")
+
+
+def make_finding_id(
+    check_id: str,
+    host: str,
+    discriminator: Optional[str] = None,
+) -> str:
+    """
+    Generate a stable, human-readable finding ID.
+
+    Args:
+        check_id:      The check's name attribute (e.g. "dns_enumeration")
+        host:          The target host (e.g. "www.example.com" or "10.0.0.1:8080")
+        discriminator: Optional per-finding qualifier (e.g. "missing-csp")
+
+    Returns:
+        e.g. "dns_enumeration-www.example.com"
+             "headers-www.example.com-missing-csp"
+    """
+    parts = [_slugify(check_id), _slugify(host)]
+    if discriminator:
+        parts.append(_slugify(discriminator))
+    return "-".join(p for p in parts if p)
+
+
+def make_finding_id_hashed(
+    check_id: str,
+    host: str,
+    discriminator: Optional[str] = None,
+    extra: Optional[str] = None,
+) -> str:
+    """
+    Generate a stable ID with a short hash suffix for high-cardinality findings.
+
+    Useful when discriminators might collide (e.g. many path findings on same host).
+
+    Returns:
+        e.g. "paths-www.example.com-admin-a3f2"
+    """
+    base = make_finding_id(check_id, host, discriminator)
+    payload = f"{check_id}:{host}:{discriminator or ''}:{extra or ''}"
+    suffix = hashlib.sha256(payload.encode()).hexdigest()[:4]
+    return f"{base}-{suffix}"
+
+
+def build_finding(
+    check_name: str,
+    title: str,
+    description: str,
+    severity: str,
+    evidence: str,
+    host: str,
+    discriminator: Optional[str] = None,
+    target: Optional[Service] = None,
+    target_url: Optional[str] = None,
+    raw_data: Optional[dict] = None,
+    references: Optional[list[str]] = None,
+) -> Finding:
+    """
+    Construct a Finding with a stable ID.
+
+    Args:
+        check_name:    The check's name (used for ID prefix)
+        title:         Brief description of the finding
+        description:   Detailed explanation
+        severity:      info | low | medium | high | critical
+        evidence:      Raw proof (header value, response snippet, etc.)
+        host:          Target hostname (used for ID)
+        discriminator: Optional per-check qualifier for ID uniqueness
+        target:        Service object (optional)
+        target_url:    Specific URL (optional, falls back to target.url)
+        raw_data:      Full raw data dict (optional)
+        references:    CVE, OWASP, etc. (optional)
+
+    Returns:
+        Finding with stable ID assigned
+    """
+    finding_id = make_finding_id(check_name, host, discriminator)
+
+    return Finding(
+        id=finding_id,
+        title=title,
+        description=description,
+        severity=severity,
+        evidence=evidence,
+        target=target,
+        target_url=target_url or (target.url if target else None),
+        check_name=check_name,
+        raw_data=raw_data,
+        references=references or [],
+    )
+
+
+# ── Severity helpers ──────────────────────────────────────────────
+
+VALID_SEVERITIES = {"info", "low", "medium", "high", "critical"}
+
+
+def validate_severity(severity: str) -> str:
+    """
+    Normalize and validate a severity string.
+    Raises ValueError for unrecognized values.
+    """
+    normalized = severity.lower().strip()
+    if normalized not in VALID_SEVERITIES:
+        raise ValueError(
+            f"Invalid severity '{severity}'. Must be one of: {sorted(VALID_SEVERITIES)}"
+        )
+    return normalized

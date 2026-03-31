@@ -1,0 +1,17 @@
+# simulations/network/dns_success.yaml
+# Smoke test: DNS enumeration finds common hosts
+# DNS only outputs hostnames and IP mappings — no Services or ports
+suite: network
+emulates: dns_enumeration
+target: "example.local"
+disposition: hosts_found
+
+output:
+  target_hosts:
+    - www.example.local
+    - api.example.local
+    - chat.example.local
+  dns_records:
+    www.example.local: "10.0.1.10"
+    api.example.local: "10.0.1.11"
+    chat.example.local: "10.0.1.12"

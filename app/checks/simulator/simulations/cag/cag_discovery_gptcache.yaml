@@ -1,0 +1,64 @@
+# simulations/cag/cag_discovery_gptcache.yaml
+#
+# Simulates discovery of a CAG pipeline with GPTCache backend.
+
+suite: cag
+emulates: cag_discovery
+target: "cag.fakobanko.local"
+disposition: gptcache_found
+
+output:
+  cag_endpoints:
+    - cache_type: "gptcache"
+      url: "http://cag.fakobanko.local:8000/cache"
+      path: "/cache"
+      status_code: 200
+      auth_required: false
+      indicators:
+        headers_match: true
+        body_match: true
+      service:
+        url: "http://cag.fakobanko.local:8000"
+        host: "cag.fakobanko.local"
+        port: 8000
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "cache_infrastructure"
+
+    - url: "http://cag.fakobanko.local:8000/cache/stats"
+      path: "/cache/stats"
+      status_code: 200
+      indicators:
+        - "header:x-cache-hit=true"
+        - "body:cache_hit"
+        - "body:ttl"
+        - "field:cache_status"
+      auth_required: false
+      service:
+        url: "http://cag.fakobanko.local:8000"
+        host: "cag.fakobanko.local"
+        port: 8000
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "cag_endpoint"
+
+  cache_infrastructure:
+    - "gptcache"
+
+findings:
+  - title: "Cache infrastructure: gptcache"
+    description: "Cache infrastructure 'gptcache' detected at /cache. No authentication required - potential cache poisoning vector."
+    severity: "medium"
+    evidence: |
+      Path: /cache
+      Status: 200
+      Cache type: gptcache
+      Indicators: {'headers_match': True, 'body_match': True}
+
+  - title: "CAG endpoint: /cache/stats"
+    description: "CAG endpoint discovered at /cache/stats. No authentication required. Detected 4 cache indicators."
+    severity: "low"
+    evidence: |
+      Path: /cache/stats
+      Status: 200
+      Indicators: header:x-cache-hit=true, body:cache_hit, body:ttl, field:cache_status

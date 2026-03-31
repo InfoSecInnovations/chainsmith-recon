@@ -1,0 +1,17 @@
+suite: ai
+emulates: ai_error_leakage
+target: "chat.example.local"
+disposition: leakage_found
+
+output:
+  leaked:
+    stack_traces: true
+    paths:
+      - "/app/chatbot/main.py"
+      - "/app/lib/tools.py"
+    tools:
+      - "get_account_balance"
+      - "transfer_funds"
+    config:
+      - "api_key"
+      - "base_url"

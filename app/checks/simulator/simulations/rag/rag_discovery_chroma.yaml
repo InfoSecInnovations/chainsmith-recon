@@ -1,0 +1,65 @@
+# simulations/rag/rag_discovery_chroma.yaml
+#
+# Simulates discovery of a RAG pipeline with Chroma vector store.
+
+suite: rag
+emulates: rag_discovery
+target: "rag.fakobanko.local"
+disposition: chroma_found
+
+output:
+  rag_endpoints:
+    - store_type: "chroma"
+      url: "http://rag.fakobanko.local:8000/api/v1/collections"
+      path: "/api/v1/collections"
+      status_code: 200
+      auth_required: false
+      indicators:
+        headers_match: false
+        body_match: true
+      service:
+        url: "http://rag.fakobanko.local:8000"
+        host: "rag.fakobanko.local"
+        port: 8000
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "vector_store"
+
+    - url: "http://rag.fakobanko.local:8000/query"
+      path: "/query"
+      method: "POST"
+      status_code: 200
+      indicators:
+        - "pattern:sources"
+        - "pattern:chunks"
+        - "pattern:similarity"
+        - "field:sources"
+      auth_required: false
+      service:
+        url: "http://rag.fakobanko.local:8000"
+        host: "rag.fakobanko.local"
+        port: 8000
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "rag_query"
+
+  vector_stores:
+    - "chroma"
+
+findings:
+  - title: "Vector store detected: chroma"
+    description: "Vector store 'chroma' detected at /api/v1/collections. No authentication required - potential data exposure."
+    severity: "medium"
+    evidence: |
+      Path: /api/v1/collections
+      Status: 200
+      Vector store: chroma
+      Indicators: {'headers_match': False, 'body_match': True}
+
+  - title: "RAG endpoint: /query"
+    description: "RAG query endpoint discovered at /query. No authentication required - potential for indirect injection attacks. Detected 4 RAG indicators in response."
+    severity: "medium"
+    evidence: |
+      Path: /query
+      Status: 200
+      Indicators: pattern:sources, pattern:chunks, pattern:similarity, field:sources

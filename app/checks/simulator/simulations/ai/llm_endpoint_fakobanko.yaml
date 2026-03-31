@@ -1,0 +1,17 @@
+# simulations/ai/llm_endpoint_fakobanko.yaml
+# Fakobanko scenario: chat service exposes OpenAI-compatible endpoint
+suite: ai
+emulates: llm_endpoint_discovery
+target: "chat.fakobanko.local"
+disposition: endpoints_found
+
+output:
+  chat_endpoints:
+    - url: "http://chat.fakobanko.local:8081/v1/chat/completions"
+      path: "/v1/chat/completions"
+      api_format: "openai"
+      status_code: 200
+    - url: "http://chat.fakobanko.local:8081/api/chat"
+      path: "/api/chat"
+      api_format: "unknown"
+      status_code: 200

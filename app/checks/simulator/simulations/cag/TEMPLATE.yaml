@@ -1,0 +1,43 @@
+# simulations/cag/TEMPLATE.yaml
+#
+# Simulation config template for CAG suite checks.
+
+# ── cag_discovery ─────────────────────────────────────────────────
+# suite: cag
+# emulates: cag_discovery
+# target: "cag.example.local"
+# disposition: cache_found
+# output:
+#   cag_endpoints:
+#     - cache_type: "gptcache"
+#       url: "http://cag.example.local:8000/cache"
+#       path: "/cache"
+#       status_code: 200
+#       auth_required: false
+#   cache_infrastructure:
+#     - "gptcache"
+
+# ── cag_cache_probe ───────────────────────────────────────────────
+# suite: cag
+# emulates: cag_cache_probe
+# target: "cag.example.local"
+# disposition: vulnerability_found
+# output:
+#   cache_vulnerabilities:
+#     - test_id: "cross_session_leak"
+#       category: "information_leakage"
+#       vulnerability_detected: true
+#   cache_timing_results:
+#     - test_id: "cache_timing"
+#       timing_data:
+#         first_request_ms: 450
+#         second_request_ms: 85
+#         caching_detected: true
+
+# --- Fill in below ---
+suite: cag
+emulates: ""
+target: ""
+disposition: ""
+
+output: {}

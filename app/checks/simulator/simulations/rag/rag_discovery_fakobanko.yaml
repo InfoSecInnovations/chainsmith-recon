@@ -1,0 +1,123 @@
+# simulations/rag/rag_discovery_fakobanko.yaml
+#
+# Fakobanko RAG discovery - knowledge base with policy documents.
+
+suite: rag
+emulates: rag_discovery
+target: "rag.fakobanko.local"
+disposition: chroma_found
+
+output:
+  rag_endpoints:
+    - store_type: "chroma"
+      url: "http://rag.fakobanko.local:8080/api/v1/collections"
+      path: "/api/v1/collections"
+      status_code: 200
+      auth_required: false
+      indicators:
+        headers_match: false
+        body_match: true
+      service:
+        url: "http://rag.fakobanko.local:8080"
+        host: "rag.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "vector_store"
+
+    - url: "http://rag.fakobanko.local:8080/query"
+      path: "/query"
+      method: "POST"
+      status_code: 200
+      indicators:
+        - "pattern:sources"
+        - "pattern:chunks"
+        - "pattern:documents"
+        - "field:sources"
+        - "field:context"
+      auth_required: false
+      service:
+        url: "http://rag.fakobanko.local:8080"
+        host: "rag.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "rag_query"
+
+    - url: "http://rag.fakobanko.local:8080/documents"
+      path: "/documents"
+      method: "GET"
+      status_code: 200
+      indicators:
+        - "field:documents"
+        - "pattern:metadata"
+      auth_required: false
+      service:
+        url: "http://rag.fakobanko.local:8080"
+        host: "rag.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "rag_query"
+
+    - url: "http://rag.fakobanko.local:8080/embeddings"
+      path: "/embeddings"
+      method: "POST"
+      status_code: 200
+      indicators:
+        - "pattern:embedding"
+        - "header:x-embedding-model"
+      auth_required: false
+      service:
+        url: "http://rag.fakobanko.local:8080"
+        host: "rag.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "rag_query"
+
+  vector_stores:
+    - "chroma"
+
+findings:
+  - title: "Vector store detected: Chroma"
+    description: "Chroma vector store detected at /api/v1/collections. No authentication required - documents may be accessible."
+    severity: "medium"
+    evidence: |
+      Path: /api/v1/collections
+      Status: 200
+      Vector store: chroma
+      Auth Required: false
+    check_name: "rag_discovery"
+    target_url: "http://rag.fakobanko.local:8080/api/v1/collections"
+
+  - title: "RAG query endpoint: /query"
+    description: "RAG query endpoint discovered at /query. No authentication required - potential for indirect injection attacks on banking knowledge base."
+    severity: "medium"
+    evidence: |
+      Path: /query
+      Status: 200
+      Indicators: sources, chunks, documents, context
+    check_name: "rag_discovery"
+    target_url: "http://rag.fakobanko.local:8080/query"
+    references:
+      - "https://arxiv.org/abs/2402.16893"
+
+  - title: "Document listing endpoint exposed"
+    description: "RAG document listing endpoint /documents accessible without authentication. May expose internal banking policies and procedures."
+    severity: "medium"
+    evidence: |
+      Path: /documents
+      Status: 200
+      Content: document metadata exposed
+    check_name: "rag_discovery"
+    target_url: "http://rag.fakobanko.local:8080/documents"
+
+  - title: "Embedding endpoint exposed"
+    description: "RAG embedding endpoint /embeddings accessible. Reveals embedding model details via headers."
+    severity: "low"
+    evidence: |
+      Path: /embeddings
+      Header: x-embedding-model present
+    check_name: "rag_discovery"
+    target_url: "http://rag.fakobanko.local:8080/embeddings"

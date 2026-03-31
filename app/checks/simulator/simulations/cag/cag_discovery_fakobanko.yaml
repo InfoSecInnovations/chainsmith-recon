@@ -1,0 +1,119 @@
+# simulations/cag/cag_discovery_fakobanko.yaml
+#
+# Fakobanko CAG discovery - semantic cache for LLM responses.
+
+suite: cag
+emulates: cag_discovery
+target: "cache.fakobanko.local"
+disposition: semantic_cache_found
+
+output:
+  cag_endpoints:
+    - url: "http://cache.fakobanko.local:8080/cache"
+      path: "/cache"
+      cache_type: "semantic_cache"
+      status_code: 200
+      auth_required: false
+      indicators:
+        - "header:x-cache"
+        - "header:x-semantic-cache"
+        - "body:cache_status"
+      service:
+        url: "http://cache.fakobanko.local:8080"
+        host: "cache.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "cache_infrastructure"
+
+    - url: "http://cache.fakobanko.local:8080/cache/stats"
+      path: "/cache/stats"
+      cache_type: "semantic_cache"
+      status_code: 200
+      auth_required: false
+      indicators:
+        - "body:hit_rate"
+        - "body:total_queries"
+        - "body:cached_responses"
+      service:
+        url: "http://cache.fakobanko.local:8080"
+        host: "cache.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "cache_status"
+
+    - url: "http://cache.fakobanko.local:8080/cache/clear"
+      path: "/cache/clear"
+      cache_type: "semantic_cache"
+      status_code: 200
+      auth_required: false
+      indicators:
+        - "body:cleared"
+      service:
+        url: "http://cache.fakobanko.local:8080"
+        host: "cache.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "cache_management"
+
+    - url: "http://chat.fakobanko.local:8080/v1/chat/completions"
+      path: "/v1/chat/completions"
+      cache_type: "prompt_cache"
+      status_code: 200
+      auth_required: false
+      indicators:
+        - "header:x-cache-hit"
+        - "header:x-prompt-tokens-cached"
+      service:
+        url: "http://chat.fakobanko.local:8080"
+        host: "chat.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+      endpoint_type: "ai_with_cache"
+
+  cache_infrastructure:
+    - "semantic_cache"
+    - "prompt_cache"
+
+findings:
+  - title: "Semantic cache infrastructure detected"
+    description: "Semantic caching system found at /cache. Cache management endpoints exposed without authentication."
+    severity: "medium"
+    evidence: |
+      Path: /cache
+      Type: semantic_cache
+      Auth: not required
+      Headers: x-cache, x-semantic-cache
+    check_name: "cag_discovery"
+    target_url: "http://cache.fakobanko.local:8080/cache"
+
+  - title: "Cache statistics endpoint exposed"
+    description: "Cache statistics endpoint /cache/stats exposes hit rates, query counts, and cached response metrics."
+    severity: "low"
+    evidence: |
+      Path: /cache/stats
+      Exposed: hit_rate, total_queries, cached_responses
+    check_name: "cag_discovery"
+    target_url: "http://cache.fakobanko.local:8080/cache/stats"
+
+  - title: "Cache clear endpoint accessible"
+    description: "Cache clear endpoint /cache/clear accessible without authentication. Could be used for cache denial-of-service."
+    severity: "medium"
+    evidence: |
+      Path: /cache/clear
+      Auth: not required
+      Risk: Cache invalidation attacks
+    check_name: "cag_discovery"
+    target_url: "http://cache.fakobanko.local:8080/cache/clear"
+
+  - title: "Prompt caching on LLM endpoint"
+    description: "Chat endpoint shows prompt caching headers. May enable timing attacks or cross-session leakage."
+    severity: "low"
+    evidence: |
+      Path: /v1/chat/completions
+      Headers: x-cache-hit, x-prompt-tokens-cached
+    check_name: "cag_discovery"
+    target_url: "http://chat.fakobanko.local:8080/v1/chat/completions"

@@ -1,0 +1,10 @@
+suite: ai
+emulates: ai_error_leakage
+target: "unreachable.example.local"
+disposition: error
+
+behavior:
+  failure_mode: exception
+  failure_message: "Connection refused to AI endpoint"
+
+output: {}

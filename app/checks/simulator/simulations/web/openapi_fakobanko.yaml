@@ -1,0 +1,23 @@
+# simulations/web/openapi_fakobanko.yaml
+# Fakobanko scenario: API docs exposed with admin and internal endpoints
+suite: web
+emulates: openapi_discovery
+target: "api.fakobanko.local"
+disposition: spec_found
+
+output:
+  spec_path: "/openapi.json"
+  endpoints:
+    - "/api/v1/accounts"
+    - "/api/v1/transactions"
+    - "/api/v1/admin/users"
+    - "/api/v1/admin/model-config"
+    - "/api/v1/internal/credit-score"
+    - "/api/v1/auth/token"
+    - "/api/v1/chat"
+    - "/api/v1/embeddings"
+  sensitive_endpoints:
+    - "/api/v1/admin/users"
+    - "/api/v1/admin/model-config"
+    - "/api/v1/internal/credit-score"
+  security_schemes: []

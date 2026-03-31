@@ -1,0 +1,19 @@
+# simulations/web/headers_fakobanko.yaml
+# Fakobanko scenario: www service missing several security headers
+suite: web
+emulates: header_analysis
+target: "www.fakobanko.local"
+disposition: headers_analyzed
+
+output:
+  host: www.fakobanko.local
+  status_code: 200
+  headers:
+    x-content-type-options: "nosniff"
+    server: "nginx/1.24.0"
+  missing_headers:
+    - "strict-transport-security"
+    - "content-security-policy"
+    - "x-frame-options"
+    - "referrer-policy"
+  findings_count: 2

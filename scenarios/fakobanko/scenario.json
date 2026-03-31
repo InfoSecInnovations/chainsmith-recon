@@ -1,0 +1,176 @@
+{
+  "name": "fakobanko",
+  "description": "Fakobanko Regional Bank — AI-powered banking platform with LLM chatbot, credit scoring API, MCP tools, RAG knowledge base, and semantic caching",
+  "version": "2.1.0",
+  "brand_name": "Fakobanko",
+  "brand_domain": "fakobanko.local",
+  "target": {
+    "pattern": "*.fakobanko.local",
+    "known_hosts": [
+      "www",
+      "chat",
+      "api",
+      "docs",
+      "mcp",
+      "agent",
+      "rag",
+      "cache"
+    ]
+  },
+  "findings": {
+    "certain": [
+      "header_vllm_version",
+      "robots_model_admin",
+      "chatbot_tool_leak",
+      "debug_mode_enabled",
+      "mcp_endpoint_exposed"
+    ],
+    "random_pool": [
+      "jwt_shared_secret",
+      "embedding_endpoint_exposed",
+      "model_card_disclosure",
+      "cors_misconfigured",
+      "api_version_mismatch",
+      "rate_limit_bypass",
+      "stack_trace_disclosure",
+      "internal_announcement_tool",
+      "customer_lookup_tool",
+      "fetch_document_tool",
+      "session_leak",
+      "model_temperature_exposed",
+      "cache_timing_leak",
+      "tool_schema_disclosure",
+      "openapi_exposed",
+      "internal_endpoints_documented",
+      "auth_schemes_revealed",
+      "dynamic_tool_loading",
+      "resource_list_exposed",
+      "tool_chain_exposed",
+      "agent_config_leak",
+      "no_session_isolation",
+      "memory_endpoint_exposed"
+    ],
+    "random_count": {
+      "min": 3,
+      "max": 7
+    }
+  },
+  "simulations": [],
+  "expected_findings": [
+    "dns_enumeration-fakobanko.local",
+    "header_analysis-www.fakobanko.local-missing-security-headers",
+    "robots_txt-www.fakobanko.local-sensitive-paths",
+    "cors_check-api.fakobanko.local-reflected-origin",
+    "openapi_discovery-api.fakobanko.local-spec-exposed",
+    "llm_endpoint_discovery-chat.fakobanko.local",
+    "ai_framework_fingerprint-chat.fakobanko.local-framework-fastapi_ml",
+    "model_info_check-api.fakobanko.local",
+    "prompt_leakage-chat.fakobanko.local-prompt-leaked",
+    "content_filter_check-chat.fakobanko.local-filter-detected",
+    "rate_limit_check-chat.fakobanko.local-no-rate-limit",
+    "tool_discovery-chat.fakobanko.local-tools-discovered",
+    "mcp_discovery-mcp.fakobanko.local-server-found",
+    "mcp_tool_enumeration-mcp.fakobanko.local-critical-execute_sql",
+    "mcp_tool_enumeration-mcp.fakobanko.local-high-transfer_funds",
+    "agent_discovery-agent.fakobanko.local-langserve",
+    "agent_goal_injection-agent.fakobanko.local-prompt-leaked",
+    "agent_goal_injection-agent.fakobanko.local-tool-disclosure",
+    "rag_discovery-rag.fakobanko.local-chroma",
+    "rag_indirect_injection-rag.fakobanko.local-context-extraction",
+    "rag_indirect_injection-rag.fakobanko.local-data-exfil",
+    "cag_discovery-cache.fakobanko.local-semantic-cache",
+    "cag_cache_probe-cache.fakobanko.local-cross-session-leak"
+  ],
+  "expected_chains": [
+    "ai_service_prompt_injection",
+    "cors_credential_theft",
+    "admin_endpoint_exposure",
+    "mcp_tool_abuse",
+    "agent_goal_hijack",
+    "rag_document_exfiltration",
+    "cache_cross_session_theft"
+  ],
+  "services": {
+    "www": {
+      "port": 8082,
+      "type": "http",
+      "description": "Public website",
+      "template": "banking/www"
+    },
+    "chat": {
+      "port": 8081,
+      "type": "ai",
+      "description": "LLM chatbot API"
+    },
+    "api": {
+      "port": 8080,
+      "type": "api",
+      "description": "Banking REST API"
+    },
+    "docs": {
+      "port": 8083,
+      "type": "http",
+      "description": "API documentation",
+      "template": "common/docs"
+    },
+    "mcp": {
+      "port": 8089,
+      "type": "ai",
+      "description": "MCP tool server",
+      "template": "ai/mcp_server"
+    },
+    "agent": {
+      "port": 8088,
+      "type": "ai",
+      "description": "LangServe agent",
+      "template": "ai/agent"
+    },
+    "rag": {
+      "port": 8087,
+      "type": "ai",
+      "description": "RAG knowledge base"
+    },
+    "cache": {
+      "port": 8084,
+      "type": "ai",
+      "description": "Semantic cache service"
+    }
+  },
+  "vulnerabilities": {
+    "summary": "Fakobanko exhibits multiple AI security vulnerabilities across its stack",
+    "by_suite": {
+      "web": [
+        "Missing security headers on www",
+        "Sensitive paths in robots.txt",
+        "CORS reflects origin on API",
+        "OpenAPI spec exposed"
+      ],
+      "ai": [
+        "Prompt leakage on chatbot",
+        "No rate limiting",
+        "Tools discoverable",
+        "Filter bypassable"
+      ],
+      "mcp": [
+        "Critical SQL execution tool",
+        "High-risk fund transfer tool",
+        "File read with path traversal risk"
+      ],
+      "agent": [
+        "System prompt leaked via injection",
+        "Tool disclosure via task pivot",
+        "No input validation"
+      ],
+      "rag": [
+        "Context extraction successful",
+        "Internal documents exposed",
+        "Delimiter escape vulnerable"
+      ],
+      "cag": [
+        "Cross-session data leakage",
+        "Predictable context IDs",
+        "Cache timing side channel"
+      ]
+    }
+  }
+}

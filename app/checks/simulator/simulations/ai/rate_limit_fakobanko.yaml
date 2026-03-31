@@ -1,0 +1,13 @@
+# simulations/ai/rate_limit_fakobanko.yaml
+# Fakobanko scenario: no rate limiting on chat endpoint
+suite: ai
+emulates: rate_limit_check
+target: "chat.fakobanko.local"
+disposition: no_rate_limit
+
+output:
+  rate_info:
+    detected: false
+    threshold: null
+    headers: {}
+    requests_sent: 12

@@ -1,0 +1,23 @@
+# simulations/web/robots_sensitive_paths.yaml
+# Smoke test: robots.txt with sensitive disallow entries
+suite: web
+emulates: robots_txt
+target: "www.example.local"
+disposition: paths_found
+
+output:
+  robots_url: "http://www.example.local:80/robots.txt"
+  disallowed:
+    - "/admin"
+    - "/internal/api"
+    - "/.env"
+    - "/model/weights"
+    - "/config"
+  interesting:
+    - "/admin"
+    - "/internal/api"
+    - "/.env"
+    - "/model/weights"
+    - "/config"
+  sitemaps:
+    - "http://www.example.local/sitemap.xml"

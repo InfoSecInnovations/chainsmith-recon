@@ -1,0 +1,12 @@
+# simulations/network/dns_exception.yaml
+# Smoke test: DNS resolution error (exercises framework error handling)
+suite: network
+emulates: dns_enumeration
+target: "unreachable.example.local"
+disposition: error
+
+behavior:
+  failure_mode: exception
+  failure_message: "DNS resolution failed: NXDOMAIN"
+
+output: {}

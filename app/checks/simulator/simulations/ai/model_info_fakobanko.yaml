@@ -1,0 +1,17 @@
+# simulations/ai/model_info_fakobanko.yaml
+# Fakobanko scenario: /v1/models exposes model ID, admin endpoint leaks system prompt ref
+suite: ai
+emulates: model_info_check
+target: "api.fakobanko.local"
+disposition: info_exposed
+
+output:
+  model_paths_checked:
+    - path: "/v1/models"
+      status: 200
+      model_id: "fakobanko-credit-llm-v2"
+      sensitive_fields: []
+    - path: "/api/v1/admin/model-config"
+      status: 200
+      model_id: "fakobanko-credit-llm-v2"
+      sensitive_fields: ["system_prompt", "internal"]

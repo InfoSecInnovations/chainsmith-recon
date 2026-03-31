@@ -1,0 +1,11 @@
+suite: ai
+emulates: rate_limit_check
+target: "chat.example.local"
+disposition: no_rate_limit
+
+output:
+  rate_info:
+    detected: false
+    threshold: null
+    headers: {}
+    requests_sent: 12

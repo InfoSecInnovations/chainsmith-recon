@@ -1,0 +1,7 @@
+suite: ai
+emulates: llm_endpoint_discovery
+target: "www.example.local"
+disposition: no_endpoints
+
+output:
+  chat_endpoints: []

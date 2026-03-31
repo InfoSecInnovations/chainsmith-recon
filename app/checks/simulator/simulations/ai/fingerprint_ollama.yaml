@@ -1,0 +1,14 @@
+suite: ai
+emulates: ai_framework_fingerprint
+target: "chat.example.local"
+disposition: framework_identified
+
+output:
+  framework: "ollama"
+  confidence: "high"
+  score: 8
+  matches:
+    - "endpoint: /api/generate"
+    - "endpoint: /api/tags"
+    - "body: ollama"
+    - "error: Modelfile"

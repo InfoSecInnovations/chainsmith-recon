@@ -1,0 +1,64 @@
+# simulations/mcp/mcp_discovery_fakobanko.yaml
+#
+# Fakobanko MCP server discovery - exposes banking tools via MCP.
+
+suite: mcp
+emulates: mcp_discovery
+target: "mcp.fakobanko.local"
+disposition: server_found
+
+output:
+  mcp_servers:
+    - url: "http://mcp.fakobanko.local:8080/mcp"
+      path: "/mcp"
+      transport: "http"
+      capabilities:
+        - "tools"
+        - "resources"
+      auth_required: false
+      mcp_version: "1.0"
+      indicators:
+        mcp_header: true
+        jsonrpc: true
+      service:
+        url: "http://mcp.fakobanko.local:8080"
+        host: "mcp.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+
+    - url: "http://mcp.fakobanko.local:8080/mcp/sse"
+      path: "/mcp/sse"
+      transport: "sse"
+      capabilities:
+        - "streaming"
+      auth_required: false
+      service:
+        url: "http://mcp.fakobanko.local:8080"
+        host: "mcp.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+
+findings:
+  - title: "MCP server discovered"
+    description: "MCP server endpoint found at /mcp with HTTP transport. No authentication required. Capabilities: tools, resources."
+    severity: "medium"
+    evidence: |
+      Path: /mcp
+      Transport: http
+      MCP Version: 1.0
+      Auth Required: false
+      Capabilities: tools, resources
+    check_name: "mcp_discovery"
+    target_url: "http://mcp.fakobanko.local:8080/mcp"
+
+  - title: "MCP SSE endpoint discovered"
+    description: "MCP Server-Sent Events endpoint found at /mcp/sse enabling real-time tool streaming."
+    severity: "low"
+    evidence: |
+      Path: /mcp/sse
+      Transport: sse
+      Streaming: enabled
+    check_name: "mcp_discovery"
+    target_url: "http://mcp.fakobanko.local:8080/mcp/sse"

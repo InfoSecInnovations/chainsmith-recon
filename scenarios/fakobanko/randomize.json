@@ -1,0 +1,112 @@
+{
+  "description": "Chain packages for randomized range mode. 2-4 packages selected per session.",
+  "version": "1.0.0",
+  
+  "chain_packages": [
+    {
+      "id": "prompt_injection_surface",
+      "chain_name": "AI Service Prompt Injection Surface",
+      "description": "Chat endpoint with exposed API docs enables targeted prompt injection",
+      "severity": "high",
+      "required_services": ["chat", "docs"],
+      "required_findings": ["llm_endpoint_discovered", "openapi_exposed"]
+    },
+    {
+      "id": "model_info_disclosure",
+      "chain_name": "Model Architecture Intelligence",
+      "description": "Model serving endpoint leaks architecture details",
+      "severity": "medium",
+      "required_services": ["ml"],
+      "required_findings": ["model_info_endpoint", "framework_fingerprint", "model_config_exposed"]
+    },
+    {
+      "id": "tool_abuse_surface",
+      "chain_name": "Agent Tool Abuse",
+      "description": "Exposed tool schemas enable unauthorized actions",
+      "severity": "critical",
+      "required_services": ["chat", "agent"],
+      "required_findings": ["tool_chain_exposed", "chatbot_tool_leak"]
+    },
+    {
+      "id": "rag_poisoning",
+      "chain_name": "RAG Corpus Poisoning",
+      "description": "Writable vector store enables indirect prompt injection",
+      "severity": "critical",
+      "required_services": ["vector", "chat"],
+      "required_findings": ["rag_endpoint_exposed", "corpus_writable"]
+    },
+    {
+      "id": "shadow_tool_injection",
+      "chain_name": "MCP Shadow Tool Injection",
+      "description": "Dynamic tool loading enables malicious tool registration",
+      "severity": "critical",
+      "required_services": ["mcp"],
+      "required_findings": ["mcp_endpoint_exposed", "dynamic_tool_loading"]
+    },
+    {
+      "id": "admin_debug_exposure",
+      "chain_name": "Admin Debug Information Leak",
+      "description": "Debug endpoints leak sensitive configuration",
+      "severity": "high",
+      "required_services": ["admin"],
+      "required_findings": ["debug_endpoints_enabled", "stack_trace_leak", "config_dump_endpoint"]
+    },
+    {
+      "id": "internal_api_bypass",
+      "chain_name": "Internal API Access via CORS",
+      "description": "CORS misconfiguration allows cross-origin access",
+      "severity": "high",
+      "required_services": ["internal", "www"],
+      "required_findings": ["cors_wildcard", "no_auth_internal"]
+    },
+    {
+      "id": "credential_leak_chain",
+      "chain_name": "Credential Exposure via Errors",
+      "description": "Error messages leak API keys and secrets",
+      "severity": "critical",
+      "required_services": ["api", "ml"],
+      "required_findings": ["verbose_errors", "model_config_exposed"]
+    },
+    {
+      "id": "embedding_theft",
+      "chain_name": "Embedding Model Extraction",
+      "description": "Exposed embedding endpoint enables model theft",
+      "severity": "medium",
+      "required_services": ["ml", "vector"],
+      "required_findings": ["embedding_endpoint_exposed", "no_rate_limit"]
+    },
+    {
+      "id": "agent_memory_leak",
+      "chain_name": "Cross-Session Memory Exposure",
+      "description": "Agent memory accessible across sessions",
+      "severity": "critical",
+      "required_services": ["agent"],
+      "required_findings": ["memory_endpoint_exposed", "no_session_isolation"]
+    }
+  ],
+
+  "random_findings_pool": [
+    "jwt_shared_secret",
+    "session_fixation",
+    "path_traversal_hint",
+    "header_injection",
+    "timing_leak",
+    "version_mismatch",
+    "backup_file_exposed",
+    "swagger_ui_exposed",
+    "graphql_introspection",
+    "websocket_no_auth",
+    "internal_announcement_tool",
+    "customer_lookup_tool",
+    "employee_directory_exposed",
+    "namespace_leak",
+    "resource_list_exposed"
+  ],
+
+  "selection_rules": {
+    "min_chains": 2,
+    "max_chains": 4,
+    "extra_findings_min": 2,
+    "extra_findings_max": 5
+  }
+}

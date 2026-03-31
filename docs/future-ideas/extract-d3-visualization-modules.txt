@@ -1,0 +1,163 @@
+Extract D3 Visualization Code into Separate JS Modules
+=======================================================
+
+Problem
+-------
+findings.html (3,205 lines / 129 KB) and trend.html (1,701 lines / 71 KB)
+are the two largest static files. ~87-88% of each file is inline CSS and
+JavaScript, dominated by D3-based visualization code. This makes the files
+hard to maintain, impossible to share visualization logic between pages,
+and slow for browsers to parse on every page load.
+
+Current State
+-------------
+findings.html contains seven distinct visualization modules, all inlined:
+
+  Function cluster                Lines (approx)   Purpose
+  ─────────────────────────────   ──────────────   ──────────────────────
+  buildTreemapHierarchy()            ~230          Interactive treemap
+  drawTreemapLevel()                                (drill-down by host,
+  renderTreemapLegend()                             category, severity)
+  renderTreemap()
+
+  renderHostTable()                  ~160          Expandable host table
+  renderSummaryBar()                                with severity dots
+  renderHostsTable()
+
+  renderChains()                     ~330          Sankey diagram for
+  renderChainsList()                                attack chain flow
+  renderChainsGraph()                               visualization
+
+  buildHeatmapData()                 ~170          Severity heatmap
+  renderHeatmap()                                   (hosts x categories)
+
+  buildRadarData()                   ~200          Attack surface radar
+  renderRadar()                                     chart (spider/polar)
+
+  buildCoverageData()                ~220          Check coverage matrix
+  renderCoverage()                                  (hosts x checks)
+
+  buildTimelineData()                ~150          Finding discovery
+  renderTimeline()                                  timeline (scatter)
+
+trend.html contains six chart modules, also all inlined:
+
+  Function cluster                Lines (approx)   Purpose
+  ─────────────────────────────   ──────────────   ──────────────────────
+  renderSeverityChart()              ~60           Stacked severity bars
+  renderRiskChart()                  ~130          Risk score line chart
+  renderSuiteChart()                 ~110          Per-suite breakdown
+  renderNewResolvedChart()           ~110          New vs resolved delta
+  renderDeltaChart()                 ~80           Scan-to-scan delta
+  renderDeltaBarChart()              ~70           Side-by-side bar chart
+
+Proposed Structure
+------------------
+static/
+  js/
+    api.js                          (existing shared JS)
+    viz/
+      treemap.js                    ~230 lines from findings.html
+      host-table.js                 ~160 lines from findings.html
+      chains-sankey.js              ~330 lines from findings.html
+      heatmap.js                    ~170 lines from findings.html
+      radar.js                      ~200 lines from findings.html
+      coverage.js                   ~220 lines from findings.html
+      timeline.js                   ~150 lines from findings.html
+      trend-charts.js               ~560 lines from trend.html
+      viz-common.js                 Shared D3 helpers (severity colors,
+                                    tooltip factory, axis formatting,
+                                    responsive resize handler)
+  css/
+    common.css                      (existing shared CSS)
+    viz.css                         Visualization-specific CSS currently
+                                    inlined in findings.html (~550 lines)
+                                    and trend.html (~250 lines)
+
+Each module would export a single render/init function and register its
+own resize handler. The page script just calls the render function with
+data. Example:
+
+    <script src="/static/js/viz/viz-common.js"></script>
+    <script src="/static/js/viz/heatmap.js"></script>
+    <script>
+        renderHeatmap(document.getElementById('heatmap-panel'), findingsData);
+    </script>
+
+Shared Helpers (viz-common.js)
+------------------------------
+Several patterns repeat across every visualization module:
+
+  - Severity color scales: the same severity-to-color mapping appears in
+    treemap, heatmap, radar, coverage, timeline, and the trend charts.
+    Currently copy-pasted ~7 times.
+
+  - Tooltip creation: every module creates a fixed-position tooltip div
+    with the same base styling, show/hide/move logic. The CSS for these
+    tooltips is also duplicated per-module (treemap-tooltip, heatmap-
+    tooltip, radar-tooltip, coverage-tooltip, timeline-tooltip).
+
+  - Responsive resize: each module has its own window resize debounce
+    handler. A shared factory would reduce boilerplate.
+
+  - Theme-aware colors: all charts need to read CSS variable values for
+    axis/grid colors. A shared helper to read getComputedStyle values
+    would centralize this.
+
+CSS Extraction (viz.css)
+------------------------
+findings.html has ~550 lines of visualization CSS (treemap, heatmap,
+radar, coverage, timeline containers, legends, tooltips, toggles). These
+share a pattern:
+
+    .{viz}-container    - flex layout
+    .{viz}-legend       - flex row with swatches
+    .{viz}-legend-item  - flex item with gap
+    .{viz}-swatch       - colored square
+    .{viz}-tooltip      - fixed-position box
+
+A single parameterized CSS pattern using shared classes (e.g.,
+.viz-legend, .viz-tooltip) with per-chart color overrides would replace
+~300 lines of near-identical CSS with ~60 lines.
+
+Implementation Plan
+-------------------
+1. Create viz-common.js with severity palette, tooltip factory, resize
+   debounce, and theme color reader. No changes to page behavior yet.
+
+2. Create viz.css with shared legend/tooltip/container patterns. Replace
+   the per-module tooltip and legend CSS in findings.html with the shared
+   classes. Verify visually.
+
+3. Extract one module at a time, starting with the simplest (timeline or
+   heatmap). Move the JS to its own file, update the <script> tags in
+   findings.html, verify the tab still works. Repeat for each module.
+
+4. Extract trend.html chart modules into trend-charts.js (or individual
+   files if they're ever needed by other pages).
+
+5. Remove the now-empty inline <style> and <script> blocks.
+
+Expected Impact
+---------------
+  - findings.html: ~3,205 -> ~600 lines (HTML + page init only)
+  - trend.html:    ~1,701 -> ~500 lines
+  - New JS files:  ~2,100 lines total (but cacheable across page loads)
+  - New CSS file:  ~300 lines (but cacheable and shared)
+  - Net reduction in bytes transferred on repeat visits: significant,
+    because the extracted JS/CSS files are cached by the browser while
+    inline code in HTML is re-parsed on every navigation.
+
+Risks / Considerations
+----------------------
+  - Script load order matters: viz modules depend on D3 and viz-common.
+    Use <script> ordering or a minimal loader. No need for a bundler at
+    this scale.
+
+  - The current inline approach has zero build steps, which is a project
+    value. The extracted files should remain plain JS — no transpilation,
+    no bundling, no npm. Just .js files loaded via <script> tags.
+
+  - Testing: each module should be extractable independently. Do one at
+    a time and verify the corresponding findings.html tab still renders
+    correctly before moving to the next.

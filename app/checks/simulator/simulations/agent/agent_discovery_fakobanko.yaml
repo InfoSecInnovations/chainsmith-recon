@@ -1,0 +1,105 @@
+# simulations/agent/agent_discovery_fakobanko.yaml
+#
+# Fakobanko LangServe agent discovery - customer service agent.
+
+suite: agent
+emulates: agent_discovery
+target: "agent.fakobanko.local"
+disposition: langserve_found
+
+output:
+  agent_endpoints:
+    - url: "http://agent.fakobanko.local:8080/invoke"
+      path: "/invoke"
+      method: "POST"
+      framework: "langserve"
+      capabilities:
+        - "tools"
+        - "memory"
+        - "streaming"
+      auth_required: false
+      status_code: 200
+      service:
+        url: "http://agent.fakobanko.local:8080"
+        host: "agent.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+
+    - url: "http://agent.fakobanko.local:8080/stream"
+      path: "/stream"
+      method: "POST"
+      framework: "langserve"
+      capabilities:
+        - "streaming"
+      auth_required: false
+      status_code: 200
+      service:
+        url: "http://agent.fakobanko.local:8080"
+        host: "agent.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+
+    - url: "http://agent.fakobanko.local:8080/input_schema"
+      path: "/input_schema"
+      method: "GET"
+      framework: "langserve"
+      auth_required: false
+      status_code: 200
+      service:
+        url: "http://agent.fakobanko.local:8080"
+        host: "agent.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+
+    - url: "http://agent.fakobanko.local:8080/agent/memory"
+      path: "/agent/memory"
+      method: "GET"
+      framework: "langserve"
+      capabilities:
+        - "memory"
+      auth_required: false
+      status_code: 200
+      service:
+        url: "http://agent.fakobanko.local:8080"
+        host: "agent.fakobanko.local"
+        port: 8080
+        scheme: "http"
+        service_type: "ai"
+
+  agent_frameworks:
+    - "langserve"
+
+findings:
+  - title: "LangServe agent discovered"
+    description: "LangServe agent endpoint found at /invoke with tools, memory, and streaming capabilities. No authentication required - potential for goal injection attacks."
+    severity: "high"
+    evidence: |
+      Framework: LangServe
+      Endpoint: /invoke
+      Capabilities: tools, memory, streaming
+      Auth Required: false
+    check_name: "agent_discovery"
+    target_url: "http://agent.fakobanko.local:8080/invoke"
+    references:
+      - "OWASP LLM Top 10 - LLM01 Prompt Injection"
+
+  - title: "Agent memory endpoint exposed"
+    description: "Agent memory endpoint /agent/memory accessible without authentication. May expose conversation history and user data."
+    severity: "medium"
+    evidence: |
+      Path: /agent/memory
+      Auth Required: false
+    check_name: "agent_discovery"
+    target_url: "http://agent.fakobanko.local:8080/agent/memory"
+
+  - title: "Agent input schema exposed"
+    description: "LangServe input_schema endpoint reveals agent input structure, aiding targeted injection attacks."
+    severity: "low"
+    evidence: |
+      Path: /input_schema
+      Framework: LangServe
+    check_name: "agent_discovery"
+    target_url: "http://agent.fakobanko.local:8080/input_schema"

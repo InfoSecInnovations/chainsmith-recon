@@ -1,0 +1,492 @@
+# ─────────────────────────────────────────────────────────────────
+# scenarios/fakobanko/docker-compose.yml
+#
+# Fakobanko Regional Bank — AI-powered banking platform
+#
+# Services:
+#   - www.fakobanko.local   (8082) — Public website
+#   - chat.fakobanko.local  (8081) — LLM chatbot API
+#   - api.fakobanko.local   (8080) — Banking REST API
+#   - docs.fakobanko.local  (8083) — API documentation
+#   - ml.fakobanko.local    (8084) — ML model serving [profile: ml]
+#   - internal.fakobanko.local (8085) — Employee portal [profile: internal]
+#   - admin.fakobanko.local (8086) — Admin panel [profile: admin]
+#   - vector.fakobanko.local (8087) — RAG/Vector DB [profile: vector]
+#   - agent.fakobanko.local (8088) — AI agent [profile: agent]
+#   - mcp.fakobanko.local   (8089) — MCP server [profile: mcp]
+#
+# Start via range:
+#   ./range/start-range.sh fakobanko
+#
+# Or directly:
+#   docker network create chainsmith-shared 2>/dev/null || true
+#   docker compose up -d
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ═══════════════════════════════════════════════════════════════
+  # BASE SERVICES (always on)
+  # ═══════════════════════════════════════════════════════════════
+
+  # ─── Public Website ────────────────────────────────────────────
+  fakobanko-www:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: fakobanko-www
+    hostname: www.fakobanko.local
+    command: >
+      uvicorn app.scenario_services.banking.www:app
+      --host 0.0.0.0 --port 8082
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=www
+      - SERVICE_PORT=8082
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/fakobanko/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=Fakobanko
+      - BRAND_DOMAIN=fakobanko.local
+      - CHAT_URL=http://chat.fakobanko.local:8081
+      - FOUNDED_YEAR=1952
+      - TAGLINE=Your Regional Banking Partner
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8082:8082"
+    networks:
+      chainsmith-shared:
+        aliases:
+          - www.fakobanko.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── Customer Chatbot ──────────────────────────────────────────
+  fakobanko-chat:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: fakobanko-chat
+    hostname: chat.fakobanko.local
+    command: >
+      uvicorn app.scenario_services.banking.chatbot:app
+      --host 0.0.0.0 --port 8081
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=chat
+      - SERVICE_PORT=8081
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/fakobanko/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=Fakobanko
+      - BRAND_DOMAIN=fakobanko.local
+      - CHATBOT_VERSION=1.2.0
+      # LLM configuration
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-http://local-litellm-proxy:4000/v1}
+      - LITELLM_MODEL=${LITELLM_MODEL:-gpt-4o-mini}
+      - LLM_PROFILE=${LLM_PROFILE:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
+      - OLLAMA_BASE_URL=http://chainsmith-ollama:11434/v1
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral}
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8081:8081"
+    networks:
+      chainsmith-shared:
+        aliases:
+          - chat.fakobanko.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── Banking API ───────────────────────────────────────────────
+  fakobanko-api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: fakobanko-api
+    hostname: api.fakobanko.local
+    command: >
+      uvicorn app.scenario_services.banking.api:app
+      --host 0.0.0.0 --port 8080
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=api
+      - SERVICE_PORT=8080
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/fakobanko/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=Fakobanko
+      - BRAND_DOMAIN=fakobanko.local
+      - VPN_DOMAIN=vpn.fakobanko.local
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      chainsmith-shared:
+        aliases:
+          - api.fakobanko.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── API Documentation ─────────────────────────────────────────
+  fakobanko-docs:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: fakobanko-docs
+    hostname: docs.fakobanko.local
+    command: >
+      uvicorn app.scenario_services.common.docs:app
+      --host 0.0.0.0 --port 8083
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=docs
+      - SERVICE_PORT=8083
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/fakobanko/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=Fakobanko
+      - BRAND_DOMAIN=fakobanko.local
+      - DOCS_VERSION=2.0.0
+      - API_BASE_URL=http://api.fakobanko.local:8080
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8083:8083"
+    networks:
+      chainsmith-shared:
+        aliases:
+          - docs.fakobanko.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8083/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ═══════════════════════════════════════════════════════════════
+  # OPTIONAL SERVICES (profile-activated)
+  # ═══════════════════════════════════════════════════════════════
+
+  # ─── ML Model Serving ──────────────────────────────────────────
+  fakobanko-ml:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: fakobanko-ml
+    hostname: ml.fakobanko.local
+    profiles:
+      - ml
+      - all
+    command: >
+      uvicorn app.scenario_services.ai.ml_serving:app
+      --host 0.0.0.0 --port 8084
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=ml
+      - SERVICE_PORT=8084
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/fakobanko/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=Fakobanko
+      - BRAND_DOMAIN=fakobanko.local
+      - MODEL_ID=fakobanko-llm-v2
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8084:8084"
+    networks:
+      chainsmith-shared:
+        aliases:
+          - ml.fakobanko.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8084/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── Internal Employee Portal ──────────────────────────────────
+  fakobanko-internal:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: fakobanko-internal
+    hostname: internal.fakobanko.local
+    profiles:
+      - internal
+      - all
+    command: >
+      uvicorn app.scenario_services.corporate.internal:app
+      --host 0.0.0.0 --port 8085
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=internal
+      - SERVICE_PORT=8085
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/fakobanko/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=Fakobanko
+      - BRAND_DOMAIN=fakobanko.local
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8085:8085"
+    networks:
+      chainsmith-shared:
+        aliases:
+          - internal.fakobanko.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8085/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── Admin Panel ───────────────────────────────────────────────
+  fakobanko-admin:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: fakobanko-admin
+    hostname: admin.fakobanko.local
+    profiles:
+      - admin
+      - all
+    command: >
+      uvicorn app.scenario_services.corporate.admin:app
+      --host 0.0.0.0 --port 8086
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=admin
+      - SERVICE_PORT=8086
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/fakobanko/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=Fakobanko
+      - BRAND_DOMAIN=fakobanko.local
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8086:8086"
+    networks:
+      chainsmith-shared:
+        aliases:
+          - admin.fakobanko.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── Vector DB / RAG Service ───────────────────────────────────
+  fakobanko-vector:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: fakobanko-vector
+    hostname: vector.fakobanko.local
+    profiles:
+      - vector
+      - all
+    command: >
+      uvicorn app.scenario_services.ai.vector_db:app
+      --host 0.0.0.0 --port 8087
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=vector
+      - SERVICE_PORT=8087
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/fakobanko/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=Fakobanko
+      - BRAND_DOMAIN=fakobanko.local
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8087:8087"
+    networks:
+      chainsmith-shared:
+        aliases:
+          - vector.fakobanko.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8087/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── AI Agent Orchestration ────────────────────────────────────
+  fakobanko-agent:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: fakobanko-agent
+    hostname: agent.fakobanko.local
+    profiles:
+      - agent
+      - all
+    command: >
+      uvicorn app.scenario_services.ai.agent:app
+      --host 0.0.0.0 --port 8088
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=agent
+      - SERVICE_PORT=8088
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/fakobanko/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=Fakobanko
+      - BRAND_DOMAIN=fakobanko.local
+      - AGENT_MODEL=gpt-4-turbo
+      # LLM configuration for agent reasoning
+      - LLM_PROFILE=${LLM_PROFILE:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
+      - OLLAMA_BASE_URL=http://chainsmith-ollama:11434/v1
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral}
+      # Internal service URLs
+      - CHAT_SERVICE_URL=http://fakobanko-chat:8081
+      - API_SERVICE_URL=http://fakobanko-api:8080
+      - VECTOR_SERVICE_URL=http://fakobanko-vector:8087
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8088:8088"
+    networks:
+      chainsmith-shared:
+        aliases:
+          - agent.fakobanko.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8088/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── MCP Server ────────────────────────────────────────────────
+  fakobanko-mcp:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: fakobanko-mcp
+    hostname: mcp.fakobanko.local
+    profiles:
+      - mcp
+      - all
+    command: >
+      uvicorn app.scenario_services.ai.mcp_server:app
+      --host 0.0.0.0 --port 8089
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=mcp
+      - SERVICE_PORT=8089
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/fakobanko/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=Fakobanko
+      - BRAND_DOMAIN=fakobanko.local
+      - MCP_SERVER_NAME=fakobanko-mcp
+      # Internal service URLs for tool execution
+      - API_SERVICE_URL=http://fakobanko-api:8080
+      - VECTOR_SERVICE_URL=http://fakobanko-vector:8087
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8089:8089"
+    networks:
+      chainsmith-shared:
+        aliases:
+          - mcp.fakobanko.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8089/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+networks:
+  chainsmith-shared:
+    name: chainsmith-shared
+    external: true

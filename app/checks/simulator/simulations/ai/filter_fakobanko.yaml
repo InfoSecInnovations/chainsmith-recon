@@ -1,0 +1,15 @@
+# simulations/ai/filter_fakobanko.yaml
+# Fakobanko scenario: basic content filtering present but roleplay bypass allowed
+suite: ai
+emulates: content_filter_check
+target: "chat.fakobanko.local"
+disposition: filter_partial
+
+output:
+  filter_info:
+    detected: true
+    blocked:
+      - "instruction_override"
+    allowed:
+      - "roleplay"
+      - "encoding"

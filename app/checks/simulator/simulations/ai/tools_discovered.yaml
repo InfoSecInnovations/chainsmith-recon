@@ -1,0 +1,15 @@
+suite: ai
+emulates: tool_discovery
+target: "chat.example.local"
+disposition: tools_found
+
+output:
+  discovered_tools:
+    - "get_account_balance"
+    - "transfer_funds"
+    - "get_transaction_history"
+    - "lookup_customer"
+    - "admin_override"
+  high_risk:
+    - "transfer_funds"
+    - "admin_override"

@@ -1,0 +1,13 @@
+suite: ai
+emulates: content_filter_check
+target: "unfiltered.example.local"
+disposition: no_filter
+
+output:
+  filter_info:
+    detected: false
+    blocked: []
+    allowed:
+      - "instruction_override"
+      - "roleplay"
+      - "encoding"

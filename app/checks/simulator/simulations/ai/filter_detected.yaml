@@ -1,0 +1,13 @@
+suite: ai
+emulates: content_filter_check
+target: "chat.example.local"
+disposition: filter_detected
+
+output:
+  filter_info:
+    detected: true
+    blocked:
+      - "instruction_override"
+      - "roleplay"
+    allowed:
+      - "encoding"

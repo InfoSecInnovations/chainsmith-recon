@@ -1,0 +1,40 @@
+# simulations/agent/agent_discovery_auth_required.yaml
+#
+# Simulates discovery of a secured agent endpoint requiring authentication.
+
+suite: agent
+emulates: agent_discovery
+target: "secure-agent.fakobanko.local"
+disposition: auth_required
+
+output:
+  agent_endpoints:
+    - url: "http://secure-agent.fakobanko.local:8000/agent/run"
+      path: "/agent/run"
+      method: "POST"
+      status_code: 401
+      framework: "langchain"
+      framework_confidence: 1
+      indicators:
+        - "path:/agent/run"
+      auth_required: true
+      service:
+        url: "http://secure-agent.fakobanko.local:8000"
+        host: "secure-agent.fakobanko.local"
+        port: 8000
+        scheme: "http"
+        service_type: "api"
+
+  agent_frameworks:
+    - "langchain"
+
+findings:
+  - title: "Agent endpoint: /agent/run"
+    description: "Agent endpoint discovered at /agent/run. Framework: langchain. Authentication required."
+    severity: "info"
+    evidence: |
+      Path: /agent/run
+      Method: POST
+      Status: 401
+      Framework: langchain (confidence: 1)
+      Indicators: path:/agent/run

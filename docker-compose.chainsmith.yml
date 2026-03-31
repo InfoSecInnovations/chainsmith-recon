@@ -1,0 +1,102 @@
+# ─────────────────────────────────────────────────────────────────
+# docker-compose.chainsmith.yml — Chainsmith Recon
+#
+# Manages the Chainsmith recon agent only.
+# Targets are discovered via checks — either real systems or
+# scenarios running in the range.
+#
+# Attaches to the external "chainsmith-shared" network for
+# communication with scenario targets.
+#
+# Start via:
+#   ./chainsmith.sh start [--profile openai|anthropic|ollama|litellm]
+#
+# LAN access:
+#   Edit the ports binding below, replacing "127.0.0.1:" with
+#   "0.0.0.0:" to expose Chainsmith on the local network.
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ─── Chainsmith Recon Agent ─────────────────────────────────
+  chainsmith-recon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: chainsmith-recon
+    environment:
+      - APP_MODULE=app.main:app
+      - HOST=0.0.0.0
+      - PORT=8000
+      - PYTHONPATH=/app
+
+      # LLM routing — resolved from LLM_PROFILE at launch
+      - LLM_PROFILE=${LLM_PROFILE:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
+      - OLLAMA_BASE_URL=http://chainsmith-ollama:11434/v1
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral}
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-}
+      - LITELLM_API_KEY=${LITELLM_API_KEY:-}
+      - LITELLM_MODEL=${LITELLM_MODEL:-gpt-4o-mini}
+      - LITELLM_MODEL_FALLBACK=${LITELLM_MODEL_FALLBACK:-gpt-4o-mini}
+
+      - RECON_DB_PATH=/data/recon.sqlite
+    volumes:
+      - ./app:/app/app:ro
+      - ./static:/app/static:ro
+      - ./scenarios:/app/scenarios:ro
+      - recon-data:/data
+    ports:
+      # ── LOCALHOST ONLY ──────────────────────────────────────
+      # For LAN access replace "127.0.0.1:" with "0.0.0.0:"
+      - "127.0.0.1:${CHAINSMITH_PORT:-8100}:8000"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+
+  # ─── Ollama (profile: ollama only) ───────────────────────────
+  # Local model inference — no API key required.
+  # First startup pulls the configured model (may take several minutes).
+  # Requires 8 GB+ RAM for mistral.
+  chainsmith-ollama:
+    image: ollama/ollama:latest
+    container_name: chainsmith-ollama
+    profiles:
+      - ollama
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+
+
+networks:
+  chainsmith-shared:
+    name: chainsmith-shared
+    external: true
+
+
+volumes:
+  recon-data:
+    name: chainsmith-recon-data
+  ollama-models:
+    name: chainsmith-ollama-models

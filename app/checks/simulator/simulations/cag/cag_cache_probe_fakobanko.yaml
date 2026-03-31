@@ -1,0 +1,120 @@
+# simulations/cag/cag_cache_probe_fakobanko.yaml
+#
+# Fakobanko CAG cache probe - vulnerable to cross-session leakage.
+
+suite: cag
+emulates: cag_cache_probe
+target: "cache.fakobanko.local"
+disposition: vulnerable
+
+output:
+  cache_vulnerabilities:
+    - vulnerability_type: "cross_session_leak"
+      endpoint_path: "/cache"
+      severity: "high"
+      description: "Cache returns responses from other user sessions"
+      evidence:
+        marker_sent: "UNIQUE_MARKER_SESSION_A_12345"
+        marker_found_in_session_b: true
+        response_preview: "Based on your previous inquiry about UNIQUE_MARKER_SESSION_A_12345..."
+
+    - vulnerability_type: "cache_timing"
+      endpoint_path: "/cache"
+      severity: "medium"
+      description: "Significant timing difference reveals cache hits"
+      evidence:
+        first_request_ms: 245
+        cached_request_ms: 12
+        speedup_ratio: 0.95
+        timing_detectable: true
+
+    - vulnerability_type: "context_id_enumeration"
+      endpoint_path: "/cache"
+      severity: "medium"
+      description: "Predictable context IDs allow accessing other sessions"
+      evidence:
+        enumerable_ids:
+          - "1"
+          - "admin"
+          - "test"
+        accessible_contexts: 3
+        response_preview: "Context admin contains: Previous banking assistant configuration..."
+
+  cache_timing_results:
+    - endpoint_path: "/cache"
+      test_type: "cache_timing"
+      requests_sent: 3
+      timing_data:
+        request_1_ms: 245
+        request_2_ms: 18
+        request_3_ms: 11
+      speedup_ratio: 0.95
+      caching_detected: true
+      vulnerability_type: "side_channel"
+
+    - endpoint_path: "/cache"
+      test_type: "cross_session_leak"
+      session_a_marker: "UNIQUE_MARKER_SESSION_A_12345"
+      session_b_received_marker: true
+      vulnerability_type: "information_leakage"
+
+    - endpoint_path: "/cache"
+      test_type: "context_id_enumeration"
+      probed_ids: ["1", "0", "admin", "test", "default"]
+      successful_ids: ["1", "admin", "test"]
+      vulnerability_type: "authorization_bypass"
+
+    - endpoint_path: "/cache"
+      test_type: "cache_key_collision"
+      identical_response: true
+      key_collision_detected: true
+      vulnerability_type: "integrity"
+
+findings:
+  - title: "Cross-session cache leakage"
+    description: "Cache system leaks responses between user sessions. Markers injected in session A were retrieved in session B, exposing potential for data theft."
+    severity: "high"
+    evidence: |
+      Test: cross_session_leak
+      Marker: UNIQUE_MARKER_SESSION_A_12345
+      Found in other session: true
+      Risk: User data exposure across sessions
+    check_name: "cag_cache_probe"
+    target_url: "http://cache.fakobanko.local:8080/cache"
+    references:
+      - "CWE-524: Use of Cache Containing Sensitive Information"
+
+  - title: "Context ID enumeration vulnerability"
+    description: "Predictable context IDs (1, admin, test) allow accessing cached responses from other sessions or administrative contexts."
+    severity: "medium"
+    evidence: |
+      Test: context_id_enumeration
+      Accessible IDs: 1, admin, test
+      Admin context: Previous banking assistant configuration leaked
+    check_name: "cag_cache_probe"
+    target_url: "http://cache.fakobanko.local:8080/cache"
+    references:
+      - "CWE-639: Authorization Bypass Through User-Controlled Key"
+
+  - title: "Cache timing side channel"
+    description: "95% speedup on cached requests reveals cache hit/miss status. Can be used to infer other users' queries."
+    severity: "medium"
+    evidence: |
+      Test: cache_timing
+      First request: 245ms
+      Cached request: 12ms
+      Speedup: 95%
+    check_name: "cag_cache_probe"
+    target_url: "http://cache.fakobanko.local:8080/cache"
+    references:
+      - "CWE-208: Observable Timing Discrepancy"
+
+  - title: "Cache key collision detected"
+    description: "Semantically similar queries return identical cached responses, enabling cache poisoning attacks."
+    severity: "low"
+    evidence: |
+      Test: cache_key_collision
+      Identical responses: true
+      Risk: Cache poisoning possible
+    check_name: "cag_cache_probe"
+    target_url: "http://cache.fakobanko.local:8080/cache"

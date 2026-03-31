@@ -1,0 +1,23 @@
+# simulations/web/robots_fakobanko.yaml
+# Fakobanko scenario: robots.txt reveals internal API and ML paths
+suite: web
+emulates: robots_txt
+target: "www.fakobanko.local"
+disposition: paths_found
+
+output:
+  robots_url: "http://www.fakobanko.local:8082/robots.txt"
+  disallowed:
+    - "/admin"
+    - "/internal/api"
+    - "/model/weights"
+    - "/api/v1/internal"
+    - "/.env"
+  interesting:
+    - "/admin"
+    - "/internal/api"
+    - "/model/weights"
+    - "/api/v1/internal"
+    - "/.env"
+  sitemaps:
+    - "http://www.fakobanko.local:8082/sitemap.xml"

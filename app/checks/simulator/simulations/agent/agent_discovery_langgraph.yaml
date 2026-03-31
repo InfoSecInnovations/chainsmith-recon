@@ -1,0 +1,76 @@
+# simulations/agent/agent_discovery_langgraph.yaml
+#
+# Simulates discovery of a LangGraph-based agent endpoint.
+
+suite: agent
+emulates: agent_discovery
+target: "agent.fakobanko.local"
+disposition: langgraph_found
+
+output:
+  agent_endpoints:
+    - url: "http://agent.fakobanko.local:8000/invoke"
+      path: "/invoke"
+      method: "POST"
+      status_code: 200
+      framework: "langgraph"
+      framework_confidence: 3
+      indicators:
+        - "path:/invoke"
+        - "body:langgraph(2)"
+        - "json-schema"
+        - "stateful-agent"
+      auth_required: false
+      capabilities:
+        memory: true
+        tools: true
+        streaming: true
+        state: true
+        threads: true
+      service:
+        url: "http://agent.fakobanko.local:8000"
+        host: "agent.fakobanko.local"
+        port: 8000
+        scheme: "http"
+        service_type: "ai"
+
+    - url: "http://agent.fakobanko.local:8000/stream"
+      path: "/stream"
+      method: "POST"
+      status_code: 200
+      framework: "langgraph"
+      framework_confidence: 2
+      indicators:
+        - "path:/stream"
+        - "body:langgraph(1)"
+      auth_required: false
+      service:
+        url: "http://agent.fakobanko.local:8000"
+        host: "agent.fakobanko.local"
+        port: 8000
+        scheme: "http"
+        service_type: "ai"
+
+  agent_frameworks:
+    - "langgraph"
+
+findings:
+  - title: "Agent endpoint: /invoke"
+    description: "Agent endpoint discovered at /invoke. Framework: langgraph. No authentication required - potential unauthorized access. Capabilities: memory, tools, streaming, state, threads."
+    severity: "high"
+    evidence: |
+      Path: /invoke
+      Method: POST
+      Status: 200
+      Framework: langgraph (confidence: 3)
+      Indicators: path:/invoke, body:langgraph(2), json-schema, stateful-agent
+
+  - title: "Agent endpoint: /stream"
+    description: "Agent endpoint discovered at /stream. Framework: langgraph. No authentication required - potential unauthorized access."
+    severity: "high"
+    evidence: |
+      Path: /stream
+      Method: POST
+      Status: 200
+      Framework: langgraph (confidence: 2)
+      Indicators: path:/stream, body:langgraph(1)

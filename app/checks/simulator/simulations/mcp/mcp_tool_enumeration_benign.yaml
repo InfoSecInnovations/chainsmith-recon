@@ -1,0 +1,90 @@
+# simulations/mcp/mcp_tool_enumeration_benign.yaml
+#
+# Simulates enumeration of MCP tools with only benign/low-risk tools.
+# Represents a well-secured MCP deployment.
+
+suite: mcp
+emulates: mcp_tool_enumeration
+target: "safe-mcp.fakobanko.local"
+disposition: benign_tools_only
+
+output:
+  mcp_tools:
+    - name: "calculate"
+      description: "Perform mathematical calculations"
+      input_schema:
+        type: object
+        properties:
+          expression:
+            type: string
+            description: "Mathematical expression to evaluate"
+        required:
+          - expression
+      risk_level: "info"
+      risk_indicators: []
+      server_url: "http://safe-mcp.fakobanko.local:3000/mcp"
+      service_host: "safe-mcp.fakobanko.local"
+
+    - name: "format_text"
+      description: "Format text with specified style"
+      input_schema:
+        type: object
+        properties:
+          text:
+            type: string
+          format:
+            type: string
+            enum: ["uppercase", "lowercase", "titlecase"]
+        required:
+          - text
+          - format
+      risk_level: "info"
+      risk_indicators: []
+      server_url: "http://safe-mcp.fakobanko.local:3000/mcp"
+      service_host: "safe-mcp.fakobanko.local"
+
+    - name: "get_weather"
+      description: "Get current weather for a location (read-only API)"
+      input_schema:
+        type: object
+        properties:
+          location:
+            type: string
+            description: "City or coordinates"
+        required:
+          - location
+      risk_level: "low"
+      risk_indicators:
+        - "name:get"
+      server_url: "http://safe-mcp.fakobanko.local:3000/mcp"
+      service_host: "safe-mcp.fakobanko.local"
+
+  high_risk_tools: []
+
+findings:
+  - title: "MCP tool: calculate (info risk)"
+    description: "MCP tool 'calculate' discovered. Description: Perform mathematical calculations. Risk level: INFO"
+    severity: "info"
+    evidence: |
+      Tool: calculate
+      Risk: info
+      Description: Perform mathematical calculations
+      Parameters: expression
+
+  - title: "MCP tool: format_text (info risk)"
+    description: "MCP tool 'format_text' discovered. Description: Format text with specified style. Risk level: INFO"
+    severity: "info"
+    evidence: |
+      Tool: format_text
+      Risk: info
+      Description: Format text with specified style
+      Parameters: text, format
+
+  - title: "MCP tool: get_weather (low risk)"
+    description: "MCP tool 'get_weather' discovered. Description: Get current weather for a location (read-only API). Risk level: LOW"
+    severity: "low"
+    evidence: |
+      Tool: get_weather
+      Risk: low
+      Description: Get current weather for a location
+      Parameters: location

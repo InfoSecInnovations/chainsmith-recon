@@ -1,0 +1,79 @@
+# simulations/network/service_probe_fakobanko.yaml
+# Fakobanko scenario: All services probed and fingerprinted
+suite: network
+emulates: service_probe
+target: "*.fakobanko.local"
+disposition: services_fingerprinted
+
+output:
+  services:
+    - host: www.fakobanko.local
+      port: 443
+      scheme: https
+      service_type: http
+      server_header: "nginx/1.24.0"
+      status_code: 200
+      response_time_ms: 28
+
+    - host: chat.fakobanko.local
+      port: 8080
+      scheme: http
+      service_type: ai
+      server_header: "uvicorn/0.24.0"
+      content_type: "application/json"
+      status_code: 200
+      response_time_ms: 45
+
+    - host: api.fakobanko.local
+      port: 8080
+      scheme: http
+      service_type: api
+      server_header: "uvicorn/0.24.0"
+      content_type: "application/json"
+      status_code: 200
+      response_time_ms: 42
+
+    - host: docs.fakobanko.local
+      port: 8080
+      scheme: http
+      service_type: http
+      server_header: "uvicorn/0.24.0"
+      content_type: "text/html"
+      status_code: 200
+      response_time_ms: 35
+
+    - host: mcp.fakobanko.local
+      port: 8080
+      scheme: http
+      service_type: ai
+      server_header: "uvicorn/0.24.0"
+      content_type: "application/json"
+      status_code: 200
+      response_time_ms: 38
+
+    - host: agent.fakobanko.local
+      port: 8080
+      scheme: http
+      service_type: ai
+      server_header: "uvicorn/0.24.0"
+      content_type: "application/json"
+      status_code: 200
+      response_time_ms: 52
+
+    - host: rag.fakobanko.local
+      port: 8080
+      scheme: http
+      service_type: ai
+      server_header: "uvicorn/0.24.0"
+      content_type: "application/json"
+      status_code: 200
+      response_time_ms: 48
+
+    - host: cache.fakobanko.local
+      port: 8080
+      scheme: http
+      service_type: ai
+      server_header: "uvicorn/0.24.0"
+      content_type: "application/json"
+      status_code: 200
+      response_time_ms: 22

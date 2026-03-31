@@ -1,0 +1,18 @@
+# simulations/web/headers_success.yaml
+# Smoke test: all security headers present, no issues
+suite: web
+emulates: header_analysis
+target: "www.example.local"
+disposition: headers_analyzed
+
+output:
+  host: "www.example.local"
+  status_code: 200
+  headers:
+    strict-transport-security: "max-age=31536000; includeSubDomains"
+    x-content-type-options: "nosniff"
+    x-frame-options: "DENY"
+    content-security-policy: "default-src 'self'"
+    referrer-policy: "strict-origin-when-cross-origin"
+    server: "nginx"
+  findings_count: 0

@@ -1,0 +1,16 @@
+# simulations/ai/fingerprint_fakobanko.yaml
+# Fakobanko scenario: chat service identified as vLLM with FastAPI overlay
+suite: ai
+emulates: ai_framework_fingerprint
+target: "chat.fakobanko.local"
+disposition: framework_identified
+
+output:
+  framework: "fastapi_ml"
+  confidence: "high"
+  score: 7
+  matches:
+    - "endpoint: /docs"
+    - "endpoint: /openapi.json"
+    - "body: fastapi"
+    - "error: RequestValidationError"

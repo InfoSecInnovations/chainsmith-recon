@@ -1,0 +1,133 @@
+# simulations/mcp/mcp_tool_enumeration_fakobanko.yaml
+#
+# Fakobanko MCP tools - banking-specific tools with security issues.
+
+suite: mcp
+emulates: mcp_tool_enumeration
+target: "mcp.fakobanko.local"
+disposition: dangerous_tools_found
+
+output:
+  mcp_tools:
+    - name: "get_account_balance"
+      description: "Retrieve account balance for a customer"
+      risk_level: "medium"
+      schema:
+        type: "object"
+        properties:
+          account_id:
+            type: "string"
+            description: "Customer account ID"
+      server_url: "http://mcp.fakobanko.local:8080/mcp"
+
+    - name: "transfer_funds"
+      description: "Transfer funds between accounts"
+      risk_level: "high"
+      schema:
+        type: "object"
+        properties:
+          from_account:
+            type: "string"
+          to_account:
+            type: "string"
+          amount:
+            type: "number"
+      server_url: "http://mcp.fakobanko.local:8080/mcp"
+
+    - name: "execute_sql"
+      description: "Execute SQL query on banking database"
+      risk_level: "critical"
+      schema:
+        type: "object"
+        properties:
+          query:
+            type: "string"
+            description: "SQL query to execute"
+      server_url: "http://mcp.fakobanko.local:8080/mcp"
+
+    - name: "read_customer_file"
+      description: "Read customer document from file storage"
+      risk_level: "high"
+      schema:
+        type: "object"
+        properties:
+          file_path:
+            type: "string"
+      server_url: "http://mcp.fakobanko.local:8080/mcp"
+
+    - name: "send_notification"
+      description: "Send email or SMS notification to customer"
+      risk_level: "medium"
+      schema:
+        type: "object"
+        properties:
+          customer_id:
+            type: "string"
+          message:
+            type: "string"
+          channel:
+            type: "string"
+            enum: ["email", "sms"]
+      server_url: "http://mcp.fakobanko.local:8080/mcp"
+
+    - name: "get_credit_score"
+      description: "Retrieve credit score for loan processing"
+      risk_level: "low"
+      schema:
+        type: "object"
+        properties:
+          ssn:
+            type: "string"
+      server_url: "http://mcp.fakobanko.local:8080/mcp"
+
+  high_risk_tools:
+    - name: "execute_sql"
+      risk_level: "critical"
+      reason: "Direct SQL execution allows database manipulation"
+
+    - name: "transfer_funds"
+      risk_level: "high"
+      reason: "Financial transfer capability without apparent authorization checks"
+
+    - name: "read_customer_file"
+      risk_level: "high"
+      reason: "File read capability may enable path traversal"
+
+findings:
+  - title: "Critical MCP tool: execute_sql"
+    description: "MCP server exposes execute_sql tool allowing direct SQL query execution. This could enable data exfiltration, manipulation, or destruction of banking records."
+    severity: "critical"
+    evidence: |
+      Tool: execute_sql
+      Description: Execute SQL query on banking database
+      Parameters: query (string)
+      Risk: Direct database access without input validation
+    check_name: "mcp_tool_enumeration"
+    target_url: "http://mcp.fakobanko.local:8080/mcp"
+    references:
+      - "OWASP LLM Top 10 - LLM07 Insecure Plugin Design"
+      - "CWE-89: SQL Injection"
+
+  - title: "High-risk MCP tool: transfer_funds"
+    description: "MCP server exposes transfer_funds tool for moving money between accounts. No apparent authorization validation in tool schema."
+    severity: "high"
+    evidence: |
+      Tool: transfer_funds
+      Parameters: from_account, to_account, amount
+      Risk: Financial manipulation if injected via LLM
+    check_name: "mcp_tool_enumeration"
+    target_url: "http://mcp.fakobanko.local:8080/mcp"
+    references:
+      - "OWASP LLM Top 10 - LLM07 Insecure Plugin Design"
+
+  - title: "High-risk MCP tool: read_customer_file"
+    description: "MCP server exposes read_customer_file tool with file_path parameter. Potential path traversal vulnerability."
+    severity: "high"
+    evidence: |
+      Tool: read_customer_file
+      Parameters: file_path (string)
+      Risk: Path traversal to read sensitive files
+    check_name: "mcp_tool_enumeration"
+    target_url: "http://mcp.fakobanko.local:8080/mcp"
+    references:
+      - "CWE-22: Path Traversal"

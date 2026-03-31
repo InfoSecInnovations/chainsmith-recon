@@ -1,0 +1,14 @@
+{
+  "name": "_template",
+  "description": "Minimal scenario template — copy and customize",
+  "version": "1.0.0",
+  "target": {
+    "pattern": "localhost",
+    "known_hosts": ["localhost"],
+    "ports": [9000],
+    "notes": "Start via: ./range/start-range.sh <your-scenario-name>"
+  },
+  "simulations": [],
+  "expected_findings": [],
+  "expected_chains": []
+}

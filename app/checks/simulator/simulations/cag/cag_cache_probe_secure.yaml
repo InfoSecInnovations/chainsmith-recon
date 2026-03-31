@@ -1,0 +1,50 @@
+# simulations/cag/cag_cache_probe_secure.yaml
+#
+# Simulates testing against a well-secured CAG system.
+
+suite: cag
+emulates: cag_cache_probe
+target: "hardened-cag.fakobanko.local"
+disposition: secure
+
+output:
+  cache_vulnerabilities: []
+
+  cache_timing_results:
+    - test_id: "cross_session_leak"
+      category: "information_leakage"
+      description: "Tests if cached responses leak across sessions"
+      vulnerability_detected: false
+      potential_issue: false
+      indicators: []
+      response_preview: "I don't have access to other users' conversations. How can I help you today?"
+
+    - test_id: "cache_timing"
+      category: "side_channel"
+      description: "Analyzes timing differences to infer cache state"
+      vulnerability_detected: false
+      potential_issue: false
+      timing_data:
+        first_request_ms: 320.5
+        second_request_ms: 315.2
+        third_request_ms: 318.1
+        speedup_ratio: 0.02
+        caching_detected: false
+      cache_headers: []
+
+    - test_id: "context_id_enumeration"
+      category: "information_leakage"
+      description: "Tests if context/session IDs are enumerable"
+      vulnerability_detected: false
+      potential_issue: false
+      accessible_ids: []
+
+    - test_id: "cache_key_collision"
+      category: "cache_poisoning"
+      description: "Tests for predictable cache key generation"
+      vulnerability_detected: false
+      potential_issue: false
+      responses_identical: false
+      cache_hit_detected: false
+
+findings: []

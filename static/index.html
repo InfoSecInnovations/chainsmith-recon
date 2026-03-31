@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chainsmith Recon - Scope</title>
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .scope-container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .scope-card {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 32px;
+            border: 1px solid var(--border);
+        }
+
+        .scope-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .scope-subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+
+        .btn-start {
+            width: 100%;
+            padding: 14px;
+            font-size: 1rem;
+            margin-top: 24px;
+        }
+
+        .inline-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .inline-toggle label {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        /* Scan Behavior section */
+        .behavior-section {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .behavior-title {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+        .behavior-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .behavior-row + .behavior-row {
+            margin-top: 8px;
+        }
+        .behavior-label {
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+        }
+        .behavior-desc {
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .behavior-row select {
+            min-width: 160px;
+        }
+
+        /* Per-suite settings inside accordion */
+        .suite-settings {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+        .suite-setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 0.75rem;
+        }
+        .suite-setting-row + .suite-setting-row {
+            margin-top: 6px;
+        }
+        .suite-setting-row label {
+            color: var(--text-secondary);
+        }
+        .suite-setting-row select {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            min-width: 140px;
+        }
+
+        /* Suite header badges */
+        .suite-badges {
+            display: flex;
+            gap: 4px;
+            margin-left: 8px;
+        }
+        .suite-badge {
+            font-size: 0.625rem;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+        .suite-badge.critical-skip {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+        .suite-badge.critical-stop {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+        }
+        .suite-badge.intrusive-on {
+            background: rgba(139, 92, 246, 0.15);
+            color: var(--accent);
+        }
+
+        /* Intrusive check locking */
+        .suite-check-item.intrusive-locked {
+            opacity: 0.35;
+            pointer-events: none;
+            position: relative;
+        }
+        .suite-check-item.intrusive-locked label::after {
+            content: '\1F512';
+            font-size: 0.6875rem;
+            margin-left: 6px;
+        }
+        .suite-check-item.intrusive-unlocked {
+            transition: opacity 0.3s ease;
+        }
+
+        /* Per-suite intrusive toggle locked when global is off */
+        .suite-setting-row.intrusive-gate-locked {
+            opacity: 0.35;
+            pointer-events: none;
+        }
+        .suite-setting-row.intrusive-gate-locked .toggle-slider {
+            cursor: not-allowed;
+        }
+
+        /* Global intrusive hint states */
+        .intrusive-hint-off {
+            color: var(--text-muted);
+        }
+        .intrusive-hint-on {
+            color: var(--accent);
+        }
+
+        /* Sticky start button */
+        .btn-start-sticky {
+            position: sticky;
+            bottom: 20px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <a href="index.html" class="brand">
+                <span class="brand-name"><span class="accent">Chainsmith</span> Recon</span>
+                <span class="brand-tagline">Recon for the AI Era</span>
+            </a>
+        </div>
+        <div class="header-right">
+            <button class="btn btn-icon" id="btn-settings" title="Settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <a href="index.html" class="nav-item active">Scope</a>
+        <a href="scan.html" class="nav-item" id="nav-scan">Scan</a>
+        <a href="findings.html" class="nav-item" id="nav-findings">Results</a>
+        <a href="trend.html" class="nav-item" id="nav-trends">Trends</a>
+        <a href="reports.html" class="nav-item" id="nav-reports">Reports</a>
+    </nav>
+
+    <!-- Legacy Scenario Banner (hidden, badge now in header) -->
+    <div id="scenario-banner" class="scenario-banner" style="display:none"></div>
+
+    <!-- Main Content -->
+    <main class="scope-container">
+        <div class="scope-card">
+            <h2 class="scope-title">Define Target Scope</h2>
+            <p class="scope-subtitle">Configure the reconnaissance target and scanning options</p>
+
+            <!-- Target -->
+            <div class="form-group">
+                <label class="form-label">Target</label>
+                <input type="text" class="form-input" id="scope-target" placeholder="example.com">
+                <div class="form-hint">Enter a domain or hostname (e.g., example.com)</div>
+            </div>
+
+            <!-- Exclusions (Chip Input) -->
+            <div class="form-group">
+                <label class="form-label">Exclusions</label>
+                <div class="chip-input-container" id="exclusions-container">
+                    <input type="text" class="chip-input" id="exclusion-input" placeholder="Type and press Enter to add...">
+                </div>
+                <div class="form-hint">Hosts or paths to exclude from scanning</div>
+            </div>
+
+            <!-- Scan Behavior -->
+            <div class="section-divider">Scan Behavior</div>
+            <div class="behavior-section">
+                <div class="behavior-row">
+                    <div>
+                        <div class="behavior-label">On Critical Finding</div>
+                        <div class="behavior-desc">What happens when any suite discovers a critical vulnerability on a host</div>
+                    </div>
+                    <select class="form-input" id="on-critical-default" style="width: 220px;">
+                        <option value="annotate">Continue & flag downstream</option>
+                        <option value="skip_downstream">Skip later suites on host</option>
+                        <option value="stop">Stop scan immediately</option>
+                    </select>
+                </div>
+                <div style="font-size: 0.6875rem; color: var(--text-muted); margin-top: 6px;">
+                    Suites can override this individually below.
+                </div>
+                <div class="behavior-row" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+                    <div>
+                        <div class="behavior-label">Allow Active Testing</div>
+                        <div class="behavior-desc">Master gate for all intrusive checks (injection, credential testing, write probes)</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="global-intrusive" onchange="onGlobalIntrusiveToggle()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div id="global-intrusive-hint" class="intrusive-hint-off" style="font-size: 0.6875rem; margin-top: 6px;">
+                    All intrusive checks are locked. Enable to unlock per-suite controls below.
+                </div>
+            </div>
+
+            <!-- Check Suites -->
+            <div class="section-divider">Check Suites</div>
+            <div id="suites-container">
+                <!-- Populated by JS -->
+            </div>
+
+            <button class="btn btn-primary btn-start btn-start-sticky" id="btn-start-scan">
+                Start Scan
+            </button>
+        </div>
+    </main>
+
+    <!-- Settings Drawer -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="drawer drawer-right" id="drawer-settings">
+        <div class="drawer-header">
+            <h2>Settings</h2>
+            <button class="drawer-close" id="close-settings">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="drawer-content">
+            <!-- Profile Selector -->
+            <div class="setting-section" style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+                <div class="setting-section-title">Scan Profile</div>
+                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+                    <select class="form-input" id="setting-profile" style="width:100%">
+                        <option value="default">default</option>
+                    </select>
+                    <div id="profile-description" style="color:var(--text-secondary);font-size:0.8125rem;"></div>
+                    <div id="profile-key-settings" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;"></div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Parallel Scanning</div>
+                    <div class="setting-desc">Run checks concurrently</div>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="setting-parallel">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Rate Limit</div>
+                    <div class="setting-desc">Requests per second</div>
+                </div>
+                <input type="number" class="form-input" id="setting-rate" value="10" min="1" max="100" style="width: 80px;">
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Verification Level</div>
+                    <div class="setting-desc">Re-verify findings</div>
+                </div>
+                <select class="form-input" id="setting-verification" style="width: 120px;">
+                    <option value="none">None</option>
+                    <option value="sample">Sample (20%)</option>
+                    <option value="half">Half (50%)</option>
+                    <option value="all">All (100%)</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Auto-redirect on Complete</div>
+                    <div class="setting-desc">Go to Findings when done</div>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="setting-auto-redirect">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Auto-analyze Chains</div>
+                    <div class="setting-desc">Run chain analysis after scan</div>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="setting-auto-chains">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Theme</div>
+                    <div class="setting-desc">Color scheme</div>
+                </div>
+                <div class="theme-selector">
+                    <button class="theme-btn active" data-theme="dark">Dark</button>
+                    <button class="theme-btn" data-theme="light">Light</button>
+                </div>
+            </div>
+
+            <div class="setting-section">
+                <div class="setting-section-title">Scenario</div>
+                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+                    <div class="setting-desc">Simulate a target environment</div>
+                    <select class="form-input" id="setting-scenario" style="width:100%">
+                        <option value="">— No scenario —</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="setting-section">
+                <div class="setting-section-title">Engagement Window</div>
+                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+                    <div class="setting-desc">Optional. You'll be warned when scanning outside this window.</div>
+                    <div style="display:flex;gap:12px;width:100%">
+                        <div style="flex:1">
+                            <label class="setting-label" style="font-size:0.75rem;margin-bottom:4px;display:block">Start</label>
+                            <input type="datetime-local" class="form-input" id="window-start" style="width:100%">
+                        </div>
+                        <div style="flex:1">
+                            <label class="setting-label" style="font-size:0.75rem;margin-bottom:4px;display:block">End</label>
+                            <input type="datetime-local" class="form-input" id="window-end" style="width:100%">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="setting-section">
+                <div class="setting-section-title">Proof of Scope</div>
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">Traffic Logging</div>
+                        <div class="setting-desc">Log all outbound connections</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="proof-traffic" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">Block Exclusions</div>
+                        <div class="setting-desc">Enforce at network level</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="proof-block" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">Log Scope Violations</div>
+                        <div class="setting-desc">Record out-of-scope attempts</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="proof-violations" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="setting-section">
+                <div class="setting-section-title">Actions</div>
+                <button class="btn" id="btn-export" style="width: 100%; margin-bottom: 8px;">
+                    Export Report
+                </button>
+                <button class="btn" id="btn-reset" style="width: 100%;">
+                    Reset All
+                </button>
+            </div>
+
+            <div class="setting-section">
+                <div class="setting-section-title">Links</div>
+                <a href="#" class="setting-link" id="link-presets">Manage Presets</a>
+                <a href="https://docs.chainsmith.io" class="setting-link" target="_blank">Documentation</a>
+                <a href="#" class="setting-link" id="link-about">About Chainsmith Recon</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Window Warning Modal -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">Outside Engagement Window</h3>
+                <button class="drawer-close" id="close-modal">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <p>You are attempting to start a scan outside the configured engagement window.</p>
+                <p style="margin-top: 12px; color: var(--text-secondary);">This action will be logged. Do you want to proceed?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" id="modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="modal-proceed">Proceed Anyway</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div class="modal-overlay" id="about-modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>About Chainsmith Recon</h3>
+                <button class="drawer-close" id="close-about-modal">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 4px;">
+                        <span style="color: var(--accent);">Chainsmith</span> Recon
+                    </div>
+                    <div style="color: var(--text-muted); font-size: 0.875rem;">Recon for the AI Era</div>
+                    <div style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; font-style: italic;">They can slop, but they can't hide.</div>
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">Version</div>
+                    <div class="modal-section-content">1.0.0</div>
+                </div>
+                <div class="modal-section">
+                    <div class="modal-section-title">Description</div>
+                    <div class="modal-section-content">AI/ML attack surface reconnaissance framework. Discovers LLM endpoints, exposed tools, leaky system prompts, and missing guardrails that traditional scanners miss.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        // Suite display metadata (presentation only — checks are fetched from API)
+        const SUITE_META = {
+            network: { name: 'Network', order: 0 },
+            web:     { name: 'Web',     order: 1, intrusiveLabel: 'WebDAV write probes, default credential attempts, mass assignment testing' },
+            ai:      { name: 'AI/LLM',  order: 2, intrusiveLabel: 'Jailbreak testing, prompt injection, filter bypass, system prompt override, parameter injection' },
+            agent:   { name: 'Agent',    order: 3, intrusiveLabel: 'Goal hijacking payload injection' },
+            rag:     { name: 'RAG',      order: 4, intrusiveLabel: 'Indirect prompt injection probes' },
+            cag:     { name: 'CAG',      order: 5, intrusiveLabel: 'Cache leakage and poisoning probes' },
+            mcp:     { name: 'MCP',      order: 6 },
+        };
+
+        // Populated dynamically from /api/v1/checks
+        let CHECK_SUITES = {};
+        // Set of intrusive check names (for per-check lock/unlock)
+        const INTRUSIVE_CHECKS = new Set();
+
+        async function loadCheckSuites() {
+            const res = await fetch('/api/v1/checks');
+            const data = await res.json();
+            const grouped = {};
+            for (const check of data.checks) {
+                const suite = check.suite || 'other';
+                if (!grouped[suite]) {
+                    const meta = SUITE_META[suite] || { name: suite.charAt(0).toUpperCase() + suite.slice(1), order: 99 };
+                    grouped[suite] = {
+                        name: meta.name,
+                        order: meta.order,
+                        checks: [],
+                        hasIntrusive: false,
+                        intrusiveLabel: meta.intrusiveLabel || '',
+                    };
+                }
+                grouped[suite].checks.push(check.name);
+                if (check.intrusive) {
+                    grouped[suite].hasIntrusive = true;
+                    INTRUSIVE_CHECKS.add(check.name);
+                }
+            }
+            // Sort suites by order
+            CHECK_SUITES = Object.fromEntries(
+                Object.entries(grouped).sort((a, b) => a[1].order - b[1].order)
+            );
+        }
+
+        // Exclusions state
+        let exclusions = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCommon();
+            await loadCheckSuites();
+            renderSuites();
+            await loadExistingScope();
+            updateNavLinks();
+            initChipInput();
+            initModals();
+        });
+
+        function renderSuites() {
+            const globalOn = document.getElementById('global-intrusive')?.checked || false;
+            const container = document.getElementById('suites-container');
+            container.innerHTML = Object.entries(CHECK_SUITES).map(([key, suite]) => `
+                <div class="suite-accordion" data-suite="${key}">
+                    <div class="suite-header" onclick="toggleSuite('${key}')">
+                        <div class="suite-header-left">
+                            <svg class="suite-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                            <span class="suite-name">${suite.name}</span>
+                            <span class="suite-count" id="count-${key}">${suite.checks.length} of ${suite.checks.length}</span>
+                            <span class="suite-badges" id="badges-${key}"></span>
+                        </div>
+                        <div class="suite-header-right">
+                            <span class="suite-toggle-all" onclick="event.stopPropagation(); toggleAllInSuite('${key}')">Toggle All</span>
+                        </div>
+                    </div>
+                    <div class="suite-body">
+                        <div class="suite-checks">
+                            ${suite.checks.map(check => {
+                                const isIntrusive = INTRUSIVE_CHECKS.has(check);
+                                const lockedClass = isIntrusive ? 'intrusive-locked' : '';
+                                const checked = isIntrusive ? '' : 'checked';
+                                return `
+                                <div class="suite-check-item ${lockedClass}" data-intrusive="${isIntrusive}">
+                                    <input type="checkbox" id="check-${check}" data-suite="${key}" ${checked} ${isIntrusive ? 'disabled' : ''}>
+                                    <label for="check-${check}">${check.replace(/_/g, ' ')}</label>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                        <div class="suite-settings">
+                            <div class="suite-setting-row">
+                                <label>For critical findings from this suite:</label>
+                                <select class="form-input" id="on-critical-${key}" onchange="updateSuiteBadges('${key}')">
+                                    <option value="">— use default —</option>
+                                    <option value="annotate">Continue & flag downstream</option>
+                                    <option value="skip_downstream">Skip later suites on host</option>
+                                    <option value="stop">Stop scan immediately</option>
+                                </select>
+                            </div>
+                            ${suite.hasIntrusive ? `
+                            <div class="suite-setting-row intrusive-gate${globalOn ? '' : ' intrusive-gate-locked'}" id="intrusive-row-${key}">
+                                <label>Allow intrusive checks</label>
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <label class="toggle" style="margin:0">
+                                        <input type="checkbox" id="intrusive-${key}" onchange="onSuiteIntrusiveToggle('${key}')" ${globalOn ? '' : 'disabled'}>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                    <span style="color:var(--text-muted);font-size:0.6875rem">${suite.intrusiveLabel || 'Active probing checks'}</span>
+                                </div>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Add change listeners to update counts
+            document.querySelectorAll('.suite-check-item input').forEach(input => {
+                input.addEventListener('change', () => updateSuiteCount(input.dataset.suite));
+            });
+
+            // Update initial counts (intrusive checks start unchecked)
+            Object.keys(CHECK_SUITES).forEach(updateSuiteCount);
+        }
+
+        function updateSuiteBadges(key) {
+            const badges = document.getElementById(`badges-${key}`);
+            if (!badges) return;
+            let html = '';
+            const onCritical = document.getElementById(`on-critical-${key}`).value;
+            if (onCritical === 'skip_downstream') {
+                html += '<span class="suite-badge critical-skip">skip later suites</span>';
+            } else if (onCritical === 'stop') {
+                html += '<span class="suite-badge critical-stop">stop on critical</span>';
+            }
+            const intrusiveEl = document.getElementById(`intrusive-${key}`);
+            if (intrusiveEl && intrusiveEl.checked) {
+                html += '<span class="suite-badge intrusive-on">intrusive on</span>';
+            }
+            badges.innerHTML = html;
+        }
+
+        function toggleSuite(key) {
+            const accordion = document.querySelector(`.suite-accordion[data-suite="${key}"]`);
+            accordion.classList.toggle('open');
+        }
+
+        function toggleAllInSuite(key) {
+            const suite = CHECK_SUITES[key];
+            // Only toggle checkboxes that aren't disabled (locked intrusive checks stay put)
+            const checkboxes = suite.checks
+                .map(c => document.getElementById(`check-${c}`))
+                .filter(cb => !cb.disabled);
+            const allChecked = checkboxes.every(cb => cb.checked);
+            checkboxes.forEach(cb => cb.checked = !allChecked);
+            updateSuiteCount(key);
+        }
+
+        function updateSuiteCount(key) {
+            const suite = CHECK_SUITES[key];
+            const checked = suite.checks.filter(c => document.getElementById(`check-${c}`).checked).length;
+            document.getElementById(`count-${key}`).textContent = `${checked} of ${suite.checks.length}`;
+        }
+
+        // ─── Three-tier intrusive cascade ──────────────────────────
+
+        function onGlobalIntrusiveToggle() {
+            const globalOn = document.getElementById('global-intrusive').checked;
+            const hint = document.getElementById('global-intrusive-hint');
+
+            if (globalOn) {
+                hint.textContent = 'Active testing unlocked. Enable per-suite below.';
+                hint.className = 'intrusive-hint-on';
+            } else {
+                hint.textContent = 'All intrusive checks are locked. Enable to unlock per-suite controls below.';
+                hint.className = 'intrusive-hint-off';
+            }
+
+            // Enable/disable all per-suite intrusive toggles
+            Object.entries(CHECK_SUITES).forEach(([key, suite]) => {
+                if (!suite.hasIntrusive) return;
+                const row = document.getElementById(`intrusive-row-${key}`);
+                const toggle = document.getElementById(`intrusive-${key}`);
+                if (!row || !toggle) return;
+
+                if (globalOn) {
+                    row.classList.remove('intrusive-gate-locked');
+                    toggle.disabled = false;
+                } else {
+                    // Turn off suite toggle and lock it
+                    toggle.checked = false;
+                    toggle.disabled = true;
+                    row.classList.add('intrusive-gate-locked');
+                    // Lock all intrusive checks in this suite
+                    lockIntrusiveChecks(key);
+                }
+            });
+
+            updateAllBadges();
+        }
+
+        function onSuiteIntrusiveToggle(key) {
+            const suiteOn = document.getElementById(`intrusive-${key}`).checked;
+            const suite = CHECK_SUITES[key];
+
+            suite.checks.forEach(check => {
+                if (!INTRUSIVE_CHECKS.has(check)) return;
+                const cb = document.getElementById(`check-${check}`);
+                const item = cb.closest('.suite-check-item');
+
+                if (suiteOn) {
+                    // Unlock: enable checkbox, check it, remove locked style
+                    cb.disabled = false;
+                    cb.checked = true;
+                    item.classList.remove('intrusive-locked');
+                    item.classList.add('intrusive-unlocked');
+                } else {
+                    // Lock: uncheck, disable, restore locked style
+                    cb.checked = false;
+                    cb.disabled = true;
+                    item.classList.add('intrusive-locked');
+                    item.classList.remove('intrusive-unlocked');
+                }
+            });
+
+            updateSuiteCount(key);
+            updateSuiteBadges(key);
+        }
+
+        function lockIntrusiveChecks(key) {
+            const suite = CHECK_SUITES[key];
+            suite.checks.forEach(check => {
+                if (!INTRUSIVE_CHECKS.has(check)) return;
+                const cb = document.getElementById(`check-${check}`);
+                const item = cb.closest('.suite-check-item');
+                cb.checked = false;
+                cb.disabled = true;
+                item.classList.add('intrusive-locked');
+                item.classList.remove('intrusive-unlocked');
+            });
+            updateSuiteCount(key);
+        }
+
+        function updateAllBadges() {
+            Object.keys(CHECK_SUITES).forEach(updateSuiteBadges);
+        }
+
+        // Chip input for exclusions
+        function initChipInput() {
+            const container = document.getElementById('exclusions-container');
+            const input = document.getElementById('exclusion-input');
+
+            container.addEventListener('click', () => input.focus());
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && input.value.trim()) {
+                    e.preventDefault();
+                    addExclusion(input.value.trim());
+                    input.value = '';
+                } else if (e.key === 'Backspace' && !input.value && exclusions.length > 0) {
+                    removeExclusion(exclusions.length - 1);
+                }
+            });
+        }
+
+        function addExclusion(value) {
+            if (!exclusions.includes(value)) {
+                exclusions.push(value);
+                renderExclusions();
+            }
+        }
+
+        function removeExclusion(index) {
+            exclusions.splice(index, 1);
+            renderExclusions();
+        }
+
+        function renderExclusions() {
+            const container = document.getElementById('exclusions-container');
+            const input = document.getElementById('exclusion-input');
+            
+            // Remove existing chips
+            container.querySelectorAll('.chip').forEach(chip => chip.remove());
+            
+            // Add chips before input
+            exclusions.forEach((exc, i) => {
+                const chip = document.createElement('span');
+                chip.className = 'chip';
+                chip.innerHTML = `${exc}<button class="chip-remove" onclick="removeExclusion(${i})">&times;</button>`;
+                container.insertBefore(chip, input);
+            });
+        }
+
+        // Modals
+        function initModals() {
+            // Window warning modal
+            document.getElementById('close-modal').addEventListener('click', closeWindowModal);
+            document.getElementById('modal-cancel').addEventListener('click', closeWindowModal);
+            document.getElementById('modal-proceed').addEventListener('click', () => {
+                closeWindowModal();
+                proceedWithScan(true);
+            });
+
+            // About modal
+            document.getElementById('link-about').addEventListener('click', (e) => {
+                e.preventDefault();
+                document.getElementById('about-modal-overlay').classList.add('open');
+                document.getElementById('drawer-overlay').classList.remove('open');
+                document.getElementById('drawer-settings').classList.remove('open');
+            });
+            document.getElementById('close-about-modal').addEventListener('click', () => {
+                document.getElementById('about-modal-overlay').classList.remove('open');
+            });
+            document.getElementById('about-modal-overlay').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) {
+                    document.getElementById('about-modal-overlay').classList.remove('open');
+                }
+            });
+
+            // Presets link (placeholder)
+            document.getElementById('link-presets').addEventListener('click', (e) => {
+                e.preventDefault();
+                alert('Preset management coming soon!');
+            });
+        }
+
+        function closeWindowModal() {
+            document.getElementById('modal-overlay').classList.remove('open');
+        }
+
+        function showWindowWarning() {
+            document.getElementById('modal-overlay').classList.add('open');
+        }
+
+        function isWithinWindow() {
+            const start = document.getElementById('window-start').value;
+            const end = document.getElementById('window-end').value;
+            
+            if (!start && !end) return true; // No window set
+            
+            const now = new Date();
+            if (start && new Date(start) > now) return false;
+            if (end && new Date(end) < now) return false;
+            return true;
+        }
+
+        async function loadExistingScope() {
+            try {
+                const scope = await api.getScope();
+                if (scope.target) {
+                    document.getElementById('scope-target').value = scope.target;
+                }
+                if (scope.exclude?.length > 0) {
+                    exclusions = scope.exclude;
+                    renderExclusions();
+                }
+                // Restore scan behavior settings
+                if (scope.scan_behavior) {
+                    const sb = scope.scan_behavior;
+                    if (sb.on_critical) {
+                        document.getElementById('on-critical-default').value = sb.on_critical;
+                    }
+                    if (sb.on_critical_overrides) {
+                        Object.entries(sb.on_critical_overrides).forEach(([suite, val]) => {
+                            const el = document.getElementById(`on-critical-${suite}`);
+                            if (el && val) el.value = val;
+                        });
+                    }
+                    // Restore intrusive toggles
+                    if (sb.intrusive_global) {
+                        document.getElementById('global-intrusive').checked = true;
+                        onGlobalIntrusiveToggle();
+                    }
+                    if (sb.intrusive_suites) {
+                        Object.entries(sb.intrusive_suites).forEach(([suite, on]) => {
+                            const el = document.getElementById(`intrusive-${suite}`);
+                            if (el && on) {
+                                el.checked = true;
+                                onSuiteIntrusiveToggle(suite);
+                            }
+                        });
+                    } else if (sb.intrusive_web) {
+                        // Backward compat: old scope with just intrusive_web
+                        document.getElementById('global-intrusive').checked = true;
+                        onGlobalIntrusiveToggle();
+                        const el = document.getElementById('intrusive-web');
+                        if (el) {
+                            el.checked = true;
+                            onSuiteIntrusiveToggle('web');
+                        }
+                    }
+                    // Update badges
+                    Object.keys(CHECK_SUITES).forEach(updateSuiteBadges);
+                }
+            } catch (err) {
+                // No existing scope
+            }
+        }
+
+        function updateNavLinks() {
+            const sessionId = getSessionId();
+            if (sessionId) {
+                document.getElementById('nav-scan').href = `scan.html?session=${sessionId}`;
+                document.getElementById('nav-findings').href = `findings.html?session=${sessionId}`;
+            }
+        }
+
+        function getSelectedChecks() {
+            const selected = [];
+            Object.values(CHECK_SUITES).forEach(suite => {
+                suite.checks.forEach(check => {
+                    if (document.getElementById(`check-${check}`).checked) {
+                        selected.push(check);
+                    }
+                });
+            });
+            return selected;
+        }
+
+        // Start Scan
+        document.getElementById('btn-start-scan').addEventListener('click', async () => {
+            const target = document.getElementById('scope-target').value.trim();
+            if (!target) {
+                alert('Please enter a target');
+                return;
+            }
+
+            // Check engagement window
+            if (!isWithinWindow()) {
+                showWindowWarning();
+                return;
+            }
+
+            proceedWithScan(false);
+        });
+
+        function gatherScanBehavior() {
+            const onCriticalDefault = document.getElementById('on-critical-default').value;
+            const onCritical = { default: onCriticalDefault };
+
+            // Per-suite overrides
+            Object.keys(CHECK_SUITES).forEach(key => {
+                const el = document.getElementById(`on-critical-${key}`);
+                if (el && el.value) {
+                    onCritical[key] = el.value;
+                }
+            });
+
+            // Intrusive settings (global + per-suite)
+            const globalIntrusive = document.getElementById('global-intrusive').checked;
+            const intrusiveSuites = {};
+            Object.entries(CHECK_SUITES).forEach(([key, suite]) => {
+                if (!suite.hasIntrusive) return;
+                const el = document.getElementById(`intrusive-${key}`);
+                if (el) intrusiveSuites[key] = el.checked;
+            });
+
+            // Backward compat: intrusive_web still sent for checks that gate on it
+            const intrusiveWeb = intrusiveSuites.web || false;
+
+            return {
+                on_critical: onCritical,
+                intrusive_web: intrusiveWeb,
+                intrusive_global: globalIntrusive,
+                intrusive_suites: intrusiveSuites,
+            };
+        }
+
+        async function proceedWithScan(outsideWindow) {
+            const target = document.getElementById('scope-target').value.trim();
+            const techniques = getSelectedChecks();
+
+            // Gather proof of scope settings
+            const proofSettings = {
+                traffic_logging: document.getElementById('proof-traffic').checked,
+                block_exclusions: document.getElementById('proof-block').checked,
+                log_violations: document.getElementById('proof-violations').checked
+            };
+
+            // Gather window settings
+            const windowStart = document.getElementById('window-start').value;
+            const windowEnd = document.getElementById('window-end').value;
+            const engagementWindow = (windowStart || windowEnd) ? {
+                start: windowStart ? new Date(windowStart).toISOString() : null,
+                end: windowEnd ? new Date(windowEnd).toISOString() : null
+            } : null;
+
+            // Gather scan behavior settings
+            const scanBehavior = gatherScanBehavior();
+
+            // Set scope with all options
+            await api.setScope(target, exclusions, techniques, {
+                engagement_window: engagementWindow,
+                proof_of_scope: proofSettings,
+                outside_window_acknowledged: outsideWindow,
+                scan_behavior: scanBehavior,
+            });
+
+            // Start scan
+            await api.startScan();
+
+            // Navigate to scan page
+            navigateTo('scan.html');
+        }
+    </script>
+</body>
+</html>

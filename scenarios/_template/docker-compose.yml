@@ -1,0 +1,87 @@
+# ─────────────────────────────────────────────────────────────────
+# scenarios/_template/docker-compose.yml
+#
+# Minimal scenario template. Copy this directory and customize.
+#
+# To create a new scenario:
+#   1. cp -r scenarios/_template scenarios/my-scenario
+#   2. Edit scenario.json with your scenario details
+#   3. Edit this docker-compose.yml with your services
+#   4. Implement services in services/
+#   5. Test: ./range/start-range.sh my-scenario
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ─── Example Service ───────────────────────────────────────────
+  # Rename this service and add more as needed
+  template-www:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: template-www
+    command: >
+      uvicorn scenarios._template.services.www:app
+      --host 0.0.0.0 --port 9000
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=www
+      - SERVICE_PORT=9000
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:9000:9000"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── Optional Service Example ──────────────────────────────────
+  # Use profiles to make services optional
+  # Start with: ./range/start-range.sh my-scenario --profile extra
+  template-extra:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: template-extra
+    profiles:
+      - extra
+      - all
+    command: >
+      uvicorn scenarios._template.services.extra:app
+      --host 0.0.0.0 --port 9001
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=extra
+      - SERVICE_PORT=9001
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:9001:9001"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+networks:
+  chainsmith-shared:
+    name: chainsmith-shared
+    external: true

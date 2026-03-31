@@ -1,0 +1,70 @@
+# simulations/network/port_scan_fakobanko.yaml
+# Fakobanko scenario: Port scan discovers services on known hosts
+# Converts target_hosts to services with open ports
+
+suite: network
+emulates: port_scan
+target: "fakobanko.local"
+disposition: services_found
+
+behavior:
+  latency_ms: 500  # Simulate realistic port scan time
+
+output:
+  services:
+    - url: "http://www.fakobanko.local:8082"
+      host: "www.fakobanko.local"
+      port: 8082
+      scheme: "http"
+      service_type: "http"
+    - url: "http://chat.fakobanko.local:8081"
+      host: "chat.fakobanko.local"
+      port: 8081
+      scheme: "http"
+      service_type: "ai"
+    - url: "http://api.fakobanko.local:8080"
+      host: "api.fakobanko.local"
+      port: 8080
+      scheme: "http"
+      service_type: "api"
+    - url: "http://docs.fakobanko.local:8083"
+      host: "docs.fakobanko.local"
+      port: 8083
+      scheme: "http"
+      service_type: "http"
+    - url: "http://mcp.fakobanko.local:8089"
+      host: "mcp.fakobanko.local"
+      port: 8089
+      scheme: "http"
+      service_type: "ai"
+    - url: "http://agent.fakobanko.local:8088"
+      host: "agent.fakobanko.local"
+      port: 8088
+      scheme: "http"
+      service_type: "ai"
+    - url: "http://rag.fakobanko.local:8087"
+      host: "rag.fakobanko.local"
+      port: 8087
+      scheme: "http"
+      service_type: "ai"
+    - url: "http://cache.fakobanko.local:8084"
+      host: "cache.fakobanko.local"
+      port: 8084
+      scheme: "http"
+      service_type: "ai"
+
+findings:
+  - title: "Port scan: 8 services discovered"
+    description: "TCP port scan discovered 8 open services across fakobanko.local infrastructure including web, API, and AI services."
+    severity: "info"
+    evidence: |
+      Open ports:
+        - www.fakobanko.local:8082 (HTTP)
+        - chat.fakobanko.local:8081 (AI/LLM)
+        - api.fakobanko.local:8080 (API)
+        - docs.fakobanko.local:8083 (HTTP)
+        - mcp.fakobanko.local:8089 (MCP)
+        - agent.fakobanko.local:8088 (Agent)
+        - rag.fakobanko.local:8087 (RAG)
+        - cache.fakobanko.local:8084 (Cache)
+    check_name: "port_scan"

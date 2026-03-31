@@ -1,0 +1,129 @@
+# simulations/mcp/mcp_tool_enumeration_dangerous_tools.yaml
+#
+# Simulates enumeration of MCP tools including high-risk tools.
+# Demonstrates file access and command execution tools.
+
+suite: mcp
+emulates: mcp_tool_enumeration
+target: "mcp.fakobanko.local"
+disposition: dangerous_tools_found
+
+output:
+  mcp_tools:
+    - name: "read_file"
+      description: "Read contents of a file from the filesystem"
+      input_schema:
+        type: object
+        properties:
+          path:
+            type: string
+            description: "Path to the file to read"
+        required:
+          - path
+      risk_level: "high"
+      risk_indicators:
+        - "name:read(_|\\s)?file"
+        - "desc:file system"
+      server_url: "http://mcp.fakobanko.local:3000/mcp"
+      service_host: "mcp.fakobanko.local"
+
+    - name: "execute_command"
+      description: "Execute a shell command on the server"
+      input_schema:
+        type: object
+        properties:
+          command:
+            type: string
+            description: "Shell command to execute"
+          timeout:
+            type: integer
+            description: "Timeout in seconds"
+        required:
+          - command
+      risk_level: "critical"
+      risk_indicators:
+        - "name:exec(ute)?(_|\\s)?command"
+        - "desc:shell command"
+      server_url: "http://mcp.fakobanko.local:3000/mcp"
+      service_host: "mcp.fakobanko.local"
+
+    - name: "search_documents"
+      description: "Search internal documents by keyword"
+      input_schema:
+        type: object
+        properties:
+          query:
+            type: string
+            description: "Search query"
+          limit:
+            type: integer
+            description: "Maximum results"
+        required:
+          - query
+      risk_level: "low"
+      risk_indicators:
+        - "name:search"
+      server_url: "http://mcp.fakobanko.local:3000/mcp"
+      service_host: "mcp.fakobanko.local"
+
+    - name: "get_current_time"
+      description: "Get the current server time"
+      input_schema:
+        type: object
+        properties:
+          timezone:
+            type: string
+            description: "Timezone (e.g., UTC, America/New_York)"
+      risk_level: "info"
+      risk_indicators: []
+      server_url: "http://mcp.fakobanko.local:3000/mcp"
+      service_host: "mcp.fakobanko.local"
+
+  high_risk_tools:
+    - name: "read_file"
+      description: "Read contents of a file from the filesystem"
+      risk_level: "high"
+      server_url: "http://mcp.fakobanko.local:3000/mcp"
+    - name: "execute_command"
+      description: "Execute a shell command on the server"
+      risk_level: "critical"
+      server_url: "http://mcp.fakobanko.local:3000/mcp"
+
+findings:
+  - title: "MCP tool: execute_command (critical risk)"
+    description: "MCP tool 'execute_command' discovered. Description: Execute a shell command on the server. Risk level: CRITICAL. This tool may allow arbitrary command execution or code evaluation."
+    severity: "critical"
+    evidence: |
+      Tool: execute_command
+      Risk: critical
+      Description: Execute a shell command on the server
+      Indicators: name:exec(ute)?(_|\s)?command
+      Parameters: command, timeout
+
+  - title: "MCP tool: read_file (high risk)"
+    description: "MCP tool 'read_file' discovered. Description: Read contents of a file from the filesystem. Risk level: HIGH. This tool may allow file system access, network requests, or database operations."
+    severity: "high"
+    evidence: |
+      Tool: read_file
+      Risk: high
+      Description: Read contents of a file from the filesystem
+      Indicators: name:read(_|\s)?file
+      Parameters: path
+
+  - title: "MCP tool: search_documents (low risk)"
+    description: "MCP tool 'search_documents' discovered. Description: Search internal documents by keyword. Risk level: LOW"
+    severity: "low"
+    evidence: |
+      Tool: search_documents
+      Risk: low
+      Description: Search internal documents by keyword
+      Parameters: query, limit
+
+  - title: "MCP tool: get_current_time (info risk)"
+    description: "MCP tool 'get_current_time' discovered. Description: Get the current server time. Risk level: INFO"
+    severity: "info"
+    evidence: |
+      Tool: get_current_time
+      Risk: info
+      Description: Get the current server time
+      Parameters: timezone

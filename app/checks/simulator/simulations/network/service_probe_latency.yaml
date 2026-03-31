@@ -1,0 +1,16 @@
+# simulations/network/service_probe_latency.yaml
+# Smoke test: Slow service probe (exercises latency handling)
+suite: network
+emulates: service_probe
+target: "slow.example.local"
+disposition: services_fingerprinted
+
+behavior:
+  latency_ms: 2000
+
+output:
+  services:
+    - host: "slow.example.local"
+      port: 80
+      scheme: "http"
+      service_type: "html"

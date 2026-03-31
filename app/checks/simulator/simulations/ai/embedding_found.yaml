@@ -1,0 +1,11 @@
+suite: ai
+emulates: embedding_endpoint_discovery
+target: "chat.example.local"
+disposition: endpoints_found
+
+output:
+  embedding_endpoints:
+    - url: "http://chat.example.local:8081/v1/embeddings"
+      path: "/v1/embeddings"
+    - url: "http://chat.example.local:8081/api/embed"
+      path: "/api/embed"

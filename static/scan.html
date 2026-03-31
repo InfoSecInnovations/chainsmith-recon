@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chainsmith Recon - Scan</title>
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .scan-container {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 100px);
+        }
+
+        .scan-panel {
+            flex: 1;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-title {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .progress-section {
+            margin-bottom: 16px;
+        }
+
+        .progress-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .check-list {
+            margin-top: 16px;
+        }
+
+        .action-bar {
+            padding: 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        /* Status badge container for throb animation */
+        .status-badge-container {
+            position: relative;
+        }
+
+        /* Phase indicators */
+        .progress-phases {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .progress-phase-wrapper {
+            flex: 1;
+            text-align: center;
+        }
+
+        .progress-phase {
+            height: 4px;
+            background: var(--bg-tertiary);
+            border-radius: 2px;
+            position: relative;
+            overflow: hidden;
+            transition: background 0.3s;
+        }
+
+        .progress-phase.active {
+            background: var(--accent-dim);
+        }
+
+        .progress-phase.active::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 40%;
+            background: var(--accent);
+            border-radius: 2px;
+            animation: phase-sweep 1.2s ease-in-out infinite;
+        }
+
+        .progress-phase.complete {
+            background: var(--accent);
+        }
+
+        .progress-phase.complete::after {
+            display: none;
+        }
+
+        @keyframes phase-sweep {
+            0% { 
+                transform: translateX(-100%);
+            }
+            100% { 
+                transform: translateX(350%);
+            }
+        }
+
+        .progress-phase-label {
+            font-size: 0.625rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            margin-top: 6px;
+        }
+
+        .progress-phase.active + .progress-phase-label,
+        .progress-phase-wrapper:has(.progress-phase.active) .progress-phase-label {
+            color: var(--accent);
+        }
+
+        .progress-phase.complete + .progress-phase-label,
+        .progress-phase-wrapper:has(.progress-phase.complete) .progress-phase-label {
+            color: var(--text-secondary);
+        }
+
+        /* Activity stream */
+        .activity-stream {
+            margin-top: 16px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .activity-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .activity-item.active .activity-dot {
+            background: var(--accent);
+            animation: dot-pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes dot-pulse {
+            0%, 100% { 
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% { 
+                transform: scale(1.3);
+                opacity: 0.7;
+            }
+        }
+
+        .activity-text {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Button variants */
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            border-color: var(--border);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-secondary);
+            border-color: var(--accent);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.25);
+            border-color: #ef4444;
+        }
+
+        /* Scanning state for status badge */
+        .status-badge.status-running {
+            position: relative;
+        }
+
+        /* Dynamic progress bar when total is unknown */
+        .progress-bar.dynamic {
+            background: linear-gradient(
+                90deg,
+                var(--accent) 0%,
+                var(--accent-hover) 50%,
+                var(--accent) 100%
+            );
+            background-size: 200% 100%;
+            animation: shimmer 1.5s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* profile-setting styles now in common.css */
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <a href="index.html" class="brand"><span class="brand-name"><span class="accent">Chainsmith</span> Recon</span><span class="brand-tagline">Recon for the AI Era</span></a>
+            <span class="header-status" id="header-status"></span>
+        </div>
+        <div class="header-right">
+            <button class="btn btn-icon" id="btn-settings" title="Settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <a href="index.html" class="nav-item" id="nav-scope">Scope</a>
+        <a href="scan.html" class="nav-item active">Scan</a>
+        <a href="findings.html" class="nav-item" id="nav-findings">Results</a>
+        <a href="trend.html" class="nav-item" id="nav-trends">Trends</a>
+        <a href="reports.html" class="nav-item" id="nav-reports">Reports</a>
+    </nav>
+
+    <!-- Legacy Scenario Banner (hidden, badge now in header) -->
+    <div id="scenario-banner" class="scenario-banner" style="display:none"></div>
+
+    <!-- Main Content -->
+    <main class="scan-container">
+        <!-- Progress Panel -->
+        <div class="scan-panel">
+            <div class="panel-header">
+                <span class="panel-title">Scan Progress</span>
+                <div class="status-badge-container">
+                    <span class="status-badge status-idle" id="status-badge">Idle</span>
+                </div>
+            </div>
+            <div class="panel-content">
+                <!-- Dynamic Progress Visualization -->
+                <div class="progress-section" id="progress-visual">
+                    <div class="progress-header">
+                        <span id="progress-label">Discovery</span>
+                        <span class="progress-text" id="progress-text">Waiting...</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+                    </div>
+                    
+                    <!-- Phase indicators for dynamic scan -->
+                    <div class="progress-phases" id="phase-indicators">
+                        <div class="progress-phase-wrapper">
+                            <div class="progress-phase" id="phase-discovery" data-phase="discovery"></div>
+                            <div class="progress-phase-label">Discovery</div>
+                        </div>
+                        <div class="progress-phase-wrapper">
+                            <div class="progress-phase" id="phase-target-analysis" data-phase="target-analysis"></div>
+                            <div class="progress-phase-label">Target Analysis</div>
+                        </div>
+                        <div class="progress-phase-wrapper">
+                            <div class="progress-phase" id="phase-ai-checks" data-phase="ai-checks"></div>
+                            <div class="progress-phase-label">AI Checks</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Activity stream -->
+                    <div class="activity-stream" id="activity-stream">
+                        <div class="activity-item" id="activity-current">
+                            <span class="activity-dot"></span>
+                            <span class="activity-text">Waiting for scan to start...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="progress-section" id="verification-section" style="display: none;">
+                    <div class="progress-header">
+                        <span>Verification</span>
+                        <span class="progress-text" id="verification-text">0 / 0</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="verification-bar" style="width: 0%; background: var(--success);"></div>
+                    </div>
+                </div>
+
+                <div class="check-list" id="check-list">
+                    <div class="empty-state" id="checks-empty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                        </svg>
+                        <h3>Waiting for scan</h3>
+                        <p>Set a target scope to begin</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Scan Control Buttons -->
+            <div class="action-bar" id="scan-controls" style="display: none;">
+                <button class="btn btn-secondary" id="btn-pause" title="Pause scan">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+                        <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+                    </svg>
+                    Pause
+                </button>
+                <button class="btn btn-secondary" id="btn-resume" style="display: none;" title="Resume scan">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5,3 19,12 5,21"></polygon>
+                    </svg>
+                    Resume
+                </button>
+                <button class="btn btn-danger" id="btn-stop" title="Stop scan">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                    </svg>
+                    Stop
+                </button>
+            </div>
+            <div class="action-bar" id="action-bar" style="display: none;">
+                <a href="findings.html" class="btn btn-primary" id="btn-view-findings">
+                    View Findings
+                </a>
+            </div>
+        </div>
+
+        <!-- Findings Preview Panel -->
+        <div class="scan-panel">
+            <div class="panel-header">
+                <span class="panel-title">Findings</span>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span id="findings-severity-summary" style="display:none;"></span>
+                    <span class="progress-text" id="findings-count">0 found</span>
+                </div>
+            </div>
+            <div class="panel-content">
+                <table class="data-table" id="findings-table" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Severity</th>
+                            <th>Title</th>
+                        </tr>
+                    </thead>
+                    <tbody id="findings-body"></tbody>
+                </table>
+                <div class="empty-state" id="findings-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="M21 21l-4.35-4.35"></path>
+                    </svg>
+                    <h3>No findings yet</h3>
+                    <p>Findings will appear after the scan completes</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Settings Drawer -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="drawer drawer-right" id="drawer-settings">
+        <div class="drawer-header">
+            <h2>Settings</h2>
+            <button class="drawer-close" id="close-settings">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="drawer-content">
+            <!-- Profile Selector -->
+            <div class="setting-section" style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+                <div class="setting-section-title">Scan Profile</div>
+                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+                    <select class="form-input" id="setting-profile" style="width:100%">
+                        <option value="default">default</option>
+                    </select>
+                    <div id="profile-description" style="color:var(--text-secondary);font-size:0.8125rem;"></div>
+                    <div id="profile-key-settings" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;"></div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Parallel Scanning</div>
+                    <div class="setting-desc">Run checks concurrently</div>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="setting-parallel">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Rate Limit</div>
+                    <div class="setting-desc">Requests per second</div>
+                </div>
+                <input type="number" class="form-input" id="setting-rate" value="10" min="1" max="100" style="width: 80px;">
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Verification Level</div>
+                    <div class="setting-desc">Re-verify findings</div>
+                </div>
+                <select class="form-input" id="setting-verification" style="width: 120px;">
+                    <option value="none">None</option>
+                    <option value="sample">Sample (20%)</option>
+                    <option value="half">Half (50%)</option>
+                    <option value="all">All (100%)</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Auto-redirect on Complete</div>
+                    <div class="setting-desc">Go to Findings when done</div>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="setting-auto-redirect">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Auto-analyze Chains</div>
+                    <div class="setting-desc">Run chain analysis after scan</div>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="setting-auto-chains">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Theme</div>
+                    <div class="setting-desc">Color scheme</div>
+                </div>
+                <div class="theme-selector">
+                    <button class="theme-btn active" data-theme="dark">Dark</button>
+                    <button class="theme-btn" data-theme="light">Light</button>
+                </div>
+            </div>
+
+            <div class="setting-section">
+                <div class="setting-section-title">Scenario</div>
+                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+                    <div class="setting-desc">Simulate a target environment</div>
+                    <select class="form-input" id="setting-scenario" style="width:100%">
+                        <option value="">— No scenario —</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="setting-section">
+                <div class="setting-section-title">Actions</div>
+                <button class="btn" id="btn-export" style="width: 100%; margin-bottom: 8px;">
+                    Export Report
+                </button>
+                <button class="btn" id="btn-reset" style="width: 100%;">
+                    Reset All
+                </button>
+            </div>
+
+            <div class="setting-section">
+                <div class="setting-section-title">Links</div>
+                <a href="https://docs.chainsmith.io" class="setting-link" target="_blank">Documentation</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">Details</h3>
+                <button class="drawer-close" id="close-modal">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        let pollInterval = null;
+        let findings = [];
+        let isPaused = false;
+        let lastPhase = 'discovery';
+        let checkPhases = new Map(); // Track which phase each check belongs to
+
+        // Phase categorization for checks (maps check names to UI phases)
+        const phaseMapping = {
+            'discovery': ['dns_enumeration', 'service_probe'],
+            'probing': ['header_analysis', 'robots_txt', 'path_probe', 'openapi_discovery', 'cors_check', 'port_scan'],
+            'analysis': ['ai_framework_fingerprint', 'ai_error_leakage', 'model_info'],
+            'ai': ['llm_endpoint', 'embedding_endpoint', 'tool_discovery', 'prompt_leakage', 'rate_limit', 'content_filter', 'context_window', 'mcp', 'agent', 'rag', 'cag']
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCommon();
+            updateNavLinks();
+            initScanControls();
+            await checkScanStatus();
+        });
+
+        function updateNavLinks() {
+            const sessionId = getSessionId();
+            if (sessionId) {
+                document.getElementById('nav-scope').href = `index.html?session=${sessionId}`;
+                document.getElementById('nav-findings').href = `findings.html?session=${sessionId}`;
+                document.getElementById('btn-view-findings').href = `findings.html?session=${sessionId}`;
+            }
+        }
+
+        function initScanControls() {
+            document.getElementById('btn-pause')?.addEventListener('click', async () => {
+                try {
+                    await api.pauseScan();
+                    isPaused = true;
+                    updateControlButtons();
+                } catch (err) {
+                    console.error('Pause error:', err);
+                }
+            });
+
+            document.getElementById('btn-resume')?.addEventListener('click', async () => {
+                try {
+                    await api.resumeScan();
+                    isPaused = false;
+                    updateControlButtons();
+                } catch (err) {
+                    console.error('Resume error:', err);
+                }
+            });
+
+            document.getElementById('btn-stop')?.addEventListener('click', async () => {
+                if (confirm('Stop the current scan? This cannot be undone.')) {
+                    try {
+                        await api.stopScan();
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                        showComplete();
+                    } catch (err) {
+                        console.error('Stop error:', err);
+                    }
+                }
+            });
+        }
+
+        function updateControlButtons() {
+            const btnPause = document.getElementById('btn-pause');
+            const btnResume = document.getElementById('btn-resume');
+            
+            if (isPaused) {
+                btnPause.style.display = 'none';
+                btnResume.style.display = 'inline-flex';
+            } else {
+                btnPause.style.display = 'inline-flex';
+                btnResume.style.display = 'none';
+            }
+        }
+
+        async function checkScanStatus() {
+            try {
+                const status = await api.getScanStatus();
+                
+                if (status.status === 'running' || status.status === 'verifying') {
+                    document.getElementById('scan-controls').style.display = 'flex';
+                    startPolling();
+                } else if (status.status === 'paused') {
+                    isPaused = true;
+                    document.getElementById('scan-controls').style.display = 'flex';
+                    updateControlButtons();
+                    await updateUI(status);
+                } else if (status.status === 'complete') {
+                    await updateUI(status);
+                    showComplete();
+                } else if (status.status === 'idle') {
+                    // No scan running, show empty state
+                }
+            } catch (err) {
+                console.log('No existing scan');
+            }
+        }
+
+        function startPolling() {
+            if (pollInterval) return;
+            pollInterval = setInterval(pollStatus, 500);
+            pollStatus();
+        }
+
+        async function pollStatus() {
+            try {
+                const status = await api.getScanStatus();
+                await updateUI(status);
+
+                if (status.status === 'paused') {
+                    isPaused = true;
+                    updateControlButtons();
+                }
+
+                if (status.status === 'complete' || status.status === 'error') {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                    document.getElementById('scan-controls').style.display = 'none';
+                    showComplete();
+
+                    // Auto-redirect if enabled
+                    if (localStorage.getItem('autoRedirect') === 'true') {
+                        setTimeout(() => navigateTo('findings.html'), 1000);
+                    }
+                }
+            } catch (err) {
+                console.error('Poll error:', err);
+            }
+        }
+
+        function determineCurrentPhase(checks) {
+            // Map backend suites to UI phases (3 phases)
+            const suiteToPhase = {
+                'network': 'discovery',
+                'web': 'target-analysis',
+                'ai': 'target-analysis',
+                'mcp': 'ai-checks',
+                'agent': 'ai-checks',
+                'rag': 'ai-checks',
+                'cag': 'ai-checks'
+            };
+            
+            const phases = ['discovery', 'target-analysis', 'ai-checks'];
+            let highestPhase = 'discovery';
+            
+            for (const check of checks) {
+                if (check.status === 'running' || check.status === 'completed') {
+                    // Use suite from backend if available
+                    let checkPhase = null;
+                    if (check.suite && suiteToPhase[check.suite]) {
+                        checkPhase = suiteToPhase[check.suite];
+                    } else {
+                        // Fallback: infer from check name
+                        const name = check.name.toLowerCase();
+                        if (name.includes('dns') || name.includes('service_probe')) {
+                            checkPhase = 'discovery';
+                        } else if (name.includes('header') || name.includes('robot') || name.includes('path') || name.includes('cors') || name.includes('openapi') || name.includes('fingerprint') || name.includes('error') || name.includes('model_info')) {
+                            checkPhase = 'target-analysis';
+                        } else {
+                            checkPhase = 'ai-checks';
+                        }
+                    }
+                    
+                    if (checkPhase) {
+                        const phaseIndex = phases.indexOf(checkPhase);
+                        const highestIndex = phases.indexOf(highestPhase);
+                        if (phaseIndex > highestIndex) {
+                            highestPhase = checkPhase;
+                        }
+                    }
+                }
+            }
+            
+            return highestPhase;
+        }
+
+        function updatePhaseIndicators(currentPhase, checks) {
+            const phases = ['discovery', 'target-analysis', 'ai-checks'];
+            const currentIndex = phases.indexOf(currentPhase);
+            
+            // Check if scan is complete (all checks done)
+            const allComplete = checks.length > 0 && checks.every(c => c.status === 'completed' || c.status === 'skipped');
+            
+            phases.forEach((phase, index) => {
+                const el = document.getElementById(`phase-${phase}`);
+                if (!el) return;
+                
+                el.classList.remove('active', 'complete');
+                
+                if (allComplete) {
+                    el.classList.add('complete');
+                } else if (index < currentIndex) {
+                    el.classList.add('complete');
+                } else if (index === currentIndex) {
+                    el.classList.add('active');
+                }
+            });
+        }
+
+        function updateActivityStream(status, currentCheck) {
+            const activityEl = document.getElementById('activity-current');
+            const textEl = activityEl?.querySelector('.activity-text');
+            
+            if (!activityEl || !textEl) return;
+            
+            if (status.status === 'running') {
+                activityEl.classList.add('active');
+                if (currentCheck) {
+                    textEl.textContent = `Running: ${currentCheck}`;
+                } else {
+                    textEl.textContent = 'Scanning in progress...';
+                }
+            } else if (status.status === 'paused') {
+                activityEl.classList.remove('active');
+                textEl.textContent = 'Scan paused';
+            } else if (status.status === 'verifying') {
+                activityEl.classList.add('active');
+                textEl.textContent = 'Verifying findings...';
+            } else if (status.status === 'complete') {
+                activityEl.classList.remove('active');
+                textEl.textContent = 'Scan complete';
+            } else {
+                activityEl.classList.remove('active');
+                textEl.textContent = 'Waiting for scan to start...';
+            }
+        }
+
+        async function updateUI(status) {
+            // Status badge - enhanced text for running state
+            const badge = document.getElementById('status-badge');
+            let displayStatus = status.phase === 'verifying' ? 'verifying' : status.status;
+            let badgeText = displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1);
+            
+            // Make running state more apparent
+            if (displayStatus === 'running') {
+                badgeText = 'Scanning...';
+            } else if (displayStatus === 'paused') {
+                badgeText = 'Paused';
+            }
+            
+            badge.className = 'status-badge status-' + displayStatus;
+            badge.textContent = badgeText;
+
+            // Show/hide scan controls based on status
+            if (status.status === 'running' || status.status === 'paused') {
+                document.getElementById('scan-controls').style.display = 'flex';
+            }
+
+            // Get check data for phase determination
+            const checksData = await api.getCheckStatuses();
+            const activeChecks = checksData.checks.filter(c => c.status !== 'pending');
+            
+            // Determine current phase
+            const currentPhase = determineCurrentPhase(checksData.checks);
+            updatePhaseIndicators(currentPhase, checksData.checks);
+            
+            // Update activity stream
+            updateActivityStream(status, status.current_check);
+
+            // Progress bar - stimulus/response model: we don't know total upfront
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const progressLabel = document.getElementById('progress-label');
+            
+            const isRunning = status.status === 'running' || status.status === 'verifying';
+            const phaseLabel = currentPhase.charAt(0).toUpperCase() + currentPhase.slice(1);
+            
+            if (isRunning) {
+                // Show count with pulse LED while running
+                progressBar.classList.add('dynamic');
+                progressBar.style.width = '100%';
+                progressText.innerHTML = `${status.checks_completed}<span class="pulse-led"></span>`;
+                progressLabel.textContent = phaseLabel;
+            } else if (status.status === 'complete') {
+                // Scan complete - show final count, no LED
+                progressBar.classList.remove('dynamic');
+                progressBar.style.width = '100%';
+                progressText.textContent = `${status.checks_completed} checks`;
+                progressLabel.textContent = 'Complete';
+            } else {
+                // Idle or other state
+                progressText.textContent = 'Waiting...';
+                progressLabel.textContent = 'Discovery';
+            }
+
+            // Verification progress
+            const verSection = document.getElementById('verification-section');
+            if (status.phase === 'verifying' || status.verification_total > 0) {
+                verSection.style.display = 'block';
+                const verPct = status.verification_total > 0
+                    ? Math.round((status.verified_count / status.verification_total) * 100)
+                    : 0;
+                document.getElementById('verification-bar').style.width = verPct + '%';
+                document.getElementById('verification-text').textContent = 
+                    `${status.verified_count} / ${status.verification_total}`;
+            }
+
+            // Check list
+            updateCheckList(activeChecks);
+
+            // Findings
+            const findingsData = await api.getFindings();
+            findings = findingsData.findings;
+            updateFindings(findings);
+
+            // Update header status
+            updateHeaderStatus();
+        }
+
+        function updateCheckList(checks) {
+            const container = document.getElementById('check-list');
+            const empty = document.getElementById('checks-empty');
+
+            if (checks.length === 0) {
+                empty.style.display = 'flex';
+                return;
+            }
+
+            empty.style.display = 'none';
+
+            // Add/update check items
+            checks.forEach(check => {
+                let item = document.querySelector(`[data-check="${check.name}"]`);
+                if (!item) {
+                    item = document.createElement('div');
+                    item.className = 'check-item';
+                    item.dataset.check = check.name;
+                    item.innerHTML = `
+                        <div class="check-status-icon ${check.status}"></div>
+                        <div class="check-info">
+                            <div class="check-name">${check.simulated ? '<span class="simulated-badge">sim</span>' : ''}${check.name}</div>
+                            <div class="check-desc">${check.description || ''}</div>
+                        </div>
+                    `;
+                    item.addEventListener('click', () => {
+                        openModal(check.name, getCheckModalContent(check));
+                    });
+                    container.appendChild(item);
+                } else {
+                    item.querySelector('.check-status-icon').className = 
+                        'check-status-icon ' + check.status;
+                }
+            });
+        }
+
+        function updateFindings(findingsData) {
+            const table = document.getElementById('findings-table');
+            const body = document.getElementById('findings-body');
+            const empty = document.getElementById('findings-empty');
+            const count = document.getElementById('findings-count');
+            const severitySummary = document.getElementById('findings-severity-summary');
+
+            count.textContent = `${findingsData.length} found`;
+
+            // Calculate severity counts
+            const severityCounts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+            findingsData.forEach(f => {
+                if (severityCounts.hasOwnProperty(f.severity)) {
+                    severityCounts[f.severity]++;
+                }
+            });
+
+            // Build severity summary badges (only show non-zero counts)
+            const summaryParts = [];
+            if (severityCounts.critical > 0) summaryParts.push(`<span class="severity-badge severity-critical">${severityCounts.critical} Critical</span>`);
+            if (severityCounts.high > 0) summaryParts.push(`<span class="severity-badge severity-high">${severityCounts.high} High</span>`);
+            if (severityCounts.medium > 0) summaryParts.push(`<span class="severity-badge severity-medium">${severityCounts.medium} Med</span>`);
+            if (severityCounts.low > 0) summaryParts.push(`<span class="severity-badge severity-low">${severityCounts.low} Low</span>`);
+            
+            if (summaryParts.length > 0) {
+                severitySummary.innerHTML = summaryParts.join(' ');
+                severitySummary.style.display = 'flex';
+                severitySummary.style.gap = '4px';
+            } else {
+                severitySummary.style.display = 'none';
+            }
+
+            if (findingsData.length === 0) {
+                table.style.display = 'none';
+                empty.style.display = 'flex';
+                return;
+            }
+
+            table.style.display = 'table';
+            empty.style.display = 'none';
+
+            body.innerHTML = findingsData.map(f => `
+                <tr data-finding="${f.id}">
+                    <td><span class="severity-badge severity-${f.severity}">${f.severity}</span></td>
+                    <td>${f.title}</td>
+                </tr>
+            `).join('');
+
+            body.querySelectorAll('tr').forEach(row => {
+                row.addEventListener('click', () => {
+                    const finding = findings.find(f => f.id === row.dataset.finding);
+                    if (finding) {
+                        openModal(finding.title, getFindingModalContent(finding));
+                    }
+                });
+            });
+        }
+
+        function showComplete() {
+            document.getElementById('scan-controls').style.display = 'none';
+            document.getElementById('action-bar').style.display = 'flex';
+            
+            // Mark all phases as complete
+            ['discovery', 'target-analysis', 'ai-checks'].forEach(phase => {
+                const el = document.getElementById(`phase-${phase}`);
+                if (el) {
+                    el.classList.remove('active');
+                    el.classList.add('complete');
+                }
+            });
+        }
+    </script>
+</body>
+</html>

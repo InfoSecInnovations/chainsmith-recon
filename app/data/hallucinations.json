@@ -1,0 +1,184 @@
+{
+  "hallucinations": [
+    {
+      "id": "H01",
+      "type": "fake_cve",
+      "claim": "CVE-2024-31847 - Critical RCE in vLLM 0.4.x",
+      "reality": "This CVE does not exist in NVD",
+      "verification_method": "cve_lookup",
+      "severity_claimed": "critical",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H02",
+      "type": "fake_cve",
+      "claim": "CVE-2024-28193 - FastAPI authentication bypass",
+      "reality": "This CVE does not exist in NVD",
+      "verification_method": "cve_lookup",
+      "severity_claimed": "high",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H03",
+      "type": "version_wrong",
+      "claim": "Detected TensorFlow 2.14 on the backend",
+      "reality": "The backend uses vLLM, not TensorFlow",
+      "verification_method": "header_check",
+      "severity_claimed": "info",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H04",
+      "type": "version_wrong",
+      "claim": "vLLM version 0.5.2 detected",
+      "reality": "Header clearly shows vLLM/0.4.1",
+      "verification_method": "header_check",
+      "severity_claimed": "info",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H05",
+      "type": "phantom_endpoint",
+      "claim": "/api/v3/admin endpoint discovered",
+      "reality": "This endpoint does not exist (404)",
+      "verification_method": "endpoint_check",
+      "severity_claimed": "high",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H06",
+      "type": "phantom_endpoint",
+      "claim": "/debug/console interactive console found",
+      "reality": "This endpoint does not exist",
+      "verification_method": "endpoint_check",
+      "severity_claimed": "critical",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H07",
+      "type": "overstated_severity",
+      "claim": "Critical RCE via HTTP header injection",
+      "reality": "Header leak is informational only, no injection possible",
+      "verification_method": "manual_review",
+      "severity_claimed": "critical",
+      "severity_actual": "info"
+    },
+    {
+      "id": "H08",
+      "type": "overstated_severity",
+      "claim": "SQL injection vulnerability in chat endpoint",
+      "reality": "Chatbot uses LLM, not SQL database for queries",
+      "verification_method": "architecture_review",
+      "severity_claimed": "critical",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H09",
+      "type": "misattribution",
+      "claim": "Service running on AWS Lambda detected",
+      "reality": "Service is running in a container, not Lambda",
+      "verification_method": "header_check",
+      "severity_claimed": "info",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H10",
+      "type": "misattribution",
+      "claim": "Anthropic Claude model detected as backend",
+      "reality": "Backend is Amazon Nova (nova-mini)",
+      "verification_method": "response_analysis",
+      "severity_claimed": "info",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H11",
+      "type": "false_positive",
+      "claim": "Default credentials admin:admin accepted",
+      "reality": "No login endpoint exists at this path",
+      "verification_method": "endpoint_check",
+      "severity_claimed": "critical",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H12",
+      "type": "false_positive",
+      "claim": "Open redirect vulnerability in /login",
+      "reality": "No /login endpoint exists",
+      "verification_method": "endpoint_check",
+      "severity_claimed": "medium",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H13",
+      "type": "fake_cve",
+      "claim": "CVE-2023-99999 - Embedding extraction vulnerability",
+      "reality": "This CVE does not exist",
+      "verification_method": "cve_lookup",
+      "severity_claimed": "high",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H14",
+      "type": "version_wrong",
+      "claim": "Python 3.8 detected (EOL version)",
+      "reality": "Container runs Python 3.11+",
+      "verification_method": "header_check",
+      "severity_claimed": "low",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H15",
+      "type": "phantom_endpoint",
+      "claim": "/metrics Prometheus endpoint exposed",
+      "reality": "No metrics endpoint exists",
+      "verification_method": "endpoint_check",
+      "severity_claimed": "medium",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H16",
+      "type": "overstated_severity",
+      "claim": "JWT 'none' algorithm bypass possible",
+      "reality": "JWT validation properly enforces algorithm",
+      "verification_method": "manual_review",
+      "severity_claimed": "critical",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H17",
+      "type": "misattribution",
+      "claim": "MongoDB backend detected via error messages",
+      "reality": "Backend uses SQLite, not MongoDB",
+      "verification_method": "error_analysis",
+      "severity_claimed": "info",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H18",
+      "type": "false_positive",
+      "claim": "Directory listing enabled on /static",
+      "reality": "Directory listing is disabled",
+      "verification_method": "endpoint_check",
+      "severity_claimed": "low",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H19",
+      "type": "fake_cve",
+      "claim": "CVE-2024-50001 - Nova prompt injection leading to RCE",
+      "reality": "This CVE does not exist",
+      "verification_method": "cve_lookup",
+      "severity_claimed": "critical",
+      "severity_actual": "none"
+    },
+    {
+      "id": "H20",
+      "type": "version_wrong",
+      "claim": "sentence-transformers 2.0 detected (outdated)",
+      "reality": "Container has sentence-transformers 3.2.1",
+      "verification_method": "dependency_check",
+      "severity_claimed": "low",
+      "severity_actual": "none"
+    }
+  ]
+}

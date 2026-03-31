@@ -1,0 +1,1701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chainsmith Recon - Trends</title>
+    <link rel="stylesheet" href="/static/css/common.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .trend-container {
+            display: flex;
+            height: calc(100vh - 100px);
+        }
+
+        .trend-sidebar {
+            width: 320px;
+            min-width: 260px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .trend-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Selector bar */
+        .selector-bar {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            align-items: center;
+        }
+
+        .selector-bar label {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .selector-bar input,
+        .selector-bar select {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.8125rem;
+        }
+
+        .selector-bar input { flex: 1; min-width: 120px; }
+        .selector-bar select { min-width: 160px; }
+
+        .selector-bar .separator {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* Sidebar scan list */
+        .sidebar-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .scan-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .scan-item {
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 4px;
+            transition: background 0.15s;
+        }
+
+        .scan-item:hover { background: var(--bg-tertiary); }
+        .scan-item.active { background: var(--accent-dim); border: 1px solid var(--accent); }
+        .scan-item.delta-selected { background: rgba(250, 204, 21, 0.1); border: 1px solid #facc15; }
+
+        .scan-item-date {
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .scan-item-meta {
+            font-size: 0.6875rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .scan-item-risk {
+            font-weight: 600;
+        }
+
+        .risk-low { color: var(--success); }
+        .risk-med { color: var(--warning); }
+        .risk-high { color: var(--error); }
+
+        /* Averages bar */
+        .averages-bar {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            background: var(--bg-tertiary);
+        }
+
+        .averages-bar .avg-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .averages-bar .avg-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+        }
+
+        /* Metrics cards */
+        .metrics-bar {
+            display: flex;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+
+        .metric-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px 14px;
+            min-width: 140px;
+            flex: 1;
+        }
+
+        .metric-card .metric-label {
+            font-size: 0.6875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .metric-card .metric-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .metric-card .metric-detail {
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* Chart tabs */
+        .chart-tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 0 16px;
+        }
+
+        .chart-panels {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .chart-panel {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: none;
+            padding: 16px;
+            overflow: auto;
+        }
+
+        .chart-panel.active { display: block; }
+
+        .chart-wrapper {
+            width: 100%;
+            height: 100%;
+            min-height: 300px;
+        }
+
+        /* D3 chart styles */
+        .chart-tooltip {
+            position: absolute;
+            pointer-events: none;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            color: var(--text-primary);
+            box-shadow: 0 4px 12px var(--shadow);
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .chart-tooltip.visible { opacity: 1; }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 8px 0;
+            font-size: 0.75rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            opacity: 1;
+            transition: opacity 0.2s;
+        }
+
+        .legend-item.muted { opacity: 0.3; }
+
+        .legend-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+
+        .axis text {
+            fill: var(--text-secondary);
+            font-size: 0.6875rem;
+        }
+
+        .axis line, .axis path {
+            stroke: var(--border);
+        }
+
+        .grid line {
+            stroke: var(--border);
+            stroke-opacity: 0.3;
+        }
+
+        .grid path { stroke: none; }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            gap: 12px;
+        }
+
+        .empty-state svg {
+            width: 48px;
+            height: 48px;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            margin: 0;
+            font-size: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state p {
+            margin: 0;
+            font-size: 0.8125rem;
+        }
+
+        /* Export panel (slides in from right) */
+        .export-panel {
+            position: fixed;
+            top: 0; right: -420px; bottom: 0;
+            width: 400px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            transition: right 0.25s ease-in-out;
+            box-shadow: -4px 0 20px var(--shadow);
+        }
+
+        .export-panel.open { right: 0; }
+
+        .export-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .export-panel-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .export-panel-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .export-panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .export-finding {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: background 0.15s;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .export-finding:hover { background: var(--bg-tertiary); }
+
+        .export-finding input[type="checkbox"] {
+            margin-top: 3px;
+            accent-color: var(--accent);
+            flex-shrink: 0;
+        }
+
+        .export-finding-info { flex: 1; min-width: 0; }
+
+        .export-finding-title {
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .export-finding-meta {
+            font-size: 0.6875rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .export-panel-footer {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .export-footer-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .export-select-actions {
+            display: flex;
+            gap: 8px;
+            font-size: 0.75rem;
+        }
+
+        .export-select-actions a {
+            color: var(--accent);
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .export-select-actions a:hover { text-decoration: underline; }
+
+        .export-format-btn {
+            flex: 1;
+            padding: 4px 6px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.6875rem;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.15s;
+        }
+
+        .export-format-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
+        .export-format-btn.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        .export-count {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .export-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 199;
+            display: none;
+        }
+
+        .export-overlay.open { display: block; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <a href="index.html" class="brand"><span class="brand-name"><span class="accent">Chainsmith</span> Recon</span><span class="brand-tagline">Recon for the AI Era</span></a>
+            <span class="header-status" id="header-status"></span>
+        </div>
+        <div class="header-right">
+            <button class="btn btn-icon" id="btn-settings" title="Settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <nav class="nav">
+        <a href="index.html" class="nav-item" id="nav-scope">Scope</a>
+        <a href="scan.html" class="nav-item" id="nav-scan">Scan</a>
+        <a href="findings.html" class="nav-item" id="nav-results">Results</a>
+        <a href="trend.html" class="nav-item active">Trends</a>
+        <a href="reports.html" class="nav-item">Reports</a>
+    </nav>
+
+    <div id="scenario-banner" class="scenario-banner" style="display:none"></div>
+
+    <main class="trend-container">
+        <!-- Sidebar -->
+        <div class="trend-sidebar">
+            <div class="selector-bar" style="flex-direction: column; align-items: stretch;">
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <label>Target</label>
+                    <input type="text" id="target-input" placeholder="example.com">
+                    <button class="btn btn-small btn-primary" id="btn-load-target">Load</button>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+                    <label>Engagement</label>
+                    <select id="engagement-select">
+                        <option value="">-- Select --</option>
+                    </select>
+                    <button class="btn btn-small" id="btn-load-engagement">Load</button>
+                </div>
+            </div>
+
+            <div class="filter-bar" style="padding:8px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
+                <div style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);">Filter</div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="date" id="filter-since" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);padding:4px 6px;border-radius:4px;font-size:0.75rem;" title="From date">
+                    <span style="color:var(--text-muted);font-size:0.6875rem;">to</span>
+                    <input type="date" id="filter-until" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);padding:4px 6px;border-radius:4px;font-size:0.75rem;" title="To date">
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <select id="filter-last-n" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);padding:4px 6px;border-radius:4px;font-size:0.75rem;">
+                        <option value="">All scans</option>
+                        <option value="3">Last 3 scans</option>
+                        <option value="5">Last 5 scans</option>
+                        <option value="10">Last 10 scans</option>
+                        <option value="20">Last 20 scans</option>
+                    </select>
+                    <button class="btn btn-small" id="btn-apply-filter" style="font-size:0.6875rem;padding:4px 8px;">Apply</button>
+                    <button class="btn btn-small" id="btn-clear-filter" style="font-size:0.6875rem;padding:4px 8px;opacity:0.6;">Clear</button>
+                </div>
+            </div>
+
+            <div class="sidebar-header" id="sidebar-header">Scan History</div>
+            <div class="scan-list" id="scan-list">
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                    <h3>No Trend Data</h3>
+                    <p>Enter a target or select an engagement</p>
+                </div>
+            </div>
+
+            <div class="averages-bar" id="averages-bar" style="display:none;">
+                <div class="avg-title">Averages</div>
+                <div id="avg-content"></div>
+            </div>
+        </div>
+
+        <!-- Main charts area -->
+        <div class="trend-main">
+            <div class="metrics-bar" id="metrics-bar" style="display:none;">
+                <div class="metric-card">
+                    <div class="metric-label">Regression Rate</div>
+                    <div class="metric-value" id="metric-regression">--</div>
+                    <div class="metric-detail" id="metric-regression-detail"></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">MTTR (Overall)</div>
+                    <div class="metric-value" id="metric-mttr">--</div>
+                    <div class="metric-detail" id="metric-mttr-detail"></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">MTTR Critical/High</div>
+                    <div class="metric-value" id="metric-mttr-crit">--</div>
+                    <div class="metric-detail" id="metric-mttr-crit-detail"></div>
+                </div>
+            </div>
+            <div class="chart-tabs">
+                <div class="tab active" data-chart="severity">Severity Trend</div>
+                <div class="tab" data-chart="risk">Risk Score</div>
+                <div class="tab" data-chart="suite">Suite Breakdown</div>
+                <div class="tab" data-chart="newresolved">New / Resolved</div>
+                <div class="tab" data-chart="delta">Delta Compare</div>
+            </div>
+            <div class="chart-panels">
+                <div class="chart-panel active" id="panel-severity">
+                    <div class="chart-wrapper" id="chart-severity"></div>
+                </div>
+                <div class="chart-panel" id="panel-risk">
+                    <div class="chart-wrapper" id="chart-risk"></div>
+                </div>
+                <div class="chart-panel" id="panel-suite">
+                    <div class="chart-wrapper" id="chart-suite"></div>
+                </div>
+                <div class="chart-panel" id="panel-newresolved">
+                    <div class="chart-wrapper" id="chart-newresolved"></div>
+                </div>
+                <div class="chart-panel" id="panel-delta">
+                    <div class="chart-wrapper" id="chart-delta"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Settings Drawer -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="drawer drawer-right" id="drawer-settings">
+        <div class="drawer-header">
+            <h2>Settings</h2>
+            <button class="drawer-close" id="close-settings">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="drawer-content">
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Theme</div>
+                    <div class="setting-desc">Color scheme</div>
+                </div>
+                <div class="theme-selector">
+                    <button class="theme-btn active" data-theme="dark">Dark</button>
+                    <button class="theme-btn" data-theme="light">Light</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Panel Overlay -->
+    <div class="export-overlay" id="export-overlay"></div>
+
+    <!-- Export Panel -->
+    <div class="export-panel" id="export-panel">
+        <div class="export-panel-header">
+            <div>
+                <div class="export-panel-title" id="export-title">Findings</div>
+                <div class="export-panel-meta" id="export-meta"></div>
+            </div>
+            <button class="btn btn-small" id="btn-close-export" title="Close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="export-panel-body" id="export-findings-list">
+        </div>
+        <div class="export-panel-footer">
+            <div class="export-footer-row" style="justify-content:space-between">
+                <span class="export-count" id="export-count">0 selected</span>
+                <div class="export-select-actions">
+                    <a id="export-select-all">Select all</a>
+                    <a id="export-select-none">Clear</a>
+                </div>
+            </div>
+            <div class="export-footer-row" id="export-format-row">
+                <button class="export-format-btn active" data-fmt="html">HTML</button>
+                <button class="export-format-btn" data-fmt="md">MD</button>
+                <button class="export-format-btn" data-fmt="json">JSON</button>
+                <button class="export-format-btn" data-fmt="sarif">SARIF</button>
+            </div>
+            <button class="btn btn-primary" id="btn-export-selected" style="width:100%">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export Selected
+            </button>
+        </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div class="chart-tooltip" id="tooltip"></div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        // ─── State ───────────────────────────────────────────────
+        let trendData = null;
+        let dataPoints = [];
+        let deltaSelection = [];  // [scanIdA, scanIdB] for delta compare
+        const tooltip = document.getElementById('tooltip');
+
+        // ─── Colors ──────────────────────────────────────────────
+        const SEV_COLORS = {
+            critical: '#991b1b',
+            high: '#dc2626',
+            medium: '#f59e0b',
+            low: '#4a9eff',
+            info: '#6b7280',
+        };
+
+        const SUITE_COLORS = {
+            web: '#4a9eff',
+            network: '#8b5cf6',
+            ai: '#f59e0b',
+            mcp: '#ec4899',
+            agent: '#10b981',
+            rag: '#06b6d4',
+            cag: '#f97316',
+            unknown: '#6b7280',
+        };
+
+        const SEV_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
+
+        // ─── Init ────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCommon();
+            initTabs();
+            initSelectors();
+            initExportPanel();
+            await loadEngagements();
+        });
+
+        function initTabs() {
+            document.querySelectorAll('.chart-tabs .tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.chart-tabs .tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.chart-panel').forEach(p => p.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.getElementById(`panel-${tab.dataset.chart}`).classList.add('active');
+
+                    // Clear delta highlights when leaving delta mode
+                    if (tab.dataset.chart !== 'delta') {
+                        deltaSelection = [];
+                        document.querySelectorAll('.scan-item.delta-selected').forEach(el => el.classList.remove('delta-selected'));
+                    }
+
+                    renderActiveChart();
+                });
+            });
+        }
+
+        function initSelectors() {
+            document.getElementById('btn-load-target').addEventListener('click', loadByTarget);
+            document.getElementById('btn-load-engagement').addEventListener('click', loadByEngagement);
+            document.getElementById('target-input').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') loadByTarget();
+            });
+            document.getElementById('btn-apply-filter').addEventListener('click', reloadWithFilters);
+            document.getElementById('btn-clear-filter').addEventListener('click', () => {
+                document.getElementById('filter-since').value = '';
+                document.getElementById('filter-until').value = '';
+                document.getElementById('filter-last-n').value = '';
+                reloadWithFilters();
+            });
+        }
+
+        function getFilters() {
+            const filters = {};
+            const since = document.getElementById('filter-since').value;
+            const until = document.getElementById('filter-until').value;
+            const lastN = document.getElementById('filter-last-n').value;
+            if (since) filters.since = since;
+            if (until) filters.until = until;
+            if (lastN) filters.last_n = parseInt(lastN, 10);
+            return filters;
+        }
+
+        function reloadWithFilters() {
+            const target = document.getElementById('target-input').value.trim();
+            const engId = document.getElementById('engagement-select').value;
+            if (target) loadByTarget();
+            else if (engId) loadByEngagement();
+        }
+
+        async function loadEngagements() {
+            try {
+                const data = await api.listEngagements();
+                const select = document.getElementById('engagement-select');
+                for (const eng of (data.engagements || [])) {
+                    const opt = document.createElement('option');
+                    opt.value = eng.id;
+                    opt.textContent = `${eng.name} (${eng.target_domain})`;
+                    select.appendChild(opt);
+                }
+            } catch (e) { /* engagements may not exist yet */ }
+        }
+
+        async function loadByTarget() {
+            const target = document.getElementById('target-input').value.trim();
+            if (!target) return;
+            document.getElementById('engagement-select').value = '';
+            try {
+                trendData = await api.getTargetTrend(target, getFilters());
+                dataPoints = trendData.data_points || [];
+                renderSidebar(target);
+                renderAverages();
+                renderMetrics();
+                renderActiveChart();
+            } catch (e) {
+                console.error('Failed to load trend:', e);
+            }
+        }
+
+        async function loadByEngagement() {
+            const engId = document.getElementById('engagement-select').value;
+            if (!engId) return;
+            document.getElementById('target-input').value = '';
+            try {
+                trendData = await api.getEngagementTrend(engId, getFilters());
+                dataPoints = trendData.data_points || [];
+                const label = document.getElementById('engagement-select').selectedOptions[0]?.textContent || engId;
+                renderSidebar(label);
+                renderAverages();
+                renderMetrics();
+                renderActiveChart();
+            } catch (e) {
+                console.error('Failed to load trend:', e);
+            }
+        }
+
+        // ─── Sidebar ─────────────────────────────────────────────
+        function renderSidebar(label) {
+            document.getElementById('sidebar-header').textContent = `${label} (${dataPoints.length} scans)`;
+            const list = document.getElementById('scan-list');
+
+            if (!dataPoints.length) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <h3>No Completed Scans</h3>
+                        <p>Run scans against this target to see trends</p>
+                    </div>`;
+                return;
+            }
+
+            list.innerHTML = dataPoints.map((dp, i) => {
+                const date = dp.date ? dp.date.substring(0, 10) : 'N/A';
+                const riskClass = dp.risk_score > 50 ? 'risk-high' : dp.risk_score > 20 ? 'risk-med' : 'risk-low';
+                return `
+                    <div class="scan-item${i === dataPoints.length - 1 ? ' active' : ''}" data-index="${i}" data-scan-id="${dp.scan_id}">
+                        <div class="scan-item-date">${date}</div>
+                        <div class="scan-item-meta">
+                            <span>${dp.total} findings</span>
+                            <span class="scan-item-risk ${riskClass}">risk: ${dp.risk_score}</span>
+                            <span style="color:var(--success)">+${dp.new}</span>
+                            <span style="color:var(--error)">-${dp.resolved}</span>
+                        </div>
+                    </div>`;
+            }).join('');
+
+            // Attach click handlers for delta selection
+            list.querySelectorAll('.scan-item').forEach(item => {
+                item.addEventListener('click', () => handleScanItemClick(item));
+            });
+        }
+
+        function isDeltaMode() {
+            const active = document.querySelector('.chart-tabs .tab.active');
+            return active && active.dataset.chart === 'delta';
+        }
+
+        function handleScanItemClick(item) {
+            if (!isDeltaMode()) return;
+
+            const scanId = item.dataset.scanId;
+            const idx = deltaSelection.indexOf(scanId);
+
+            if (idx >= 0) {
+                // Deselect
+                deltaSelection.splice(idx, 1);
+                item.classList.remove('delta-selected');
+            } else if (deltaSelection.length < 2) {
+                // Select
+                deltaSelection.push(scanId);
+                item.classList.add('delta-selected');
+            } else {
+                // Replace oldest selection
+                const oldest = deltaSelection.shift();
+                document.querySelector(`.scan-item[data-scan-id="${oldest}"]`)?.classList.remove('delta-selected');
+                deltaSelection.push(scanId);
+                item.classList.add('delta-selected');
+            }
+
+            if (deltaSelection.length === 2) {
+                renderDeltaChart();
+            }
+        }
+
+        function renderAverages() {
+            const bar = document.getElementById('averages-bar');
+            const content = document.getElementById('avg-content');
+            const avgs = trendData?.averages;
+            if (!avgs || !avgs.this_target || !Object.keys(avgs.this_target).length) {
+                bar.style.display = 'none';
+                return;
+            }
+            bar.style.display = 'block';
+            const t = avgs.this_target;
+            const a = avgs.all_targets || {};
+            content.innerHTML = `
+                <div class="avg-row"><span>This target avg:</span><span>${t.total} findings, risk ${t.risk_score}</span></div>
+                <div class="avg-row"><span style="margin-left:8px">C:${t.critical} H:${t.high} M:${t.medium} L:${t.low}</span></div>
+                ${a.total !== undefined ? `<div class="avg-row" style="margin-top:4px"><span>All targets avg:</span><span>${a.total} findings, risk ${a.risk_score}</span></div>` : ''}
+            `;
+        }
+
+        // ─── Metrics Rendering ───────────────────────────────────
+        function renderMetrics() {
+            const bar = document.getElementById('metrics-bar');
+            const metrics = trendData?.metrics;
+            if (!metrics || (!metrics.regression_rate && !metrics.mttr_hours?.overall)) {
+                bar.style.display = 'none';
+                return;
+            }
+            bar.style.display = 'flex';
+
+            // Regression rate
+            const regEl = document.getElementById('metric-regression');
+            const regDetail = document.getElementById('metric-regression-detail');
+            if (metrics.regression_rate !== null && metrics.regression_rate !== undefined) {
+                regEl.textContent = `${metrics.regression_rate}%`;
+                regEl.style.color = metrics.regression_rate > 20 ? 'var(--error)' :
+                    metrics.regression_rate > 10 ? 'var(--warning)' : 'var(--success)';
+                regDetail.textContent = `${metrics.total_regressed} regressed / ${metrics.total_resolved} resolved`;
+            } else {
+                regEl.textContent = 'N/A';
+                regEl.style.color = 'var(--text-muted)';
+                regDetail.textContent = 'No resolved findings yet';
+            }
+
+            // MTTR overall
+            const mttr = metrics.mttr_hours || {};
+            const mttrEl = document.getElementById('metric-mttr');
+            const mttrDetail = document.getElementById('metric-mttr-detail');
+            if (mttr.overall !== undefined) {
+                mttrEl.textContent = formatHours(mttr.overall);
+                mttrDetail.textContent = [
+                    mttr.medium !== undefined ? `Med: ${formatHours(mttr.medium)}` : null,
+                    mttr.low !== undefined ? `Low: ${formatHours(mttr.low)}` : null,
+                ].filter(Boolean).join(' | ') || '';
+            } else {
+                mttrEl.textContent = 'N/A';
+                mttrDetail.textContent = 'No remediation data';
+            }
+
+            // MTTR critical/high
+            const critEl = document.getElementById('metric-mttr-crit');
+            const critDetail = document.getElementById('metric-mttr-crit-detail');
+            const critParts = [];
+            if (mttr.critical !== undefined) critParts.push(`Crit: ${formatHours(mttr.critical)}`);
+            if (mttr.high !== undefined) critParts.push(`High: ${formatHours(mttr.high)}`);
+            if (critParts.length) {
+                critEl.textContent = formatHours(mttr.critical ?? mttr.high);
+                critDetail.textContent = critParts.join(' | ');
+            } else {
+                critEl.textContent = 'N/A';
+                critDetail.textContent = 'No critical/high remediations';
+            }
+        }
+
+        function formatHours(hours) {
+            if (hours < 1) return `${Math.round(hours * 60)}m`;
+            if (hours < 24) return `${Math.round(hours)}h`;
+            const days = hours / 24;
+            return days < 2 ? `${Math.round(hours)}h` : `${Math.round(days)}d`;
+        }
+
+        // ─── Chart Rendering ─────────────────────────────────────
+        function renderActiveChart() {
+            const active = document.querySelector('.chart-tabs .tab.active');
+            if (!active || !dataPoints.length) return;
+            const chart = active.dataset.chart;
+            if (chart === 'severity') renderSeverityChart();
+            else if (chart === 'risk') renderRiskChart();
+            else if (chart === 'suite') renderSuiteChart();
+            else if (chart === 'newresolved') renderNewResolvedChart();
+            else if (chart === 'delta') renderDeltaChart();
+        }
+
+        function getChartDimensions(containerId) {
+            const container = document.getElementById(containerId);
+            const rect = container.getBoundingClientRect();
+            const margin = { top: 40, right: 30, bottom: 50, left: 50 };
+            return {
+                container,
+                width: Math.max(rect.width - margin.left - margin.right, 200),
+                height: Math.max(rect.height - margin.top - margin.bottom, 200),
+                margin,
+                fullWidth: rect.width,
+                fullHeight: rect.height,
+            };
+        }
+
+        function showTooltip(html, event) {
+            tooltip.innerHTML = html;
+            tooltip.classList.add('visible');
+            const x = event.pageX + 12;
+            const y = event.pageY - 12;
+            tooltip.style.left = `${x}px`;
+            tooltip.style.top = `${y}px`;
+        }
+
+        function hideTooltip() {
+            tooltip.classList.remove('visible');
+        }
+
+        // ─── Chart 1: Severity Trend (Line Chart) ───────────────
+        function renderSeverityChart() {
+            const { container, width, height, margin } = getChartDimensions('chart-severity');
+            container.innerHTML = '';
+
+            const svg = d3.select(container).append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const parseDate = (d) => new Date(d.date);
+            const x = d3.scaleTime()
+                .domain(d3.extent(dataPoints, parseDate))
+                .range([0, width]);
+
+            const maxCount = d3.max(dataPoints, d =>
+                Math.max(d.critical, d.high, d.medium, d.low, d.info)
+            ) || 1;
+
+            const y = d3.scaleLinear()
+                .domain([0, maxCount * 1.1])
+                .range([height, 0]);
+
+            // Grid
+            g.append('g').attr('class', 'grid')
+                .call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
+
+            // Axes
+            g.append('g').attr('class', 'axis')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(x).ticks(Math.min(dataPoints.length, 8)));
+
+            g.append('g').attr('class', 'axis')
+                .call(d3.axisLeft(y).ticks(5));
+
+            // Track hidden series
+            const hidden = new Set();
+
+            // Lines
+            const lineGroup = g.append('g');
+
+            function drawLines() {
+                lineGroup.selectAll('*').remove();
+                for (const sev of SEV_ORDER) {
+                    if (hidden.has(sev)) continue;
+                    const line = d3.line()
+                        .x(d => x(parseDate(d)))
+                        .y(d => y(d[sev] || 0))
+                        .curve(d3.curveMonotoneX);
+
+                    lineGroup.append('path')
+                        .datum(dataPoints)
+                        .attr('fill', 'none')
+                        .attr('stroke', SEV_COLORS[sev])
+                        .attr('stroke-width', 2.5)
+                        .attr('d', line);
+
+                    // Dots
+                    lineGroup.selectAll(`.dot-${sev}`)
+                        .data(dataPoints)
+                        .enter().append('circle')
+                        .attr('cx', d => x(parseDate(d)))
+                        .attr('cy', d => y(d[sev] || 0))
+                        .attr('r', 4)
+                        .attr('fill', SEV_COLORS[sev])
+                        .attr('stroke', 'var(--bg-primary)')
+                        .attr('stroke-width', 1.5)
+                        .on('mouseover', (event, d) => {
+                            showTooltip(`
+                                <div style="font-weight:600;margin-bottom:4px">${d.date?.substring(0, 10)}</div>
+                                ${SEV_ORDER.map(s => `<div style="color:${SEV_COLORS[s]}">${s}: ${d[s]}</div>`).join('')}
+                                <div style="margin-top:4px;color:var(--text-secondary)">Total: ${d.total} | Risk: ${d.risk_score}</div>
+                                <div style="margin-top:2px;color:var(--accent);font-size:0.6875rem">Click to view findings</div>
+                            `, event);
+                        })
+                        .on('mouseout', hideTooltip)
+                        .on('click', (event, d) => {
+                            hideTooltip();
+                            openExportPanel(d.scan_id, d.date?.substring(0, 10) || d.scan_id.substring(0, 8));
+                        })
+                        .style('cursor', 'pointer');
+                }
+            }
+
+            drawLines();
+
+            // Legend
+            const legend = d3.select(container).insert('div', 'svg')
+                .attr('class', 'legend');
+
+            for (const sev of SEV_ORDER) {
+                const item = legend.append('div')
+                    .attr('class', 'legend-item')
+                    .on('click', () => {
+                        if (hidden.has(sev)) hidden.delete(sev);
+                        else hidden.add(sev);
+                        item.classed('muted', hidden.has(sev));
+                        drawLines();
+                    });
+
+                item.append('div')
+                    .attr('class', 'legend-swatch')
+                    .style('background', SEV_COLORS[sev]);
+
+                item.append('span').text(sev);
+            }
+        }
+
+        // ─── Chart 2: Risk Score (Bar + Line) ────────────────────
+        function renderRiskChart() {
+            const { container, width, height, margin } = getChartDimensions('chart-risk');
+            margin.right = 60; // space for secondary axis
+            const effectiveWidth = width - 30;
+            container.innerHTML = '';
+
+            const svg = d3.select(container).append('svg')
+                .attr('width', effectiveWidth + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scaleBand()
+                .domain(dataPoints.map((d, i) => i))
+                .range([0, effectiveWidth])
+                .padding(0.3);
+
+            const maxStacked = d3.max(dataPoints, d =>
+                d.critical + d.high + d.medium + d.low + d.info
+            ) || 1;
+
+            const y = d3.scaleLinear()
+                .domain([0, maxStacked * 1.1])
+                .range([height, 0]);
+
+            const maxRisk = d3.max(dataPoints, d => d.risk_score) || 1;
+            const yRisk = d3.scaleLinear()
+                .domain([0, maxRisk * 1.2])
+                .range([height, 0]);
+
+            // Grid
+            g.append('g').attr('class', 'grid')
+                .call(d3.axisLeft(y).ticks(5).tickSize(-effectiveWidth).tickFormat(''));
+
+            // X axis
+            g.append('g').attr('class', 'axis')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(x).tickFormat(i => {
+                    const dp = dataPoints[i];
+                    return dp?.date ? dp.date.substring(5, 10) : '';
+                }));
+
+            // Y axes
+            g.append('g').attr('class', 'axis')
+                .call(d3.axisLeft(y).ticks(5));
+
+            g.append('g').attr('class', 'axis')
+                .attr('transform', `translate(${effectiveWidth},0)`)
+                .call(d3.axisRight(yRisk).ticks(5))
+                .selectAll('text').style('fill', '#4ade80');
+
+            // Stacked bars
+            const stack = d3.stack()
+                .keys(SEV_ORDER)
+                .value((d, key) => d[key] || 0);
+
+            const stacked = stack(dataPoints);
+
+            g.selectAll('.layer')
+                .data(stacked)
+                .enter().append('g')
+                .attr('fill', d => SEV_COLORS[d.key])
+                .selectAll('rect')
+                .data(d => d.map((v, i) => ({ ...v, index: i })))
+                .enter().append('rect')
+                .attr('x', d => x(d.index))
+                .attr('y', d => y(d[1]))
+                .attr('height', d => y(d[0]) - y(d[1]))
+                .attr('width', x.bandwidth())
+                .attr('rx', 2)
+                .on('mouseover', (event, d) => {
+                    const dp = dataPoints[d.index];
+                    showTooltip(`
+                        <div style="font-weight:600;margin-bottom:4px">${dp.date?.substring(0, 10)}</div>
+                        ${SEV_ORDER.map(s => `<div style="color:${SEV_COLORS[s]}">${s}: ${dp[s]}</div>`).join('')}
+                        <div style="margin-top:4px;color:#4ade80;font-weight:600">Risk Score: ${dp.risk_score}</div>
+                        <div style="margin-top:2px;color:var(--accent);font-size:0.6875rem">Click to view findings</div>
+                    `, event);
+                })
+                .on('mouseout', hideTooltip)
+                .on('click', (event, d) => {
+                    hideTooltip();
+                    const dp = dataPoints[d.index];
+                    openExportPanel(dp.scan_id, dp.date?.substring(0, 10) || dp.scan_id.substring(0, 8));
+                })
+                .style('cursor', 'pointer');
+
+            // Risk score line
+            const riskLine = d3.line()
+                .x((d, i) => x(i) + x.bandwidth() / 2)
+                .y(d => yRisk(d.risk_score))
+                .curve(d3.curveMonotoneX);
+
+            g.append('path')
+                .datum(dataPoints)
+                .attr('fill', 'none')
+                .attr('stroke', '#4ade80')
+                .attr('stroke-width', 2.5)
+                .attr('d', riskLine);
+
+            g.selectAll('.risk-dot')
+                .data(dataPoints)
+                .enter().append('circle')
+                .attr('cx', (d, i) => x(i) + x.bandwidth() / 2)
+                .attr('cy', d => yRisk(d.risk_score))
+                .attr('r', 4)
+                .attr('fill', '#4ade80')
+                .attr('stroke', 'var(--bg-primary)')
+                .attr('stroke-width', 1.5);
+
+            // Legend
+            const legend = d3.select(container).insert('div', 'svg')
+                .attr('class', 'legend');
+
+            for (const sev of SEV_ORDER) {
+                const item = legend.append('div').attr('class', 'legend-item');
+                item.append('div').attr('class', 'legend-swatch').style('background', SEV_COLORS[sev]);
+                item.append('span').text(sev);
+            }
+            const riskItem = legend.append('div').attr('class', 'legend-item');
+            riskItem.append('div').attr('class', 'legend-swatch').style('background', '#4ade80');
+            riskItem.append('span').text('risk score');
+        }
+
+        // ─── Chart 3: Suite Breakdown (Stacked Bar) ──────────────
+        function renderSuiteChart() {
+            const { container, width, height, margin } = getChartDimensions('chart-suite');
+            container.innerHTML = '';
+
+            // Collect all suites across data points
+            const allSuites = new Set();
+            for (const dp of dataPoints) {
+                for (const s of Object.keys(dp.by_suite || {})) allSuites.add(s);
+            }
+            const suiteKeys = [...allSuites].sort();
+
+            if (!suiteKeys.length) {
+                container.innerHTML = '<div class="empty-state"><h3>No Suite Data</h3><p>Suite information not available for these scans</p></div>';
+                return;
+            }
+
+            const svg = d3.select(container).append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            // Prepare data with suite counts
+            const prepared = dataPoints.map((dp, i) => {
+                const row = { index: i, date: dp.date };
+                for (const s of suiteKeys) row[s] = dp.by_suite?.[s] || 0;
+                return row;
+            });
+
+            const x = d3.scaleBand()
+                .domain(prepared.map(d => d.index))
+                .range([0, width])
+                .padding(0.3);
+
+            const maxStacked = d3.max(prepared, d =>
+                suiteKeys.reduce((sum, s) => sum + (d[s] || 0), 0)
+            ) || 1;
+
+            const y = d3.scaleLinear()
+                .domain([0, maxStacked * 1.1])
+                .range([height, 0]);
+
+            // Grid
+            g.append('g').attr('class', 'grid')
+                .call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
+
+            // Axes
+            g.append('g').attr('class', 'axis')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(x).tickFormat(i => {
+                    const dp = dataPoints[i];
+                    return dp?.date ? dp.date.substring(5, 10) : '';
+                }));
+
+            g.append('g').attr('class', 'axis')
+                .call(d3.axisLeft(y).ticks(5));
+
+            // Stacked bars
+            const stack = d3.stack()
+                .keys(suiteKeys)
+                .value((d, key) => d[key] || 0);
+
+            const stacked = stack(prepared);
+
+            g.selectAll('.layer')
+                .data(stacked)
+                .enter().append('g')
+                .attr('fill', d => SUITE_COLORS[d.key] || '#6b7280')
+                .selectAll('rect')
+                .data(d => d.map((v, i) => ({ ...v, index: i, key: d.key })))
+                .enter().append('rect')
+                .attr('x', d => x(d.index))
+                .attr('y', d => y(d[1]))
+                .attr('height', d => y(d[0]) - y(d[1]))
+                .attr('width', x.bandwidth())
+                .attr('rx', 2)
+                .on('mouseover', (event, d) => {
+                    const dp = dataPoints[d.index];
+                    const suiteEntries = Object.entries(dp.by_suite || {})
+                        .sort((a, b) => b[1] - a[1]);
+                    showTooltip(`
+                        <div style="font-weight:600;margin-bottom:4px">${dp.date?.substring(0, 10)}</div>
+                        ${suiteEntries.map(([s, c]) =>
+                            `<div style="color:${SUITE_COLORS[s] || '#6b7280'}">${s}: ${c}</div>`
+                        ).join('')}
+                    `, event);
+                })
+                .on('mouseout', hideTooltip);
+
+            // Legend
+            const legend = d3.select(container).insert('div', 'svg')
+                .attr('class', 'legend');
+
+            for (const suite of suiteKeys) {
+                const item = legend.append('div').attr('class', 'legend-item');
+                item.append('div').attr('class', 'legend-swatch')
+                    .style('background', SUITE_COLORS[suite] || '#6b7280');
+                item.append('span').text(suite);
+            }
+        }
+        // ─── Chart 4: New / Resolved (Grouped Bar) ─────────────
+        const STATUS_COLORS = {
+            new: '#22c55e',
+            resolved: '#6b7280',
+            regressed: '#ef4444',
+        };
+
+        function renderNewResolvedChart() {
+            const { container, width, height, margin } = getChartDimensions('chart-newresolved');
+            container.innerHTML = '';
+
+            const svg = d3.select(container).append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const statusKeys = ['new', 'resolved', 'regressed'];
+
+            const x0 = d3.scaleBand()
+                .domain(dataPoints.map((d, i) => i))
+                .range([0, width])
+                .padding(0.25);
+
+            const x1 = d3.scaleBand()
+                .domain(statusKeys)
+                .range([0, x0.bandwidth()])
+                .padding(0.08);
+
+            const maxCount = d3.max(dataPoints, d =>
+                Math.max(d.new || 0, d.resolved || 0, d.regressed || 0)
+            ) || 1;
+
+            const y = d3.scaleLinear()
+                .domain([0, maxCount * 1.15])
+                .range([height, 0]);
+
+            // Grid
+            g.append('g').attr('class', 'grid')
+                .call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
+
+            // X axis
+            g.append('g').attr('class', 'axis')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(x0).tickFormat(i => {
+                    const dp = dataPoints[i];
+                    return dp?.date ? dp.date.substring(5, 10) : '';
+                }));
+
+            // Y axis
+            g.append('g').attr('class', 'axis')
+                .call(d3.axisLeft(y).ticks(5));
+
+            // Grouped bars
+            const scanGroups = g.selectAll('.scan-group')
+                .data(dataPoints.map((d, i) => ({ ...d, index: i })))
+                .enter().append('g')
+                .attr('transform', d => `translate(${x0(d.index)},0)`);
+
+            for (const key of statusKeys) {
+                scanGroups.append('rect')
+                    .attr('x', x1(key))
+                    .attr('y', d => y(d[key] || 0))
+                    .attr('width', x1.bandwidth())
+                    .attr('height', d => height - y(d[key] || 0))
+                    .attr('fill', STATUS_COLORS[key])
+                    .attr('rx', 2)
+                    .on('mouseover', (event, d) => {
+                        showTooltip(`
+                            <div style="font-weight:600;margin-bottom:4px">${d.date?.substring(0, 10)}</div>
+                            <div style="color:${STATUS_COLORS.new}">New: ${d.new || 0}</div>
+                            <div style="color:${STATUS_COLORS.resolved}">Resolved: ${d.resolved || 0}</div>
+                            <div style="color:${STATUS_COLORS.regressed}">Regressed: ${d.regressed || 0}</div>
+                            <div style="margin-top:4px;color:var(--text-secondary)">Total: ${d.total}</div>
+                            <div style="margin-top:2px;color:var(--accent);font-size:0.6875rem">Click to view findings</div>
+                        `, event);
+                    })
+                    .on('mouseout', hideTooltip)
+                    .on('click', (event, d) => {
+                        hideTooltip();
+                        openExportPanel(d.scan_id, d.date?.substring(0, 10) || d.scan_id.substring(0, 8));
+                    })
+                    .style('cursor', 'pointer');
+            }
+
+            // Net change line (new + regressed - resolved)
+            const netLine = d3.line()
+                .x((d, i) => x0(i) + x0.bandwidth() / 2)
+                .y(d => {
+                    const net = (d.new || 0) + (d.regressed || 0) - (d.resolved || 0);
+                    return y(Math.max(0, net));
+                })
+                .curve(d3.curveMonotoneX);
+
+            g.append('path')
+                .datum(dataPoints)
+                .attr('fill', 'none')
+                .attr('stroke', '#facc15')
+                .attr('stroke-width', 2)
+                .attr('stroke-dasharray', '6,3')
+                .attr('d', netLine);
+
+            // Legend
+            const legend = d3.select(container).insert('div', 'svg')
+                .attr('class', 'legend');
+
+            for (const key of statusKeys) {
+                const item = legend.append('div').attr('class', 'legend-item');
+                item.append('div').attr('class', 'legend-swatch').style('background', STATUS_COLORS[key]);
+                item.append('span').text(key);
+            }
+            const netItem = legend.append('div').attr('class', 'legend-item');
+            netItem.append('div').attr('class', 'legend-swatch')
+                .style('background', '#facc15')
+                .style('opacity', '0.7');
+            netItem.append('span').text('net change');
+        }
+        // ─── Chart 5: Delta Compare (Grouped Bar) ──────────────
+        async function renderDeltaChart() {
+            const container = document.getElementById('chart-delta');
+
+            if (deltaSelection.length < 2) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
+                        </svg>
+                        <h3>Select Two Scans</h3>
+                        <p>Click two scans in the sidebar to compare them</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading comparison...</div>';
+
+            try {
+                const comparison = await api.compareScans(deltaSelection[0], deltaSelection[1]);
+                renderDeltaBarChart(container, comparison);
+            } catch (e) {
+                container.innerHTML = `<div class="empty-state"><h3>Comparison Failed</h3><p>${e.message}</p></div>`;
+            }
+        }
+
+        // ─── Export Panel ────────────────────────────────────────
+        let exportFindings = [];
+        let exportFormat = 'html';
+
+        function initExportPanel() {
+            document.getElementById('btn-close-export').addEventListener('click', closeExportPanel);
+            document.getElementById('export-overlay').addEventListener('click', closeExportPanel);
+
+            document.getElementById('export-select-all').addEventListener('click', () => {
+                document.querySelectorAll('#export-findings-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+                updateExportCount();
+            });
+            document.getElementById('export-select-none').addEventListener('click', () => {
+                document.querySelectorAll('#export-findings-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+                updateExportCount();
+            });
+
+            document.querySelectorAll('.export-format-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.export-format-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    exportFormat = btn.dataset.fmt;
+                });
+            });
+
+            document.getElementById('btn-export-selected').addEventListener('click', doExport);
+        }
+
+        async function openExportPanel(scanId, label) {
+            const panel = document.getElementById('export-panel');
+            const overlay = document.getElementById('export-overlay');
+            const list = document.getElementById('export-findings-list');
+
+            document.getElementById('export-title').textContent = `Findings — ${label}`;
+            document.getElementById('export-meta').textContent = `Scan: ${scanId.substring(0, 8)}`;
+            list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Loading findings...</div>';
+
+            panel.classList.add('open');
+            overlay.classList.add('open');
+
+            try {
+                const data = await api.getScanFindings(scanId);
+                exportFindings = data.findings || [];
+                renderExportFindings();
+            } catch (e) {
+                list.innerHTML = `<div style="padding:16px;color:var(--error)">Failed to load findings: ${e.message}</div>`;
+            }
+        }
+
+        function closeExportPanel() {
+            document.getElementById('export-panel').classList.remove('open');
+            document.getElementById('export-overlay').classList.remove('open');
+            exportFindings = [];
+        }
+
+        function renderExportFindings() {
+            const list = document.getElementById('export-findings-list');
+            if (!exportFindings.length) {
+                list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">No findings in this scan.</div>';
+                updateExportCount();
+                return;
+            }
+
+            list.innerHTML = exportFindings.map((f, i) => {
+                const sev = (f.severity || 'info').toLowerCase();
+                const sevColor = SEV_COLORS[sev] || '#6b7280';
+                return `
+                    <label class="export-finding" data-index="${i}">
+                        <input type="checkbox" checked data-fp="${f.fingerprint || ''}" data-index="${i}">
+                        <div class="export-finding-info">
+                            <div class="export-finding-title">
+                                <span style="color:${sevColor};font-weight:600;font-size:0.6875rem;text-transform:uppercase;margin-right:6px">${sev}</span>
+                                ${escapeHtml(f.title || 'Untitled')}
+                            </div>
+                            <div class="export-finding-meta">
+                                ${f.check_name || ''} ${f.host ? '| ' + f.host : ''}
+                            </div>
+                        </div>
+                    </label>`;
+            }).join('');
+
+            list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.addEventListener('change', updateExportCount);
+            });
+
+            updateExportCount();
+        }
+
+        function updateExportCount() {
+            const checked = document.querySelectorAll('#export-findings-list input[type="checkbox"]:checked');
+            document.getElementById('export-count').textContent = `${checked.length} selected`;
+            document.getElementById('btn-export-selected').disabled = checked.length === 0;
+        }
+
+        async function doExport() {
+            const checked = document.querySelectorAll('#export-findings-list input[type="checkbox"]:checked');
+            const fingerprints = [];
+            checked.forEach(cb => {
+                const fp = cb.dataset.fp;
+                if (fp) fingerprints.push(fp);
+            });
+
+            if (!fingerprints.length) {
+                alert('No findings selected.');
+                return;
+            }
+
+            const btn = document.getElementById('btn-export-selected');
+            const origText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;margin-right:6px;vertical-align:middle"></span>Exporting...';
+
+            try {
+                const result = await api.generateTargetedExport(fingerprints, exportFormat);
+
+                if (exportFormat === 'pdf') {
+                    if (!result.ok) throw new Error('PDF generation failed');
+                    const blob = await result.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `targeted-export.pdf`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                } else {
+                    if (result.detail) throw new Error(result.detail);
+                    const text = typeof result.content === 'string'
+                        ? result.content : JSON.stringify(result.content, null, 2);
+                    const mime = exportFormat === 'json' || exportFormat === 'sarif'
+                        ? 'application/json'
+                        : exportFormat === 'html' ? 'text/html' : 'text/markdown';
+                    const blob = new Blob([text], { type: mime });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = result.filename || `targeted-export.${exportFormat}`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }
+
+                closeExportPanel();
+            } catch (e) {
+                alert(`Export failed: ${e.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = origText;
+            }
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function renderDeltaBarChart(container, comparison) {
+            container.innerHTML = '';
+
+            const { width, height, margin } = getChartDimensions('chart-delta');
+
+            // Summary header
+            const header = document.createElement('div');
+            header.style.cssText = 'padding:0 0 12px;display:flex;gap:16px;font-size:0.8125rem;';
+            const scanA = dataPoints.find(d => d.scan_id === comparison.scan_a_id);
+            const scanB = dataPoints.find(d => d.scan_id === comparison.scan_b_id);
+            header.innerHTML = `
+                <span style="color:var(--text-secondary)">Comparing:</span>
+                <span style="color:var(--text-primary);font-weight:600">${scanA?.date?.substring(0, 10) || comparison.scan_a_id.substring(0, 8)}</span>
+                <span style="color:var(--text-muted)">\u2192</span>
+                <span style="color:var(--text-primary);font-weight:600">${scanB?.date?.substring(0, 10) || comparison.scan_b_id.substring(0, 8)}</span>
+                ${comparison.checks_compared !== undefined ? `<span style="color:var(--text-muted)">(${comparison.checks_compared} common checks)</span>` : ''}
+            `;
+            container.appendChild(header);
+
+            // Categories for the bar chart
+            const categories = [
+                { key: 'new', label: 'New', count: comparison.new_count, color: '#22c55e' },
+                { key: 'resolved', label: 'Resolved', count: comparison.resolved_count, color: '#6b7280' },
+                { key: 'recurring', label: 'Recurring', count: comparison.recurring_count, color: '#4a9eff' },
+            ];
+            if (comparison.regressed !== undefined && comparison.regressed > 0) {
+                categories.push({ key: 'regressed', label: 'Regressed', count: comparison.regressed, color: '#ef4444' });
+            }
+
+            const svg = d3.select(container).append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom);
+
+            const g = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scaleBand()
+                .domain(categories.map(c => c.label))
+                .range([0, width])
+                .padding(0.4);
+
+            const maxCount = d3.max(categories, c => c.count) || 1;
+            const y = d3.scaleLinear()
+                .domain([0, maxCount * 1.15])
+                .range([height, 0]);
+
+            // Grid
+            g.append('g').attr('class', 'grid')
+                .call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(''));
+
+            // Axes
+            g.append('g').attr('class', 'axis')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(x));
+
+            g.append('g').attr('class', 'axis')
+                .call(d3.axisLeft(y).ticks(5));
+
+            // Bars
+            g.selectAll('.delta-bar')
+                .data(categories)
+                .enter().append('rect')
+                .attr('x', d => x(d.label))
+                .attr('y', d => y(d.count))
+                .attr('width', x.bandwidth())
+                .attr('height', d => height - y(d.count))
+                .attr('fill', d => d.color)
+                .attr('rx', 4)
+                .on('mouseover', (event, d) => {
+                    let details = '';
+                    const findings = d.key === 'new' ? comparison.new_findings :
+                                    d.key === 'resolved' ? comparison.resolved_findings : [];
+                    if (findings && findings.length) {
+                        const shown = findings.slice(0, 5);
+                        details = shown.map(f =>
+                            `<div style="font-size:0.6875rem;color:${SEV_COLORS[f.severity] || '#ccc'}">\u2022 ${f.title}</div>`
+                        ).join('');
+                        if (findings.length > 5) details += `<div style="font-size:0.6875rem;color:var(--text-muted)">+${findings.length - 5} more</div>`;
+                    }
+                    showTooltip(`
+                        <div style="font-weight:600;margin-bottom:4px">${d.label}: ${d.count}</div>
+                        ${details}
+                    `, event);
+                })
+                .on('mouseout', hideTooltip);
+
+            // Count labels on bars
+            g.selectAll('.delta-label')
+                .data(categories)
+                .enter().append('text')
+                .attr('x', d => x(d.label) + x.bandwidth() / 2)
+                .attr('y', d => y(d.count) - 6)
+                .attr('text-anchor', 'middle')
+                .attr('fill', 'var(--text-primary)')
+                .attr('font-size', '0.8125rem')
+                .attr('font-weight', '600')
+                .text(d => d.count);
+
+            // Legend with check info
+            if (comparison.checks_only_in_a || comparison.checks_only_in_b) {
+                const info = d3.select(container).append('div')
+                    .style('font-size', '0.6875rem')
+                    .style('color', 'var(--text-muted)')
+                    .style('padding-top', '8px');
+                const parts = [];
+                if (comparison.checks_only_in_a) parts.push(`${comparison.checks_only_in_a} checks only in scan A`);
+                if (comparison.checks_only_in_b) parts.push(`${comparison.checks_only_in_b} checks only in scan B`);
+                info.text(`Note: ${parts.join(', ')} (excluded from comparison)`);
+            }
+        }
+    </script>
+</body>
+</html>

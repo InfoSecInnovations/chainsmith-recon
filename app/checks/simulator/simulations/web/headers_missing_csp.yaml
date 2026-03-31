@@ -1,0 +1,19 @@
+# simulations/web/headers_missing_csp.yaml
+# Smoke test: missing CSP and HSTS (common real-world finding)
+suite: web
+emulates: header_analysis
+target: "api.example.local"
+disposition: headers_analyzed
+
+output:
+  host: "api.example.local"
+  status_code: 200
+  headers:
+    x-content-type-options: "nosniff"
+    server: "uvicorn/0.24.0"
+  missing_headers:
+    - "strict-transport-security"
+    - "content-security-policy"
+    - "x-frame-options"
+    - "referrer-policy"
+  findings_count: 2

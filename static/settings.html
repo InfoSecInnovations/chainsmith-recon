@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chainsmith Recon - Settings</title>
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .settings-container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .settings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .settings-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .settings-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .settings-card {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .settings-card.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-title svg {
+            width: 18px;
+            height: 18px;
+            color: var(--accent);
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .setting-item {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .setting-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .setting-item:first-child {
+            padding-top: 0;
+        }
+
+        .setting-info {
+            flex: 1;
+            margin-right: 16px;
+        }
+
+        .setting-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .setting-desc {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .setting-control {
+            flex-shrink: 0;
+        }
+
+        .setting-control input[type="number"],
+        .setting-control input[type="text"],
+        .setting-control select {
+            width: 140px;
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .setting-control input:focus,
+        .setting-control select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        /* Toggle switch */
+        .toggle {
+            position: relative;
+            width: 44px;
+            height: 24px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            transition: 0.2s;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 2px;
+            bottom: 2px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+
+        .toggle input:checked + .toggle-slider {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .toggle input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+            background: white;
+        }
+
+        /* Profile selector card */
+        .profile-selector {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .profile-selector select {
+            flex: 1;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .profile-info {
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+
+        .profile-info-desc {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .profile-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .profile-badge {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+        }
+
+        .profile-badge.accent {
+            background: rgba(139, 92, 246, 0.15);
+            border-color: rgba(139, 92, 246, 0.3);
+            color: #a78bfa;
+        }
+
+        /* Advanced section toggle */
+        .advanced-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 0;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 0.8125rem;
+        }
+
+        .advanced-toggle:hover {
+            color: var(--text-primary);
+        }
+
+        .advanced-toggle svg {
+            width: 16px;
+            height: 16px;
+            transition: transform 0.2s;
+        }
+
+        .advanced-toggle.open svg {
+            transform: rotate(90deg);
+        }
+
+        .advanced-content {
+            display: none;
+        }
+
+        .advanced-content.open {
+            display: block;
+        }
+
+        /* Unsaved changes indicator */
+        .unsaved-indicator {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(251, 191, 36, 0.15);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            border-radius: 8px;
+            color: var(--warning);
+            font-size: 0.8125rem;
+        }
+
+        .unsaved-indicator.show {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <a href="index.html" class="brand">
+                <span class="brand-name"><span class="accent">Chainsmith</span> Recon</span>
+                <span class="brand-tagline">Recon for the AI Era</span>
+            </a>
+        </div>
+        <div class="header-right">
+            <a href="index.html" class="btn btn-secondary" style="padding: 8px 16px;">
+                ← Back to Scan
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="settings-container">
+        <div class="settings-header">
+            <h1 class="settings-title">Settings</h1>
+            <div class="settings-actions">
+                <div class="unsaved-indicator" id="unsaved-indicator">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    Unsaved changes
+                </div>
+                <button class="btn btn-secondary" id="btn-reset">Reset to Defaults</button>
+                <button class="btn btn-primary" id="btn-save">Save Changes</button>
+            </div>
+        </div>
+
+        <div class="settings-grid">
+            <!-- Profile Card -->
+            <div class="settings-card full-width">
+                <div class="card-header">
+                    <span class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        Active Profile
+                    </span>
+                    <a href="profiles.html" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8125rem;">
+                        Manage Profiles →
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="profile-selector">
+                        <select id="profile-select">
+                            <option value="default">default</option>
+                        </select>
+                    </div>
+                    <div class="profile-info" id="profile-info">
+                        <div class="profile-info-desc" id="profile-desc">Balanced settings for general reconnaissance</div>
+                        <div class="profile-badges" id="profile-badges"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network Card -->
+            <div class="settings-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="2" y1="12" x2="22" y2="12"></line>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                        </svg>
+                        Network
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Request Timeout</div>
+                            <div class="setting-desc">Seconds to wait for HTTP responses</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="number" id="network-timeout" min="1" max="300" step="1">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Concurrent Requests</div>
+                            <div class="setting-desc">Maximum parallel HTTP connections</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="number" id="network-concurrent" min="1" max="100" step="1">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">User Agent</div>
+                            <div class="setting-desc">HTTP User-Agent header</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" id="network-useragent" style="width: 200px;">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Verify SSL</div>
+                            <div class="setting-desc">Validate SSL certificates</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="network-verify-ssl">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">HTTP Proxy</div>
+                            <div class="setting-desc">Route traffic through proxy (e.g., http://127.0.0.1:8080)</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" id="network-proxy" placeholder="http://..." style="width: 200px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rate Limiting Card -->
+            <div class="settings-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        Rate Limiting
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Requests per Second</div>
+                            <div class="setting-desc">Maximum request rate</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="number" id="rate-rps" min="0.1" max="100" step="0.1">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Delay Between Hosts</div>
+                            <div class="setting-desc">Seconds to wait when switching hosts</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="number" id="rate-delay" min="0" max="60" step="0.1">
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Respect robots.txt</div>
+                            <div class="setting-desc">Honor crawl delays from robots.txt</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="rate-robots">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Checks Card -->
+            <div class="settings-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"></path>
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                        </svg>
+                        Check Behavior
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Skip Disabled Checks</div>
+                            <div class="setting-desc">Don't run checks marked as disabled</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="checks-skip-disabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">On Critical Finding</div>
+                            <div class="setting-desc">What happens when a suite discovers a critical vulnerability</div>
+                        </div>
+                        <div class="setting-control">
+                            <select id="checks-on-critical">
+                                <option value="annotate">Continue & flag downstream</option>
+                                <option value="skip_downstream">Skip later suites on host</option>
+                                <option value="stop">Stop scan immediately</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Allow Intrusive Checks</div>
+                            <div class="setting-desc">Enables active testing: WebDAV write probes, default credential attempts</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="checks-intrusive-web">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Verification Level</div>
+                            <div class="setting-desc">Re-verify findings after discovery</div>
+                        </div>
+                        <div class="setting-control">
+                            <select id="checks-verification">
+                                <option value="none">None</option>
+                                <option value="sample">Sample (20%)</option>
+                                <option value="all">All (100%)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Proof of Scope Card -->
+            <div class="settings-card">
+                <div class="card-header">
+                    <span class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                        Proof of Scope
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Traffic Logging</div>
+                            <div class="setting-desc">Log all HTTP traffic for compliance</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="pos-traffic">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Log Violations</div>
+                            <div class="setting-desc">Record out-of-scope access attempts</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="pos-violations">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Require Engagement Window</div>
+                            <div class="setting-desc">Enforce time-based scanning restrictions</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="pos-window">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced Card -->
+            <div class="settings-card full-width">
+                <div class="card-header">
+                    <span class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                        Advanced
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Payload Mutation</div>
+                            <div class="setting-desc">Try payload variations during checks</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="adv-mutation">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Timing Analysis</div>
+                            <div class="setting-desc">Detect timing-based vulnerabilities</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="adv-timing">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Cache Responses</div>
+                            <div class="setting-desc">Cache HTTP responses during scan</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="adv-cache">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">WAF Evasion</div>
+                            <div class="setting-desc">Enable WAF evasion techniques</div>
+                        </div>
+                        <div class="setting-control">
+                            <label class="toggle">
+                                <input type="checkbox" id="adv-waf">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Max Evidence Bytes</div>
+                            <div class="setting-desc">Maximum evidence size per finding</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="number" id="adv-evidence" min="100" max="1000000" step="100">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Status Message -->
+    <div class="status-message" id="status-message"></div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        let originalPrefs = null;
+        let hasChanges = false;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            loadTheme();
+            await loadProfiles();
+            await loadPreferences();
+            initEventListeners();
+        });
+
+        async function loadProfiles() {
+            const select = document.getElementById('profile-select');
+            try {
+                const data = await api.getProfiles();
+                select.innerHTML = '';
+                for (const p of data.profiles || []) {
+                    const opt = document.createElement('option');
+                    opt.value = p.name;
+                    opt.textContent = p.name + (p.built_in ? '' : ' (custom)');
+                    if (p.active) opt.selected = true;
+                    select.appendChild(opt);
+                }
+                await updateProfileInfo();
+            } catch (e) {
+                console.error('Failed to load profiles:', e);
+            }
+        }
+
+        async function updateProfileInfo() {
+            const name = document.getElementById('profile-select').value;
+            const desc = document.getElementById('profile-desc');
+            const badges = document.getElementById('profile-badges');
+            
+            try {
+                const data = await api.getProfile(name);
+                desc.textContent = data.profile?.description || 'No description';
+                
+                const prefs = data.resolved_preferences;
+                badges.innerHTML = `
+                    <span class="profile-badge">Timeout: ${prefs.network.timeout_seconds}s</span>
+                    <span class="profile-badge">Rate: ${prefs.rate_limiting.requests_per_second} req/s</span>
+                    <span class="profile-badge">Concurrent: ${prefs.network.max_concurrent_requests}</span>
+                    ${prefs.advanced.waf_evasion ? '<span class="profile-badge accent">WAF Evasion</span>' : ''}
+                    ${prefs.rate_limiting.respect_robots_txt ? '<span class="profile-badge">Respects robots.txt</span>' : ''}
+                `;
+            } catch (e) {
+                desc.textContent = '';
+                badges.innerHTML = '';
+            }
+        }
+
+        async function loadPreferences() {
+            try {
+                const data = await api.getPreferences();
+                const prefs = data.preferences;
+                originalPrefs = JSON.stringify(prefs);
+
+                // Network
+                document.getElementById('network-timeout').value = prefs.network.timeout_seconds;
+                document.getElementById('network-concurrent').value = prefs.network.max_concurrent_requests;
+                document.getElementById('network-useragent').value = prefs.network.user_agent;
+                document.getElementById('network-verify-ssl').checked = prefs.network.verify_ssl;
+                document.getElementById('network-proxy').value = prefs.network.proxy || '';
+
+                // Rate Limiting
+                document.getElementById('rate-rps').value = prefs.rate_limiting.requests_per_second;
+                document.getElementById('rate-delay').value = prefs.rate_limiting.delay_between_hosts;
+                document.getElementById('rate-robots').checked = prefs.rate_limiting.respect_robots_txt;
+
+                // Checks
+                document.getElementById('checks-skip-disabled').checked = prefs.checks.skip_disabled;
+                document.getElementById('checks-on-critical').value = prefs.checks.on_critical || 'annotate';
+                document.getElementById('checks-intrusive-web').checked = prefs.checks.intrusive_web;
+                document.getElementById('checks-verification').value = prefs.checks.verification_level;
+
+                // Proof of Scope
+                document.getElementById('pos-traffic').checked = prefs.proof_of_scope.traffic_logging;
+                document.getElementById('pos-violations').checked = prefs.proof_of_scope.log_violations;
+                document.getElementById('pos-window').checked = prefs.proof_of_scope.require_engagement_window;
+
+                // Advanced
+                document.getElementById('adv-mutation').checked = prefs.advanced.payload_mutation;
+                document.getElementById('adv-timing').checked = prefs.advanced.timing_analysis;
+                document.getElementById('adv-cache').checked = prefs.advanced.cache_responses;
+                document.getElementById('adv-waf').checked = prefs.advanced.waf_evasion;
+                document.getElementById('adv-evidence').value = prefs.advanced.max_finding_evidence_bytes;
+
+                hasChanges = false;
+                updateUnsavedIndicator();
+            } catch (e) {
+                showStatus('Failed to load preferences', 'error');
+            }
+        }
+
+        function getCurrentPrefs() {
+            return {
+                network: {
+                    timeout_seconds: parseFloat(document.getElementById('network-timeout').value),
+                    max_concurrent_requests: parseInt(document.getElementById('network-concurrent').value),
+                    user_agent: document.getElementById('network-useragent').value,
+                    verify_ssl: document.getElementById('network-verify-ssl').checked,
+                    proxy: document.getElementById('network-proxy').value || null
+                },
+                rate_limiting: {
+                    requests_per_second: parseFloat(document.getElementById('rate-rps').value),
+                    delay_between_hosts: parseFloat(document.getElementById('rate-delay').value),
+                    respect_robots_txt: document.getElementById('rate-robots').checked
+                },
+                checks: {
+                    skip_disabled: document.getElementById('checks-skip-disabled').checked,
+                    on_critical: document.getElementById('checks-on-critical').value,
+                    intrusive_web: document.getElementById('checks-intrusive-web').checked,
+                    verification_level: document.getElementById('checks-verification').value
+                },
+                proof_of_scope: {
+                    traffic_logging: document.getElementById('pos-traffic').checked,
+                    log_violations: document.getElementById('pos-violations').checked,
+                    require_engagement_window: document.getElementById('pos-window').checked
+                },
+                advanced: {
+                    payload_mutation: document.getElementById('adv-mutation').checked,
+                    timing_analysis: document.getElementById('adv-timing').checked,
+                    cache_responses: document.getElementById('adv-cache').checked,
+                    waf_evasion: document.getElementById('adv-waf').checked,
+                    max_finding_evidence_bytes: parseInt(document.getElementById('adv-evidence').value)
+                }
+            };
+        }
+
+        function checkForChanges() {
+            const current = JSON.stringify(getCurrentPrefs());
+            hasChanges = current !== originalPrefs;
+            updateUnsavedIndicator();
+        }
+
+        function updateUnsavedIndicator() {
+            const indicator = document.getElementById('unsaved-indicator');
+            indicator.classList.toggle('show', hasChanges);
+        }
+
+        function initEventListeners() {
+            // Profile selector
+            document.getElementById('profile-select').addEventListener('change', async (e) => {
+                await api.activateProfile(e.target.value);
+                await updateProfileInfo();
+                await loadPreferences();
+                showStatus('Profile activated', 'success');
+            });
+
+            // Track changes on all inputs
+            document.querySelectorAll('input, select').forEach(el => {
+                el.addEventListener('change', checkForChanges);
+                el.addEventListener('input', checkForChanges);
+            });
+
+            // Save button
+            document.getElementById('btn-save').addEventListener('click', async () => {
+                try {
+                    const prefs = getCurrentPrefs();
+                    await api.updatePreferences(prefs);
+                    originalPrefs = JSON.stringify(prefs);
+                    hasChanges = false;
+                    updateUnsavedIndicator();
+                    await updateProfileInfo();
+                    showStatus('Settings saved', 'success');
+                } catch (e) {
+                    showStatus('Failed to save settings', 'error');
+                }
+            });
+
+            // Reset button
+            document.getElementById('btn-reset').addEventListener('click', async () => {
+                if (confirm('Reset all settings to defaults for this profile?')) {
+                    try {
+                        const name = document.getElementById('profile-select').value;
+                        await fetch(`/api/profiles/${name}/reset`, { method: 'POST' });
+                        await loadPreferences();
+                        await updateProfileInfo();
+                        showStatus('Settings reset to defaults', 'success');
+                    } catch (e) {
+                        showStatus('Failed to reset settings', 'error');
+                    }
+                }
+            });
+        }
+
+        // showStatus() provided by api.js
+    </script>
+</body>
+</html>

@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chainsmith Recon - Reports</title>
+    <link rel="stylesheet" href="/static/css/common.css">
+    <style>
+        .reports-container {
+            display: flex;
+            height: calc(100vh - 100px);
+        }
+
+        .reports-sidebar {
+            width: 340px;
+            min-width: 280px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .reports-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Sidebar sections */
+        .sidebar-section {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-section-title {
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        /* Report type selector */
+        .report-type-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .report-type-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s;
+            border: 1px solid transparent;
+        }
+
+        .report-type-item:hover { background: var(--bg-tertiary); }
+
+        .report-type-item.active {
+            background: var(--accent-dim);
+            border-color: var(--accent);
+        }
+
+        .report-type-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+            flex-shrink: 0;
+        }
+
+        .report-type-icon.technical { background: rgba(74, 158, 255, 0.15); color: var(--accent); }
+        .report-type-icon.delta { background: rgba(251, 191, 36, 0.15); color: var(--warning); }
+        .report-type-icon.executive { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; }
+        .report-type-icon.compliance { background: rgba(74, 222, 128, 0.15); color: var(--success); }
+        .report-type-icon.trend { background: rgba(236, 72, 153, 0.15); color: #ec4899; }
+
+        .report-type-info { flex: 1; min-width: 0; }
+
+        .report-type-name {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .report-type-desc {
+            font-size: 0.6875rem;
+            color: var(--text-secondary);
+            margin-top: 1px;
+        }
+
+        /* Form inputs */
+        .input-group {
+            margin-bottom: 12px;
+        }
+
+        .input-group:last-child { margin-bottom: 0; }
+
+        .input-label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 8px 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 4px;
+            font-size: 0.8125rem;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .input-hint {
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .input-row .input-group { flex: 1; margin-bottom: 0; }
+
+        .vs-label {
+            padding: 8px 0;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        /* Format selector */
+        .format-selector {
+            display: flex;
+            gap: 6px;
+        }
+
+        .format-btn {
+            flex: 1;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.15s;
+        }
+
+        .format-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
+        .format-btn.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        /* Generate button */
+        .btn-generate {
+            width: 100%;
+            padding: 10px;
+            margin-top: 16px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .btn-generate .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Main panel */
+        .report-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            min-height: 48px;
+        }
+
+        .report-toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .report-toolbar-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .report-toolbar-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .report-toolbar-right {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Preview area */
+        .report-preview {
+            flex: 1;
+            overflow: auto;
+            padding: 0;
+            position: relative;
+        }
+
+        .report-preview-content {
+            padding: 24px;
+            font-size: 0.875rem;
+            line-height: 1.7;
+        }
+
+        .report-preview-content pre {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 16px;
+            overflow-x: auto;
+            font-size: 0.8125rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .report-preview-content code {
+            font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+        }
+
+        .report-preview-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #fff;
+        }
+
+        /* Empty state */
+        .report-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            gap: 12px;
+        }
+
+        .report-empty svg {
+            width: 48px;
+            height: 48px;
+            opacity: 0.5;
+        }
+
+        .report-empty h3 {
+            margin: 0;
+            font-size: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .report-empty p {
+            margin: 0;
+            font-size: 0.8125rem;
+        }
+
+        /* Report history */
+        .history-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            border-top: 1px solid var(--border);
+        }
+
+        .history-header-title {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .history-clear {
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+
+        .history-clear:hover { color: var(--error); }
+
+        .history-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: background 0.15s;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .history-item:hover { background: var(--bg-tertiary); }
+
+        .history-item-type {
+            font-size: 0.625rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            padding: 2px 6px;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+
+        .history-item-type.technical { background: rgba(74, 158, 255, 0.15); color: var(--accent); }
+        .history-item-type.delta { background: rgba(251, 191, 36, 0.15); color: var(--warning); }
+        .history-item-type.executive { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; }
+        .history-item-type.compliance { background: rgba(74, 222, 128, 0.15); color: var(--success); }
+        .history-item-type.trend { background: rgba(236, 72, 153, 0.15); color: #ec4899; }
+
+        .history-item-info { flex: 1; min-width: 0; }
+
+        .history-item-name {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item-date {
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+        }
+
+        .history-item-format {
+            font-size: 0.6875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        .history-item-actions {
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .history-item:hover .history-item-actions {
+            opacity: 1;
+        }
+
+        .history-action-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 2px;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+        }
+
+        .history-action-btn:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .history-action-btn.delete:hover {
+            color: var(--error);
+        }
+
+        .pdf-unavailable {
+            opacity: 0.4;
+            cursor: not-allowed !important;
+            position: relative;
+        }
+
+        .pdf-unavailable:hover::after {
+            content: 'xhtml2pdf not installed';
+            position: absolute;
+            bottom: calc(100% + 4px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.6875rem;
+            white-space: nowrap;
+            z-index: 10;
+        }
+
+        /* Error state */
+        .report-error {
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            border-radius: 6px;
+            padding: 16px;
+            margin: 24px;
+            color: var(--error);
+        }
+
+        .report-error-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .report-error-detail {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <a href="index.html" class="brand"><span class="brand-name"><span class="accent">Chainsmith</span> Recon</span><span class="brand-tagline">Recon for the AI Era</span></a>
+            <span class="header-status" id="header-status"></span>
+        </div>
+        <div class="header-right">
+            <button class="btn btn-icon" id="btn-settings" title="Settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <nav class="nav">
+        <a href="index.html" class="nav-item">Scope</a>
+        <a href="scan.html" class="nav-item">Scan</a>
+        <a href="findings.html" class="nav-item">Results</a>
+        <a href="trend.html" class="nav-item">Trends</a>
+        <a href="reports.html" class="nav-item active">Reports</a>
+    </nav>
+
+    <div id="scenario-banner" class="scenario-banner" style="display:none"></div>
+
+    <main class="reports-container">
+        <!-- Sidebar -->
+        <div class="reports-sidebar">
+            <!-- Report Type -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Report Type</div>
+                <div class="report-type-list" id="report-type-list">
+                    <div class="report-type-item active" data-type="technical">
+                        <div class="report-type-icon technical">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        </div>
+                        <div class="report-type-info">
+                            <div class="report-type-name">Technical</div>
+                            <div class="report-type-desc">Full findings, chains & coverage</div>
+                        </div>
+                    </div>
+                    <div class="report-type-item" data-type="delta">
+                        <div class="report-type-icon delta">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M8 21H3v-5"/><path d="M21 3l-9 9"/><path d="M3 21l9-9"/></svg>
+                        </div>
+                        <div class="report-type-info">
+                            <div class="report-type-name">Delta</div>
+                            <div class="report-type-desc">Compare two scans side-by-side</div>
+                        </div>
+                    </div>
+                    <div class="report-type-item" data-type="executive">
+                        <div class="report-type-icon executive">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                        </div>
+                        <div class="report-type-info">
+                            <div class="report-type-name">Executive</div>
+                            <div class="report-type-desc">Risk overview for leadership</div>
+                        </div>
+                    </div>
+                    <div class="report-type-item" data-type="compliance">
+                        <div class="report-type-icon compliance">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        </div>
+                        <div class="report-type-info">
+                            <div class="report-type-name">Compliance</div>
+                            <div class="report-type-desc">Audit trail & scope validation</div>
+                        </div>
+                    </div>
+                    <div class="report-type-item" data-type="trend">
+                        <div class="report-type-icon trend">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        </div>
+                        <div class="report-type-info">
+                            <div class="report-type-name">Trend</div>
+                            <div class="report-type-desc">Multi-scan risk progression</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inputs -->
+            <div class="sidebar-section" id="inputs-section">
+                <!-- Dynamic inputs rendered by JS -->
+            </div>
+
+            <!-- Format -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Output Format</div>
+                <div class="format-selector" id="format-selector">
+                    <button class="format-btn active" data-format="html">HTML</button>
+                    <button class="format-btn" data-format="md">Markdown</button>
+                    <button class="format-btn" data-format="json">JSON</button>
+                    <button class="format-btn" data-format="sarif">SARIF</button>
+                    <button class="format-btn" data-format="pdf" id="btn-format-pdf">PDF</button>
+                </div>
+                <button class="btn btn-primary btn-generate" id="btn-generate">Generate Report</button>
+            </div>
+
+            <!-- History -->
+            <div class="history-header" id="history-header" style="display:none">
+                <span class="history-header-title">Recent Reports</span>
+                <button class="history-clear" id="btn-clear-history">Clear</button>
+            </div>
+            <div class="history-list" id="history-list"></div>
+        </div>
+
+        <!-- Main Panel -->
+        <div class="reports-main">
+            <div class="report-toolbar" id="report-toolbar" style="display:none">
+                <div class="report-toolbar-left">
+                    <span class="report-toolbar-title" id="toolbar-title"></span>
+                    <span class="report-toolbar-meta" id="toolbar-meta"></span>
+                </div>
+                <div class="report-toolbar-right">
+                    <button class="btn btn-small" id="btn-copy" style="display:none" title="Copy to clipboard">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        Copy
+                    </button>
+                    <button class="btn btn-small btn-primary" id="btn-download" style="display:none">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Download
+                    </button>
+                </div>
+            </div>
+
+            <div class="report-preview" id="report-preview">
+                <div class="report-empty" id="report-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    <h3>Generate a Report</h3>
+                    <p>Select a report type, fill in the inputs, and click Generate</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Settings Drawer -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="drawer drawer-right" id="drawer-settings">
+        <div class="drawer-header">
+            <h2>Settings</h2>
+            <button class="drawer-close" id="close-settings">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="drawer-content">
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Theme</div>
+                    <div class="setting-desc">Color scheme</div>
+                </div>
+                <div class="theme-selector">
+                    <button class="theme-btn active" data-theme="dark">Dark</button>
+                    <button class="theme-btn" data-theme="light">Light</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title"></h3>
+                <button class="drawer-close" id="close-modal">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        // ─── State ───────────────────────────────────────────────
+        let currentType = 'technical';
+        let currentFormat = 'html';
+        let generating = false;
+        let lastResult = null;
+        let lastFilename = null;
+        let lastFormat = null;
+        let reportHistory = JSON.parse(localStorage.getItem('reportHistory') || '[]');
+        let scansCache = null;
+        let engagementsCache = null;
+        let pdfAvailable = false;
+
+        // ─── Init ────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCommon();
+            initTypeSelector();
+            initFormatSelector();
+            initGenerateButton();
+            initToolbarButtons();
+            initHistory();
+            renderInputs();
+            await Promise.all([loadDropdownData(), checkCapabilities()]);
+        });
+
+        async function checkCapabilities() {
+            try {
+                const caps = await api.getCapabilities();
+                pdfAvailable = caps.pdf === true;
+                const pdfBtn = document.getElementById('btn-format-pdf');
+                if (pdfBtn && !pdfAvailable) {
+                    pdfBtn.classList.add('pdf-unavailable');
+                }
+            } catch (e) {
+                console.warn('Could not check capabilities:', e);
+            }
+        }
+
+        // ─── Load scans & engagements for dropdowns ─────────────
+        async function loadDropdownData() {
+            try {
+                const [scansData, engData] = await Promise.all([
+                    api.listScans(null, 100),
+                    api.listEngagements()
+                ]);
+                scansCache = scansData.scans || [];
+                engagementsCache = engData.engagements || [];
+                renderInputs();
+            } catch (e) {
+                console.error('Failed to load dropdown data:', e);
+            }
+        }
+
+        // ─── Type Selector ───────────────────────────────────────
+        function initTypeSelector() {
+            document.querySelectorAll('.report-type-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('.report-type-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    currentType = item.dataset.type;
+                    renderInputs();
+                });
+            });
+        }
+
+        // ─── Format Selector ─────────────────────────────────────
+        function initFormatSelector() {
+            document.querySelectorAll('.format-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (btn.dataset.format === 'pdf' && !pdfAvailable) return;
+                    document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentFormat = btn.dataset.format;
+                });
+            });
+        }
+
+        // ─── Render Dynamic Inputs ───────────────────────────────
+        function renderInputs() {
+            const section = document.getElementById('inputs-section');
+            const scanOptions = (scansCache || []).map(s => {
+                const date = s.started_at ? s.started_at.substring(0, 10) : 'N/A';
+                const label = `${s.target} - ${date} (${s.total_findings || 0} findings)`;
+                return `<option value="${s.id}">${label}</option>`;
+            }).join('');
+            const engOptions = (engagementsCache || []).map(e =>
+                `<option value="${e.id}">${e.name} (${e.target_domain})</option>`
+            ).join('');
+
+            const scanSelect = `
+                <div class="input-group">
+                    <label class="input-label">Scan</label>
+                    <select class="input-field" id="input-scan">${scanOptions ? scanOptions : '<option value="">No scans found</option>'}</select>
+                </div>`;
+
+            const scanABSelect = `
+                <div class="input-row">
+                    <div class="input-group">
+                        <label class="input-label">Scan A (before)</label>
+                        <select class="input-field" id="input-scan-a">${scanOptions ? scanOptions : '<option value="">No scans</option>'}</select>
+                    </div>
+                    <div class="vs-label">vs</div>
+                    <div class="input-group">
+                        <label class="input-label">Scan B (after)</label>
+                        <select class="input-field" id="input-scan-b">${scanOptions ? scanOptions : '<option value="">No scans</option>'}</select>
+                    </div>
+                </div>`;
+
+            const engSelect = `
+                <div class="input-group">
+                    <label class="input-label">Engagement <span style="color:var(--text-muted)">(optional)</span></label>
+                    <select class="input-field" id="input-engagement">
+                        <option value="">-- None --</option>
+                        ${engOptions}
+                    </select>
+                </div>`;
+
+            const targetInput = `
+                <div class="input-group">
+                    <label class="input-label">Target Domain</label>
+                    <input type="text" class="input-field" id="input-target" placeholder="example.com">
+                    <div class="input-hint">OR select an engagement above</div>
+                </div>`;
+
+            const trendEngSelect = `
+                <div class="input-group">
+                    <label class="input-label">Engagement</label>
+                    <select class="input-field" id="input-engagement">
+                        <option value="">-- Select engagement --</option>
+                        ${engOptions}
+                    </select>
+                    <div class="input-hint">OR enter a target domain below</div>
+                </div>`;
+
+            let html = '<div class="sidebar-section-title">Inputs</div>';
+
+            switch (currentType) {
+                case 'technical':
+                    html += scanSelect;
+                    break;
+                case 'delta':
+                    html += scanABSelect;
+                    break;
+                case 'executive':
+                    html += scanSelect + engSelect;
+                    break;
+                case 'compliance':
+                    html += scanSelect + engSelect;
+                    break;
+                case 'trend':
+                    html += trendEngSelect + targetInput;
+                    break;
+            }
+
+            section.innerHTML = html;
+
+            // Auto-select second scan for delta
+            if (currentType === 'delta' && scansCache && scansCache.length > 1) {
+                document.getElementById('input-scan-b').selectedIndex = 1;
+            }
+        }
+
+        // ─── Generate Button ─────────────────────────────────────
+        function initGenerateButton() {
+            document.getElementById('btn-generate').addEventListener('click', generateReport);
+        }
+
+        async function generateReport() {
+            if (generating) return;
+            const btn = document.getElementById('btn-generate');
+            const preview = document.getElementById('report-preview');
+
+            // Validate inputs
+            const params = getReportParams();
+            if (!params) return;
+
+            // Set loading state
+            generating = true;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Generating...';
+
+            try {
+                let result;
+                switch (currentType) {
+                    case 'technical':
+                        result = await api.generateTechnicalReport(params.scanId, currentFormat);
+                        break;
+                    case 'delta':
+                        result = await api.generateDeltaReport(params.scanAId, params.scanBId, currentFormat);
+                        break;
+                    case 'executive':
+                        result = await api.generateExecutiveReport(params.scanId, currentFormat, params.engagementId);
+                        break;
+                    case 'compliance':
+                        result = await api.generateComplianceReport(params.scanId, currentFormat, params.engagementId);
+                        break;
+                    case 'trend':
+                        result = await api.generateTrendReport(currentFormat, params.engagementId, params.target);
+                        break;
+                }
+
+                if (currentFormat === 'pdf') {
+                    if (!result.ok) {
+                        const errData = await result.json();
+                        throw new Error(errData.detail || 'PDF generation failed');
+                    }
+                    const blob = await result.blob();
+                    const contentDisp = result.headers.get('content-disposition') || '';
+                    const match = contentDisp.match(/filename="(.+)"/);
+                    lastFilename = match ? match[1] : `chainsmith-${currentType}-report.pdf`;
+                    lastResult = blob;
+                    lastFormat = 'pdf';
+                    renderPdfPreview(blob);
+                } else {
+                    if (result.detail) throw new Error(result.detail);
+                    lastResult = result;
+                    lastFilename = result.filename || `chainsmith-${currentType}-report.${currentFormat}`;
+                    lastFormat = currentFormat;
+                    renderPreview(result, currentFormat);
+                }
+
+                // Add to history
+                addToHistory({
+                    type: currentType,
+                    format: currentFormat,
+                    filename: lastFilename,
+                    date: new Date().toISOString(),
+                    params: { ...params }
+                });
+
+                showToolbar();
+
+            } catch (e) {
+                preview.innerHTML = `
+                    <div class="report-error">
+                        <div class="report-error-title">Report Generation Failed</div>
+                        <div class="report-error-detail">${e.message}</div>
+                    </div>`;
+                document.getElementById('report-toolbar').style.display = 'none';
+            } finally {
+                generating = false;
+                btn.disabled = false;
+                btn.textContent = 'Generate Report';
+            }
+        }
+
+        function getReportParams() {
+            switch (currentType) {
+                case 'technical': {
+                    const scanId = document.getElementById('input-scan')?.value;
+                    if (!scanId) { alert('Please select a scan.'); return null; }
+                    return { scanId };
+                }
+                case 'delta': {
+                    const scanAId = document.getElementById('input-scan-a')?.value;
+                    const scanBId = document.getElementById('input-scan-b')?.value;
+                    if (!scanAId || !scanBId) { alert('Please select two scans.'); return null; }
+                    if (scanAId === scanBId) { alert('Please select two different scans.'); return null; }
+                    return { scanAId, scanBId };
+                }
+                case 'executive':
+                case 'compliance': {
+                    const scanId = document.getElementById('input-scan')?.value;
+                    if (!scanId) { alert('Please select a scan.'); return null; }
+                    const engagementId = document.getElementById('input-engagement')?.value || null;
+                    return { scanId, engagementId };
+                }
+                case 'trend': {
+                    const engagementId = document.getElementById('input-engagement')?.value || null;
+                    const target = document.getElementById('input-target')?.value.trim() || null;
+                    if (!engagementId && !target) { alert('Please select an engagement or enter a target domain.'); return null; }
+                    return { engagementId, target };
+                }
+            }
+        }
+
+        // ─── Preview Rendering ───────────────────────────────────
+        function renderPreview(result, format) {
+            const preview = document.getElementById('report-preview');
+            document.getElementById('report-empty')?.remove();
+
+            if (format === 'html') {
+                const iframe = document.createElement('iframe');
+                iframe.className = 'report-preview-iframe';
+                iframe.sandbox = 'allow-same-origin';
+                preview.innerHTML = '';
+                preview.appendChild(iframe);
+                iframe.srcdoc = result.content;
+            } else if (format === 'json' || format === 'sarif') {
+                const content = typeof result.content === 'string'
+                    ? result.content
+                    : JSON.stringify(result.content, null, 2);
+                preview.innerHTML = `<div class="report-preview-content"><pre><code>${escapeHtml(content)}</code></pre></div>`;
+            } else {
+                // Markdown
+                preview.innerHTML = `<div class="report-preview-content"><pre><code>${escapeHtml(result.content)}</code></pre></div>`;
+            }
+        }
+
+        function renderPdfPreview(blob) {
+            const preview = document.getElementById('report-preview');
+            document.getElementById('report-empty')?.remove();
+
+            const size = (blob.size / 1024).toFixed(1);
+            preview.innerHTML = `
+                <div class="report-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    <h3>PDF Ready</h3>
+                    <p>${lastFilename} (${size} KB)</p>
+                    <button class="btn btn-primary" onclick="downloadReport()" style="margin-top:8px">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Download PDF
+                    </button>
+                </div>`;
+        }
+
+        function showToolbar() {
+            const toolbar = document.getElementById('report-toolbar');
+            toolbar.style.display = 'flex';
+
+            const typeLabel = currentType.charAt(0).toUpperCase() + currentType.slice(1);
+            document.getElementById('toolbar-title').textContent = `${typeLabel} Report`;
+            document.getElementById('toolbar-meta').textContent = lastFormat.toUpperCase();
+
+            const copyBtn = document.getElementById('btn-copy');
+            const dlBtn = document.getElementById('btn-download');
+
+            copyBtn.style.display = (lastFormat === 'pdf') ? 'none' : 'inline-flex';
+            dlBtn.style.display = 'inline-flex';
+        }
+
+        // ─── Toolbar Buttons ─────────────────────────────────────
+        function initToolbarButtons() {
+            document.getElementById('btn-copy').addEventListener('click', async () => {
+                if (!lastResult || lastFormat === 'pdf') return;
+                const text = typeof lastResult.content === 'string'
+                    ? lastResult.content
+                    : JSON.stringify(lastResult.content, null, 2);
+                try {
+                    await navigator.clipboard.writeText(text);
+                    const btn = document.getElementById('btn-copy');
+                    const orig = btn.innerHTML;
+                    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied';
+                    setTimeout(() => { btn.innerHTML = orig; }, 1500);
+                } catch (e) {
+                    console.error('Copy failed:', e);
+                }
+            });
+
+            document.getElementById('btn-download').addEventListener('click', downloadReport);
+        }
+
+        function downloadReport() {
+            if (!lastResult) return;
+            let blob;
+            if (lastFormat === 'pdf') {
+                blob = lastResult;
+            } else {
+                const text = typeof lastResult.content === 'string'
+                    ? lastResult.content
+                    : JSON.stringify(lastResult.content, null, 2);
+                const mime = lastFormat === 'json' ? 'application/json'
+                    : lastFormat === 'sarif' ? 'application/json'
+                    : lastFormat === 'html' ? 'text/html'
+                    : 'text/markdown';
+                blob = new Blob([text], { type: mime });
+            }
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = lastFilename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // ─── History ─────────────────────────────────────────────
+        function initHistory() {
+            document.getElementById('btn-clear-history').addEventListener('click', () => {
+                reportHistory = [];
+                localStorage.setItem('reportHistory', '[]');
+                renderHistory();
+            });
+            renderHistory();
+        }
+
+        function addToHistory(entry) {
+            reportHistory.unshift(entry);
+            if (reportHistory.length > 20) reportHistory = reportHistory.slice(0, 20);
+            localStorage.setItem('reportHistory', JSON.stringify(reportHistory));
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const header = document.getElementById('history-header');
+            const list = document.getElementById('history-list');
+
+            if (!reportHistory.length) {
+                header.style.display = 'none';
+                list.innerHTML = '';
+                return;
+            }
+
+            header.style.display = 'flex';
+            list.innerHTML = reportHistory.map((h, i) => {
+                const date = h.date ? new Date(h.date).toLocaleString() : '';
+                return `
+                    <div class="history-item" data-index="${i}">
+                        <span class="history-item-type ${h.type}">${h.type}</span>
+                        <div class="history-item-info">
+                            <div class="history-item-name">${h.filename}</div>
+                            <div class="history-item-date">${date}</div>
+                        </div>
+                        <span class="history-item-format">${h.format}</span>
+                        <div class="history-item-actions">
+                            <button class="history-action-btn regen" data-index="${i}" title="Re-generate with same settings">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                            </button>
+                            <button class="history-action-btn delete" data-index="${i}" title="Remove from history">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                        </div>
+                    </div>`;
+            }).join('');
+
+            // Click on item body to load settings
+            list.querySelectorAll('.history-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    // Ignore clicks on action buttons
+                    if (e.target.closest('.history-action-btn')) return;
+                    loadHistoryItem(parseInt(item.dataset.index));
+                });
+            });
+
+            // Re-generate button
+            list.querySelectorAll('.history-action-btn.regen').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(btn.dataset.index);
+                    loadHistoryItem(idx);
+                    setTimeout(() => generateReport(), 100);
+                });
+            });
+
+            // Delete button
+            list.querySelectorAll('.history-action-btn.delete').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(btn.dataset.index);
+                    reportHistory.splice(idx, 1);
+                    localStorage.setItem('reportHistory', JSON.stringify(reportHistory));
+                    renderHistory();
+                });
+            });
+        }
+
+        function loadHistoryItem(index) {
+            const h = reportHistory[index];
+            if (!h) return;
+            // Switch to that type
+            document.querySelectorAll('.report-type-item').forEach(t => {
+                t.classList.toggle('active', t.dataset.type === h.type);
+            });
+            currentType = h.type;
+            // Switch format (only if available)
+            const fmtAvailable = h.format !== 'pdf' || pdfAvailable;
+            const fmt = fmtAvailable ? h.format : 'html';
+            document.querySelectorAll('.format-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.format === fmt);
+            });
+            currentFormat = fmt;
+            renderInputs();
+            // Pre-fill inputs after a tick (DOM needs to update)
+            setTimeout(() => {
+                if (h.params.scanId && document.getElementById('input-scan'))
+                    document.getElementById('input-scan').value = h.params.scanId;
+                if (h.params.scanAId && document.getElementById('input-scan-a'))
+                    document.getElementById('input-scan-a').value = h.params.scanAId;
+                if (h.params.scanBId && document.getElementById('input-scan-b'))
+                    document.getElementById('input-scan-b').value = h.params.scanBId;
+                if (h.params.engagementId && document.getElementById('input-engagement'))
+                    document.getElementById('input-engagement').value = h.params.engagementId;
+                if (h.params.target && document.getElementById('input-target'))
+                    document.getElementById('input-target').value = h.params.target;
+            }, 50);
+        }
+
+        // ─── Helpers ─────────────────────────────────────────────
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

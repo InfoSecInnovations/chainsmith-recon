@@ -1,0 +1,134 @@
+{
+  "patterns": [
+    {
+      "id": "prompt_injection_tool_abuse",
+      "name": "Prompt Injection → Tool Abuse",
+      "description": "Manipulate chatbot into calling tools with attacker-controlled parameters",
+      "indicators": ["chatbot_tool_leak", "verbose_errors", "tool_schema_disclosure"],
+      "chains_with": ["customer_lookup_tool", "internal_announcement_tool", "fetch_document_tool"],
+      "attack_steps": [
+        "Identify available tools via error messages",
+        "Craft prompt injection to invoke sensitive tools",
+        "Extract data through tool responses"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["OWASP LLM Top 10 - LLM01", "https://owasp.org/www-project-top-10-for-large-language-model-applications/"]
+    },
+    {
+      "id": "system_prompt_extraction",
+      "name": "System Prompt Extraction",
+      "description": "Recover system prompt to understand chatbot constraints and find bypasses",
+      "indicators": ["chatbot_tool_leak", "verbose_errors", "debug_mode_enabled"],
+      "chains_with": ["header_vllm_version", "model_card_disclosure"],
+      "attack_steps": [
+        "Use various extraction techniques",
+        "Analyze responses for instruction leakage",
+        "Map constraints and potential bypasses"
+      ],
+      "severity_multiplier": 1.5,
+      "combined_severity": "medium",
+      "references": ["Perez & Ribeiro 2022", "https://arxiv.org/abs/2211.09527"]
+    },
+    {
+      "id": "rag_data_extraction",
+      "name": "RAG Data Extraction",
+      "description": "Extract sensitive data from retrieval-augmented generation context",
+      "indicators": ["chatbot_tool_leak", "customer_lookup_tool", "session_leak"],
+      "chains_with": ["embedding_endpoint_exposed", "model_card_disclosure"],
+      "attack_steps": [
+        "Identify RAG-based responses",
+        "Craft queries to expand context retrieval",
+        "Extract embedded customer or internal data"
+      ],
+      "severity_multiplier": 2.5,
+      "combined_severity": "high",
+      "references": ["Carlini et al. 2021", "https://arxiv.org/abs/2012.07805"]
+    },
+    {
+      "id": "auth_token_reuse",
+      "name": "Authentication Token Reuse",
+      "description": "Shared authentication tokens enable cross-service access",
+      "indicators": ["jwt_shared_secret", "api_version_mismatch", "cors_misconfigured"],
+      "chains_with": ["robots_model_admin", "internal_announcement_tool"],
+      "attack_steps": [
+        "Capture token from one service",
+        "Identify services sharing auth infrastructure",
+        "Access higher-privilege endpoints with captured token"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["OWASP API Security Top 10 - API2"]
+    },
+    {
+      "id": "version_disclosure_exploit",
+      "name": "Version Disclosure → Known Vulnerabilities",
+      "description": "Technology version leaks enable targeted CVE exploitation",
+      "indicators": ["header_vllm_version", "stack_trace_disclosure", "debug_mode_enabled"],
+      "chains_with": ["model_card_disclosure"],
+      "attack_steps": [
+        "Identify leaked version information",
+        "Search CVE databases for known vulnerabilities",
+        "Develop targeted exploits"
+      ],
+      "severity_multiplier": 1.5,
+      "combined_severity": "medium",
+      "references": ["CWE-200: Information Exposure"]
+    },
+    {
+      "id": "admin_panel_discovery",
+      "name": "Admin Panel Discovery Chain",
+      "description": "Multiple info disclosures reveal path to administrative interface",
+      "indicators": ["robots_model_admin", "debug_mode_enabled", "stack_trace_disclosure"],
+      "chains_with": ["jwt_shared_secret", "api_version_mismatch"],
+      "attack_steps": [
+        "Discover admin paths via robots.txt",
+        "Identify authentication requirements",
+        "Attempt access with discovered credentials or tokens"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["OWASP Testing Guide - WSTG-CONF-05"]
+    },
+    {
+      "id": "rate_limit_bypass_abuse",
+      "name": "Rate Limit Bypass → Brute Force",
+      "description": "Bypassing rate limits enables brute force and enumeration attacks",
+      "indicators": ["rate_limit_bypass", "customer_lookup_tool"],
+      "chains_with": ["api_version_mismatch"],
+      "attack_steps": [
+        "Identify rate limiting mechanism",
+        "Discover bypass technique (e.g., X-Forwarded-For)",
+        "Enumerate users or brute force credentials"
+      ],
+      "severity_multiplier": 1.5,
+      "combined_severity": "medium",
+      "references": ["OWASP API Security - API4:2023"]
+    },
+    {
+      "id": "path_traversal_docs",
+      "name": "Path Traversal via Document Fetch",
+      "description": "Document retrieval tool may allow access to sensitive internal files",
+      "indicators": ["fetch_document_tool", "debug_mode_enabled"],
+      "chains_with": ["internal_announcement_tool", "stack_trace_disclosure"],
+      "attack_steps": [
+        "Identify document fetch functionality",
+        "Test path traversal sequences",
+        "Access configuration or sensitive files"
+      ],
+      "severity_multiplier": 2.5,
+      "combined_severity": "high",
+      "references": ["CWE-22: Path Traversal"]
+    }
+  ],
+  "severity_matrix": {
+    "info+info": "low",
+    "info+low": "low",
+    "info+medium": "medium",
+    "low+low": "medium",
+    "low+medium": "medium",
+    "medium+medium": "high",
+    "any+high": "high",
+    "high+high": "critical"
+  }
+}

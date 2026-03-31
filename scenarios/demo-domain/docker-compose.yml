@@ -1,0 +1,194 @@
+# ─────────────────────────────────────────────────────────────────
+# scenarios/demo-domain/docker-compose.yml
+#
+# Demo Domain — Generic IT helpdesk portal with AI assistant
+#
+# Services:
+#   - localhost:8200 — Public helpdesk portal (www)
+#   - localhost:8201 — LLM chatbot API (chat) [scenario-specific]
+#   - localhost:8202 — REST API backend (api) [scenario-specific]
+#   - localhost:8203 — MCP agent layer (agent)
+#
+# Start via range:
+#   ./range/start-range.sh demo-domain
+#
+# Or directly:
+#   docker network create chainsmith-shared 2>/dev/null || true
+#   docker compose up -d
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ─── Public Helpdesk Portal ────────────────────────────────────
+  demo-domain-www:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: demo-domain-www
+    command: >
+      uvicorn app.scenario_services.corporate.helpdesk:app
+      --host 0.0.0.0 --port 8200
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=www
+      - SERVICE_PORT=8200
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/demo-domain/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=IT HelpDesk
+      - BRAND_DOMAIN=corp.internal
+      - CHAT_URL=http://localhost:8201
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8200:8200"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8200/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── LLM Chatbot API ───────────────────────────────────────────
+  # Note: Uses scenario-specific chat.py due to helpdesk-specific
+  # tools and system prompt. Could be migrated to shared template
+  # with additional configuration options.
+  demo-domain-chat:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: demo-domain-chat
+    command: >
+      uvicorn scenarios.demo-domain.services.chat:app
+      --host 0.0.0.0 --port 8201
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=chat
+      - SERVICE_PORT=8201
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/demo-domain/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # LLM configuration
+      - LLM_PROFILE=${LLM_PROFILE:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
+      - OLLAMA_BASE_URL=http://chainsmith-ollama:11434/v1
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral}
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8201:8201"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8201/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── REST API Backend ──────────────────────────────────────────
+  # Note: Uses scenario-specific api.py due to helpdesk-specific
+  # endpoints (tickets, knowledge base). Could be migrated to
+  # corporate/helpdesk_api template.
+  demo-domain-api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: demo-domain-api
+    command: >
+      uvicorn scenarios.demo-domain.services.api:app
+      --host 0.0.0.0 --port 8202
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=api
+      - SERVICE_PORT=8202
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/demo-domain/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8202:8202"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8202/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── MCP Agent Layer ───────────────────────────────────────────
+  demo-domain-agent:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: demo-domain-agent
+    command: >
+      uvicorn app.scenario_services.ai.mcp_server:app
+      --host 0.0.0.0 --port 8203
+    environment:
+      - PYTHONPATH=/app
+      - SERVICE_NAME=agent
+      - SERVICE_PORT=8203
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/demo-domain/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=IT HelpDesk
+      - BRAND_DOMAIN=corp.internal
+      - MCP_SERVER_NAME=helpdesk-mcp
+      # LLM configuration for agent reasoning
+      - LLM_PROFILE=${LLM_PROFILE:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
+      - OLLAMA_BASE_URL=http://chainsmith-ollama:11434/v1
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral}
+      # Internal service URLs
+      - CHAT_SERVICE_URL=http://demo-domain-chat:8201
+      - API_SERVICE_URL=http://demo-domain-api:8202
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8203:8203"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8203/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+networks:
+  chainsmith-shared:
+    name: chainsmith-shared
+    external: true

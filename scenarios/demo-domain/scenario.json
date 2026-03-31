@@ -1,0 +1,110 @@
+{
+  "name": "demo-domain",
+  "description": "Generic IT helpdesk portal — AI assistant, REST API, and agentic MCP layer running locally on ports 8200-8203",
+  "version": "1.1.0",
+  "brand_name": "IT HelpDesk",
+  "brand_domain": "corp.internal",
+  "target": {
+    "pattern": "localhost",
+    "known_hosts": ["localhost"],
+    "ports": [8200, 8201, 8202, 8203],
+    "notes": "Start via: ./range/start-range.sh demo-domain"
+  },
+  "findings": {
+    "certain": [
+      "version_disclosure",
+      "missing_security_headers",
+      "robots_sensitive_paths",
+      "verbose_errors"
+    ],
+    "random_pool": [
+      "cors_wildcard",
+      "unauthed_docs",
+      "tool_schema_exposed",
+      "no_rate_limit",
+      "mcp_endpoint_exposed",
+      "dynamic_tool_loading",
+      "resource_list_exposed",
+      "agent_config_leak",
+      "no_session_isolation",
+      "memory_endpoint_exposed"
+    ],
+    "random_count": {
+      "min": 2,
+      "max": 5
+    }
+  },
+  "simulations": [
+    "network/dns_demo_domain.yaml",
+    "network/service_probe_demo_domain.yaml",
+    "web/headers_demo_domain.yaml",
+    "web/robots_demo_domain.yaml",
+    "web/cors_demo_domain.yaml",
+    "web/openapi_demo_domain.yaml",
+    "ai/llm_endpoint_demo_domain.yaml",
+    "ai/fingerprint_demo_domain.yaml",
+    "ai/model_info_demo_domain.yaml",
+    "ai/prompt_leak_demo_domain.yaml",
+    "ai/rate_limit_demo_domain.yaml",
+    "ai/tools_demo_domain.yaml",
+    "ai/error_leakage_demo_domain.yaml",
+    "mcp/mcp_surface_demo_domain.yaml",
+    "mcp/mcp_tools_demo_domain.yaml",
+    "mcp/mcp_resources_demo_domain.yaml"
+  ],
+  "expected_findings": [
+    "dns_enumeration-localhost-8200",
+    "dns_enumeration-localhost-8201",
+    "dns_enumeration-localhost-8202",
+    "dns_enumeration-localhost-8203",
+    "header_analysis-localhost-8200-version-disclosure",
+    "header_analysis-localhost-8200-missing-security-headers",
+    "robots_txt-localhost-8200-sensitive-paths",
+    "cors_check-localhost-8202-wildcard",
+    "cors_check-localhost-8201-wildcard",
+    "openapi_discovery-localhost-8202-spec-exposed",
+    "openapi_discovery-localhost-8203-spec-exposed",
+    "llm_endpoint_discovery-localhost-8201",
+    "ai_framework_fingerprint-localhost-8201-framework-fastapi",
+    "model_info_check-localhost-8201",
+    "prompt_leakage-localhost-8201-prompt-leaked",
+    "rate_limit_check-localhost-8201-no-rate-limit",
+    "tool_discovery-localhost-8201-tools-discovered",
+    "ai_error_leakage-localhost-8201-internal-urls",
+    "mcp_surface_discovery-localhost-8203",
+    "mcp_tools_exposed-localhost-8203-sensitive-tools",
+    "mcp_resources_exposed-localhost-8203-sensitive-resources"
+  ],
+  "expected_chains": [
+    "mcp_resource_topology_lateral_movement",
+    "tool_schema_injection",
+    "agent_autonomous_action_escalation",
+    "cross_session_memory",
+    "js_bundle_api_key_exposure",
+    "unauthenticated_ai_endpoint_access"
+  ],
+  "services": {
+    "www": {
+      "port": 8200,
+      "type": "http",
+      "description": "Helpdesk landing page",
+      "template": "corporate/helpdesk"
+    },
+    "chat": {
+      "port": 8201,
+      "type": "ai",
+      "description": "AI chat assistant"
+    },
+    "api": {
+      "port": 8202,
+      "type": "api",
+      "description": "Helpdesk REST API"
+    },
+    "agent": {
+      "port": 8203,
+      "type": "ai",
+      "description": "MCP agent server",
+      "template": "ai/mcp_server"
+    }
+  }
+}

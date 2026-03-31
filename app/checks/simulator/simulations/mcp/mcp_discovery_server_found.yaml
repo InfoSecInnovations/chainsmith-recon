@@ -1,0 +1,38 @@
+# simulations/mcp/mcp_discovery_server_found.yaml
+#
+# Simulates successful discovery of an MCP server endpoint.
+# Used for scenario mode testing without a live MCP server.
+
+suite: mcp
+emulates: mcp_discovery
+target: "mcp.fakobanko.local"
+disposition: server_found
+
+output:
+  mcp_servers:
+    - url: "http://mcp.fakobanko.local:3000/mcp"
+      path: "/mcp"
+      transport: "http"
+      capabilities:
+        - tools
+        - resources
+      auth_required: false
+      server_info:
+        name: "fakobanko-mcp"
+        version: "1.0.0"
+      service:
+        url: "http://mcp.fakobanko.local:3000"
+        host: "mcp.fakobanko.local"
+        port: 3000
+        scheme: "http"
+        service_type: "ai"
+
+findings:
+  - title: "MCP server discovered: /mcp"
+    description: "MCP server endpoint discovered. Transport: http. Capabilities: tools, resources. No authentication required."
+    severity: "medium"
+    evidence: |
+      Path: /mcp
+      Method: POST
+      Status: 200
+      Indicators: jsonrpc-response, body:"capabilities", body:"tools"

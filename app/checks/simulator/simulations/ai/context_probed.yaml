@@ -1,0 +1,10 @@
+suite: ai
+emulates: context_window_check
+target: "chat.example.local"
+disposition: context_measured
+
+output:
+  context_info:
+    max_successful: 2000
+    failed_at: 4000
+    error_type: "context_limit"
