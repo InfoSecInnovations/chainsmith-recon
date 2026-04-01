@@ -4,20 +4,36 @@ app/checks/mcp - MCP Suite
 Model Context Protocol (MCP) reconnaissance checks.
 Discovers and audits AI systems exposing tool-calling over MCP.
 
-Implemented checks:
-  mcp_discovery         - Discover MCP server endpoints
-  mcp_tool_enumeration  - Enumerate available tools and assess risk levels
+Implemented checks (18 total):
+  Phase 0 (existing):
+    mcp_discovery              - Discover MCP server endpoints
+    mcp_tool_enumeration       - Enumerate available tools and assess risk levels
 
-Backlog (not yet implemented):
-  mcp_tool_invoke       - Probe tool behavior with crafted inputs
-  mcp_injection         - Test for prompt injection via tool results
-  mcp_server_auth       - Check for missing/weak authentication
-  mcp_transport_security - Verify TLS and transport security
-  mcp_resource_access   - Probe resource URIs for path traversal
-  mcp_sampling_abuse    - Test sampling endpoint for jailbreaks
-  mcp_schema_leak       - Check tool schemas for sensitive field exposure
-  mcp_chained_tools     - Multi-tool chain abuse scenarios
-  mcp_websocket_transport - WebSocket transport detection and probing
+  Phase 9 Wave 1 (passive, high value):
+    mcp_auth_check             - Test authentication enforcement at all levels
+    mcp_websocket_transport    - Discover WebSocket MCP transport endpoints
+    mcp_tool_chain_analysis    - Analyze tools for dangerous capability combinations
+    mcp_shadow_tool_detection  - Detect shadow tool attack susceptibility
+
+  Phase 9 Wave 2 (passive analysis):
+    mcp_schema_leakage         - Analyze tool schemas for info leakage
+    mcp_server_fingerprint     - Identify MCP server implementation/version
+    mcp_transport_security     - Analyze transport layer security (TLS, CORS, SSE)
+    mcp_notification_injection - Test for unsolicited notification acceptance
+
+  Phase 9 Wave 3 (active probing):
+    mcp_tool_invocation        - Probe tools with safe test payloads
+    mcp_resource_traversal     - Test resource URIs for path traversal / SSRF
+    mcp_template_injection     - Test resource template params for injection
+
+  Phase 9 Wave 4 (cross-suite):
+    mcp_prompt_injection       - Test prompt injection via tool results
+
+  Phase 9 Wave 5 (lower priority):
+    mcp_sampling_abuse         - Test sampling endpoint for LLM proxy abuse
+    mcp_protocol_version       - Test protocol version downgrade
+    mcp_tool_rate_limit        - Test tool invocation rate limiting
+    mcp_undeclared_capabilities - Probe for undeclared capabilities
 
 Chain patterns:
   mcp_tool_injection       - Tool result -> prompt injection -> LLM action
@@ -37,9 +53,51 @@ from app.checks.base import BaseCheck
 from app.checks.mcp.discovery import MCPDiscoveryCheck
 from app.checks.mcp.tool_enumeration import MCPToolEnumerationCheck
 
+# Phase 9 Wave 1
+from app.checks.mcp.auth_check import MCPAuthCheck
+from app.checks.mcp.websocket_transport import WebSocketTransportCheck
+from app.checks.mcp.tool_chain_analysis import ToolChainAnalysisCheck
+from app.checks.mcp.shadow_tool_detection import ShadowToolDetectionCheck
+
+# Phase 9 Wave 2
+from app.checks.mcp.schema_leakage import ToolSchemaLeakageCheck
+from app.checks.mcp.server_fingerprint import MCPServerFingerprintCheck
+from app.checks.mcp.transport_security import TransportSecurityCheck
+from app.checks.mcp.notification_injection import MCPNotificationInjectionCheck
+
+# Phase 9 Wave 3
+from app.checks.mcp.tool_invocation import MCPToolInvocationCheck
+from app.checks.mcp.resource_traversal import MCPResourceTraversalCheck
+from app.checks.mcp.template_injection import ResourceTemplateInjectionCheck
+
+# Phase 9 Wave 4
+from app.checks.mcp.prompt_injection import MCPPromptInjectionCheck
+
+# Phase 9 Wave 5
+from app.checks.mcp.sampling_abuse import MCPSamplingAbuseCheck
+from app.checks.mcp.protocol_version import MCPProtocolVersionCheck
+from app.checks.mcp.rate_limit import ToolRateLimitCheck
+from app.checks.mcp.undeclared_capabilities import UndeclaredCapabilityCheck
+
 __all__ = [
     "MCPDiscoveryCheck",
     "MCPToolEnumerationCheck",
+    "MCPAuthCheck",
+    "WebSocketTransportCheck",
+    "ToolChainAnalysisCheck",
+    "ShadowToolDetectionCheck",
+    "ToolSchemaLeakageCheck",
+    "MCPServerFingerprintCheck",
+    "TransportSecurityCheck",
+    "MCPNotificationInjectionCheck",
+    "MCPToolInvocationCheck",
+    "MCPResourceTraversalCheck",
+    "ResourceTemplateInjectionCheck",
+    "MCPPromptInjectionCheck",
+    "MCPSamplingAbuseCheck",
+    "MCPProtocolVersionCheck",
+    "ToolRateLimitCheck",
+    "UndeclaredCapabilityCheck",
 ]
 
 
@@ -48,4 +106,20 @@ def get_checks() -> list[type[BaseCheck]]:
     return [
         MCPDiscoveryCheck,
         MCPToolEnumerationCheck,
+        MCPAuthCheck,
+        WebSocketTransportCheck,
+        ToolChainAnalysisCheck,
+        ShadowToolDetectionCheck,
+        ToolSchemaLeakageCheck,
+        MCPServerFingerprintCheck,
+        TransportSecurityCheck,
+        MCPNotificationInjectionCheck,
+        MCPToolInvocationCheck,
+        MCPResourceTraversalCheck,
+        ResourceTemplateInjectionCheck,
+        MCPPromptInjectionCheck,
+        MCPSamplingAbuseCheck,
+        MCPProtocolVersionCheck,
+        ToolRateLimitCheck,
+        UndeclaredCapabilityCheck,
     ]
