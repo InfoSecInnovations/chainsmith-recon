@@ -87,6 +87,17 @@ def get_real_checks() -> list:
         FaviconCheck, HTTP2DetectionCheck, HSTSPreloadCheck,
         SRICheck, MassAssignmentCheck,
     )
+    from app.checks.mcp import (
+        MCPDiscoveryCheck, MCPToolEnumerationCheck,
+        MCPAuthCheck, WebSocketTransportCheck,
+        ToolChainAnalysisCheck, ShadowToolDetectionCheck,
+        ToolSchemaLeakageCheck, MCPServerFingerprintCheck,
+        TransportSecurityCheck, MCPNotificationInjectionCheck,
+        MCPToolInvocationCheck, MCPResourceTraversalCheck,
+        ResourceTemplateInjectionCheck, MCPPromptInjectionCheck,
+        MCPSamplingAbuseCheck, MCPProtocolVersionCheck,
+        ToolRateLimitCheck, UndeclaredCapabilityCheck,
+    )
     from app.checks.ai import (
         LLMEndpointCheck, EmbeddingEndpointCheck, ModelInfoCheck,
         AIFrameworkFingerprintCheck, AIErrorLeakageCheck,
@@ -177,6 +188,34 @@ def get_real_checks() -> list:
         MultiTurnInjectionCheck(),
         InputFormatInjectionCheck(),
         TokenCostExhaustionCheck(),
+
+        # MCP Phase 1 (depends on services — discovery)
+        MCPDiscoveryCheck(),
+        WebSocketTransportCheck(),
+
+        # MCP Phase 2 (depends on mcp_servers)
+        MCPToolEnumerationCheck(),
+        MCPAuthCheck(),
+        TransportSecurityCheck(),
+        MCPServerFingerprintCheck(),
+        UndeclaredCapabilityCheck(),
+        MCPProtocolVersionCheck(),
+
+        # MCP Phase 3 (depends on Phase 2 — tool data + server connections)
+        ShadowToolDetectionCheck(),
+        ToolSchemaLeakageCheck(),
+        ToolChainAnalysisCheck(),
+        MCPNotificationInjectionCheck(),
+        MCPSamplingAbuseCheck(),
+        ToolRateLimitCheck(),
+
+        # MCP Phase 4 (active probing — requires tool invocation)
+        MCPToolInvocationCheck(),
+        MCPResourceTraversalCheck(),
+        ResourceTemplateInjectionCheck(),
+
+        # MCP Phase 5 (cross-suite — depends on MCP + AI suite)
+        MCPPromptInjectionCheck(),
     ]
     
     logger.info(f"Loaded {len(checks)} real checks")
