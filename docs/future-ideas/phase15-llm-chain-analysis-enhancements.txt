@@ -1,5 +1,5 @@
-LLM Chain Analysis Enhancements
-====================================
+Phase 15: LLM Chain Analysis Enhancements
+==============================================
 Two related problems around LLM-powered chain analysis that need design
 work before implementation.
 

@@ -1,5 +1,5 @@
-RAG Suite Check Enhancements
-================================
+Phase 13: RAG Suite Check Enhancements
+===========================================
 Proposed additions to the RAG check suite (app/checks/rag/).
 Ordered by value to the reconnaissance workflow.
 

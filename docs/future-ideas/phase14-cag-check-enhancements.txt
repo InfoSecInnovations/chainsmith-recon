@@ -1,5 +1,5 @@
-CAG Suite Check Enhancements
-================================
+Phase 14: CAG Suite Check Enhancements
+===========================================
 Proposed additions to the CAG check suite (app/checks/cag/).
 Ordered by value to the reconnaissance workflow.
 

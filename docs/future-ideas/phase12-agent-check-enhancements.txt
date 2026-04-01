@@ -1,5 +1,5 @@
-Agent Suite Check Enhancements
-==================================
+Phase 12: Agent Suite Check Enhancements
+=============================================
 Proposed additions to the agent check suite (app/checks/agent/).
 Ordered by value to the reconnaissance workflow.
 

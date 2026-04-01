@@ -1,5 +1,5 @@
-AI Suite Check Enhancements
-================================
+Phase 11: AI Suite Check Enhancements
+==========================================
 Proposed additions to the AI check suite (app/checks/ai/).
 Ordered by value to the reconnaissance workflow.
 

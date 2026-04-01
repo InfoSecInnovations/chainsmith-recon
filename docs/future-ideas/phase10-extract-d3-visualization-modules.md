@@ -1,4 +1,4 @@
-# Phase 13: Extract D3 Visualization Modules
+# Phase 10: Extract D3 Visualization Modules
 
 Break inline JavaScript and CSS out of findings.html and trend.html into
 separate, cacheable files organized under `static/js/viz/` and `static/css/`.
@@ -66,7 +66,7 @@ static/
 
 ## Build Waves
 
-### Wave 1 — Foundation (Phase 13a)
+### Wave 1 — Foundation (Phase 10a)
 
 Create shared infrastructure. No changes to page behavior yet.
 
@@ -77,7 +77,7 @@ Create shared infrastructure. No changes to page behavior yet.
 | Script/link tags | Add `<link>` for viz.css and `<script>` for viz-common.js to findings.html and trend.html (no functional change yet) |
 | Tests | Automated tests confirming viz-common.js loads and namespace exists |
 
-### Wave 2 — Extract findings.html visualizations (Phase 13b)
+### Wave 2 — Extract findings.html visualizations (Phase 10b)
 
 Extract one module at a time. After each extraction: run automated tests,
 then manual browser verification before proceeding to the next.
@@ -103,7 +103,7 @@ For each extraction:
 - Update/add automated tests
 - Manual browser verification
 
-### Wave 3 — Extract trend.html charts (Phase 13c)
+### Wave 3 — Extract trend.html charts (Phase 10c)
 
 | Deliverable | Description |
 |---|---|
@@ -111,7 +111,7 @@ For each extraction:
 | trend.html cleanup | Remove inline `<script>` and `<style>` blocks, add `<script src>` and `<link>` tags |
 | Tests | Automated tests for trend chart rendering |
 
-### Wave 4 — Cleanup (Phase 13d)
+### Wave 4 — Cleanup (Phase 10d)
 
 | Deliverable | Description |
 |---|---|
