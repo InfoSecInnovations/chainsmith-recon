@@ -108,6 +108,17 @@ def get_real_checks() -> list:
         TokenCostExhaustionCheck, SystemPromptInjectionCheck,
         OutputFormatManipulationCheck, APIParameterInjectionCheck,
     )
+    from app.checks.agent import (
+        AgentDiscoveryCheck, AgentGoalInjectionCheck,
+        AgentMultiAgentDetectionCheck, AgentFrameworkVersionCheck,
+        AgentMemoryExtractionCheck, AgentToolAbuseCheck,
+        AgentPrivilegeEscalationCheck, AgentLoopDetectionCheck,
+        AgentCallbackInjectionCheck, AgentStreamingInjectionCheck,
+        AgentFrameworkExploitsCheck, AgentMemoryPoisoningCheck,
+        AgentContextOverflowCheck, AgentReflectionAbuseCheck,
+        AgentStateManipulationCheck, AgentTrustChainCheck,
+        AgentCrossInjectionCheck,
+    )
     
     # Instantiate all checks in dependency order
     checks = [
@@ -216,6 +227,33 @@ def get_real_checks() -> list:
 
         # MCP Phase 5 (cross-suite — depends on MCP + AI suite)
         MCPPromptInjectionCheck(),
+
+        # Agent Phase 1 (depends on services — discovery)
+        AgentDiscoveryCheck(),
+
+        # Agent Phase 2 (depends on agent_endpoints)
+        AgentMultiAgentDetectionCheck(),
+        AgentFrameworkVersionCheck(),
+        AgentMemoryExtractionCheck(),
+
+        # Agent Phase 3 (depends on Phase 2 — active probing)
+        AgentGoalInjectionCheck(),
+        AgentToolAbuseCheck(),
+        AgentPrivilegeEscalationCheck(),
+        AgentLoopDetectionCheck(),
+        AgentCallbackInjectionCheck(),
+        AgentStreamingInjectionCheck(),
+
+        # Agent Phase 4 (depends on Phase 2-3 — framework-specific)
+        AgentFrameworkExploitsCheck(),
+        AgentMemoryPoisoningCheck(),
+        AgentContextOverflowCheck(),
+        AgentReflectionAbuseCheck(),
+        AgentStateManipulationCheck(),
+
+        # Agent Phase 5 (depends on multi-agent detection)
+        AgentTrustChainCheck(),
+        AgentCrossInjectionCheck(),
     ]
     
     logger.info(f"Loaded {len(checks)} real checks")
