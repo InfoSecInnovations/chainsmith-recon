@@ -1,0 +1,834 @@
+/* ================================================================
+   Chainsmith Viz — Shared Visualization Styles
+   ================================================================
+   Base classes used by all visualization modules.  Per-viz overrides
+   are layered at the bottom of this file.
+   ================================================================ */
+
+/* ─── Generic viz tooltip ─────────────────────────────────────── */
+.viz-tooltip {
+    position: fixed;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    pointer-events: none;
+    z-index: 1000;
+    max-width: 300px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.viz-tooltip strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+/* ─── Generic viz legend ──────────────────────────────────────── */
+.viz-legend {
+    display: flex;
+    gap: 16px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+
+.viz-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.viz-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+/* ─── Generic viz container ───────────────────────────────────── */
+.viz-container {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    padding: 16px;
+}
+
+/* ================================================================
+   Per-viz overrides
+   ================================================================ */
+
+/* ─── Treemap ─────────────────────────────────────────────────── */
+.treemap-container {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.treemap-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    font-size: 0.75rem;
+}
+
+.treemap-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    min-height: 20px;
+}
+
+.treemap-breadcrumb-item {
+    cursor: pointer;
+    color: var(--accent);
+    transition: color 0.15s;
+}
+
+.treemap-breadcrumb-item:hover {
+    color: var(--text-primary);
+}
+
+.treemap-breadcrumb-sep {
+    color: var(--text-muted);
+}
+
+.treemap-breadcrumb-current {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.treemap-size-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.treemap-size-toggle button {
+    background: var(--bg-secondary);
+    border: none;
+    color: var(--text-secondary);
+    padding: 4px 10px;
+    font-size: 0.6875rem;
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+}
+
+.treemap-size-toggle button:last-child {
+    border-right: none;
+}
+
+.treemap-size-toggle button.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+.treemap-chart {
+    flex: 1;
+    position: relative;
+}
+
+.treemap-legend {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+    z-index: 10;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.treemap-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.treemap-legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.treemap-tooltip {
+    position: fixed;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    pointer-events: none;
+    z-index: 1000;
+    max-width: 300px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.treemap-tooltip strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.treemap-tooltip-severity {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-left: 6px;
+}
+
+.treemap-tooltip-breakdown {
+    margin-top: 4px;
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+}
+
+/* ─── Host Table ──────────────────────────────────────────────── */
+.host-table-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.summary-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+
+.summary-item {
+    text-align: center;
+    min-width: 55px;
+}
+
+.summary-count {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.summary-label {
+    font-size: 0.625rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.table-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.table-legend {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.table-legend-gradient {
+    width: 80px;
+    height: 12px;
+    border-radius: 3px;
+    background: linear-gradient(to right, #fecaca, #b91c1c);
+}
+
+.expand-all-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.expand-all-btn:hover {
+    background: var(--border);
+}
+
+.hosts-table {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.host-row {
+    border-bottom: 1px solid var(--border);
+}
+
+.host-row:last-child {
+    border-bottom: none;
+}
+
+.host-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+    gap: 10px;
+}
+
+.host-header:hover {
+    background: var(--bg-tertiary);
+}
+
+.host-expand {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+
+.host-row.expanded .host-expand {
+    transform: rotate(90deg);
+}
+
+.host-risk-bar {
+    width: 5px;
+    height: 28px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.host-name {
+    flex: 1;
+    font-weight: 500;
+    font-size: 0.8125rem;
+}
+
+.host-stats {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.severity-dot {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.625rem;
+    font-weight: 600;
+}
+
+.severity-dot.sev-critical,
+.severity-dot.sev-high {
+    color: #fff;
+}
+
+.severity-dot.sev-medium,
+.severity-dot.sev-low,
+.severity-dot.sev-info {
+    color: #450a0a;
+}
+
+.host-finding-count {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    min-width: 70px;
+    text-align: right;
+}
+
+.findings-list-container {
+    display: none;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border);
+}
+
+.host-row.expanded .findings-list-container {
+    display: block;
+}
+
+.finding-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px 10px 44px;
+    gap: 10px;
+    border-bottom: 1px solid var(--bg-secondary);
+    transition: background 0.15s;
+    cursor: pointer;
+}
+
+.finding-item:last-child {
+    border-bottom: none;
+}
+
+.finding-item:hover {
+    background: var(--bg-secondary);
+}
+
+.finding-severity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.finding-title {
+    flex: 1;
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+}
+
+.finding-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.finding-badge.sev-critical,
+.finding-badge.sev-high {
+    color: #fff;
+}
+
+.finding-badge.sev-medium,
+.finding-badge.sev-low,
+.finding-badge.sev-info {
+    color: #450a0a;
+}
+
+.empty-hosts {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.empty-hosts svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.empty-hosts h3 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+/* ─── Chains ──────────────────────────────────────────────────── */
+.chains-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+.chains-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.chain-legend {
+    margin-top: 12px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.chain-legend span {
+    margin-right: 16px;
+}
+
+.chain-legend-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    margin-right: 4px;
+}
+
+.view-toggle {
+    display: flex;
+    gap: 4px;
+}
+
+.in-progress-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
+}
+
+.in-progress-message .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+#treemap-graph, #chains-graph {
+    width: 100%;
+    height: 100%;
+}
+
+/* Sankey link transitions for smooth highlighting */
+.sankey-link {
+    transition: stroke-opacity 0.2s ease, stroke-width 0.2s ease;
+}
+
+/* Node transitions */
+#chains-graph g rect,
+#chains-graph g text {
+    transition: opacity 0.2s ease;
+}
+
+/* ─── Heatmap ─────────────────────────────────────────────────── */
+.heatmap-container {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    padding: 16px;
+}
+
+.heatmap-legend {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.heatmap-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.heatmap-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.heatmap-tooltip {
+    position: fixed;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    pointer-events: none;
+    z-index: 1000;
+    max-width: 300px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.heatmap-tooltip strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.heatmap-tooltip .heatmap-tip-count {
+    color: var(--text-secondary);
+}
+
+/* ─── Radar ───────────────────────────────────────────────────── */
+.radar-container {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.radar-legend {
+    display: flex;
+    gap: 16px;
+    padding: 12px 16px;
+    font-size: 0.8125rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.radar-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.radar-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.radar-tooltip {
+    position: fixed;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+    pointer-events: none;
+    z-index: 1000;
+    max-width: 260px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.radar-tooltip strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.radar-tooltip .radar-tip-score {
+    color: var(--text-secondary);
+}
+
+/* ─── Coverage Matrix ─────────────────────────────────────────── */
+.coverage-container {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    padding: 16px;
+}
+
+.coverage-legend {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+
+.coverage-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.coverage-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.coverage-tooltip {
+    position: fixed;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    pointer-events: none;
+    z-index: 1000;
+    max-width: 300px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.coverage-tooltip strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.coverage-tooltip .coverage-tip-status {
+    color: var(--text-secondary);
+}
+
+.coverage-note {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-bottom: 12px;
+}
+
+.coverage-summary-row {
+    font-size: 0.6875rem;
+    fill: var(--text-muted);
+}
+
+/* ─── Timeline ────────────────────────────────────────────────── */
+.timeline-container {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    padding: 16px;
+}
+
+.timeline-legend {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.timeline-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.timeline-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.timeline-tooltip {
+    position: fixed;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    pointer-events: none;
+    z-index: 1000;
+    max-width: 300px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.timeline-tooltip strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.timeline-tooltip .timeline-tip-detail {
+    color: var(--text-secondary);
+}
+
+.timeline-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-left: 12px;
+}
+
+.timeline-toggle button {
+    background: var(--bg-secondary);
+    border: none;
+    color: var(--text-secondary);
+    padding: 4px 10px;
+    font-size: 0.6875rem;
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+}
+
+.timeline-toggle button:last-child {
+    border-right: none;
+}
+
+.timeline-toggle button.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* ─── Trend D3 chart styles ───────────────────────────────────── */
+.chart-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.chart-tooltip.visible { opacity: 1; }
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 0;
+    font-size: 0.75rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    opacity: 1;
+    transition: opacity 0.2s;
+}
+
+.legend-item.muted { opacity: 0.3; }
+
+.legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.axis text {
+    fill: var(--text-secondary);
+    font-size: 0.6875rem;
+}
+
+.axis line, .axis path {
+    stroke: var(--border);
+}
+
+.grid line {
+    stroke: var(--border);
+    stroke-opacity: 0.3;
+}
+
+.grid path { stroke: none; }

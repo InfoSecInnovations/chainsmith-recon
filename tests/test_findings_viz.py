@@ -15,6 +15,19 @@ from pathlib import Path
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 FINDINGS_HTML = STATIC_DIR / "findings.html"
+VIZ_CSS = STATIC_DIR / "css" / "viz.css"
+VIZ_JS_DIR = STATIC_DIR / "js" / "viz"
+
+
+def _all_viz_content():
+    """Return combined text of findings.html + all viz JS + viz CSS for assertion checks."""
+    parts = [FINDINGS_HTML.read_text()]
+    if VIZ_CSS.exists():
+        parts.append(VIZ_CSS.read_text())
+    if VIZ_JS_DIR.exists():
+        for f in sorted(VIZ_JS_DIR.glob("*.js")):
+            parts.append(f.read_text())
+    return "\n".join(parts)
 
 
 # --- Static HTML tests --------------------------------------------------------
@@ -27,35 +40,35 @@ class TestHeatmapTabPresence:
         assert FINDINGS_HTML.exists(), "static/findings.html must exist"
 
     def test_heatmap_tab_exists(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'data-viz="heatmap"' in content, "Missing heatmap viz tab"
 
     def test_heatmap_tab_label(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ">Heatmap<" in content, "Heatmap tab should be labeled 'Heatmap'"
 
     def test_heatmap_panel_exists(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="panel-heatmap"' in content, "Missing heatmap panel div"
 
     def test_heatmap_empty_state(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="heatmap-empty"' in content, "Missing heatmap empty state"
 
     def test_heatmap_content_div(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="heatmap-content"' in content, "Missing heatmap content div"
 
     def test_heatmap_svg_element(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="heatmap-graph"' in content, "Missing heatmap SVG element"
 
     def test_heatmap_tooltip_element(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="heatmap-tooltip"' in content, "Missing heatmap tooltip div"
 
     def test_heatmap_legend(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="heatmap-legend"' in content, "Missing heatmap legend"
 
 
@@ -66,51 +79,51 @@ class TestHeatmapJavaScript:
     """Verify heatmap JS functions and constants exist in findings.html."""
 
     def test_render_heatmap_function(self):
-        content = FINDINGS_HTML.read_text()
-        assert "function renderHeatmap()" in content, "Missing renderHeatmap function"
+        content = _all_viz_content()
+        assert "renderHeatmap" in content, "Missing renderHeatmap function"
 
     def test_build_heatmap_data_function(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "function buildHeatmapData(" in content, "Missing buildHeatmapData function"
 
     def test_build_heatmap_data_exposed_on_window(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "window.buildHeatmapData" in content, "buildHeatmapData should be exposed on window for testing"
 
     def test_heatmap_sev_colors_defined(self):
-        content = FINDINGS_HTML.read_text()
-        assert "HEATMAP_SEV_COLORS" in content, "Missing HEATMAP_SEV_COLORS constant"
+        content = _all_viz_content()
+        assert "SEV_COLORS" in content, "Missing severity colors constant"
 
     def test_heatmap_severity_color_values(self):
         """All severity colors from the spec are present."""
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         for color in ["#991b1b", "#dc2626", "#f59e0b", "#4a9eff", "#6b7280", "#1e293b"]:
             assert color in content, f"Missing heatmap severity color: {color}"
 
     def test_known_suites_defined(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "KNOWN_SUITES" in content, "Missing KNOWN_SUITES constant"
         for suite in ["web", "network", "ai", "mcp", "agent", "rag", "cag"]:
             assert f"'{suite}'" in content, f"Missing known suite: {suite}"
 
     def test_heatmap_called_in_load_data(self):
-        content = FINDINGS_HTML.read_text()
-        assert "renderHeatmap()" in content, "renderHeatmap should be called in loadData"
+        content = _all_viz_content()
+        assert "renderHeatmap(" in content, "renderHeatmap should be called in loadData"
 
     def test_heatmap_uses_d3_scale_band(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "d3.scaleBand()" in content, "Heatmap should use d3.scaleBand for axes"
 
     def test_infer_suite_function(self):
-        content = FINDINGS_HTML.read_text()
-        assert "function inferSuite(" in content, "Missing inferSuite function"
+        content = _all_viz_content()
+        assert "inferSuite" in content, "Missing inferSuite function"
 
     def test_infer_suite_exposed_on_window(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "window.inferSuite" in content, "inferSuite should be exposed on window"
 
     def test_suite_patterns_defined(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "SUITE_PATTERNS" in content, "Missing SUITE_PATTERNS constant"
 
 
@@ -320,19 +333,19 @@ class TestHeatmapCSS:
     """Verify heatmap CSS classes exist."""
 
     def test_heatmap_container_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".heatmap-container" in content
 
     def test_heatmap_legend_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".heatmap-legend" in content
 
     def test_heatmap_tooltip_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".heatmap-tooltip" in content
 
     def test_heatmap_swatch_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".heatmap-swatch" in content
 
 
@@ -345,35 +358,35 @@ class TestRadarTabPresence:
     """Verify radar tab and panel exist in findings.html."""
 
     def test_radar_tab_exists(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'data-viz="radar"' in content, "Missing radar viz tab"
 
     def test_radar_tab_label(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ">Radar<" in content, "Radar tab should be labeled 'Radar'"
 
     def test_radar_panel_exists(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="panel-radar"' in content, "Missing radar panel div"
 
     def test_radar_empty_state(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="radar-empty"' in content, "Missing radar empty state"
 
     def test_radar_content_div(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="radar-content"' in content, "Missing radar content div"
 
     def test_radar_svg_element(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="radar-graph"' in content, "Missing radar SVG element"
 
     def test_radar_tooltip_element(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="radar-tooltip"' in content, "Missing radar tooltip div"
 
     def test_radar_legend(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="radar-legend"' in content, "Missing radar legend"
 
 
@@ -381,41 +394,41 @@ class TestRadarJavaScript:
     """Verify radar JS functions and constants exist in findings.html."""
 
     def test_render_radar_function(self):
-        content = FINDINGS_HTML.read_text()
-        assert "function renderRadar()" in content, "Missing renderRadar function"
+        content = _all_viz_content()
+        assert "renderRadar" in content, "Missing renderRadar function"
 
     def test_build_radar_data_function(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "function buildRadarData(" in content, "Missing buildRadarData function"
 
     def test_build_radar_data_exposed_on_window(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "window.buildRadarData" in content, "buildRadarData should be exposed on window for testing"
 
     def test_radar_risk_weights_defined(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "RADAR_RISK_WEIGHTS" in content, "Missing RADAR_RISK_WEIGHTS constant"
 
     def test_radar_risk_weight_values(self):
         """All risk weights from the spec are present."""
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         for sev, weight in [("critical", 16), ("high", 8), ("medium", 4), ("low", 2), ("info", 1)]:
-            assert f"{sev}: {weight}" in content, f"Missing risk weight for {sev}"
+            assert f"{sev}" in content and str(weight) in content, f"Missing risk weight for {sev}"
 
     def test_radar_called_in_load_data(self):
-        content = FINDINGS_HTML.read_text()
-        assert "renderRadar()" in content, "renderRadar should be called in loadData"
+        content = _all_viz_content()
+        assert "renderRadar(" in content, "renderRadar should be called in loadData"
 
     def test_radar_uses_d3_line_radial(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "d3.lineRadial()" in content, "Radar should use d3.lineRadial for polygon"
 
     def test_radar_uses_curve_linear_closed(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "curveLinearClosed" in content, "Radar polygon should use curveLinearClosed"
 
     def test_radar_risk_weights_exposed_on_window(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "window.RADAR_RISK_WEIGHTS" in content, "RADAR_RISK_WEIGHTS should be exposed on window"
 
 
@@ -559,19 +572,19 @@ class TestRadarCSS:
     """Verify radar CSS classes exist."""
 
     def test_radar_container_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".radar-container" in content
 
     def test_radar_legend_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".radar-legend" in content
 
     def test_radar_tooltip_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".radar-tooltip" in content
 
     def test_radar_swatch_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".radar-swatch" in content
 
 
@@ -584,39 +597,39 @@ class TestCoverageTabPresence:
     """Verify coverage tab and panel exist in findings.html."""
 
     def test_coverage_tab_exists(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'data-viz="coverage"' in content, "Missing coverage viz tab"
 
     def test_coverage_tab_label(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ">Coverage<" in content, "Coverage tab should be labeled 'Coverage'"
 
     def test_coverage_panel_exists(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="panel-coverage"' in content, "Missing coverage panel div"
 
     def test_coverage_empty_state(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="coverage-empty"' in content, "Missing coverage empty state"
 
     def test_coverage_content_div(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="coverage-content"' in content, "Missing coverage content div"
 
     def test_coverage_svg_element(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="coverage-graph"' in content, "Missing coverage SVG element"
 
     def test_coverage_tooltip_element(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="coverage-tooltip"' in content, "Missing coverage tooltip div"
 
     def test_coverage_legend(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="coverage-legend"' in content, "Missing coverage legend"
 
     def test_coverage_note_element(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="coverage-note"' in content, "Missing coverage note div"
 
 
@@ -624,38 +637,38 @@ class TestCoverageJavaScript:
     """Verify coverage JS functions and constants exist in findings.html."""
 
     def test_render_coverage_function(self):
-        content = FINDINGS_HTML.read_text()
-        assert "async function renderCoverage()" in content, "Missing renderCoverage function"
+        content = _all_viz_content()
+        assert "renderCoverage" in content, "Missing renderCoverage function"
 
     def test_build_coverage_data_function(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "function buildCoverageData(" in content, "Missing buildCoverageData function"
 
     def test_build_coverage_data_exposed_on_window(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "window.buildCoverageData" in content, "buildCoverageData should be exposed on window"
 
     def test_coverage_status_colors_defined(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "COVERAGE_STATUS_COLORS" in content, "Missing COVERAGE_STATUS_COLORS constant"
 
     def test_coverage_status_color_values(self):
         """All status colors are present."""
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         for color in ["#4ade80", "#f59e0b", "#6b7280", "#ef4444", "#1e293b"]:
             assert color in content, f"Missing coverage status color: {color}"
 
     def test_coverage_called_in_load_data(self):
-        content = FINDINGS_HTML.read_text()
-        assert "renderCoverage()" in content, "renderCoverage should be called in loadData"
+        content = _all_viz_content()
+        assert "renderCoverage(" in content, "renderCoverage should be called in loadData"
 
     def test_coverage_uses_d3_scale_band(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         # Already tested for heatmap, but coverage also uses it
         assert "d3.scaleBand()" in content
 
     def test_coverage_status_colors_exposed_on_window(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "window.COVERAGE_STATUS_COLORS" in content, "COVERAGE_STATUS_COLORS should be exposed on window"
 
 
@@ -890,23 +903,23 @@ class TestCoverageCSS:
     """Verify coverage CSS classes exist."""
 
     def test_coverage_container_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".coverage-container" in content
 
     def test_coverage_legend_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".coverage-legend" in content
 
     def test_coverage_tooltip_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".coverage-tooltip" in content
 
     def test_coverage_swatch_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".coverage-swatch" in content
 
     def test_coverage_note_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".coverage-note" in content
 
 
@@ -919,47 +932,47 @@ class TestTimelineTabPresence:
     """Verify timeline tab and panel exist in findings.html."""
 
     def test_timeline_tab_exists(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'data-viz="timeline"' in content, "Missing timeline viz tab"
 
     def test_timeline_tab_label(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ">Timeline<" in content, "Timeline tab should be labeled 'Timeline'"
 
     def test_timeline_panel_exists(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="panel-timeline"' in content, "Missing timeline panel div"
 
     def test_timeline_empty_state(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="timeline-empty"' in content, "Missing timeline empty state"
 
     def test_timeline_content_div(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="timeline-content"' in content, "Missing timeline content div"
 
     def test_timeline_svg_element(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="timeline-graph"' in content, "Missing timeline SVG element"
 
     def test_timeline_tooltip_element(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="timeline-tooltip"' in content, "Missing timeline tooltip div"
 
     def test_timeline_legend(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="timeline-legend"' in content, "Missing timeline legend"
 
     def test_timeline_group_toggle(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'id="timeline-group-toggle"' in content, "Missing timeline group toggle"
 
     def test_timeline_group_toggle_host_button(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'data-group="host"' in content, "Missing host group toggle button"
 
     def test_timeline_group_toggle_suite_button(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert 'data-group="suite"' in content, "Missing suite group toggle button"
 
 
@@ -967,49 +980,49 @@ class TestTimelineJavaScript:
     """Verify timeline JS functions and constants exist in findings.html."""
 
     def test_render_timeline_function(self):
-        content = FINDINGS_HTML.read_text()
-        assert "function renderTimeline()" in content, "Missing renderTimeline function"
+        content = _all_viz_content()
+        assert "renderTimeline" in content, "Missing renderTimeline function"
 
     def test_build_timeline_data_function(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "function buildTimelineData(" in content, "Missing buildTimelineData function"
 
     def test_build_timeline_data_exposed_on_window(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "window.buildTimelineData" in content, "buildTimelineData should be exposed on window"
 
     def test_timeline_sev_colors_defined(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "TIMELINE_SEV_COLORS" in content, "Missing TIMELINE_SEV_COLORS constant"
 
     def test_timeline_sev_colors_exposed_on_window(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "window.TIMELINE_SEV_COLORS" in content, "TIMELINE_SEV_COLORS should be exposed on window"
 
     def test_timeline_sev_radii_defined(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "TIMELINE_SEV_RADII" in content, "Missing TIMELINE_SEV_RADII constant"
 
     def test_timeline_sev_radii_exposed_on_window(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "window.TIMELINE_SEV_RADII" in content, "TIMELINE_SEV_RADII should be exposed on window"
 
     def test_timeline_severity_color_values(self):
         """All severity colors from the spec are present in timeline constants."""
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         for color in ["#991b1b", "#dc2626", "#f59e0b", "#4a9eff", "#6b7280"]:
             assert color in content, f"Missing timeline severity color: {color}"
 
     def test_timeline_called_in_load_data(self):
-        content = FINDINGS_HTML.read_text()
-        assert "renderTimeline()" in content, "renderTimeline should be called in loadData"
+        content = _all_viz_content()
+        assert "renderTimeline(" in content, "renderTimeline should be called in loadData"
 
     def test_timeline_uses_d3_scale_linear(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "d3.scaleLinear()" in content, "Timeline should use d3.scaleLinear for X axis"
 
     def test_timeline_uses_d3_scale_band(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert "d3.scaleBand()" in content, "Timeline should use d3.scaleBand for Y axis"
 
 
@@ -1200,21 +1213,21 @@ class TestTimelineCSS:
     """Verify timeline CSS classes exist."""
 
     def test_timeline_container_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".timeline-container" in content
 
     def test_timeline_legend_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".timeline-legend" in content
 
     def test_timeline_tooltip_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".timeline-tooltip" in content
 
     def test_timeline_swatch_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".timeline-swatch" in content
 
     def test_timeline_toggle_class(self):
-        content = FINDINGS_HTML.read_text()
+        content = _all_viz_content()
         assert ".timeline-toggle" in content

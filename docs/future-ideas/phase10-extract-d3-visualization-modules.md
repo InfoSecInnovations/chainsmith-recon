@@ -1,4 +1,6 @@
-# Phase 10: Extract D3 Visualization Modules
+# Phase 10: Extract D3 Visualization Modules — DONE
+
+**Status: Complete (2026-04-01)**
 
 Break inline JavaScript and CSS out of findings.html and trend.html into
 separate, cacheable files organized under `static/js/viz/` and `static/css/`.
@@ -155,3 +157,48 @@ Each extraction step requires:
   Verify each before proceeding to isolate regressions.
 - **CSS specificity** — shared base classes must not conflict with
   existing common.css styles. Use `.viz-` prefix consistently.
+
+---
+
+## Completion Notes (2026-04-01)
+
+All four waves completed in a single session. 137 existing tests updated
+and passing.
+
+### Actual file structure
+
+```
+static/
+  css/
+    viz.css                 834 lines — shared viz CSS + per-viz overrides
+  js/
+    viz/
+      viz-common.js         211 lines — namespace, palettes, tooltip factory,
+                            severity helpers, host normalization, inferSuite
+      heatmap.js            205 lines
+      timeline.js           196 lines
+      radar.js              207 lines
+      coverage.js           295 lines
+      treemap.js            283 lines
+      host-table.js         146 lines
+      chains-sankey.js      240 lines
+      trend-charts.js       530 lines — all 5 trend chart render functions
+```
+
+### Actual line counts
+
+| File | Before | After |
+|---|---|---|
+| findings.html | 3,205 | 714 |
+| trend.html | 1,699 | 1,006 |
+| New JS (static/js/viz/) | 0 | 2,313 |
+| New CSS (viz.css) | 0 | 834 |
+
+### Deviations from plan
+
+- trend.html landed at 1,006 lines (vs planned ~500) because page-layout
+  CSS, export panel, sidebar, metrics, and delta orchestrator are
+  page-specific and stayed inline.
+- All modules use `window.ChainsmithViz` namespace as planned.
+- No build tools introduced; plain `<script>` tag ordering enforces
+  load order.
