@@ -119,6 +119,17 @@ def get_real_checks() -> list:
         AgentStateManipulationCheck, AgentTrustChainCheck,
         AgentCrossInjectionCheck,
     )
+    from app.checks.rag import (
+        RAGDiscoveryCheck, RAGIndirectInjectionCheck,
+        RAGVectorStoreAccessCheck, RAGAuthBypassCheck,
+        RAGCollectionEnumerationCheck, RAGEmbeddingFingerprintCheck,
+        RAGDocumentExfiltrationCheck, RAGRetrievalManipulationCheck,
+        RAGSourceAttributionCheck, RAGCachePoisoningCheck,
+        RAGCorpusPoisoningCheck, RAGMetadataInjectionCheck,
+        RAGChunkBoundaryCheck, RAGMultimodalInjectionCheck,
+        RAGFusionRerankerCheck, RAGCrossCollectionCheck,
+        RAGAdversarialEmbeddingCheck,
+    )
     
     # Instantiate all checks in dependency order
     checks = [
@@ -254,6 +265,33 @@ def get_real_checks() -> list:
         # Agent Phase 5 (depends on multi-agent detection)
         AgentTrustChainCheck(),
         AgentCrossInjectionCheck(),
+
+        # RAG Phase 1 (depends on services — discovery)
+        RAGDiscoveryCheck(),
+
+        # RAG Phase 2 (depends on rag_endpoints / vector_stores)
+        RAGVectorStoreAccessCheck(),
+        RAGAuthBypassCheck(),
+        RAGCollectionEnumerationCheck(),
+        RAGEmbeddingFingerprintCheck(),
+
+        # RAG Phase 3 (depends on Phase 1-2 — read-only probing)
+        RAGIndirectInjectionCheck(),
+        RAGDocumentExfiltrationCheck(),
+        RAGRetrievalManipulationCheck(),
+        RAGSourceAttributionCheck(),
+        RAGCachePoisoningCheck(),
+
+        # RAG Phase 4 (depends on Phase 2-3 — write/intrusive)
+        RAGCorpusPoisoningCheck(),
+        RAGMetadataInjectionCheck(),
+        RAGChunkBoundaryCheck(),
+        RAGMultimodalInjectionCheck(),
+
+        # RAG Phase 5 (depends on Phase 3-4 — advanced)
+        RAGFusionRerankerCheck(),
+        RAGCrossCollectionCheck(),
+        RAGAdversarialEmbeddingCheck(),
     ]
     
     logger.info(f"Loaded {len(checks)} real checks")
@@ -338,6 +376,11 @@ def infer_suite(check_name: str) -> str:
     """Infer the suite name from a check name."""
     name_lower = check_name.lower()
     suite_patterns = {
+        # Prefix-based suites first (avoid false matches with AI patterns)
+        "mcp": ["mcp"],
+        "agent": ["agent"],
+        "rag": ["rag"],
+        "cag": ["cag"],
         "network": ["dns", "wildcard_dns", "geoip", "reverse_dns", "port_scan",
                     "tls_analysis", "service_probe", "http_method_enum",
                     "banner_grab", "whois_lookup", "traceroute",
@@ -354,10 +397,6 @@ def infer_suite(check_name: str) -> str:
                 "jailbreak", "multi_turn", "input_format", "model_enum",
                 "token_cost", "system_prompt_injection", "output_format",
                 "api_parameter"],
-        "mcp": ["mcp"],
-        "agent": ["agent"],
-        "rag": ["rag"],
-        "cag": ["cag"],
     }
     for suite, patterns in suite_patterns.items():
         if any(p in name_lower for p in patterns):
