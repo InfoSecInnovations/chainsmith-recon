@@ -130,6 +130,17 @@ def get_real_checks() -> list:
         RAGFusionRerankerCheck, RAGCrossCollectionCheck,
         RAGAdversarialEmbeddingCheck,
     )
+    from app.checks.cag import (
+        CAGDiscoveryCheck, CAGCacheProbeCheck,
+        CacheEvictionCheck, CacheWarmingCheck,
+        TTLMappingCheck, MultiLayerCacheCheck,
+        CacheQuotaCheck, ProviderCachingCheck,
+        CrossUserLeakageCheck, CacheKeyReverseCheck,
+        SemanticThresholdCheck, SideChannelCheck,
+        StaleContextCheck, CachePoisoningCheck,
+        InjectionPersistenceCheck, SerializationCheck,
+        DistributedCacheCheck,
+    )
     
     # Instantiate all checks in dependency order
     checks = [
@@ -292,6 +303,33 @@ def get_real_checks() -> list:
         RAGFusionRerankerCheck(),
         RAGCrossCollectionCheck(),
         RAGAdversarialEmbeddingCheck(),
+
+        # CAG Phase 1 (depends on services — discovery)
+        CAGDiscoveryCheck(),
+        CAGCacheProbeCheck(),
+
+        # CAG Phase 2 (depends on cag_endpoints — infrastructure analysis)
+        CacheEvictionCheck(),
+        CacheWarmingCheck(),
+        TTLMappingCheck(),
+        MultiLayerCacheCheck(),
+        CacheQuotaCheck(),
+        ProviderCachingCheck(),
+
+        # CAG Phase 3 (depends on Phase 1-2 — deep probing)
+        CrossUserLeakageCheck(),
+        CacheKeyReverseCheck(),
+        SemanticThresholdCheck(),
+        SideChannelCheck(),
+        StaleContextCheck(),
+
+        # CAG Phase 4 (active exploitation — intrusive)
+        CachePoisoningCheck(),
+        InjectionPersistenceCheck(),
+
+        # CAG Phase 5 (advanced — infrastructure-dependent)
+        SerializationCheck(),
+        DistributedCacheCheck(),
     ]
     
     logger.info(f"Loaded {len(checks)} real checks")

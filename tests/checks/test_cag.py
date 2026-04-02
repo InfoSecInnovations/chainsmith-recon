@@ -68,9 +68,11 @@ def make_response(
 ) -> HttpResponse:
     """Create a mock HTTP response."""
     return HttpResponse(
+        url="http://cag.example.com:8080/test",
         status_code=status_code,
         headers=headers or {},
         body=body,
+        elapsed_ms=50.0,
         error=error,
     )
 
