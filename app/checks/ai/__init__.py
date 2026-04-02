@@ -19,6 +19,16 @@ LLM and AI service reconnaissance:
 - System prompt injection via API parameters
 - Output format manipulation
 - API parameter injection (mass assignment)
+- Embedding extraction/inversion
+- Streaming response analysis
+- API key/auth bypass
+- Model behavior fingerprinting
+- Conversation history leak
+- Function calling abuse
+- Guardrail consistency testing
+- Training data extraction
+- Adversarial input robustness
+- Response caching detection
 """
 
 from app.checks.ai.endpoints import LLMEndpointCheck, EmbeddingEndpointCheck
@@ -38,6 +48,16 @@ from app.checks.ai.token_cost import TokenCostExhaustionCheck
 from app.checks.ai.system_inject import SystemPromptInjectionCheck
 from app.checks.ai.output_format import OutputFormatManipulationCheck
 from app.checks.ai.param_inject import APIParameterInjectionCheck
+from app.checks.ai.embedding_extract import EmbeddingExtractionCheck
+from app.checks.ai.streaming import StreamingAnalysisCheck
+from app.checks.ai.auth_bypass import AuthBypassCheck
+from app.checks.ai.model_fingerprint import ModelBehaviorFingerprintCheck
+from app.checks.ai.history_leak import ConversationHistoryLeakCheck
+from app.checks.ai.function_abuse import FunctionCallingAbuseCheck
+from app.checks.ai.guardrail_consistency import GuardrailConsistencyCheck
+from app.checks.ai.training_data import TrainingDataExtractionCheck
+from app.checks.ai.adversarial_input import AdversarialInputCheck
+from app.checks.ai.cache_detect import ResponseCachingCheck
 
 __all__ = [
     "LLMEndpointCheck",
@@ -58,4 +78,14 @@ __all__ = [
     "SystemPromptInjectionCheck",
     "OutputFormatManipulationCheck",
     "APIParameterInjectionCheck",
+    "EmbeddingExtractionCheck",
+    "StreamingAnalysisCheck",
+    "AuthBypassCheck",
+    "ModelBehaviorFingerprintCheck",
+    "ConversationHistoryLeakCheck",
+    "FunctionCallingAbuseCheck",
+    "GuardrailConsistencyCheck",
+    "TrainingDataExtractionCheck",
+    "AdversarialInputCheck",
+    "ResponseCachingCheck",
 ]
