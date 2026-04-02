@@ -1,6 +1,6 @@
 # Check Reference
 
-Chainsmith includes 25 checks organized into 7 suites.
+Chainsmith includes 88 checks organized into 7 suites.
 
 ## Suite Execution Order
 
@@ -16,10 +16,10 @@ Within each suite, checks with dependencies wait for their requirements.
 
 | Suite | Checks | Entry Point | Purpose |
 |-------|--------|-------------|---------|
-| [network](network.md) | 2 | Yes | Service discovery |
-| [web](web.md) | 5 | No | HTTP analysis |
-| [ai](ai.md) | 10 | No | LLM/ML endpoints |
-| [mcp](mcp.md) | 2 | No | MCP servers |
+| [network](network.md) | 13 | Yes | Service discovery |
+| [web](web.md) | 23 | No | HTTP analysis |
+| [ai](ai.md) | 28 | No | LLM/ML endpoints |
+| [mcp](mcp.md) | 18 | No | MCP servers |
 | [agent](agent.md) | 2 | No | AI agents |
 | [rag](rag.md) | 2 | No | RAG systems |
 | [cag](cag.md) | 2 | No | Cache systems |
@@ -29,7 +29,12 @@ Within each suite, checks with dependencies wait for their requirements.
 ```
 dns_enumeration ──┬──► service_probe ──┬──► header_analysis
                   │                    ├──► robots_txt
-                  │                    ├──► llm_endpoint_discovery ──► prompt_leakage
+                  │                    ├──► llm_endpoint_discovery ──┬──► prompt_leakage
+                  │                    │                             ├──► jailbreak_testing
+                  │                    │                             ├──► auth_bypass
+                  │                    │                             ├──► model_behavior_fingerprint
+                  │                    │                             └──► ... (25 more AI checks)
+                  │                    ├──► embedding_endpoint_discovery ──► embedding_extraction
                   │                    ├──► mcp_discovery ──► mcp_tool_enumeration
                   │                    ├──► agent_discovery ──► agent_goal_injection
                   │                    ├──► rag_discovery ──► rag_indirect_injection

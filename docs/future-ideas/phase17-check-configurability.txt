@@ -1,0 +1,297 @@
+Phase 17: Check Configurability
+==========================================
+Make check behavior tunable without touching Python. Currently, check-
+specific parameters (wordlists, endpoint paths, payloads, timeouts,
+rate limits) are hardcoded as class constants or constructor defaults.
+The config system (chainsmith.yaml) only handles global settings.
+
+This phase introduces per-check configuration, check profiles, and
+externalized payload data so operators can adapt checks to each
+engagement without code changes.
+
+
+Current state:
+  - Global config: chainsmith.yaml covers scope, ports, LiteLLM,
+    storage, swarm — no per-check knobs
+  - Check parameters: Hardcoded in class bodies (e.g.,
+    DnsEnumerationCheck.DEFAULT_WORDLIST, LLMEndpointCheck.CHAT_PATHS,
+    APIParameterInjectionCheck.PARAM_TESTS)
+  - Filtering: ScanStartInput accepts checks/suites lists at scan-start;
+    no persistent enable/disable per check
+  - Behavior tuning: timeout_seconds, requests_per_second,
+    delay_between_targets, retry_count are BaseCheck attributes set at
+    instantiation, not overridable from config
+  - on_critical: Suite-level only, not per-check
+
+
+==========================================================================
+WAVE 1 — PER-CHECK CONFIG SECTION IN YAML
+==========================================================================
+
+Add a `checks:` section to chainsmith.yaml that layers over class
+defaults. Every BaseCheck attribute becomes overridable per check.
+
+Schema:
+  checks:
+    _defaults:                        # Applies to all checks
+      timeout_seconds: 30
+      requests_per_second: 10
+      retry_count: 1
+    dns_enumeration:
+      wordlist: ["api", "chat", "admin", "internal", "staging"]
+      timeout_seconds: 60
+    llm_endpoint_discovery:
+      chat_paths: ["/v1/chat/completions", "/custom/chat"]
+      embedding_paths: ["/v1/embeddings"]
+      requests_per_second: 5
+    header_analysis:
+      critical_headers: ["Content-Security-Policy", "X-Frame-Options"]
+    api_parameter_injection:
+      enabled: false                  # Skip entirely
+
+Resolution order (last wins):
+  1. Hardcoded class default
+  2. checks._defaults
+  3. checks.<check_name>
+  4. Constructor kwarg (for programmatic use)
+  5. Environment variable CHAINSMITH_CHECK_<NAME>_<PARAM>
+
+Implementation notes:
+  - Modify BaseCheck.__init__ to pull overrides from get_config()
+  - Config is read once at check instantiation, not per-execution
+  - Unknown keys under a check name are passed to the check's __init__
+    as kwargs — checks opt in to custom params via constructor
+  - Validate early: fail at load time if a check name in config doesn't
+    match any registered check (typo protection)
+
+
+==========================================================================
+WAVE 2 — EXTERNALIZE PAYLOAD DATA
+==========================================================================
+
+Extract test cases, wordlists, and endpoint path lists from Python
+into data files. Checks become engines that load their payloads at
+init from a configurable path.
+
+Proposed layout:
+  data/
+    payloads/
+      jailbreak_prompts.yaml
+      parameter_injection.yaml
+      mcp_tool_injection.yaml
+      prompt_leakage_probes.yaml
+      input_format_injection.yaml
+    wordlists/
+      subdomains_small.txt          # 16 entries (current default)
+      subdomains_full.txt           # Expanded list
+      paths_web.txt
+      paths_ai.txt
+      model_names.txt
+    endpoints/
+      chat_paths.yaml               # LLMEndpointCheck.CHAT_PATHS
+      embedding_paths.yaml           # EmbeddingEndpointCheck paths
+      model_info_paths.yaml          # ModelInfoCheck.MODEL_PATHS
+
+Config integration:
+  checks:
+    dns_enumeration:
+      wordlist_file: "./data/wordlists/subdomains_full.txt"
+    jailbreak_testing:
+      payload_file: "./data/payloads/jailbreak_prompts.yaml"
+      depth: standard                # light | standard | thorough
+
+Benefits:
+  - Non-developers can update payloads without touching Python
+  - Payloads can be swapped per-engagement via config
+  - Community payload contributions are easy
+  - Version-controlled payload evolution (git diff on data files)
+
+Implementation notes:
+  - Add a load_payload(path, default) utility in app/lib/
+  - Relative paths resolve from project root
+  - Absolute paths honored as-is
+  - Each check retains its current hardcoded values as fallback if
+    no data file is specified
+  - YAML for structured payloads (test name, value, severity, etc.);
+    plain text for simple wordlists (one entry per line)
+
+
+==========================================================================
+WAVE 3 — CHECK PROFILES
+==========================================================================
+
+Extend the existing port_profile concept to full check profiles.
+A profile bundles suite selection, check enablement, and parameter
+overrides into a single switchable preset.
+
+Schema:
+  profiles:
+    quick:
+      suites: [network, web]
+      checks:
+        dns_enumeration:
+          wordlist_file: "./data/wordlists/subdomains_small.txt"
+        _defaults:
+          timeout_seconds: 15
+
+    thorough:
+      suites: [network, web, ai, mcp, agent, rag, cag]
+      checks:
+        dns_enumeration:
+          wordlist_file: "./data/wordlists/subdomains_full.txt"
+        _defaults:
+          timeout_seconds: 120
+          retry_count: 3
+
+    passive:
+      exclude_intrusive: true
+      checks:
+        _defaults:
+          requests_per_second: 2
+          delay_between_targets: 1.0
+
+    ai-focused:
+      suites: [network, ai, mcp, agent, rag, cag]
+      checks:
+        port_scan:
+          port_profile: ai
+        _defaults:
+          timeout_seconds: 90
+
+Usage:
+  - CLI: chainsmith scan --profile thorough
+  - API: ScanStartInput gains a profile field
+  - Config: default_profile: quick in chainsmith.yaml
+
+Resolution order:
+  1. Profile values
+  2. Top-level checks: values (profile-independent overrides)
+  3. Runtime overrides (CLI flags, API params)
+
+Implementation notes:
+  - Profiles are pure config — no code changes to checks themselves
+  - Profile merges with top-level config; explicit values win
+  - Profile "inherits" from base config, not from other profiles
+    (no profile chaining — keep it simple)
+
+
+==========================================================================
+WAVE 4 — PER-CHECK ENABLE/DISABLE AND ON_CRITICAL
+==========================================================================
+
+4a. Persistent check enablement
+---------------------------------
+Add enabled flag per check in config, checked in can_run() before
+condition evaluation.
+
+  checks:
+    api_parameter_injection:
+      enabled: false
+      reason: "Client prohibits parameter fuzzing"  # Optional, for docs
+
+This is simpler than passing exclusion lists through the API every
+scan. The API checks/suites filters still work — this is the persistent
+layer underneath.
+
+Implementation:
+  - BaseCheck gains self.enabled (default True)
+  - can_run() returns False if not enabled
+  - CheckLauncher logs skipped-because-disabled separately from
+    skipped-because-conditions-not-met
+
+
+4b. Per-check on_critical
+---------------------------
+Currently on_critical is suite-level. Some checks within a suite
+warrant different responses.
+
+  checks:
+    port_scan:
+      on_critical: annotate
+    tls_analysis:
+      on_critical: skip_downstream
+
+Resolution: per-check > per-suite > default.
+
+Implementation:
+  - BaseCheck gains self.on_critical (default None = inherit from suite)
+  - CheckLauncher checks check-level first, then falls back to suite
+
+
+==========================================================================
+WAVE 5 — ENVIRONMENT VARIABLE OVERRIDES AND VALIDATION
+==========================================================================
+
+5a. Env var overrides for check params
+----------------------------------------
+Extend the existing CHAINSMITH_* pattern to individual check params:
+
+  CHAINSMITH_CHECK_DNS_ENUMERATION_TIMEOUT_SECONDS=60
+  CHAINSMITH_CHECK_LLM_ENDPOINT_DISCOVERY_REQUESTS_PER_SECOND=2
+  CHAINSMITH_CHECK_API_PARAMETER_INJECTION_ENABLED=false
+
+Convention:
+  CHAINSMITH_CHECK_<CHECK_NAME>_<PARAM> (all uppercase, hyphens to
+  underscores)
+
+Essential for CI/CD and containerized deployments where mounting
+config files is inconvenient.
+
+Implementation:
+  - In BaseCheck.__init__, after YAML config lookup, scan os.environ
+    for matching prefix
+  - Type coercion: bool for enabled/intrusive/sequential, float for
+    rates/delays, int for timeouts/retries, str for paths
+  - Env vars win over YAML (highest priority after constructor kwargs)
+
+
+5b. Config validation
+-----------------------
+Add validate_config() classmethod to BaseCheck. Called at load time
+so misconfigs fail fast.
+
+Validations:
+  - timeout_seconds > 0
+  - requests_per_second > 0
+  - retry_count >= 0
+  - wordlist/payload files exist if specified
+  - Check names in config match registered checks (typo protection)
+  - on_critical is one of: annotate, skip_downstream, stop
+  - Profile references valid suites
+
+On failure: raise ConfigError with clear message including the check
+name, the bad value, and what was expected.
+
+
+==========================================================================
+OPEN QUESTIONS
+==========================================================================
+
+1. Should profiles support inheritance (profile extends another
+   profile)? Adds complexity but reduces duplication. Current
+   recommendation: no, keep it flat.
+
+2. Should payload files support Jinja2 templating for target-specific
+   payload generation? (e.g., injecting the target domain into
+   payloads.) Or is that over-engineering at this stage?
+
+3. How should the config handle check names that don't exist yet
+   (e.g., from a not-yet-installed plugin)? Strict validation would
+   reject them. Lenient mode would warn and skip. Recommendation:
+   strict by default, with a config flag to allow unknown check names.
+
+4. Should there be a config export command that dumps the fully
+   resolved config (all layers merged) for debugging? Useful for
+   CI/CD troubleshooting.
+
+5. Should per-check config support conditional values based on
+   target properties? (e.g., "use this wordlist if target is .gov,
+   that wordlist otherwise.") Recommendation: not in this phase —
+   use profiles to handle different engagement types.
+
+6. Where should the data/ directory live relative to the project?
+   Options: project root (current recommendation), user home
+   (~/.chainsmith/data/), or configurable via data_dir setting.
+
+7. Should enabled: false checks still appear in /api/checks output
+   (marked as disabled) or be hidden entirely?

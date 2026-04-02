@@ -7,7 +7,7 @@ Chainsmith Recon is an open-source reconnaissance tool designed to discover, enu
 ## Features
 
 - **7 Check Suites**: Network, Web, AI, MCP, Agent, RAG, CAG
-- **25 Automated Checks**: From DNS enumeration to prompt injection testing
+- **88 Automated Checks**: From DNS enumeration to prompt injection testing
 - **Chain Orchestration**: Dependency-aware execution ordering
 - **Swarm Mode**: Distributed scanning across multiple agents
 - **Scenario System**: Simulated environments for training
@@ -46,7 +46,7 @@ chainsmith scan example.com -o report.yaml -f yaml
 │                    Check Suites                          │
 ├──────────┬──────────┬──────────┬──────────┬─────────────┤
 │ network  │   web    │    ai    │   mcp    │ agent/rag/  │
-│ (2)      │   (5)    │   (10)   │   (2)    │ cag (6)     │
+│ (13)     │   (23)   │   (28)   │   (18)   │ cag (6)     │
 └──────────┴──────────┴──────────┴──────────┴─────────────┘
          │
          ▼
@@ -60,10 +60,10 @@ chainsmith scan example.com -o report.yaml -f yaml
 
 | Suite | Checks | Purpose |
 |-------|--------|---------|
-| **network** | 2 | DNS enumeration, service discovery |
-| **web** | 5 | Headers, robots.txt, CORS, OpenAPI |
-| **ai** | 10 | LLM endpoints, prompts, filters, tools |
-| **mcp** | 2 | MCP server and tool enumeration |
+| **network** | 13 | DNS enumeration, service discovery, port scanning |
+| **web** | 23 | Headers, robots.txt, CORS, OpenAPI, auth detection |
+| **ai** | 28 | LLM endpoints, prompts, filters, jailbreaks, auth bypass, guardrails |
+| **mcp** | 18 | MCP server/tool enumeration, permission testing, schema analysis |
 | **agent** | 2 | Agent discovery, goal injection |
 | **rag** | 2 | RAG endpoints, indirect injection |
 | **cag** | 2 | Cache discovery, cross-session probes |
