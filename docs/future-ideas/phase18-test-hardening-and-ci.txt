@@ -1,0 +1,168 @@
+Phase 18: Test Hardening and CI
+==========================================
+Ensure the test suite stays green, runs on every commit via GitHub
+Actions, and remains easy to extend as new checks and features land.
+Today the suite collects 1471 tests but carries 43 failures and 19
+errors, the pytest config is split across two files, and the CI
+workflow has minor inefficiencies. This phase cleans all of that up
+so "testing as we go" stays frictionless.
+
+
+Current state:
+  - 1471 tests collected, 1404 passing, 43 failing, 19 erroring
+  - pytest configured in BOTH pytest.ini AND pyproject.toml
+    (pytest.ini wins; pyproject.toml settings like --strict-markers
+    are silently ignored)
+  - Markers defined (slow, integration, network) but not applied
+    anywhere
+  - tests/checks/ has no conftest.py; AI/MCP/RAG/agent tests
+    duplicate fixture setup locally
+  - GitHub Actions CI exists (.github/workflows/ci.yml) but will
+    fail immediately due to broken tests
+  - CI installs from requirements.txt / requirements-dev.txt while
+    pyproject.toml also declares dependencies (drift risk)
+  - Coverage runs tests twice on Python 3.12 (once plain, once
+    with --cov)
+
+
+==========================================================================
+WAVE 1 — GREEN TRUNK
+==========================================================================
+
+Goal: Every test passes on a clean checkout.
+
+1. Fix the 19 errors in test_preferences_api.py
+   - Likely a missing import or module-level breakage
+   - Fix the root cause; do not just skip/xfail
+
+2. Fix the ~40 failures across check test files
+   - tests/checks/test_agent.py (9 failures)
+   - tests/checks/test_ai.py (1 failure)
+   - tests/checks/test_cag.py (10 failures)
+   - tests/checks/test_mcp.py (7 failures)
+   - tests/checks/test_rag.py (9 failures)
+   - tests/test_llm.py (1 failure — caching assertion)
+   - tests/test_payloads.py (2 failures — payload content checks)
+   - tests/test_reports_sarif_export.py (1 failure — trend HTML)
+   Most of these share a common mock-HTTP pattern that drifted from
+   the actual check implementations; fix the mocks to match current
+   code, not the other way around.
+
+3. Confirm full green: pytest -q exits 0
+
+
+==========================================================================
+WAVE 2 — CONSOLIDATE PYTEST CONFIG
+==========================================================================
+
+Goal: Single source of truth for test configuration.
+
+1. Delete pytest.ini entirely
+
+2. Merge its unique settings into pyproject.toml:
+     [tool.pytest.ini_options]
+     asyncio_mode = "auto"
+     asyncio_default_fixture_loop_scope = "function"
+     testpaths = ["tests"]
+     python_files = ["test_*.py"]
+     python_functions = ["test_*"]
+     addopts = ["-ra", "-q", "--strict-markers", "--tb=short"]
+     markers = [
+         "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+         "integration: marks integration tests",
+         "network: marks tests requiring network access",
+     ]
+     filterwarnings = [
+         "ignore::DeprecationWarning",
+         "ignore::pytest.PytestUnraisableExceptionWarning",
+     ]
+
+3. Verify: pytest --co -q still collects all tests
+
+
+==========================================================================
+WAVE 3 — SHARED CHECK TEST FIXTURES
+==========================================================================
+
+Goal: DRY up tests/checks/ so adding a new check test is trivial.
+
+1. Create tests/checks/conftest.py with:
+   - mock_http_client fixture (shared AsyncMock for httpx)
+   - make_response helper (builds HttpResponse with status, headers,
+     body, json)
+   - sample_service / sample_ai_service re-exports from root conftest
+     (or just rely on pytest fixture scoping)
+
+2. Refactor existing check tests to use the shared fixtures
+   instead of local duplicates
+
+3. Document the pattern in a short comment block at the top of
+   tests/checks/conftest.py so future check authors can copy it
+
+
+==========================================================================
+WAVE 4 — CI WORKFLOW CLEANUP
+==========================================================================
+
+Goal: CI is fast, correct, and uses pyproject.toml as the source
+of truth.
+
+1. Switch install step to:
+     pip install -e ".[dev]"
+   Remove references to requirements.txt / requirements-dev.txt in
+   the workflow (keep the files if other tooling needs them, but CI
+   should not depend on them)
+
+2. Update cache key hash:
+     key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+
+3. Combine the two test runs on 3.12 into one:
+     pytest tests/ -v --tb=short --color=yes \
+       ${{ matrix.python-version == '3.12' && '--cov=app --cov-report=xml --cov-report=term-missing' || '' }}
+
+4. Verify both Python 3.11 and 3.12 pass in CI
+
+
+==========================================================================
+WAVE 5 — APPLY MARKERS AND FAST-LOOP SUPPORT
+==========================================================================
+
+Goal: Developers can run a fast subset locally while CI runs
+everything.
+
+1. Audit existing tests and apply markers:
+   - @pytest.mark.network on anything that would hit a real endpoint
+     if mocks were removed (future-proofing)
+   - @pytest.mark.slow on the DB persistence tests and any test
+     taking >2s
+   - @pytest.mark.integration on tests that spin up FastAPI TestClient
+
+2. Add a Makefile / pyproject.toml [tool.taskipy] shortcut:
+     test-fast:  pytest -m "not slow and not network"
+     test-all:   pytest
+     test-cover: pytest --cov=app --cov-report=term-missing
+
+3. Document in README or CONTRIBUTING.md
+
+
+==========================================================================
+OPTIONAL — FUTURE ENHANCEMENTS
+==========================================================================
+
+- GitHub Actions status badge in README
+- Branch protection rule requiring CI green before merge
+- pytest-xdist for parallel local runs (pytest -n auto)
+- Dependabot or Renovate for keeping dev deps current
+- Pre-commit hook running pytest -x on staged files (fast fail)
+
+
+==========================================================================
+ACCEPTANCE CRITERIA
+==========================================================================
+
+- [ ] pytest -q exits 0 with 0 failures, 0 errors
+- [ ] Only pyproject.toml configures pytest (pytest.ini deleted)
+- [ ] tests/checks/conftest.py exists with shared mock helpers
+- [ ] CI workflow uses pip install -e ".[dev]" and runs tests once
+      per Python version
+- [ ] Markers are applied and test-fast runs in <30s locally
