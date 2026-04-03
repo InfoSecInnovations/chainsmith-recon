@@ -83,6 +83,27 @@ const api = {
         return (await fetch(`/api/v1/scans?${params}`)).json();
     },
     async listEngagements() { return (await fetch('/api/v1/engagements')).json(); },
+    async getEngagement(id) { return (await fetch(`/api/v1/engagements/${id}`)).json(); },
+    async createEngagement(data) {
+        return (await fetch('/api/v1/engagements', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })).json();
+    },
+    async updateEngagement(id, data) {
+        return (await fetch(`/api/v1/engagements/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })).json();
+    },
+    async deleteEngagement(id) {
+        return (await fetch(`/api/v1/engagements/${id}`, { method: 'DELETE' })).json();
+    },
+    async getEngagementScans(id, limit = 50) {
+        return (await fetch(`/api/v1/engagements/${id}/scans?limit=${limit}`)).json();
+    },
     async compareScans(scanAId, scanBId) { return (await fetch(`/api/v1/scans/${scanAId}/compare/${scanBId}`)).json(); },
     async getTargetTrend(domain, filters = {}) {
         const params = new URLSearchParams();

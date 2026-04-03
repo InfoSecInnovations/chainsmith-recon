@@ -119,6 +119,326 @@
       "severity_multiplier": 2.5,
       "combined_severity": "high",
       "references": ["CWE-22: Path Traversal"]
+    },
+    {
+      "id": "rag_pipeline_compromise",
+      "name": "RAG Pipeline Injection",
+      "description": "RAG pipeline with indirect injection enables attacker-controlled context in responses",
+      "indicators": ["rag", "retrieval", "injection", "vector", "embedding"],
+      "chains_with": ["chatbot_tool_leak", "embedding_endpoint_exposed"],
+      "attack_steps": [
+        "Identify RAG pipeline endpoints",
+        "Craft documents with indirect injection payloads",
+        "Submit queries triggering retrieval of poisoned context",
+        "Verify injection executes within LLM response"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["OWASP LLM Top 10 - LLM01"]
+    },
+    {
+      "id": "rag_corpus_poisoning",
+      "name": "RAG Corpus Poisoning → Persistent Injection",
+      "description": "Writable ingestion plus injection vulnerability enables persistent attacker-controlled responses",
+      "indicators": ["rag", "corpus", "ingestion", "upload", "injection", "document"],
+      "chains_with": ["embedding_endpoint_exposed", "chatbot_tool_leak"],
+      "attack_steps": [
+        "Identify writable document ingestion endpoints",
+        "Craft documents with persistent injection payloads",
+        "Ingest poisoned documents into the corpus",
+        "Verify poisoned content affects all users"
+      ],
+      "severity_multiplier": 2.5,
+      "combined_severity": "critical",
+      "references": ["Greshake et al. 2023 - Indirect Prompt Injection"]
+    },
+    {
+      "id": "rag_vector_store_bypass",
+      "name": "Vector Store Direct Access",
+      "description": "Unauthenticated vector store access bypasses all RAG pipeline controls",
+      "indicators": ["rag", "vector", "chroma", "qdrant", "pinecone", "weaviate", "auth", "bypass"],
+      "chains_with": ["embedding_endpoint_exposed"],
+      "attack_steps": [
+        "Access vector store API directly",
+        "Enumerate collections and metadata",
+        "Query or modify vectors without authentication",
+        "Exfiltrate document content from stored chunks"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["CWE-306: Missing Authentication"]
+    },
+    {
+      "id": "cag_cross_user_leakage",
+      "name": "CAG Cross-User Cache Leakage",
+      "description": "Cache serves one user's context to another across trust boundaries",
+      "indicators": ["cache", "cag", "leakage", "cross-user", "isolation", "shared"],
+      "chains_with": ["session_leak"],
+      "attack_steps": [
+        "Identify caching infrastructure and behavior",
+        "Submit queries to populate cache with identifiable content",
+        "Switch auth context and query for similar topics",
+        "Verify cached responses from other users are returned"
+      ],
+      "severity_multiplier": 2.5,
+      "combined_severity": "critical",
+      "references": ["CWE-200: Information Exposure"]
+    },
+    {
+      "id": "cag_cache_poisoning",
+      "name": "CAG Cache Poisoning → Persistent Injection",
+      "description": "Cache poisoning enables attacker-injected content served to other users",
+      "indicators": ["cache", "cag", "poisoning", "warming", "injection", "persistence"],
+      "chains_with": ["chatbot_tool_leak"],
+      "attack_steps": [
+        "Probe cache behavior and identify cacheable patterns",
+        "Craft responses containing malicious instructions",
+        "Submit queries causing poisoned response to be cached",
+        "Verify poisoned content is served to subsequent users"
+      ],
+      "severity_multiplier": 2.5,
+      "combined_severity": "critical",
+      "references": ["CWE-349: Acceptance of Extraneous Untrusted Data"]
+    },
+    {
+      "id": "mcp_tool_exploitation",
+      "name": "MCP Unauthenticated Tool Execution",
+      "description": "Enumerated MCP tools without authentication enables direct tool invocation",
+      "indicators": ["mcp", "tool", "auth", "invocation", "enumeration", "schema"],
+      "chains_with": ["chatbot_tool_leak", "internal_announcement_tool"],
+      "attack_steps": [
+        "Enumerate tools exposed by MCP server",
+        "Confirm authentication is not enforced",
+        "Invoke high-risk tools directly without credentials",
+        "Test for data access or code execution capabilities"
+      ],
+      "severity_multiplier": 2.5,
+      "combined_severity": "critical",
+      "references": ["MCP Security Best Practices"]
+    },
+    {
+      "id": "mcp_shadow_tool_attack",
+      "name": "MCP Shadow Tool → Prompt Injection",
+      "description": "Hidden shadow tools override legitimate ones, exploitable via prompt injection",
+      "indicators": ["mcp", "shadow", "tool", "injection", "prompt", "override"],
+      "chains_with": ["chatbot_tool_leak"],
+      "attack_steps": [
+        "Identify shadow tools overriding legitimate ones",
+        "Analyze how shadow descriptions influence LLM tool selection",
+        "Craft prompt injection payloads via tool results",
+        "Chain shadow redirection with prompt injection"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["Invariant Labs - MCP Security Research"]
+    },
+    {
+      "id": "mcp_resource_traversal",
+      "name": "MCP Resource Traversal → SSRF",
+      "description": "Path traversal on MCP resources combined with template injection enables SSRF",
+      "indicators": ["mcp", "resource", "traversal", "template", "injection", "path"],
+      "chains_with": ["fetch_document_tool"],
+      "attack_steps": [
+        "Identify vulnerable MCP resource URIs",
+        "Test template parameters for injection",
+        "Combine traversal with template injection for file access",
+        "Attempt SSRF via internal URL injection"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["CWE-22: Path Traversal", "CWE-918: SSRF"]
+    },
+    {
+      "id": "agent_goal_hijacking",
+      "name": "Agent Goal Hijacking",
+      "description": "Agent endpoints vulnerable to goal override redirect autonomous behavior",
+      "indicators": ["agent", "goal", "injection", "orchestration", "autonomous"],
+      "chains_with": ["chatbot_tool_leak", "internal_announcement_tool"],
+      "attack_steps": [
+        "Identify agent orchestration endpoints",
+        "Craft goal injection payloads overriding the objective",
+        "Submit hijacked goals through agent input",
+        "Verify agent pursues attacker-specified goal"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["OWASP LLM Top 10 - LLM01"]
+    },
+    {
+      "id": "agent_memory_compromise",
+      "name": "Agent Memory Poisoning → Persistent Control",
+      "description": "Extracted agent memory enables targeted poisoning with persistent instructions",
+      "indicators": ["agent", "memory", "extraction", "poisoning", "persistent"],
+      "chains_with": ["session_leak", "chatbot_tool_leak"],
+      "attack_steps": [
+        "Extract existing agent memory to understand context",
+        "Analyze memory structure for injection points",
+        "Inject poisoned entries with persistent instructions",
+        "Verify instructions persist across sessions"
+      ],
+      "severity_multiplier": 2.5,
+      "combined_severity": "critical",
+      "references": ["Agent Security Research - Memory Attacks"]
+    },
+    {
+      "id": "multi_agent_lateral_movement",
+      "name": "Multi-Agent Lateral Injection",
+      "description": "Output from one agent poisons another through trusted inter-agent channels",
+      "indicators": ["agent", "multi-agent", "cross", "injection", "trust", "chain"],
+      "chains_with": ["chatbot_tool_leak"],
+      "attack_steps": [
+        "Map multi-agent topology and communication paths",
+        "Identify trust relationships between agents",
+        "Inject malicious output into lower-privilege agent",
+        "Verify poisoned output propagates to higher-privilege agents"
+      ],
+      "severity_multiplier": 2.5,
+      "combined_severity": "critical",
+      "references": ["Multi-Agent Security - Trust Chain Attacks"]
+    },
+    {
+      "id": "agent_context_overflow_bypass",
+      "name": "Agent Guardrail Bypass via Context Overflow",
+      "description": "Loop triggers combined with context overflow push safety instructions out of window",
+      "indicators": ["agent", "loop", "context", "overflow", "guardrail", "bypass"],
+      "chains_with": [],
+      "attack_steps": [
+        "Identify agent loop triggers",
+        "Craft inputs forcing repetitive processing",
+        "Monitor context window consumption",
+        "Submit restricted requests after guardrails are evicted"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["Context Window Attacks - LLM Security"]
+    },
+    {
+      "id": "cross_origin_ai_abuse",
+      "name": "Cross-Origin AI Service Abuse",
+      "description": "Permissive CORS on AI endpoints allows cross-origin LLM requests from any website",
+      "indicators": ["cors", "llm", "endpoint", "api", "chat", "completion"],
+      "chains_with": ["cors_misconfigured"],
+      "attack_steps": [
+        "Confirm permissive CORS on AI endpoints",
+        "Craft malicious webpage making cross-origin LLM requests",
+        "Test if authenticated sessions are forwarded",
+        "Demonstrate cross-origin prompt injection or data exfiltration"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["CWE-942: Overly Permissive CORS"]
+    },
+    {
+      "id": "ssrf_via_agent_callback",
+      "name": "SSRF via Agent Callback Injection",
+      "description": "URL-accepting parameters plus agent callback injection enables SSRF",
+      "indicators": ["ssrf", "url", "callback", "webhook", "agent", "internal"],
+      "chains_with": ["fetch_document_tool", "internal_announcement_tool"],
+      "attack_steps": [
+        "Identify URL-accepting parameters",
+        "Craft callback payloads targeting internal resources",
+        "Submit through agent callback interface",
+        "Enumerate internal services via SSRF responses"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["CWE-918: SSRF"]
+    },
+    {
+      "id": "full_llm_compromise",
+      "name": "Full LLM Compromise Pipeline",
+      "description": "System prompt extracted plus tools discovered enables fully informed LLM attacks",
+      "indicators": ["llm", "prompt", "tool", "system", "endpoint", "chat", "completion"],
+      "chains_with": ["chatbot_tool_leak", "model_card_disclosure"],
+      "attack_steps": [
+        "Access LLM chat/completion endpoints",
+        "Extract system prompt to understand constraints",
+        "Enumerate available tools and capabilities",
+        "Chain prompt manipulation with tool invocation"
+      ],
+      "severity_multiplier": 2.5,
+      "combined_severity": "critical",
+      "references": ["OWASP LLM Top 10 - LLM01", "OWASP LLM Top 10 - LLM07"]
+    },
+    {
+      "id": "content_filter_bypass",
+      "name": "Content Filter Bypass Pipeline",
+      "description": "Characterized filters plus jailbreaks plus streaming bypass enables restricted content",
+      "indicators": ["filter", "jailbreak", "streaming", "bypass", "content", "guardrail"],
+      "chains_with": [],
+      "attack_steps": [
+        "Map content filter rules and blocked categories",
+        "Apply confirmed jailbreak techniques",
+        "Test if streaming mode weakens filtering",
+        "Combine jailbreak with streaming for maximum bypass"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["OWASP LLM Top 10 - LLM02"]
+    },
+    {
+      "id": "financial_denial_of_service",
+      "name": "Financial DoS via Token Exhaustion",
+      "description": "Rate limit bypass combined with expensive completions enables uncapped cost generation",
+      "indicators": ["rate", "limit", "bypass", "token", "cost", "exhaustion", "expensive"],
+      "chains_with": [],
+      "attack_steps": [
+        "Identify rate limiting and bypass techniques",
+        "Confirm expensive completions without token limits",
+        "Submit high-volume expensive requests via bypass",
+        "Demonstrate sustained cost generation"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["OWASP LLM Top 10 - LLM04"]
+    },
+    {
+      "id": "credential_compromise",
+      "name": "Credential Compromise via Default Creds",
+      "description": "Identified auth mechanism with confirmed default credentials",
+      "indicators": ["auth", "credential", "default", "login", "admin", "password"],
+      "chains_with": ["robots_model_admin"],
+      "attack_steps": [
+        "Identify authentication mechanism in use",
+        "Confirm default credentials provide valid access",
+        "Enumerate accessible functionality",
+        "Test for administrative privileges"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["CWE-798: Hard-coded Credentials", "OWASP Testing Guide - WSTG-ATHN-02"]
+    },
+    {
+      "id": "openapi_mass_assignment",
+      "name": "API Schema → Mass Assignment",
+      "description": "Full API schema reveals data models; mass assignment confirms writable protected fields",
+      "indicators": ["openapi", "swagger", "api", "mass", "assignment", "schema", "model"],
+      "chains_with": ["api_version_mismatch"],
+      "attack_steps": [
+        "Extract data models from OpenAPI documentation",
+        "Identify privileged fields in schema definitions",
+        "Confirm mass assignment on protected fields",
+        "Escalate via role or permission field modification"
+      ],
+      "severity_multiplier": 2.0,
+      "combined_severity": "high",
+      "references": ["OWASP API Security - API6:2023", "CWE-915: Mass Assignment"]
+    },
+    {
+      "id": "mcp_agent_hybrid",
+      "name": "MCP-to-Agent Injection Pipeline",
+      "description": "MCP tool results flow into agent context enabling prompt injection hijack of agent behavior",
+      "indicators": ["mcp", "agent", "tool", "injection", "prompt", "orchestration"],
+      "chains_with": ["chatbot_tool_leak"],
+      "attack_steps": [
+        "Identify MCP servers connected to agent orchestration",
+        "Map how tool results flow into agent context",
+        "Craft injection payloads within MCP tool results",
+        "Verify injected instructions influence agent behavior"
+      ],
+      "severity_multiplier": 2.5,
+      "combined_severity": "critical",
+      "references": ["MCP Security - Tool Result Injection"]
     }
   ],
   "severity_matrix": {

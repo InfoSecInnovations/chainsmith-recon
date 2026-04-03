@@ -317,11 +317,35 @@ Ready to launch. Click the Launch button to begin."""
             keywords = set()
             
             kw_list = [
+                # Web / Network
                 "header", "server", "version", "disclosure",
-                "chatbot", "tool", "prompt", "injection",
                 "api", "endpoint", "cors", "error", "debug",
-                "config", "admin", "internal", "model", "llm",
-                "openapi", "swagger", "robots", "path"
+                "config", "admin", "internal", "openapi", "swagger",
+                "robots", "path", "auth", "credential", "default",
+                "login", "password", "ssrf", "url", "callback",
+                "webhook", "mass", "assignment", "schema",
+                # AI / LLM
+                "chatbot", "tool", "prompt", "injection", "model",
+                "llm", "chat", "completion", "filter", "jailbreak",
+                "streaming", "bypass", "content", "guardrail",
+                "rate", "limit", "token", "cost", "exhaustion",
+                "expensive", "system",
+                # RAG
+                "rag", "retrieval", "vector", "embedding",
+                "corpus", "ingestion", "upload", "document",
+                "collection", "chroma", "qdrant", "pinecone",
+                "weaviate",
+                # CAG
+                "cache", "cag", "leakage", "cross-user",
+                "isolation", "shared", "poisoning", "warming",
+                "persistence", "stale",
+                # MCP
+                "mcp", "shadow", "resource", "traversal",
+                "template", "invocation", "enumeration",
+                # Agent
+                "agent", "goal", "orchestration", "autonomous",
+                "memory", "extraction", "multi-agent", "cross",
+                "trust", "chain", "loop", "context", "overflow",
             ]
             for kw in kw_list:
                 if kw in text:
