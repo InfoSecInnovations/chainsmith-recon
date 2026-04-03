@@ -44,6 +44,29 @@ class LLMProvider(Enum):
     LITELLM = "litellm"
 
 
+class LLMErrorType(str, Enum):
+    """Categorized LLM error types for UI surfacing and retry decisions."""
+    NONE = "none"                       # No error
+    RATE_LIMIT = "rate_limit"           # 429
+    TIMEOUT = "timeout"                 # httpx.TimeoutException
+    TRANSIENT = "transient"             # 500/502/503
+    CONTENT_FILTER = "content_filter"   # 400 + content policy keywords
+    TOKEN_LIMIT = "token_limit"         # 400 + token/context keywords
+    AUTH = "auth"                       # 401/403
+    NOT_CONFIGURED = "not_configured"   # NoLLMClient
+    MODEL_NOT_FOUND = "model_not_found" # 404
+    PARSE_ERROR = "parse_error"         # JSON parse failure (client-side)
+    UNKNOWN = "unknown"                 # Unrecognized error
+
+
+# Error types that are worth retrying automatically
+RETRYABLE_ERROR_TYPES = {
+    LLMErrorType.RATE_LIMIT,
+    LLMErrorType.TIMEOUT,
+    LLMErrorType.TRANSIENT,
+}
+
+
 @dataclass
 class LLMConfig:
     """
@@ -184,7 +207,49 @@ class LLMResponse:
     provider: str
     success: bool = True
     error: Optional[str] = None
+    error_type: LLMErrorType = LLMErrorType.NONE
+    retryable: bool = False
     usage: dict = field(default_factory=dict)
+
+
+def _classify_error(status_code: int, body: str, exception: Optional[Exception] = None) -> tuple[LLMErrorType, bool]:
+    """
+    Classify an LLM error by HTTP status and response body.
+
+    Returns (error_type, retryable).
+    """
+    if exception is not None:
+        exc_name = type(exception).__name__
+        if "Timeout" in exc_name or "TimeoutException" in exc_name:
+            return LLMErrorType.TIMEOUT, True
+        if status_code == 0:
+            return LLMErrorType.TRANSIENT, True
+
+    if status_code == 429:
+        return LLMErrorType.RATE_LIMIT, True
+
+    if status_code in (500, 502, 503):
+        return LLMErrorType.TRANSIENT, True
+
+    if status_code in (401, 403):
+        return LLMErrorType.AUTH, False
+
+    if status_code == 404:
+        return LLMErrorType.MODEL_NOT_FOUND, False
+
+    if status_code == 400:
+        lower = body.lower()
+        content_kw = ("content policy", "safety", "moderation", "content filter",
+                       "harmful", "refused", "not allowed")
+        if any(kw in lower for kw in content_kw):
+            return LLMErrorType.CONTENT_FILTER, False
+
+        token_kw = ("token", "context length", "context_length",
+                     "maximum context", "too long", "too many tokens")
+        if any(kw in lower for kw in token_kw):
+            return LLMErrorType.TOKEN_LIMIT, False
+
+    return LLMErrorType.UNKNOWN, False
 
 
 class LLMClient(ABC):
@@ -234,6 +299,8 @@ class NoLLMClient(LLMClient):
             provider="none",
             success=False,
             error="No LLM provider configured",
+            error_type=LLMErrorType.NOT_CONFIGURED,
+            retryable=False,
         )
     
     @property
@@ -287,14 +354,18 @@ class OpenAIClient(LLMClient):
                 )
                 
                 if response.status_code != 200:
+                    error_type, retryable = _classify_error(
+                        response.status_code, response.text[:500])
                     return LLMResponse(
                         content="",
                         model=self.config.openai_model,
                         provider="openai",
                         success=False,
                         error=f"HTTP {response.status_code}: {response.text[:200]}",
+                        error_type=error_type,
+                        retryable=retryable,
                     )
-                
+
                 data = response.json()
                 return LLMResponse(
                     content=data["choices"][0]["message"]["content"],
@@ -303,16 +374,19 @@ class OpenAIClient(LLMClient):
                     success=True,
                     usage=data.get("usage", {}),
                 )
-                
+
         except Exception as e:
+            error_type, retryable = _classify_error(0, str(e), exception=e)
             return LLMResponse(
                 content="",
                 model=self.config.openai_model,
                 provider="openai",
                 success=False,
                 error=str(e),
+                error_type=error_type,
+                retryable=retryable,
             )
-    
+
     @property
     def provider_name(self) -> str:
         return "openai"
@@ -371,20 +445,24 @@ class AnthropicClient(LLMClient):
                 )
                 
                 if response.status_code != 200:
+                    error_type, retryable = _classify_error(
+                        response.status_code, response.text[:500])
                     return LLMResponse(
                         content="",
                         model=self.config.anthropic_model,
                         provider="anthropic",
                         success=False,
                         error=f"HTTP {response.status_code}: {response.text[:200]}",
+                        error_type=error_type,
+                        retryable=retryable,
                     )
-                
+
                 data = response.json()
                 content = ""
                 for block in data.get("content", []):
                     if block.get("type") == "text":
                         content += block.get("text", "")
-                
+
                 return LLMResponse(
                     content=content,
                     model=data.get("model", self.config.anthropic_model),
@@ -392,16 +470,19 @@ class AnthropicClient(LLMClient):
                     success=True,
                     usage=data.get("usage", {}),
                 )
-                
+
         except Exception as e:
+            error_type, retryable = _classify_error(0, str(e), exception=e)
             return LLMResponse(
                 content="",
                 model=self.config.anthropic_model,
                 provider="anthropic",
                 success=False,
                 error=str(e),
+                error_type=error_type,
+                retryable=retryable,
             )
-    
+
     @property
     def provider_name(self) -> str:
         return "anthropic"
@@ -441,7 +522,8 @@ class LiteLLMClient(LLMClient):
             models_to_try.append(self.config.litellm_model_fallback)
         
         last_error = ""
-        
+        last_status = 0
+
         try:
             async with httpx.AsyncClient(timeout=self.config.timeout_seconds) as client:
                 for model in models_to_try:
@@ -466,23 +548,31 @@ class LiteLLMClient(LLMClient):
                         )
                     
                     last_error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    last_status = response.status_code
                     logger.warning(f"LiteLLM model {model} failed: {last_error}")
-                
+
+                error_type, retryable = _classify_error(
+                    last_status, last_error)
                 return LLMResponse(
                     content="",
                     model=self.config.litellm_model,
                     provider="litellm",
                     success=False,
                     error=last_error,
+                    error_type=error_type,
+                    retryable=retryable,
                 )
-                
+
         except Exception as e:
+            error_type, retryable = _classify_error(0, str(e), exception=e)
             return LLMResponse(
                 content="",
                 model=self.config.litellm_model,
                 provider="litellm",
                 success=False,
                 error=str(e),
+                error_type=error_type,
+                retryable=retryable,
             )
     
     @property

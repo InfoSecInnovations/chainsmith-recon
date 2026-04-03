@@ -70,6 +70,7 @@ const api = {
     async getFindingsByHost() { return (await fetch('/api/v1/findings/by-host')).json(); },
     async getChecks() { return (await fetch('/api/v1/checks')).json(); },
     async analyzeChains() { return (await fetch('/api/v1/chains/analyze', { method: 'POST' })).json(); },
+    async retryChains() { return (await fetch('/api/v1/chains/retry', { method: 'POST' })).json(); },
     async getChains() { return (await fetch('/api/v1/chains')).json(); },
     async getChainDetail(chainId) { return (await fetch(`/api/v1/chains/${chainId}`)).json(); },
     async exportReport() { return (await fetch('/api/v1/export', { method: 'POST' })).json(); },

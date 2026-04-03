@@ -448,6 +448,14 @@ input[type="datetime-local"]:focus {
 .status-analyzing { background: rgba(251, 191, 36, 0.2); color: var(--warning); }
 .status-complete { background: rgba(74, 222, 128, 0.2); color: var(--success); }
 .status-error { background: rgba(248, 113, 113, 0.2); color: var(--error); }
+.status-partial { background: rgba(251, 191, 36, 0.2); color: var(--warning); }
+.status-failed { background: rgba(248, 113, 113, 0.2); color: var(--error); }
+.status-rejected { background: rgba(248, 113, 113, 0.2); color: var(--error); }
+.status-retrying {
+    background: rgba(251, 191, 36, 0.2);
+    color: var(--warning);
+    animation: status-throb 1.5s ease-in-out infinite;
+}
 
 @keyframes status-throb {
     0%, 100% { 

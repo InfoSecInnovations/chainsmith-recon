@@ -3,6 +3,16 @@ Phase 15: LLM Chain Analysis Enhancements
 Two related problems around LLM-powered chain analysis that need design
 work before implementation.
 
+Relevant source files:
+  - app/engine/chains.py      — detect_llm_chains, run_chain_analysis,
+                                 format_findings_for_llm, parse_llm_response
+  - app/lib/llm.py            — LLMClient abstraction, provider clients,
+                                 LLMResponse dataclass
+  - app/routes/chains.py      — /api/chains endpoint
+  - app/state.py              — chain_status, chain_error state fields
+  - static/findings.html      — Attack Chains panel, status badge rendering
+  - static/js/viz/chains-sankey.js — Chain list + Sankey graph rendering
+
 
 ==========================================================================
 PROBLEM 1: VISIBILITY OF LLM CHAIN FAILURES
@@ -16,94 +26,241 @@ rejections will become more common — the LLM may refuse to analyze
 
 This problem is relatively straightforward to solve.
 
-Open Questions
----------------
+Current Failure Behavior (confirmed from code)
+------------------------------------------------
 
-1. When chain analysis fails today, does detect_llm_chains catch the
-   exception and return an empty list silently? Or does it surface
-   partial results? Need to confirm the current failure behavior to
-   know what to change.
+detect_llm_chains (chains.py:310-389) fails silently in multiple ways:
 
-2. What are the common failure modes? Known candidates:
-   - Provider rate limit (429)
-   - Content filter rejection (LLM refuses to discuss attack chains)
-   - Timeout (LLM takes too long)
-   - Malformed response (LLM returns non-JSON or unparseable output)
-   - Auth failure (bad/expired API key)
-   - Provider outage (500/503 from provider)
-   - Token limit exceeded (findings summary too large for context)
-   - Partial success (LLM returns some chains but errors on others)
-   Are there other failure modes observed in practice?
+  1. LLM not available — llm_client.is_available() returns False.
+     Logs info, returns empty list. (lines 315-318)
 
-3. Should failures be categorized by recoverability?
-   - Retryable: rate limit, timeout, transient provider error
-   - Actionable: content filter rejection (prompt needs adjustment),
-     token limit (findings need to be summarized differently)
-   - Terminal: auth failure, provider not configured
-   This categorization affects whether the UI shows "Retry" vs
-   "Configure" vs just an error message.
+  2. LLM request fails — response.success is False.
+     Logs warning with response.error, returns empty list. (line 387)
+     The LLMResponse dataclass (llm.py:179-187) carries error info but
+     detect_llm_chains discards it — just logs and returns [].
 
-4. Should the system auto-retry retryable failures? If so, how many
-   times, with what backoff? Or should it surface the failure and let
-   the user decide?
+  3. JSON parse failure — LLM returns non-JSON or malformed JSON.
+     Two-stage parse attempt: direct json.loads, then extract JSON block
+     from response text. If both fail, logs warning, returns [].
+     (chains.py:404-425)
 
-5. For content filter rejections specifically: should the system
-   attempt automatic mitigation before surfacing the error? For
-   example, rephrasing the prompt to avoid trigger words ("attack
-   chain" -> "vulnerability correlation", "exploit path" ->
-   "risk dependency"). This is a band-aid but might resolve 80%
-   of filter rejections.
+  4. Unhandled exception — caught by run_chain_analysis wrapper
+     (chains.py:228-231). Sets state.chain_status = "error" and
+     state.chain_error = str(e). This IS surfaced via the API's
+     "message" field, but the UI only shows "Error" badge with no
+     detail breakdown.
+
+Key insight: failures 1-3 are INVISIBLE to the user. The function
+returns an empty list, run_chain_analysis sets status to "complete"
+(not "error"), and the UI shows "0 LLM chains" as if nothing was
+attempted. Only failure 4 (unhandled exception) sets the error state.
+
+This means the fix requires detect_llm_chains to RETURN failure
+information alongside any partial results, not just log it.
+
+
+Failure Modes (confirmed + observed)
+--------------------------------------
+
+Each provider client (llm.py) catches errors at the HTTP level:
+  - OpenAIClient (lines 273-314): non-200 → error LLMResponse,
+    exception → error LLMResponse, 60s timeout
+  - AnthropicClient (lines 361-403): same pattern, 60s timeout
+  - LiteLLMClient (lines 445-486): tries primary then fallback model,
+    error only after both fail
+
+Failure modes by category:
+
+  Retryable (surface Retry button):
+  - Rate limit (HTTP 429) — provider throttling
+  - Timeout (60s default) — LLM slow or overloaded
+  - Transient provider error (HTTP 500/502/503) — outage
+
+  Actionable (surface guidance):
+  - Content filter rejection — LLM refuses offensive security terms.
+    Detected by: HTTP 400 + response body mentioning "content policy",
+    "safety", or "moderation". Action: suggest prompt rephrasing.
+  - Token limit exceeded — findings too large for context window.
+    Detected by: HTTP 400 + "token" or "context length" in error.
+    Action: suggest reducing findings count or evidence length.
+  - Malformed response — LLM returns text instead of JSON.
+    Detected by: JSON parse failure in chains.py:404-425.
+    Action: suggest simplifying response format instructions.
+
+  Terminal (surface Configure link):
+  - Auth failure (HTTP 401/403) — bad or expired API key
+  - Provider not configured — NoLLMClient returns is_available()=False
+  - Model not found (HTTP 404) — configured model doesn't exist
+
+
+Failure Categorization Design
+------------------------------
+
+Answer to Q3: Yes, categorize by recoverability. The LLMResponse
+dataclass already carries the raw error string; we need to add an
+error_type enum derived from HTTP status + response body parsing.
+
+  New enum in app/lib/llm.py:
+
+  class LLMErrorType(str, Enum):
+      NONE = "none"               # No error
+      RATE_LIMIT = "rate_limit"   # 429
+      TIMEOUT = "timeout"         # httpx.TimeoutException
+      TRANSIENT = "transient"     # 500/502/503
+      CONTENT_FILTER = "content_filter"  # 400 + content policy keywords
+      TOKEN_LIMIT = "token_limit"  # 400 + token/context keywords
+      AUTH = "auth"               # 401/403
+      NOT_CONFIGURED = "not_configured"  # NoLLMClient
+      MODEL_NOT_FOUND = "model_not_found"  # 404
+      PARSE_ERROR = "parse_error"  # JSON parse failure (client-side)
+      UNKNOWN = "unknown"          # Unrecognized error
+
+  Extend LLMResponse:
+      error_type: LLMErrorType = LLMErrorType.NONE
+      retryable: bool = False
+
+  Classification logic: each provider client maps HTTP status + body
+  keywords to the appropriate error_type. The retryable flag is derived
+  from the type (rate_limit, timeout, transient → True).
+
+
+Auto-Retry Strategy
+--------------------
+
+Answer to Q4: Auto-retry retryable failures with conservative limits.
+
+  - Max retries: 2 (3 attempts total)
+  - Backoff: exponential — 2s, 4s
+  - Only for: rate_limit, timeout, transient
+  - NOT for: content_filter, auth, token_limit, parse_error
+  - Surface outcome after final attempt (success or failure)
+  - State during retry: status remains "Analyzing" with a substatus
+    like "Retrying (attempt 2/3)..."
+
+This keeps the user informed without requiring manual intervention for
+transient failures. If all retries fail, surface the error with full
+detail.
+
+
+Content Filter Auto-Mitigation
+--------------------------------
+
+Answer to Q5: Yes, attempt ONE automatic rephrasing before surfacing.
+
+  Strategy: maintain a sanitized prompt variant that replaces
+  security-specific terminology:
+    "attack chain"          → "vulnerability correlation"
+    "exploit path"          → "risk dependency path"
+    "penetration testing"   → "security assessment"
+    "exploit"               → "leverage"
+    "attack surface"        → "exposure surface"
+
+  Flow:
+    1. Try original prompt
+    2. If content_filter rejection: try sanitized prompt automatically
+    3. If sanitized also fails: surface the error with explanation
+    4. If sanitized succeeds: use results, but flag in the UI that
+       sanitized prompt was used (so user knows to expect this)
+
+  This adds one extra LLM call on content filter failure only — not on
+  every request. The sanitized term map lives in config so it can be
+  extended without code changes.
 
 
 Proposed UI Surface
 --------------------
 
-The Attack Chains panel already has a status badge (Idle, Analyzing,
-Complete). Extend it:
+The Attack Chains panel (findings.html:199-231) already has a status
+badge with CSS classes status-idle, status-analyzing, status-complete,
+status-error. JavaScript updates it at lines 647-650.
 
-  Status badges:
-  - "Idle" — no analysis run
-  - "Analyzing" — in progress
-  - "Complete" — success, N chains found
-  - "Partial" — some chains found but errors occurred
-  - "Failed" — analysis attempted but produced no results
-  - "Rejected" — LLM provider refused the request (content filter)
+Extend with new states and detail:
 
-  Detail panel (click badge or expand):
-  - Error type (rate limit, content filter, timeout, etc.)
-  - Provider response (sanitized — no API keys in display)
+  Status badges (add CSS classes for new states):
+  - "Idle" — no analysis run                    [status-idle, existing]
+  - "Analyzing" — in progress                   [status-analyzing, existing]
+  - "Complete" — success, N chains found         [status-complete, existing]
+  - "Partial" — some chains found, LLM errored  [status-partial, NEW]
+  - "Failed" — analysis attempted, no results    [status-failed, NEW]
+  - "Rejected" — content filter rejection        [status-rejected, NEW]
+  - "Retrying" — auto-retry in progress          [status-retrying, NEW]
+
+  Detail panel (click badge to expand — new collapsible section):
+  - Error type (from LLMErrorType enum)
+  - Provider name (from LLMResponse.provider)
+  - Error message (sanitized — strip any API key substrings)
   - Timestamp of last attempt
-  - Retry button (for retryable failures)
-  - "Rule-based only" indicator when LLM portion failed but rule
-    chains succeeded
+  - Retry button (visible only when retryable=True)
+  - "Showing rule-based chains only" indicator when LLM failed but
+    rule-based chains exist
+  - "Sanitized prompt used" indicator when auto-mitigation succeeded
+
+  Implementation: add a <div id="chain-error-detail"> below the
+  existing status badge in findings.html. Toggle visibility based on
+  llm_analysis.status in the API response.
 
   CLI output:
   - Currently: "N chains (M rule, L LLM, B both)"
-  - Proposed: "N chains (M rule, L LLM, B both) [LLM analysis failed:
-    content filter rejection]"
+  - Proposed: "N chains (M rule, L LLM, B both) [LLM: content filter
+    rejection — retried with sanitized prompt, succeeded]"
+  - Or on failure: "N chains (M rule, 0 LLM) [LLM failed: rate limit
+    after 3 attempts]"
 
 
 Proposed API Changes
 ---------------------
 
-The /api/chains endpoint currently returns:
-  { "status": "complete", "chains": [...] }
+The /api/chains endpoint (routes/chains.py:54-83) currently returns:
+  {
+    "status": "idle|analyzing|complete|error",
+    "chains_count": integer,
+    "rule_based_count": integer,
+    "llm_count": integer,
+    "chains": [...],
+    "message": null|"error message"
+  }
 
-Extend with error detail:
+Extend with structured LLM analysis detail:
   {
     "status": "partial",
+    "chains_count": 5,
+    "rule_based_count": 5,
+    "llm_count": 0,
     "chains": [...],
+    "message": null,
     "llm_analysis": {
       "status": "failed",
       "error_type": "content_filter",
       "error_message": "Provider rejected request: content policy violation",
       "provider": "anthropic",
+      "model": "claude-sonnet-4-6-20250514",
       "retryable": false,
+      "auto_mitigated": false,
+      "attempts": 2,
       "timestamp": "2026-03-27T14:30:00Z",
-      "rule_chains_count": 5,
-      "llm_chains_count": 0
+      "sanitized_prompt_used": false,
+      "token_usage": null
     }
   }
+
+  On success, llm_analysis shows:
+  {
+    "status": "success",
+    "error_type": "none",
+    "error_message": null,
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-6-20250514",
+    "retryable": false,
+    "auto_mitigated": false,
+    "attempts": 1,
+    "timestamp": "2026-03-27T14:30:00Z",
+    "sanitized_prompt_used": false,
+    "token_usage": {"prompt_tokens": 1200, "completion_tokens": 800}
+  }
+
+  The llm_analysis object is built from the LLMResponse returned by
+  detect_llm_chains. New fields on state: chain_llm_analysis (dict)
+  populated alongside chain_status.
 
 
 ==========================================================================
@@ -117,176 +274,580 @@ that instructs the LLM to analyze findings and identify attack chains.
 This is a significantly harder problem with workflow, UX, and safety
 implications that are not yet resolved.
 
-Open Questions — User & Scope
+
+Current Prompt Architecture (confirmed from code)
+---------------------------------------------------
+
+The chain analysis prompt is a SINGLE monolithic string built inline
+in detect_llm_chains (chains.py:332-361). It combines three logical
+sections into one user-message prompt (no separate system message):
+
+  Section 1 — Role/Instructions (lines 332-334):
+    "You are a penetration testing expert analyzing reconnaissance
+    findings for attack chain opportunities.
+    Target: {state.target}"
+
+  Section 2 — Findings Data (lines 337-338):
+    Formatted by format_findings_for_llm() (lines 392-401).
+    Each finding rendered as:
+      "- F-001: [HIGH] Title
+         Check: check_name, Target: target_url
+         Evidence: first_100_chars..."
+    Evidence is double-truncated: 200 chars on intake, 100 in format.
+
+  Section 3 — Response Format (lines 348-360):
+    JSON schema example with expected fields: title, finding_ids,
+    severity, exploitation_steps, reasoning.
+    Includes quality filter: "Only include chains that represent
+    genuine combined attack opportunities..."
+
+The prompt is sent via llm_client.chat(prompt) as a single string —
+no system/user message separation. This means the LLM has no
+persistent role context; everything is in one shot.
+
+This monolithic structure actually makes prompt customization EASIER
+for the MVP — there's only one string to replace, and sections are
+clearly delineated by content, even if not by API structure.
+
+
+Prompt Scope — What's Adjustable
+----------------------------------
+
+Answer to Q7: Start with chain analysis only. The other prompts
+(ChainsmithAgent conversational, VerifierAgent if implemented) are
+separate concerns with different adjustment needs. Chain analysis is
+the most common failure point and the one users will want to fix.
+
+Answer to Q8: Currently one prompt, three logical sections. The
+recommended approach is to split into separate configurable sections:
+
+  chain_analysis_instructions:
+    Role definition and analysis approach.
+    Default: "You are a penetration testing expert..."
+    User might change to: "You are a compliance analyst..."
+
+  chain_analysis_data_format:
+    Template for how findings are formatted.
+    Default: the format_findings_for_llm() output pattern.
+    Less likely to be user-edited, but should be overridable.
+
+  chain_analysis_response_format:
+    JSON schema and quality instructions.
+    Default: the current JSON format block.
+    User might want additional fields or different structure.
+
+Splitting these lets users change the analysis approach without
+touching data formatting or response structure — the most common
+adjustment scenario.
+
+
+User & Access Model
+--------------------
+
+Answer to Q6: Both admin and operator, but same mechanism.
+
+  - Persistent prompts (saved in preferences): the "admin" use case.
+    Set via CLI or preferences file. Applies to all scans by default.
+  - Per-scan override: the "operator" use case. Override via CLI flag
+    or UI before running chain analysis.
+
+No separate access control needed — Chainsmith is a single-user tool
+per instance. In swarm mode, the coordinator owns all prompt config
+(chain analysis is coordinator-side only, confirmed in code).
+
+
+Mechanism — Recommended Approach
+----------------------------------
+
+Answer to Q9: Start with (b) preferences, extend to (d) UI editor.
+
+  MVP (Phase 2): Preferences-based override.
+    chainsmith prefs set llm.chain_instructions "Your custom prompt..."
+    chainsmith prefs set llm.chain_response_format "Your format..."
+    chainsmith prefs get llm.chain_instructions
+    chainsmith prefs reset llm.chain_instructions
+
+    Storage: existing preferences system (prefs.json).
+    detect_llm_chains reads from prefs, falls back to hardcoded default.
+    No restart required — prefs are read at analysis time.
+
+  Phase 3: UI editor (drawer/modal from chain analysis panel).
+    More detail in that phase section below.
+
+  NOT recommended for MVP: config file (requires restart), versioned
+  prompts (premature complexity), prompt library (no user base yet).
+
+
+Variable/Placeholder Support
+------------------------------
+
+Answer to Q10: Yes, support a small set of variables in prompt
+templates. These are resolved at analysis time by detect_llm_chains.
+
+  Available variables:
+    {target}          — state.target (target URL/domain)
+    {finding_count}   — number of findings being analyzed
+    {findings}        — formatted findings block (from data format template)
+    {severity_summary} — e.g., "3 critical, 7 high, 12 medium, 5 low"
+    {suites}          — comma-separated list of check suites that ran
+    {response_format} — the response format instructions block
+
+  Implementation: Python str.format_map() with a SafeDict that returns
+  "{key}" for missing keys (no KeyError on typos, just leaves the
+  placeholder literal).
+
+  The full prompt is assembled as:
+    instructions_template.format_map(variables) + "\n\n" +
+    "Findings discovered:\n" + findings_block + "\n\n" +
+    response_format_template.format_map(variables)
+
+
+Instruction/Data Separation
+-----------------------------
+
+Answer to Q11: Yes, enforce separation. This is the natural split
+already present in the code:
+
+  - Instructions (user-editable): "You are a [role] analyzing
+    [context] for [goal]..." — the WHY and HOW of analysis.
+  - Data (system-generated): the formatted findings block — the WHAT
+    being analyzed. Generated by format_findings_for_llm().
+  - Response format (semi-editable): JSON schema and quality
+    instructions — the OUTPUT specification.
+
+Users primarily want to change instructions (different analysis lens)
+or response format (different output fields). They rarely need to
+change how findings are formatted — that's internal plumbing.
+
+
+Safety & Validation
+---------------------
+
+Answer to Q12: Lightweight guardrails, not heavy validation.
+
+  Validation on save:
+  - Maximum prompt length: 4000 chars for instructions, 2000 for
+    response format. Prevents accidentally pasting entire documents.
+  - Must contain {findings} placeholder (or the prompt won't include
+    any data to analyze).
+  - Must contain JSON keyword in response format (or parse_llm_response
+    won't be able to extract results).
+  - No API key patterns (regex check for common key formats).
+
+  Runtime guardrails:
+  - Token count estimate before sending (using tiktoken or provider's
+    tokenizer). Warn if total prompt > 80% of model's context window.
+  - Response timeout unchanged (60s) — prevents runaway generation.
+  - Cost is bounded by the single-request nature of chain analysis.
+
+  NOT implementing for MVP:
+  - Prompt injection detection (too complex, low risk since user IS
+    the operator — they're not attacking themselves).
+  - Output quality validation (would need a second LLM call to judge
+    chain quality — circular and expensive).
+  - Chain hallucination detection (would need to verify finding_ids
+    exist — this IS worth doing but is a separate concern; currently
+    parse_llm_response should already validate finding_ids against
+    known findings).
+
+
+Test Mode
+----------
+
+Answer to Q13: Yes, implement "dry run" in Phase 2.
+
+  Mechanism:
+  - CLI: chainsmith chains analyze --dry-run --prompt-file custom.txt
+    Runs chain analysis with the custom prompt against the most recent
+    scan's findings. Outputs results to stdout without replacing the
+    stored chain analysis results.
+  - API: POST /api/chains/test with {"instructions": "...", "response_format": "..."}
+    Returns chain analysis results without updating state.
+  - UI (Phase 3): "Test Prompt" button in the editor that calls the
+    test endpoint and shows results in a preview pane.
+
+  The dry-run response includes:
+  - Chains found (count and detail)
+  - Token usage (prompt + completion)
+  - Cost estimate (based on provider pricing)
+  - Parse success/failure (did the LLM return valid JSON?)
+  - Comparison summary: "Default prompt: 3 chains. Custom prompt: 5
+    chains. 2 chains overlap."
+
+
+Revert/Rollback
+-----------------
+
+Answer to Q14: Simple reset for MVP, version history in Phase 3.
+
+  MVP: "Reset to default" command/button.
+    chainsmith prefs reset llm.chain_instructions
+    chainsmith prefs reset llm.chain_response_format
+    Restores the hardcoded defaults. One click, no complexity.
+
+  Phase 3: Prompt version history.
+    Each save creates a timestamped snapshot in prefs. Display as a
+    list with diff view. "Revert to version" button. Cap at 20
+    versions (oldest auto-pruned). This is a nice-to-have, not a
+    blocker.
+
+
+Per-Provider Prompt Overrides
 -------------------------------
 
-6. Who is the user adjusting prompts?
-   - Admin/power user tuning Chainsmith's behavior for their org?
-   - Individual operators customizing per engagement?
-   - Both, with different levels of access?
+Answer to Q15: Yes, but only when needed.
 
-7. Which prompts are in scope for adjustment?
-   - Chain analysis system prompt (detect_llm_chains) — the main one
-   - Chain analysis user prompt (the findings summary format)
-   - Verification prompts (if VerifierAgent is implemented)
-   - Conversational scoping prompts (ChainsmithAgent)
-   - All of the above?
-   - Or is this strictly about chain analysis for now?
+  The preference keys support provider qualification:
+    llm.chain_instructions              — default for all providers
+    llm.chain_instructions.anthropic    — override for Anthropic only
+    llm.chain_instructions.openai       — override for OpenAI only
 
-8. How many distinct prompts are there in the chain analysis flow?
-   - System prompt (role/instructions for the LLM)
-   - User prompt (the formatted findings data)
-   - Response format instructions (JSON schema, expected structure)
-   - Are these currently one prompt or separate?
+  Resolution order: provider-specific → default → hardcoded.
 
-Open Questions — Mechanism
+  Primary use case: Anthropic's content filter rejects "attack chain"
+  but OpenAI's doesn't. User sets a sanitized prompt for Anthropic
+  only while keeping the original for OpenAI.
+
+  This is a natural extension of the auto-mitigation from Problem 1.
+  If the auto-sanitized prompt works, the user can save it as the
+  Anthropic-specific override to avoid the retry penalty.
+
+
+Workflow Integration
+---------------------
+
+Answer to Q16: All three scenarios, with post-failure as primary.
+
+  Primary: Post-failure (reactive).
+    User runs scan → chain analysis fails → error detail shows
+    "content filter rejection" → user clicks "Edit Prompt" →
+    adjusts instructions → clicks "Retry" → sees results.
+
+    This is the workflow that Problem 1's visibility enables. The
+    prompt editor should be reachable directly from the error detail
+    panel (one click from failure to fix).
+
+  Secondary: Post-success (iterative).
+    User reviews chains → thinks analysis missed something → opens
+    prompt editor → changes approach (e.g., "focus on authentication
+    bypass chains") → re-runs → compares results.
+
+  Tertiary: Pre-scan (proactive).
+    Power user configures prompts via CLI before scanning. Less common
+    but important for automation / CI integration.
+
+
+Persistence Model
+------------------
+
+Answer to Q17: Persistent default with per-scan override.
+
+  - Preferences (persistent): llm.chain_instructions saved in
+    prefs.json. Applies to all future scans until changed.
+  - CLI flag (per-scan): chainsmith scan --chain-prompt-file custom.txt
+    Overrides the persistent setting for this scan only.
+  - UI override (per-scan): edit prompt in the chain analysis panel
+    before clicking "Re-analyze". Option to "Save as default" after
+    successful test.
+
+  This gives operators flexibility without forcing them to manage
+  prompt state. The most common path is: tweak via UI → test → save
+  as default.
+
+
+UI Placement
+-------------
+
+Answer to Q18: Drawer/modal triggered from the chain analysis panel.
+
+  Rationale:
+  - Separate settings page is too disconnected from the context where
+    prompt editing is needed (the chain analysis results).
+  - Inline in the panel would clutter the chain view with a text editor.
+  - A drawer (slide-in from right) or modal keeps the prompt editor
+    contextual while not consuming the chain analysis space.
+
+  Trigger: "Edit Prompt" icon/button in the chain analysis panel
+  header, next to the status badge. Also linked from the error detail
+  panel when chain analysis fails.
+
+  Drawer contents:
+  - Tab 1: Instructions (the role/approach prompt)
+  - Tab 2: Response Format (the JSON schema/quality instructions)
+  - Preview of assembled prompt (read-only, shows variables resolved)
+  - "Test" button (dry-run against last findings)
+  - "Save" / "Save as Default" / "Reset to Default" buttons
+  - Token count estimate (updates live as user types)
+
+
+Profile Integration
+--------------------
+
+Answer to Q19: Prompts independent of profiles for now.
+
+  Profiles control WHAT checks run and HOW aggressively. Prompts
+  control HOW the LLM analyzes the results. These are orthogonal
+  concerns.
+
+  Future consideration: a "compliance" profile might want a different
+  analysis lens than a "pentest" profile. But this is a Phase 4 concern
+  (profile-linked prompts) — don't over-engineer the MVP.
+
+
+Multi-Step Chain Analysis
+--------------------------
+
+Answer to Q20: Not for MVP, but design the single prompt to be
+replaceable with a chain of prompts later.
+
+  The current architecture (single llm_client.chat() call) can be
+  extended to a list of prompts where each step's output feeds the
+  next. But this requires:
+  - Intermediate result parsing between steps
+  - Error handling per step (partial chain completion)
+  - Cost multiplication (3 steps = 3x cost minimum)
+  - Prompt dependency management (step 2 references step 1's output)
+
+  For now: keep the single-prompt architecture. The abstraction
+  boundary is detect_llm_chains returning a list of chains — the
+  caller doesn't care if it took 1 or 3 LLM calls internally.
+
+
+Community Prompt Library
+-------------------------
+
+Answer to Q21: Long-term only. Not enough users yet to justify.
+
+  When ready, the simplest approach:
+  - Default prompts ship in app/data/prompts/default/
+  - Community prompts in a GitHub repo (chainsmith-prompts)
+  - Import via: chainsmith prompts import <url-or-file>
+  - Export via: chainsmith prompts export chain-analysis > my-prompt.txt
+
+
+Swarm Architecture Interaction
+-------------------------------
+
+Answer to Q22: Confirmed — coordinator-side only.
+
+  Chain analysis runs after all findings are collected on the
+  coordinator. Agents never see chain analysis prompts. Custom
+  prompts are stored in coordinator preferences and applied at
+  analysis time. No protocol changes needed for swarm support.
+
+
+Prompt Engineering Guidance
 ----------------------------
 
-9. How dynamic does prompt adjustment need to be?
-   Options from simplest to most complex:
-   a. Config file: edit a YAML/text file, restart server
-   b. Preferences: chainsmith prefs set llm.chain_prompt "..."
-   c. CLI command: chainsmith prompts edit chain-analysis
-   d. UI editor: live prompt editing in the web interface
-   e. Prompt library: multiple templates selectable per engagement
-   f. Versioned prompts: git-like history of prompt changes with
-      rollback
+Answer to Q23: Inline hints in the UI editor (Phase 3).
 
-10. Should prompt templates support variables/placeholders?
-    For example: "Analyze these {finding_count} findings from
-    {target_domain} and identify attack chains..."
-    If yes, what variables should be available? Finding count,
-    target domain, severity breakdown, suite list, etc.?
+  - Placeholder text in the instructions field: "Describe the analysis
+    approach. Example: 'You are a security analyst identifying how
+    these findings could be combined into multi-step attacks...'"
+  - Warning banner when content filter keywords detected: "Your prompt
+    contains terms that may trigger content filters with some providers
+    (e.g., 'attack chain'). Consider alternatives like 'vulnerability
+    correlation'."
+  - Link to Chainsmith docs page on prompt customization.
+  - NOT implementing: AI-assisted prompt writing (too meta — using an
+    LLM to write prompts for an LLM adds complexity and cost).
 
-11. Should there be a separation between the "instruction" part of
-    the prompt (how to analyze) and the "data" part (the findings)?
-    Users might want to change "analyze these as a pentester" to
-    "analyze these for compliance risk" without touching the data
-    formatting.
 
-Open Questions — Safety & Validation
----------------------------------------
+Effectiveness Telemetry
+-------------------------
 
-12. What happens when a user writes a bad prompt?
-    - Garbage chains (hallucinated vulnerability combinations)
-    - Extremely expensive (prompt is too long, generates huge output)
-    - Injection (user crafts a prompt that extracts data from the
-      LLM provider rather than analyzing findings)
-    - Silent failure (prompt works but produces subtly wrong results)
-    Should there be validation? Guardrails? Cost limits?
+Answer to Q24: Basic metrics in Phase 4, stored locally.
 
-13. Should there be a "test" mode?
-    - "Test with last scan's findings" button that runs the modified
-      prompt against existing data without replacing the real results
-    - Side-by-side comparison: default prompt results vs custom prompt
-    - Token count estimate before running (cost preview)
+  Track per chain analysis run:
+  - Prompt used (hash, not full text — for comparison grouping)
+  - Provider and model
+  - Token usage (prompt + completion)
+  - Chains found (count, severities)
+  - Parse success/failure
+  - Error type (if failed)
+  - Duration (wall clock time)
 
-14. Should there be a revert/rollback mechanism?
-    - "Reset to default prompt" button
-    - Prompt version history with diff view
-    - Or is a single "custom prompt" field with a reset button enough?
+  Display: "Prompt Performance" section in the prompt editor (Phase 4).
+  Shows: average chains found, error rate, average cost per run.
+  Comparison: "Your custom prompt finds 40% more chains than the
+  default, with 10% higher cost."
 
-15. If a custom prompt works for one LLM provider but fails on another
-    (e.g., Anthropic's content filter rejects it but OpenAI's doesn't),
-    should there be per-provider prompt overrides?
-
-Open Questions — Workflow Integration
----------------------------------------
-
-16. Where does prompt editing fit in the user's workflow?
-    Scenarios:
-    a. Pre-scan: user configures prompts before scanning (proactive)
-    b. Post-failure: user sees failure, edits prompt, retries (reactive)
-    c. Post-success: user reviews chains, thinks they're incomplete,
-       tweaks prompt and re-runs (iterative)
-    All three? Which is the primary use case?
-
-17. Should prompt changes persist across scans?
-    - Per-engagement: prompt customization is tied to a scan session
-    - Persistent: saved in preferences, applies to all future scans
-    - Both: persistent default with per-scan override
-
-18. Should prompt editing be a separate "Prompts" settings section,
-    or integrated into the chain analysis panel itself?
-    - Separate: cleaner, but adds a new concept to the UI
-    - Integrated: contextual, but clutters the chain analysis view
-    - Drawer/modal: triggered from chain analysis panel, opens an
-      editing overlay
-
-19. How does this interact with profiles?
-    - Should aggressive/stealth profiles have different chain analysis
-      prompts?
-    - Should a "compliance" profile use a different prompt than a
-      "pentest" profile?
-    - Or should prompts be independent of profiles?
-
-Open Questions — Advanced Considerations
-------------------------------------------
-
-20. Should the system support prompt chaining / multi-step analysis?
-    Instead of one big prompt, break chain analysis into steps:
-    a. "Categorize these findings by attack surface"
-    b. "For each category, identify which findings could be combined"
-    c. "For each combination, assess exploitability"
-    This improves quality but adds complexity and cost.
-
-21. Should there be a community/shared prompt library?
-    - Default prompts ship with Chainsmith
-    - Users can export/import prompt templates
-    - Community-maintained prompt library on GitHub
-    - This is a long-term consideration, not MVP
-
-22. How does prompt adjustment interact with the swarm architecture?
-    - Does the coordinator send the custom prompt to agents?
-    - Or does chain analysis only happen on the coordinator (current
-      design) so prompt customization is coordinator-side only?
-    NOTE: Chain analysis is coordinator-side only. Agents execute
-    checks and return findings; chain analysis runs after all findings
-    are collected. See docs/swarm-architecture.md (agent dependencies).
-
-23. Should the system provide prompt engineering guidance?
-    - Inline hints: "Tip: avoid words like 'attack' or 'exploit' if
-      your provider has strict content filters"
-    - Template starters: "Start from this template and modify..."
-    - Documentation link to prompt engineering best practices
-
-24. Should there be telemetry on prompt effectiveness?
-    - Track: which prompts produce more chains, fewer errors, lower
-      cost
-    - Compare: default prompt performance vs custom prompt performance
-    - This helps users know if their customization is actually better
+  All data local — no telemetry sent to Chainsmith servers or LLM
+  providers beyond the analysis requests themselves.
 
 
 ==========================================================================
-IMPLEMENTATION RECOMMENDATION (when ready)
+IMPLEMENTATION PLAN
 ==========================================================================
 
-Suggested phasing based on impact vs complexity:
+Detailed phasing with concrete implementation targets.
 
-Phase 1: Visibility only (Problem 1)
-  - Surface LLM chain analysis errors in UI/CLI/API
-  - Add status badges: Partial, Failed, Rejected
-  - Show error type and message
-  - Add retry button for retryable failures
-  - No prompt editing — just visibility
 
-Phase 2: Simple prompt override
-  - Single text field for chain analysis system prompt
-  - Accessible via: chainsmith prefs set llm.chain_system_prompt "..."
-  - Reset to default button
-  - Test mode: "Run against last findings" before committing
-  - Per-provider prompt overrides if needed
+Phase 1: Visibility (Problem 1)
+---------------------------------
+Goal: Surface LLM chain analysis errors so users know what happened.
+Complexity: Low-medium. Mostly wiring existing error data to the UI.
 
-Phase 3: UI-integrated prompt editing
-  - Prompt editor in chain analysis panel (drawer/modal)
-  - Variable/placeholder support
-  - Token count estimate
-  - Side-by-side comparison with default
-  - Prompt version history with rollback
+  Backend changes:
 
-Phase 4: Advanced prompt management
-  - Prompt library (multiple templates)
-  - Profile-linked prompts
-  - Multi-step chain analysis
-  - Community prompt sharing
-  - Effectiveness telemetry
+  1. app/lib/llm.py — Add LLMErrorType enum and extend LLMResponse:
+     - error_type: LLMErrorType (classified from HTTP status + body)
+     - retryable: bool (derived from error_type)
+     - Each provider client classifies errors in its response handling
+
+  2. app/engine/chains.py — detect_llm_chains returns error context:
+     - Change return type from list[dict] to a result object:
+       ChainAnalysisResult(chains=[], llm_status="failed",
+       llm_error=LLMResponse, attempts=1)
+     - run_chain_analysis populates state.chain_llm_analysis from this
+     - Auto-retry logic for retryable errors (max 2 retries, 2s/4s)
+     - Content filter auto-mitigation (one sanitized prompt retry)
+
+  3. app/state.py — Add chain_llm_analysis field:
+     - Dict with: status, error_type, error_message, provider, model,
+       retryable, attempts, timestamp, sanitized_prompt_used,
+       token_usage
+
+  4. app/routes/chains.py — Include llm_analysis in /api/chains response:
+     - Add llm_analysis dict from state.chain_llm_analysis
+     - Set top-level status to "partial" when rule chains exist but
+       LLM failed
+
+  Frontend changes:
+
+  5. static/findings.html — Add error detail section:
+     - New collapsible <div id="chain-error-detail"> below status badge
+     - CSS classes: status-partial, status-failed, status-rejected,
+       status-retrying
+     - Retry button (calls POST /api/chains/retry)
+
+  6. JavaScript (findings.html:645-711) — Update status rendering:
+     - Read llm_analysis from API response
+     - Render error detail panel when llm_analysis.status != "success"
+     - Show/hide retry button based on retryable flag
+
+  CLI changes:
+
+  7. Chain analysis summary line includes error context:
+     - "5 chains (5 rule, 0 LLM) [LLM: content filter rejection]"
+
+  New API endpoint:
+
+  8. POST /api/chains/retry — Re-run LLM chain analysis only:
+     - Uses existing findings from state (no re-scan)
+     - Returns updated chain results with new llm_analysis
+     - Useful for retry after transient failures or prompt changes
+
+
+Phase 2: Simple Prompt Override
+---------------------------------
+Goal: Let users customize chain analysis prompts via CLI and prefs.
+Complexity: Medium. Requires prompt template system and test mode.
+
+  1. Split the monolithic prompt in chains.py into three templates:
+     - DEFAULT_CHAIN_INSTRUCTIONS (the role/approach text)
+     - DEFAULT_CHAIN_DATA_FORMAT (finding formatting pattern)
+     - DEFAULT_CHAIN_RESPONSE_FORMAT (JSON schema + quality filter)
+     Store defaults as module-level constants in chains.py.
+
+  2. detect_llm_chains reads custom prompts from preferences:
+     - prefs.get("llm.chain_instructions") or DEFAULT_CHAIN_INSTRUCTIONS
+     - Provider-specific: prefs.get(f"llm.chain_instructions.{provider}")
+     - Resolve variables via str.format_map()
+
+  3. CLI commands:
+     - chainsmith prefs set llm.chain_instructions "..."
+     - chainsmith prefs get llm.chain_instructions
+     - chainsmith prefs reset llm.chain_instructions
+     - chainsmith chains analyze --dry-run (test mode)
+
+  4. POST /api/chains/test endpoint:
+     - Accepts custom instructions + response format
+     - Runs against last scan's findings
+     - Returns results without updating state
+     - Includes token usage and cost estimate
+
+  5. Prompt validation on save:
+     - Length limits (4000 chars instructions, 2000 response format)
+     - Must contain {findings} reference
+     - No API key patterns
+
+  6. Per-scan override:
+     - chainsmith scan --chain-instructions "..." or --chain-prompt-file
+     - Overrides persistent prefs for that scan only
+
+
+Phase 3: UI-Integrated Prompt Editing
+----------------------------------------
+Goal: Visual prompt editor accessible from the chain analysis panel.
+Complexity: Medium-high. New UI component with live preview.
+
+  1. Drawer/modal component in findings.html:
+     - Triggered by "Edit Prompt" button in chain analysis panel header
+     - Also linked from error detail panel
+     - Tabs: Instructions / Response Format / Preview
+
+  2. Instructions tab:
+     - Textarea with current prompt (custom or default)
+     - Variable reference sidebar ({target}, {finding_count}, etc.)
+     - Inline content filter warnings (highlight risky terms)
+     - Character count with limit indicator
+
+  3. Response Format tab:
+     - Textarea with current response format template
+     - JSON syntax highlighting (CodeMirror or similar)
+
+  4. Preview tab:
+     - Read-only view of assembled prompt with variables resolved
+     - Token count estimate (updates on tab switch)
+     - "Test" button → calls /api/chains/test → shows results inline
+
+  5. Actions:
+     - "Save" — saves to prefs (persistent)
+     - "Use for this scan" — applies without saving to prefs
+     - "Reset to Default" — restores hardcoded defaults
+     - Token count + cost estimate displayed
+
+  6. Prompt version history:
+     - Each save stores timestamped snapshot in prefs
+     - "History" section shows last 20 versions with timestamps
+     - Click to view, "Revert" button to restore
+     - Diff view between versions (text diff)
+
+  7. Side-by-side comparison:
+     - "Compare with default" button
+     - Shows default prompt results alongside custom prompt results
+     - Highlight differences in chain output
+
+
+Phase 4: Advanced Prompt Management
+--------------------------------------
+Goal: Power features for teams and advanced users.
+Complexity: High. Multiple new systems.
+
+  1. Prompt library:
+     - Multiple named prompt templates stored in prefs
+     - Quick-switch between templates in the UI
+     - Import/export as YAML files
+
+  2. Profile-linked prompts:
+     - Profiles can specify a prompt template name
+     - "pentest" profile → aggressive analysis prompt
+     - "compliance" profile → compliance-focused prompt
+     - Fallback to default if profile doesn't specify
+
+  3. Multi-step chain analysis:
+     - Configurable analysis pipeline (list of prompt steps)
+     - Step 1 output feeds Step 2 input
+     - Per-step error handling and partial results
+     - Cost estimate shows total across all steps
+
+  4. Community prompt sharing:
+     - Export: chainsmith prompts export <name> > file.yaml
+     - Import: chainsmith prompts import file.yaml
+     - Optional: GitHub-hosted community prompt repository
+
+  5. Effectiveness telemetry:
+     - Track metrics per analysis run (local storage)
+     - Dashboard in prompt editor showing performance trends
+     - A/B comparison between prompt templates

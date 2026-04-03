@@ -140,6 +140,9 @@ class ChainsmithClient:
     def start_chain_analysis(self) -> dict:
         return self._request("POST", "/api/chains/analyze")
 
+    def retry_chain_analysis(self) -> dict:
+        return self._request("POST", "/api/chains/retry")
+
     def get_chains(self) -> dict:
         return self._request("GET", "/api/chains")
 

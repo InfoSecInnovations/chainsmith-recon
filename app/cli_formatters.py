@@ -329,6 +329,39 @@ def print_preferences_dict(d: dict, indent: int = 2):
             click.echo(f"{prefix}  {values}")
 
 
+def format_chain_summary(chains_data: dict, no_color: bool = False) -> str:
+    """
+    Format chain analysis summary for CLI output, including LLM error context.
+
+    Example outputs:
+        "5 chains (3 rule, 2 LLM, 0 both)"
+        "3 chains (3 rule, 0 LLM, 0 both) [LLM: content filter rejection]"
+        "0 chains [LLM failed: rate limit after 3 attempts]"
+    """
+    chains = chains_data.get("chains", [])
+    rule_count = chains_data.get("rule_based_count", 0)
+    llm_count = chains_data.get("llm_count", 0)
+    both_count = len([c for c in chains if c.get("source") == "both"])
+
+    base = f"{len(chains)} chains ({rule_count} rule, {llm_count} LLM, {both_count} both)"
+
+    llm_analysis = chains_data.get("llm_analysis")
+    if not llm_analysis or llm_analysis.get("status") in ("success", "not_configured", None):
+        return base
+
+    error_type = (llm_analysis.get("error_type", "unknown") or "unknown").replace("_", " ")
+    attempts = llm_analysis.get("attempts", 1)
+
+    if llm_analysis.get("auto_mitigated"):
+        suffix = f"[LLM: {error_type} — retried with sanitized prompt, succeeded]"
+    elif len(chains) > 0:
+        suffix = f"[LLM: {error_type}]"
+    else:
+        suffix = f"[LLM failed: {error_type} after {attempts} attempt(s)]"
+
+    return f"{base} {suffix}"
+
+
 def output_findings(findings: list[dict], target: str, fmt: str,
                     output: Optional[str], verbose: bool, quiet: bool,
                     no_color: bool = False):

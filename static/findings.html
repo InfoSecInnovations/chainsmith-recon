@@ -216,6 +216,27 @@
                             <span><span class="chain-legend-dot" style="background: var(--success);"></span>LLM</span>
                             <span><span class="chain-legend-dot" style="background: var(--warning);"></span>Both</span>
                         </div>
+                        <div id="chain-error-detail" style="display: none; margin-top: 8px; padding: 10px 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 6px; font-size: 0.8125rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span style="font-weight: 600; color: var(--text-primary);" id="chain-error-title">LLM Analysis Error</span>
+                                <button class="btn btn-small" id="btn-chain-error-toggle" style="font-size: 0.75rem; padding: 2px 8px;">Details</button>
+                            </div>
+                            <div id="chain-error-summary" style="color: var(--text-secondary);"></div>
+                            <div id="chain-error-details" style="display: none; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px;">
+                                <table style="width: 100%; font-size: 0.75rem; color: var(--text-secondary);">
+                                    <tr><td style="padding: 2px 8px 2px 0; white-space: nowrap;">Error type:</td><td id="chain-error-type"></td></tr>
+                                    <tr><td style="padding: 2px 8px 2px 0; white-space: nowrap;">Provider:</td><td id="chain-error-provider"></td></tr>
+                                    <tr><td style="padding: 2px 8px 2px 0; white-space: nowrap;">Model:</td><td id="chain-error-model"></td></tr>
+                                    <tr><td style="padding: 2px 8px 2px 0; white-space: nowrap;">Attempts:</td><td id="chain-error-attempts"></td></tr>
+                                    <tr><td style="padding: 2px 8px 2px 0; white-space: nowrap;">Message:</td><td id="chain-error-message" style="word-break: break-word;"></td></tr>
+                                    <tr id="chain-error-sanitized-row" style="display: none;"><td style="padding: 2px 8px 2px 0;">Note:</td><td>Sanitized prompt was used</td></tr>
+                                </table>
+                            </div>
+                            <div style="margin-top: 8px; display: flex; gap: 8px;">
+                                <button class="btn btn-primary btn-small" id="btn-retry-chains" style="display: none;">Retry</button>
+                                <span id="chain-rule-only-note" style="display: none; color: var(--warning); font-size: 0.75rem; align-self: center;">Showing rule-based chains only</span>
+                            </div>
+                        </div>
                     </div>
                     <div class="chains-content" id="chains-content">
                         <div class="empty-state" id="chains-empty">
@@ -553,6 +574,25 @@
                 document.getElementById('btn-chain-list').classList.remove('active');
                 renderChains();
             });
+
+            document.getElementById('btn-retry-chains').addEventListener('click', async () => {
+                await api.retryChains();
+                updateChainStatus('analyzing');
+                document.getElementById('chain-error-detail').style.display = 'none';
+                startChainPolling();
+            });
+
+            document.getElementById('btn-chain-error-toggle').addEventListener('click', () => {
+                var details = document.getElementById('chain-error-details');
+                var btn = document.getElementById('btn-chain-error-toggle');
+                if (details.style.display === 'none') {
+                    details.style.display = 'block';
+                    btn.textContent = 'Hide';
+                } else {
+                    details.style.display = 'none';
+                    btn.textContent = 'Details';
+                }
+            });
         }
 
         async function loadData() {
@@ -644,10 +684,59 @@
         }
 
         // ─── Chains ────────────────────────────────────────────
+        var lastLlmAnalysis = null;
+
         function updateChainStatus(status) {
             const badge = document.getElementById('chain-status-badge');
+            // Map status to display label
+            const labels = {
+                idle: 'Idle', analyzing: 'Analyzing', complete: 'Complete',
+                error: 'Error', partial: 'Partial', failed: 'Failed',
+                rejected: 'Rejected', retrying: 'Retrying...'
+            };
             badge.className = 'status-badge status-' + status;
-            badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            badge.textContent = labels[status] || status.charAt(0).toUpperCase() + status.slice(1);
+        }
+
+        function updateChainErrorDetail(llmAnalysis, chainStatus) {
+            var panel = document.getElementById('chain-error-detail');
+            var retryBtn = document.getElementById('btn-retry-chains');
+            var ruleNote = document.getElementById('chain-rule-only-note');
+
+            if (!llmAnalysis || llmAnalysis.status === 'success' || llmAnalysis.status === 'not_configured') {
+                panel.style.display = 'none';
+                return;
+            }
+
+            panel.style.display = 'block';
+
+            // Summary line
+            var summary = document.getElementById('chain-error-summary');
+            var typeLabel = (llmAnalysis.error_type || 'unknown').replace(/_/g, ' ');
+            if (llmAnalysis.auto_mitigated) {
+                summary.innerHTML = '<span style="color: var(--success);">LLM analysis succeeded with sanitized prompt</span>';
+                panel.style.display = 'none'; // auto-mitigated success — no error to show
+                return;
+            } else {
+                summary.textContent = 'LLM analysis failed: ' + typeLabel;
+            }
+
+            // Detail fields
+            document.getElementById('chain-error-type').textContent = typeLabel;
+            document.getElementById('chain-error-provider').textContent = llmAnalysis.provider || '-';
+            document.getElementById('chain-error-model').textContent = llmAnalysis.model || '-';
+            document.getElementById('chain-error-attempts').textContent = llmAnalysis.attempts || '-';
+            document.getElementById('chain-error-message').textContent = llmAnalysis.error_message || '-';
+
+            // Sanitized prompt note
+            var sanitizedRow = document.getElementById('chain-error-sanitized-row');
+            sanitizedRow.style.display = llmAnalysis.sanitized_prompt_used ? '' : 'none';
+
+            // Retry button
+            retryBtn.style.display = llmAnalysis.retryable ? '' : 'none';
+
+            // Rule-only note
+            ruleNote.style.display = (chainStatus === 'partial') ? '' : 'none';
         }
 
         function startChainPolling() {
@@ -660,10 +749,13 @@
             try {
                 const data = await api.getChains();
                 chains = data.chains || [];
+                lastLlmAnalysis = data.llm_analysis || null;
                 updateChainStatus(data.status);
+                updateChainErrorDetail(lastLlmAnalysis, data.status);
                 renderChains();
 
-                if (data.status === 'complete' || data.status === 'error') {
+                var doneStates = ['complete', 'error', 'partial'];
+                if (doneStates.indexOf(data.status) !== -1) {
                     clearInterval(chainPollInterval);
                     chainPollInterval = null;
                 }

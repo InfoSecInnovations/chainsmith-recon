@@ -49,8 +49,9 @@ class AppState:
         
         # Chain analysis
         self.chains: list[dict] = []
-        self.chain_status: str = "idle"  # idle, analyzing, complete, error
+        self.chain_status: str = "idle"  # idle, analyzing, complete, partial, error
         self.chain_error: Optional[str] = None
+        self.chain_llm_analysis: Optional[dict] = None  # structured LLM analysis detail
         
         # Settings
         self.settings = {

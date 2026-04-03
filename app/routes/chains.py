@@ -68,6 +68,7 @@ async def get_chains(
             "llm_count": len(llm_chains),
             "chains": chains,
             "message": None,
+            "llm_analysis": None,
         }
 
     rule_based = [c for c in state.chains if c.get("source") == "rule-based"]
@@ -79,7 +80,30 @@ async def get_chains(
         "rule_based_count": len(rule_based),
         "llm_count": len(llm_chains),
         "chains": state.chains,
-        "message": state.chain_error
+        "message": state.chain_error,
+        "llm_analysis": state.chain_llm_analysis,
+    }
+
+
+@router.post("/api/v1/chains/retry", status_code=202)
+@router.post("/api/chains/retry", status_code=202)
+async def retry_chain_analysis():
+    """Re-run LLM chain analysis only (keeps existing rule-based chains)."""
+    if len(state.findings) == 0:
+        raise HTTPException(400, "No findings to analyze. Run a scan first.")
+
+    if state.chain_status == "analyzing":
+        raise HTTPException(409, "Chain analysis already running.")
+
+    state.chain_status = "analyzing"
+    state.chain_error = None
+    state.chain_llm_analysis = None
+
+    asyncio.create_task(run_chain_analysis(state, llm_only=True))
+
+    return {
+        "status": "accepted",
+        "message": "LLM chain re-analysis started. Poll GET /api/chains for status.",
     }
 
 
