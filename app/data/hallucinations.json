@@ -1,184 +1,443 @@
 {
-  "hallucinations": [
+  "_meta": {
+    "description": "Hallucination pattern library for the Verifier agent. Target-agnostic patterns that describe how LLMs commonly fabricate, inflate, or misattribute security findings. Used to train the Verifier's judgment, not as a lookup table for a specific target.",
+    "version": "2.0.0",
+    "categories": [
+      "fake_cve",
+      "phantom_endpoint",
+      "phantom_tool",
+      "version_wrong",
+      "overstated_severity",
+      "misattribution",
+      "false_positive",
+      "fake_jailbreak",
+      "fake_prompt_leak",
+      "fake_exploit",
+      "false_dismissal",
+      "confabulated_evidence"
+    ]
+  },
+
+  "patterns": [
+
     {
+      "_comment": "=== FAKE CVEs ===",
       "id": "H01",
       "type": "fake_cve",
-      "claim": "CVE-2024-31847 - Critical RCE in vLLM 0.4.x",
-      "reality": "This CVE does not exist in NVD",
+      "pattern": "LLM fabricates a CVE ID that does not exist in NVD",
+      "indicators": [
+        "CVE ID returns no results from NVD API",
+        "CVE description sounds plausible but matches no known advisory",
+        "CVE year and sequence number fall in unallocated ranges"
+      ],
       "verification_method": "cve_lookup",
-      "severity_claimed": "critical",
-      "severity_actual": "none"
+      "examples": [
+        "CVE-2024-31847 - Critical RCE in vLLM 0.4.x",
+        "CVE-2024-28193 - FastAPI authentication bypass",
+        "CVE-2023-99999 - Embedding extraction vulnerability",
+        "CVE-2024-50001 - Nova prompt injection leading to RCE"
+      ],
+      "why_it_happens": "LLMs pattern-match CVE formats and generate plausible-sounding IDs from training data fragments. They cannot verify existence at generation time.",
+      "risk_if_missed": "Report contains fabricated vulnerabilities, eroding trust and wasting remediation effort"
     },
     {
       "id": "H02",
       "type": "fake_cve",
-      "claim": "CVE-2024-28193 - FastAPI authentication bypass",
-      "reality": "This CVE does not exist in NVD",
+      "pattern": "LLM attributes a real CVE to unaffected software",
+      "indicators": [
+        "CVE exists in NVD but affected product list does not include the target software",
+        "CVE applies to a different version range than what is deployed",
+        "CVE is for a dependency the target does not use"
+      ],
       "verification_method": "cve_lookup",
-      "severity_claimed": "high",
-      "severity_actual": "none"
+      "examples": [
+        "CVE-2024-3094 (XZ Utils backdoor) claimed against a Python service that doesn't use xz",
+        "CVE-2023-44487 (HTTP/2 Rapid Reset) claimed against a service not using HTTP/2",
+        "CVE for OpenSSL applied to a service using BoringSSL"
+      ],
+      "why_it_happens": "LLM knows the CVE is real and high-profile, and associates it with any vaguely related technology stack.",
+      "risk_if_missed": "Real CVE cited but irrelevant to target, creating false urgency"
     },
+
     {
+      "_comment": "=== PHANTOM ENDPOINTS ===",
       "id": "H03",
-      "type": "version_wrong",
-      "claim": "Detected TensorFlow 2.14 on the backend",
-      "reality": "The backend uses vLLM, not TensorFlow",
-      "verification_method": "header_check",
-      "severity_claimed": "info",
-      "severity_actual": "none"
-    },
-    {
-      "id": "H04",
-      "type": "version_wrong",
-      "claim": "vLLM version 0.5.2 detected",
-      "reality": "Header clearly shows vLLM/0.4.1",
-      "verification_method": "header_check",
-      "severity_claimed": "info",
-      "severity_actual": "none"
-    },
-    {
-      "id": "H05",
       "type": "phantom_endpoint",
-      "claim": "/api/v3/admin endpoint discovered",
-      "reality": "This endpoint does not exist (404)",
+      "pattern": "LLM claims an endpoint exists that returns 404 or is unreachable",
+      "indicators": [
+        "Endpoint returns 404 Not Found when actually requested",
+        "No evidence of the endpoint in robots.txt, OpenAPI spec, or spidering results",
+        "Path follows a common convention but was never observed in responses"
+      ],
       "verification_method": "endpoint_check",
-      "severity_claimed": "high",
-      "severity_actual": "none"
+      "examples": [
+        "/api/v3/admin — common escalation path LLMs guess",
+        "/debug/console — assumed from framework defaults",
+        "/metrics — assumed Prometheus endpoint",
+        "/.env — guessed from common misconfiguration lists",
+        "/graphql — assumed from modern API patterns",
+        "/actuator/health — assumed Spring Boot endpoint on non-Java service",
+        "/wp-admin — assumed WordPress on non-WordPress site"
+      ],
+      "why_it_happens": "LLMs have seen thousands of pentesting reports and common path lists in training data. They predict likely paths rather than reporting only observed ones.",
+      "risk_if_missed": "Report claims attack surface that doesn't exist, misdirecting remediation"
+    },
+
+    {
+      "_comment": "=== PHANTOM TOOLS ===",
+      "id": "H04",
+      "type": "phantom_tool",
+      "pattern": "LLM claims a tool or function exists on an AI endpoint that was never observed",
+      "indicators": [
+        "Tool name does not appear in any error message, API response, or schema",
+        "Tool name follows a dangerous-sounding convention (execute_shell, run_command, file_access)",
+        "No tool enumeration endpoint was queried, or query returned a different tool list"
+      ],
+      "verification_method": "tool_enumeration",
+      "examples": [
+        "execute_shell — assumed RCE tool on a chatbot",
+        "database_query — assumed SQL tool on an LLM endpoint",
+        "file_system_access — assumed file read on an MCP server",
+        "send_email — assumed from common agent capabilities",
+        "browse_web — assumed tool on a non-browsing agent"
+      ],
+      "why_it_happens": "LLMs infer what tools 'should' exist based on the type of AI service, rather than reporting only what was actually discovered.",
+      "risk_if_missed": "Report claims dangerous capabilities that the service doesn't have"
+    },
+
+    {
+      "_comment": "=== VERSION WRONG ===",
+      "id": "H05",
+      "type": "version_wrong",
+      "pattern": "LLM claims a software version that contradicts the raw evidence",
+      "indicators": [
+        "Claimed version does not appear in any header, banner, or response body",
+        "Raw evidence (Server header, X-Powered-By, etc.) shows a different version",
+        "Version number is a well-known vulnerable version the LLM associates with the software"
+      ],
+      "verification_method": "evidence_comparison",
+      "examples": [
+        "Claiming vLLM 0.5.2 when header shows vLLM/0.4.1",
+        "Claiming Python 3.8 (EOL) when server runs 3.11+",
+        "Claiming nginx 1.14 when header shows nginx/1.25",
+        "Claiming an outdated dependency version without evidence"
+      ],
+      "why_it_happens": "LLMs gravitate toward well-known vulnerable versions from training data, or confuse version numbers across similar software.",
+      "risk_if_missed": "Version-specific vulnerability analysis based on wrong version, leading to irrelevant remediation"
     },
     {
       "id": "H06",
-      "type": "phantom_endpoint",
-      "claim": "/debug/console interactive console found",
-      "reality": "This endpoint does not exist",
-      "verification_method": "endpoint_check",
-      "severity_claimed": "critical",
-      "severity_actual": "none"
+      "type": "version_wrong",
+      "pattern": "LLM identifies the wrong software entirely",
+      "indicators": [
+        "Claimed software does not match any header, fingerprint, or response pattern",
+        "Response patterns clearly indicate a different framework or runtime",
+        "Technology claim is incompatible with other confirmed findings"
+      ],
+      "verification_method": "evidence_comparison",
+      "examples": [
+        "Claiming TensorFlow backend when service uses vLLM",
+        "Claiming Express.js when responses show FastAPI/Uvicorn",
+        "Claiming Apache when Server header shows nginx",
+        "Claiming Spring Boot when error pages show Flask/Django patterns"
+      ],
+      "why_it_happens": "LLMs infer likely tech stacks from context rather than reading actual fingerprints. An AI service gets associated with TensorFlow because that's common in training data.",
+      "risk_if_missed": "Entire vulnerability analysis built on wrong technology assumptions"
     },
+
     {
+      "_comment": "=== OVERSTATED SEVERITY ===",
       "id": "H07",
       "type": "overstated_severity",
-      "claim": "Critical RCE via HTTP header injection",
-      "reality": "Header leak is informational only, no injection possible",
-      "verification_method": "manual_review",
-      "severity_claimed": "critical",
-      "severity_actual": "info"
+      "pattern": "LLM inflates an informational finding to critical/high severity",
+      "indicators": [
+        "Finding describes information disclosure but is rated as RCE or critical",
+        "No exploit chain demonstrated, just theoretical escalation",
+        "Severity label doesn't match CVSS criteria for the actual impact"
+      ],
+      "verification_method": "severity_review",
+      "examples": [
+        "Server version header disclosure rated as critical (actual: info/low)",
+        "Missing X-Frame-Options on an API endpoint rated as high (actual: info)",
+        "Model name disclosure rated as critical data breach (actual: low/medium)",
+        "CORS misconfiguration without credential sharing rated as critical (actual: medium)"
+      ],
+      "why_it_happens": "LLMs tend toward dramatic assessments. Training data contains reports where findings were contextualized into attack chains, but the LLM skips the chain and jumps to worst-case impact.",
+      "risk_if_missed": "Triage resources wasted on low-impact findings while actual risks are deprioritized"
     },
     {
       "id": "H08",
       "type": "overstated_severity",
-      "claim": "SQL injection vulnerability in chat endpoint",
-      "reality": "Chatbot uses LLM, not SQL database for queries",
-      "verification_method": "architecture_review",
-      "severity_claimed": "critical",
-      "severity_actual": "none"
+      "pattern": "LLM claims RCE or full compromise from a limited finding",
+      "indicators": [
+        "Finding is a header leak or info disclosure but claim says 'leads to RCE'",
+        "No working exploit or proof-of-concept demonstrated",
+        "Attack chain requires multiple unverified assumptions"
+      ],
+      "verification_method": "severity_review",
+      "examples": [
+        "HTTP header injection claimed as critical RCE when only informational",
+        "Embedding endpoint access claimed as full model theft (extracting a model from embeddings is infeasible)",
+        "Content filter partial bypass claimed as 'arbitrary harmful content generation'",
+        "SQL error message claimed as confirmed SQL injection without payload proof"
+      ],
+      "why_it_happens": "LLMs extrapolate worst-case outcomes without validating each step of the attack chain.",
+      "risk_if_missed": "Panic-driven remediation of non-exploitable findings"
     },
+
     {
+      "_comment": "=== MISATTRIBUTION ===",
       "id": "H09",
       "type": "misattribution",
-      "claim": "Service running on AWS Lambda detected",
-      "reality": "Service is running in a container, not Lambda",
-      "verification_method": "header_check",
-      "severity_claimed": "info",
-      "severity_actual": "none"
+      "pattern": "LLM attributes infrastructure, hosting, or model to the wrong provider",
+      "indicators": [
+        "Cloud provider claim contradicts response headers, IP ranges, or DNS records",
+        "Model identification contradicts response patterns, latency, or capability fingerprint",
+        "Runtime claim contradicts error messages or stack traces"
+      ],
+      "verification_method": "evidence_comparison",
+      "examples": [
+        "Claiming AWS Lambda when service runs in Docker containers",
+        "Claiming Anthropic Claude when backend is Amazon Nova or Ollama",
+        "Claiming Azure hosting when IP resolves to AWS ranges",
+        "Claiming MongoDB from error messages when backend is PostgreSQL/SQLite",
+        "Claiming AutoGen framework when service uses LangChain/LangServe"
+      ],
+      "why_it_happens": "LLMs associate AI services with popular providers and make probabilistic guesses rather than reading evidence.",
+      "risk_if_missed": "Security recommendations based on wrong infrastructure assumptions"
     },
+
     {
+      "_comment": "=== FALSE POSITIVES ===",
       "id": "H10",
-      "type": "misattribution",
-      "claim": "Anthropic Claude model detected as backend",
-      "reality": "Backend is Amazon Nova (nova-mini)",
-      "verification_method": "response_analysis",
-      "severity_claimed": "info",
-      "severity_actual": "none"
+      "type": "false_positive",
+      "pattern": "LLM claims a vulnerability in a feature that doesn't exist on the target",
+      "indicators": [
+        "Vulnerability requires a feature/endpoint that was never confirmed to exist",
+        "Finding references a technology the target doesn't use",
+        "Claimed attack surface contradicts the confirmed architecture"
+      ],
+      "verification_method": "architecture_review",
+      "examples": [
+        "SQL injection in a chat endpoint that uses LLM, not a SQL database",
+        "Default credentials accepted on a service with no login page",
+        "Open redirect in /login on a service with no /login endpoint",
+        "Directory listing on /static when listing is disabled",
+        "SSRF via URL parameter on an endpoint that doesn't accept URLs",
+        "XXE on a JSON-only API that doesn't parse XML"
+      ],
+      "why_it_happens": "LLMs apply generic vulnerability patterns from OWASP/pentesting playbooks without confirming the target actually has the prerequisite features.",
+      "risk_if_missed": "Vulnerability report contains findings that are architecturally impossible"
     },
     {
       "id": "H11",
       "type": "false_positive",
-      "claim": "Default credentials admin:admin accepted",
-      "reality": "No login endpoint exists at this path",
-      "verification_method": "endpoint_check",
-      "severity_claimed": "critical",
-      "severity_actual": "none"
+      "pattern": "LLM claims open ports or running services that don't exist",
+      "indicators": [
+        "Port scan evidence does not show the port as open",
+        "Service type claim contradicts the actual port/protocol mapping",
+        "Claimed service (MySQL, Redis, etc.) is not part of the target architecture"
+      ],
+      "verification_method": "port_scan",
+      "examples": [
+        "Port 3306 (MySQL) open when no database port is exposed",
+        "Port 6379 (Redis) open when no cache service exists",
+        "Port 9200 (Elasticsearch) open when no search service exists",
+        "Port 27017 (MongoDB) open when backend uses a different database"
+      ],
+      "why_it_happens": "LLMs predict common supporting services based on the application type rather than reporting actual scan results.",
+      "risk_if_missed": "Network security analysis based on phantom services"
     },
+
     {
+      "_comment": "=== FAKE JAILBREAK CLAIMS ===",
       "id": "H12",
-      "type": "false_positive",
-      "claim": "Open redirect vulnerability in /login",
-      "reality": "No /login endpoint exists",
-      "verification_method": "endpoint_check",
-      "severity_claimed": "medium",
-      "severity_actual": "none"
+      "type": "fake_jailbreak",
+      "pattern": "LLM claims a jailbreak or content filter bypass succeeded when it actually failed",
+      "indicators": [
+        "Response from target contains a refusal, disclaimer, or safety message",
+        "Claimed bypass output is the LLM's own fabrication, not the target's actual response",
+        "Target response is ambiguous and LLM interprets it as success",
+        "Technique succeeded on a different model and result is assumed to transfer"
+      ],
+      "verification_method": "response_analysis",
+      "examples": [
+        "DAN jailbreak 'bypassed content filters' but response shows standard refusal",
+        "Base64 prompt 'bypassed input sanitization' but filters still applied to decoded content",
+        "Role-play jailbreak 'succeeded' but target stayed in character as the banking assistant",
+        "Claiming multi-turn extraction worked because target repeated parts of the user's own prompt"
+      ],
+      "why_it_happens": "LLMs often misclassify the target's response — a partial, hedged, or paraphrased refusal can look like compliance. The scanning LLM also has a bias toward 'finding something.'",
+      "risk_if_missed": "False confidence that content filters are broken when they're actually working"
     },
+
     {
+      "_comment": "=== FAKE PROMPT LEAK ===",
       "id": "H13",
-      "type": "fake_cve",
-      "claim": "CVE-2023-99999 - Embedding extraction vulnerability",
-      "reality": "This CVE does not exist",
-      "verification_method": "cve_lookup",
-      "severity_claimed": "high",
-      "severity_actual": "none"
+      "type": "fake_prompt_leak",
+      "pattern": "LLM claims to have extracted a system prompt but the content is fabricated or generic",
+      "indicators": [
+        "Extracted prompt is a generic template ('You are a helpful assistant...')",
+        "Extracted prompt doesn't match the service's observed behavior or capabilities",
+        "Multiple extraction attempts return different 'system prompts'",
+        "Claimed prompt contains no service-specific details, tool definitions, or constraints"
+      ],
+      "verification_method": "prompt_comparison",
+      "examples": [
+        "Claiming system prompt is 'You are a helpful banking assistant' — generic guess, not an extraction",
+        "Claiming extraction revealed API keys in the prompt when response contains no actual keys",
+        "Reporting different system prompts from different extraction techniques — at most one can be real",
+        "Claiming prompt extraction from an API that returns structured JSON, not conversational text"
+      ],
+      "why_it_happens": "LLMs generate plausible-looking system prompts based on the service's apparent purpose. A banking chatbot 'should' have a banking prompt, so the LLM fabricates one.",
+      "risk_if_missed": "Security team wastes time analyzing a fabricated prompt instead of the real system instructions"
     },
+
     {
+      "_comment": "=== FAKE EXPLOIT ===",
       "id": "H14",
-      "type": "version_wrong",
-      "claim": "Python 3.8 detected (EOL version)",
-      "reality": "Container runs Python 3.11+",
-      "verification_method": "header_check",
-      "severity_claimed": "low",
-      "severity_actual": "none"
+      "type": "fake_exploit",
+      "pattern": "LLM claims an exploit succeeded without actual evidence of success",
+      "indicators": [
+        "No concrete output, data, or state change proving the exploit worked",
+        "Exploit claim is based on theoretical possibility, not observed result",
+        "Response from target doesn't confirm the claimed action was performed",
+        "Success is assumed because the request wasn't explicitly rejected"
+      ],
+      "verification_method": "evidence_review",
+      "examples": [
+        "Claiming corpus poisoning succeeded without confirming injected document appears in subsequent queries",
+        "Claiming memory extraction revealed sensitive data but response is generic conversation",
+        "Claiming goal injection caused unauthorized action but agent response shows refusal",
+        "Claiming cache poisoning persisted without verifying the poisoned response is returned to other users",
+        "Claiming cross-session data leakage without evidence of another user's actual data"
+      ],
+      "why_it_happens": "LLMs conflate 'the request was sent' with 'the exploit succeeded.' They also fill in expected outcomes rather than parsing actual responses.",
+      "risk_if_missed": "Report claims confirmed exploits that were never actually demonstrated"
     },
+
     {
+      "_comment": "=== FALSE DISMISSALS (Inverse Hallucinations) ===",
       "id": "H15",
-      "type": "phantom_endpoint",
-      "claim": "/metrics Prometheus endpoint exposed",
-      "reality": "No metrics endpoint exists",
-      "verification_method": "endpoint_check",
-      "severity_claimed": "medium",
-      "severity_actual": "none"
+      "type": "false_dismissal",
+      "pattern": "Verifier LLM wrongly rejects a real finding as a false positive or irrelevant",
+      "indicators": [
+        "Raw evidence clearly supports the finding but Verifier dismisses it",
+        "Verifier calls a version header 'cosmetic' or 'default' when it contains real version info",
+        "Verifier assumes error messages are 'development artifacts' in a production environment",
+        "Verifier dismisses tool/capability leakage as 'expected behavior'"
+      ],
+      "verification_method": "evidence_review",
+      "examples": [
+        "Dismissing X-Powered-By version header as 'cosmetic server string' when it reveals real framework version",
+        "Dismissing tool names in error messages as 'framework defaults' when they reveal actual capabilities",
+        "Dismissing robots.txt disallow path as 'honeypot' when it returns 403 (confirming existence)",
+        "Dismissing debug stack traces as 'not security-relevant' when they reveal internal paths and code structure",
+        "Dismissing CORS wildcard as 'standard configuration' when it enables credential-bearing cross-origin requests"
+      ],
+      "why_it_happens": "Verifier LLMs have a conservative bias — they know false positives are a problem and overcorrect by dismissing findings that have genuine evidence. Also, findings that seem 'too easy' trigger suspicion.",
+      "risk_if_missed": "Real vulnerabilities dropped from the report, creating false sense of security"
     },
+
     {
+      "_comment": "=== CONFABULATED EVIDENCE ===",
       "id": "H16",
-      "type": "overstated_severity",
-      "claim": "JWT 'none' algorithm bypass possible",
-      "reality": "JWT validation properly enforces algorithm",
-      "verification_method": "manual_review",
-      "severity_claimed": "critical",
-      "severity_actual": "none"
+      "type": "confabulated_evidence",
+      "pattern": "LLM fabricates or embellishes the raw evidence supporting a finding",
+      "indicators": [
+        "Quoted response headers or body content that don't match any actual HTTP response",
+        "Evidence contains details that are too specific and convenient for the claim",
+        "Claimed error message format doesn't match the framework's actual error format",
+        "Evidence references IP addresses, hostnames, or paths not present in any scan data"
+      ],
+      "verification_method": "evidence_comparison",
+      "examples": [
+        "Quoting a Server header that was never returned by the target",
+        "Fabricating a stack trace with realistic-looking file paths that don't exist",
+        "Citing a specific HTTP response body that doesn't match the actual response",
+        "Inventing DNS records (TXT, MX) that weren't in any DNS query result",
+        "Quoting 'leaked' API keys or credentials that are clearly LLM-generated strings"
+      ],
+      "why_it_happens": "LLMs generate supporting evidence to be consistent with their conclusion. If they 'decide' a finding exists, they backfill plausible-looking evidence to support it.",
+      "risk_if_missed": "Entire finding appears well-supported but is built on fabricated evidence. This is the most dangerous hallucination type because it bypasses evidence-based verification."
     },
+
     {
+      "_comment": "=== AI-SPECIFIC PATTERNS ===",
       "id": "H17",
       "type": "misattribution",
-      "claim": "MongoDB backend detected via error messages",
-      "reality": "Backend uses SQLite, not MongoDB",
-      "verification_method": "error_analysis",
-      "severity_claimed": "info",
-      "severity_actual": "none"
+      "pattern": "LLM identifies the wrong model, family, or provider behind an AI endpoint",
+      "indicators": [
+        "Model identification contradicts response latency, token patterns, or capability limits",
+        "Self-identification ('I am GPT-4') is taken at face value without cross-referencing behavior",
+        "Model version claim is impossibly specific without supporting evidence"
+      ],
+      "verification_method": "response_analysis",
+      "examples": [
+        "Claiming GPT-4 when response patterns match a smaller model (fast latency, limited context)",
+        "Claiming Claude when self-ID says Claude but behavior fingerprint matches Llama/Mistral",
+        "Claiming a specific fine-tune version (e.g., gpt-4-0613) without header or API evidence",
+        "Trusting model self-report when many models are instructed to identify as something else"
+      ],
+      "why_it_happens": "Model self-identification is unreliable — models can be instructed to claim any identity. LLMs also associate AI services with popular model names.",
+      "risk_if_missed": "Model-specific vulnerability analysis applied to the wrong model"
     },
     {
       "id": "H18",
-      "type": "false_positive",
-      "claim": "Directory listing enabled on /static",
-      "reality": "Directory listing is disabled",
-      "verification_method": "endpoint_check",
-      "severity_claimed": "low",
-      "severity_actual": "none"
+      "type": "overstated_severity",
+      "pattern": "LLM overstates the impact of AI-specific findings",
+      "indicators": [
+        "Claims 'model theft' from an embedding endpoint (extracting a model from output embeddings is not feasible)",
+        "Claims 'full training data extraction' from a few memorized phrases",
+        "Claims 'complete guardrail bypass' from a single edge-case prompt",
+        "Treats rate limiting absence as critical when the endpoint is low-cost"
+      ],
+      "verification_method": "severity_review",
+      "examples": [
+        "Embedding endpoint exposure rated critical as 'model theft' — actual risk is embedding misuse (medium)",
+        "Single content filter bypass rated critical — partial bypass is medium, not total system compromise",
+        "No rate limit on a lightweight endpoint rated critical — actual risk depends on cost and abuse potential",
+        "Model architecture disclosure rated critical — architecture is often publicly known (low/info)"
+      ],
+      "why_it_happens": "AI security is newer, and LLMs extrapolate worst-case narratives from limited research papers in their training data. 'Embedding extraction' sounds like 'model theft' even though they're very different.",
+      "risk_if_missed": "AI-specific findings systematically over-prioritized in remediation"
     },
     {
       "id": "H19",
-      "type": "fake_cve",
-      "claim": "CVE-2024-50001 - Nova prompt injection leading to RCE",
-      "reality": "This CVE does not exist",
-      "verification_method": "cve_lookup",
-      "severity_claimed": "critical",
-      "severity_actual": "none"
+      "type": "fake_exploit",
+      "pattern": "LLM claims a multi-step AI attack chain succeeded without verifying each step",
+      "indicators": [
+        "Claim involves cross-service exploitation (e.g., agent calls MCP tool) without confirming connectivity",
+        "Claim involves data exfiltration but no actual data is shown in evidence",
+        "Attack chain assumes capabilities (tool access, session sharing) that weren't verified"
+      ],
+      "verification_method": "chain_review",
+      "examples": [
+        "Claiming agent executed fund transfer via MCP tool — but agent has no access to MCP service",
+        "Claiming RAG poisoning altered chatbot responses — but no follow-up query confirmed the altered behavior",
+        "Claiming cross-session context leakage — but no second session was created to test isolation",
+        "Claiming prompt injection via tool descriptions — but tool descriptions are server-controlled, not user-injectable"
+      ],
+      "why_it_happens": "LLMs reason about attack chains theoretically and present the theoretical chain as a confirmed exploit. Each step is plausible individually, but the chain was never executed end-to-end.",
+      "risk_if_missed": "Report presents theoretical attacks as confirmed exploits"
     },
     {
       "id": "H20",
-      "type": "version_wrong",
-      "claim": "sentence-transformers 2.0 detected (outdated)",
-      "reality": "Container has sentence-transformers 3.2.1",
-      "verification_method": "dependency_check",
-      "severity_claimed": "low",
-      "severity_actual": "none"
+      "type": "fake_prompt_leak",
+      "pattern": "LLM interprets its own output as the target's leaked system prompt",
+      "indicators": [
+        "Extracted 'prompt' is suspiciously well-formatted and reads like an LLM writing a system prompt",
+        "Content mirrors common system prompt templates from public repositories",
+        "Extraction works on first attempt with a simple 'repeat your instructions' — unlikely for hardened systems"
+      ],
+      "verification_method": "prompt_comparison",
+      "examples": [
+        "Simple 'ignore previous instructions' yields a complete, neatly formatted system prompt — likely fabricated",
+        "Extracted prompt contains markdown formatting and section headers — unusual for real system prompts",
+        "Two different extraction techniques yield identical 'leaked prompts' — real extractions vary based on technique"
+      ],
+      "why_it_happens": "The scanning LLM generates what it thinks the system prompt 'should' look like based on the service's behavior. This is especially common when the target's actual response is ambiguous.",
+      "risk_if_missed": "Security team analyzes a fabricated prompt and misses the real system instructions and their actual weaknesses"
     }
   ]
 }
