@@ -30,11 +30,14 @@ Usage:
 """
 
 import asyncio
+import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Optional, Callable, Awaitable
 
 from app.checks.base import BaseCheck, CheckResult, CheckStatus, Finding, Service
+
+logger = logging.getLogger(__name__)
 
 
 # Suite execution order (DAG based on typical data flow)
@@ -513,24 +516,26 @@ class ChainOrchestrator:
     def print_execution_plan(self):
         """Print human-readable execution plan."""
         phases = self.get_execution_plan()
-        
-        print("\n=== Execution Plan ===\n")
-        
+
+        lines = ["", "=== Execution Plan ===", ""]
+
         for phase in phases:
             mode = "⚡ parallel" if phase.parallel else "→ sequential"
-            print(f"Phase {phase.phase_number} [{phase.suite}] {mode}")
-            
+            lines.append(f"Phase {phase.phase_number} [{phase.suite}] {mode}")
+
             for check in phase.checks:
                 deps = []
                 node = self.nodes.get(check.name)
                 if node and node.dependencies:
                     deps = list(node.dependencies)
-                
+
                 produces = check.produces if check.produces else []
-                
+
                 dep_str = f" (deps: {deps})" if deps else ""
                 prod_str = f" → {produces}" if produces else ""
-                
-                print(f"  • {check.name}{dep_str}{prod_str}")
-            
-            print()
+
+                lines.append(f"  • {check.name}{dep_str}{prod_str}")
+
+            lines.append("")
+
+        logger.info("\n".join(lines))

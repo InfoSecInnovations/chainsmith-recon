@@ -362,6 +362,7 @@
         <a href="index.html" class="nav-item" id="nav-scope">Scope</a>
         <a href="scan.html" class="nav-item" id="nav-scan">Scan</a>
         <a href="findings.html" class="nav-item" id="nav-results">Results</a>
+        <a href="engagements.html" class="nav-item">Engagements</a>
         <a href="trend.html" class="nav-item active">Trends</a>
         <a href="reports.html" class="nav-item">Reports</a>
     </nav>
@@ -377,12 +378,8 @@
                     <input type="text" id="target-input" placeholder="example.com">
                     <button class="btn btn-small btn-primary" id="btn-load-target">Load</button>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
-                    <label>Engagement</label>
-                    <select id="engagement-select">
-                        <option value="">-- Select --</option>
-                    </select>
-                    <button class="btn btn-small" id="btn-load-engagement">Load</button>
+                <div style="font-size:0.6875rem;color:var(--text-muted);margin-top:6px;">
+                    For engagement-scoped trends, use the <a href="engagements.html" style="color:var(--accent);">Engagements</a> tab.
                 </div>
             </div>
 
@@ -413,7 +410,7 @@
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                     </svg>
                     <h3>No Trend Data</h3>
-                    <p>Enter a target or select an engagement</p>
+                    <p>Enter a target domain to see trends</p>
                 </div>
             </div>
 
@@ -557,7 +554,6 @@
             initTabs();
             initSelectors();
             initExportPanel();
-            await loadEngagements();
         });
 
         function initTabs() {
@@ -581,7 +577,6 @@
 
         function initSelectors() {
             document.getElementById('btn-load-target').addEventListener('click', loadByTarget);
-            document.getElementById('btn-load-engagement').addEventListener('click', loadByEngagement);
             document.getElementById('target-input').addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') loadByTarget();
             });
@@ -607,28 +602,12 @@
 
         function reloadWithFilters() {
             const target = document.getElementById('target-input').value.trim();
-            const engId = document.getElementById('engagement-select').value;
             if (target) loadByTarget();
-            else if (engId) loadByEngagement();
-        }
-
-        async function loadEngagements() {
-            try {
-                const data = await api.listEngagements();
-                const select = document.getElementById('engagement-select');
-                for (const eng of (data.engagements || [])) {
-                    const opt = document.createElement('option');
-                    opt.value = eng.id;
-                    opt.textContent = `${eng.name} (${eng.target_domain})`;
-                    select.appendChild(opt);
-                }
-            } catch (e) { /* engagements may not exist yet */ }
         }
 
         async function loadByTarget() {
             const target = document.getElementById('target-input').value.trim();
             if (!target) return;
-            document.getElementById('engagement-select').value = '';
             try {
                 trendData = await api.getTargetTrend(target, getFilters());
                 dataPoints = trendData.data_points || [];
@@ -641,22 +620,8 @@
             }
         }
 
-        async function loadByEngagement() {
-            const engId = document.getElementById('engagement-select').value;
-            if (!engId) return;
-            document.getElementById('target-input').value = '';
-            try {
-                trendData = await api.getEngagementTrend(engId, getFilters());
-                dataPoints = trendData.data_points || [];
-                const label = document.getElementById('engagement-select').selectedOptions[0]?.textContent || engId;
-                renderSidebar(label);
-                renderAverages();
-                renderMetrics();
-                renderActiveChart();
-            } catch (e) {
-                console.error('Failed to load trend:', e);
-            }
-        }
+
+
 
         // ─── Sidebar ─────────────────────────────────────────────
         function renderSidebar(label) {

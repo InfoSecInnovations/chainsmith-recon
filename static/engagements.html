@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chainsmith Recon - Engagements</title>
+    <link rel="stylesheet" href="/static/css/common.css">
+    <link rel="stylesheet" href="/static/css/viz.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .eng-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px 20px;
+        }
+
+        /* ─── List View ────────────────────────────────────────── */
+        .eng-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .eng-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .eng-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8125rem;
+        }
+
+        .eng-table th {
+            text-align: left;
+            padding: 10px 12px;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .eng-table td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .eng-table tr.clickable {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .eng-table tr.clickable:hover {
+            background: var(--bg-secondary);
+        }
+
+        .eng-name-cell {
+            color: var(--text-primary) !important;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .status-dot.active { background: var(--success); }
+        .status-dot.completed { background: var(--accent); }
+        .status-dot.archived { background: var(--text-muted); }
+
+        .eng-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .eng-empty h3 {
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        /* ─── Detail View ──────────────────────────────────────── */
+        .detail-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.8125rem;
+            margin-bottom: 16px;
+            cursor: pointer;
+        }
+
+        .detail-back:hover { color: var(--text-primary); }
+
+        .detail-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .detail-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .detail-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .detail-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .detail-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        /* ─── Sub-tabs ─────────────────────────────────────────── */
+        .sub-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        .sub-tab {
+            padding: 10px 20px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+        }
+
+        .sub-tab:hover { color: var(--text-primary); }
+
+        .sub-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .sub-panel { display: none; }
+        .sub-panel.active { display: block; }
+
+        /* ─── Scans sub-tab ────────────────────────────────────── */
+        .scan-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8125rem;
+        }
+
+        .scan-table th {
+            text-align: left;
+            padding: 10px 12px;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .scan-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        /* ─── Trend sub-tab ────────────────────────────────────── */
+        .trend-chart-area {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            min-height: 300px;
+        }
+
+        .trend-summary {
+            display: flex;
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .trend-stat {
+            flex: 1;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .trend-stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .trend-stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* ─── Reports sub-tab ──────────────────────────────────── */
+        .report-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .report-option {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .report-option-info h4 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .report-option-info p {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        /* ─── Modal ────────────────────────────────────────────── */
+        .form-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .form-modal-overlay.open { display: flex; }
+
+        .form-modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            width: 440px;
+            max-width: 90vw;
+        }
+
+        .form-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .form-modal-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .form-modal-body {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .form-modal-body .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .form-modal-body .form-group label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .form-modal-body .form-group input,
+        .form-modal-body .form-group textarea {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            padding: 8px 10px;
+            font-size: 0.8125rem;
+            font-family: inherit;
+        }
+
+        .form-modal-body .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .form-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        /* ─── Delete Confirm ───────────────────────────────────── */
+        .confirm-delete {
+            color: var(--error);
+            font-size: 0.8125rem;
+            padding: 12px;
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <a href="index.html" class="brand">
+                <span class="brand-name"><span class="accent">Chainsmith</span> Recon</span>
+                <span class="brand-tagline">Recon for the AI Era</span>
+            </a>
+        </div>
+        <div class="header-right">
+            <span class="header-status" id="header-status"></span>
+            <button class="btn btn-icon" id="btn-settings" title="Settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <a href="index.html" class="nav-item">Scope</a>
+        <a href="scan.html" class="nav-item">Scan</a>
+        <a href="findings.html" class="nav-item">Results</a>
+        <a href="engagements.html" class="nav-item active">Engagements</a>
+        <a href="trend.html" class="nav-item">Trends</a>
+        <a href="reports.html" class="nav-item">Reports</a>
+    </nav>
+
+    <div id="scenario-banner" class="scenario-banner" style="display:none"></div>
+
+    <!-- Main Content -->
+    <main class="eng-container">
+        <!-- LIST VIEW -->
+        <div id="list-view">
+            <div class="eng-header">
+                <h2 class="eng-title">Engagements</h2>
+                <button class="btn btn-primary" id="btn-new-eng">+ New Engagement</button>
+            </div>
+
+            <div id="eng-list-content">
+                <div class="eng-empty">
+                    <h3>No Engagements Yet</h3>
+                    <p>Engagements group related scans for a pentest project. Create one to get started.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- DETAIL VIEW -->
+        <div id="detail-view" style="display:none;">
+            <a class="detail-back" id="btn-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                Back to Engagements
+            </a>
+
+            <div class="detail-header">
+                <div>
+                    <h2 class="detail-title" id="detail-title"></h2>
+                    <div class="detail-meta">
+                        <span id="detail-client"></span>
+                        <span id="detail-target"></span>
+                        <span id="detail-created"></span>
+                    </div>
+                </div>
+                <div class="detail-actions">
+                    <span id="detail-status"></span>
+                    <button class="btn" id="btn-edit-eng">Edit</button>
+                    <button class="btn" id="btn-delete-eng" style="color:var(--error)">Delete</button>
+                </div>
+            </div>
+
+            <div id="detail-description" style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:20px;"></div>
+
+            <!-- Sub-tabs -->
+            <div class="sub-tabs">
+                <button class="sub-tab active" data-tab="scans">Scans</button>
+                <button class="sub-tab" data-tab="trend">Trend</button>
+                <button class="sub-tab" data-tab="reports">Reports</button>
+            </div>
+
+            <!-- Scans panel -->
+            <div class="sub-panel active" id="panel-scans">
+                <div id="scans-content">
+                    <p style="color:var(--text-secondary);text-align:center;padding:40px;">No scans linked to this engagement yet.</p>
+                </div>
+            </div>
+
+            <!-- Trend panel -->
+            <div class="sub-panel" id="panel-trend">
+                <div id="trend-content">
+                    <div class="trend-summary" id="trend-summary" style="display:none;"></div>
+                    <div class="trend-chart-area" id="trend-chart">
+                        <p style="color:var(--text-secondary);text-align:center;padding:40px;">Loading trend data...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reports panel -->
+            <div class="sub-panel" id="panel-reports">
+                <div class="report-actions">
+                    <div class="report-option">
+                        <div class="report-option-info">
+                            <h4>Executive Report</h4>
+                            <p>High-level summary for stakeholders</p>
+                        </div>
+                        <button class="btn btn-primary btn-small" onclick="generateEngReport('executive')">Generate</button>
+                    </div>
+                    <div class="report-option">
+                        <div class="report-option-info">
+                            <h4>Trend Report</h4>
+                            <p>Finding trends across all scans in this engagement</p>
+                        </div>
+                        <button class="btn btn-primary btn-small" onclick="generateEngReport('trend')">Generate</button>
+                    </div>
+                    <div class="report-option">
+                        <div class="report-option-info">
+                            <h4>Compliance Report</h4>
+                            <p>Scope compliance and traffic audit</p>
+                        </div>
+                        <button class="btn btn-primary btn-small" onclick="generateEngReport('compliance')">Generate</button>
+                    </div>
+                </div>
+                <div id="report-result" style="margin-top:16px;"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Create/Edit Modal -->
+    <div class="form-modal-overlay" id="eng-modal-overlay">
+        <div class="form-modal">
+            <div class="form-modal-header">
+                <h3 id="eng-modal-title">New Engagement</h3>
+                <button class="drawer-close" id="eng-modal-close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="form-modal-body">
+                <div class="form-group">
+                    <label>Name *</label>
+                    <input type="text" id="eng-name" placeholder="e.g., FakoBanko Q2 2026">
+                </div>
+                <div class="form-group">
+                    <label>Target Domain *</label>
+                    <input type="text" id="eng-target" placeholder="e.g., fakobanko.co">
+                </div>
+                <div class="form-group">
+                    <label>Client</label>
+                    <input type="text" id="eng-client" placeholder="e.g., FakoBanko Inc.">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="eng-description" placeholder="Notes about this engagement..."></textarea>
+                </div>
+            </div>
+            <div class="form-modal-footer">
+                <button class="btn" id="eng-modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="eng-modal-save">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirm Modal -->
+    <div class="form-modal-overlay" id="delete-modal-overlay">
+        <div class="form-modal" style="width:380px;">
+            <div class="form-modal-header">
+                <h3>Delete Engagement</h3>
+                <button class="drawer-close" id="delete-modal-close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="form-modal-body">
+                <div class="confirm-delete">
+                    This will delete the engagement. Scans will be unlinked but not deleted.
+                </div>
+            </div>
+            <div class="form-modal-footer">
+                <button class="btn" id="delete-modal-cancel">Cancel</button>
+                <button class="btn" id="delete-modal-confirm" style="background:var(--error);color:#fff;">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Drawer (shared pattern) -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="drawer drawer-right" id="drawer-settings">
+        <div class="drawer-header">
+            <h2>Settings</h2>
+            <button class="drawer-close" id="close-settings">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="drawer-content">
+            <div class="setting-section" style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+                <div class="setting-section-title">Scan Profile</div>
+                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+                    <select class="form-input" id="setting-profile" style="width:100%">
+                        <option value="default">default</option>
+                    </select>
+                    <div id="profile-description" style="color:var(--text-secondary);font-size:0.8125rem;"></div>
+                    <div id="profile-key-settings" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;"></div>
+                </div>
+            </div>
+            <div class="setting-row">
+                <div>
+                    <div class="setting-label">Theme</div>
+                    <div class="setting-desc">Color scheme</div>
+                </div>
+                <div class="theme-selector">
+                    <button class="theme-btn active" data-theme="dark">Dark</button>
+                    <button class="theme-btn" data-theme="light">Light</button>
+                </div>
+            </div>
+            <div class="setting-section">
+                <div class="setting-section-title">Scenario</div>
+                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+                    <div class="setting-desc">Simulate a target environment</div>
+                    <select class="form-input" id="setting-scenario" style="width:100%">
+                        <option value="">--- No scenario ---</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal (shared pattern for check/finding details) -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title"></h3>
+                <button class="drawer-close" id="close-modal">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/viz/trend-charts.js"></script>
+    <script>
+        // ─── State ───────────────────────────────────────────────
+        let engagements = [];
+        let currentEngagement = null;
+        let editingId = null;
+
+        // ─── Init ────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCommon();
+            initModal();
+            initEngagementModal();
+            initDeleteModal();
+            initSubTabs();
+            initBackButton();
+
+            // Check for deep-link: ?id=xxx
+            const params = new URLSearchParams(window.location.search);
+            const deepId = params.get('id');
+            if (deepId) {
+                await openDetail(deepId);
+            } else {
+                await loadEngagements();
+            }
+        });
+
+        // ─── List View ──────────────────────────────────────────
+        async function loadEngagements() {
+            try {
+                const data = await api.listEngagements();
+                engagements = data.engagements || data || [];
+                renderList();
+            } catch (e) {
+                console.error('Failed to load engagements:', e);
+            }
+        }
+
+        function renderList() {
+            const container = document.getElementById('eng-list-content');
+            if (!engagements.length) {
+                container.innerHTML = `
+                    <div class="eng-empty">
+                        <h3>No Engagements Yet</h3>
+                        <p>Engagements group related scans for a pentest project. Create one to get started.</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="eng-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Client</th>
+                            <th>Target</th>
+                            <th>Created</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${engagements.map(eng => {
+                            const date = eng.created_at ? new Date(eng.created_at).toLocaleDateString() : '--';
+                            const status = eng.status || 'active';
+                            return `
+                            <tr class="clickable" onclick="openDetail('${eng.id}')">
+                                <td class="eng-name-cell">${esc(eng.name)}</td>
+                                <td>${esc(eng.client_name || '--')}</td>
+                                <td>${esc(eng.target_domain)}</td>
+                                <td>${date}</td>
+                                <td><span class="status-dot ${status}"></span>${status}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>`;
+        }
+
+        // ─── Detail View ────────────────────────────────────────
+        async function openDetail(engId) {
+            try {
+                const eng = await api.getEngagement(engId);
+                if (eng.detail) { // 404
+                    alert('Engagement not found');
+                    showListView();
+                    return;
+                }
+                currentEngagement = eng;
+
+                // Update URL
+                const url = new URL(window.location);
+                url.searchParams.set('id', engId);
+                window.history.pushState({}, '', url);
+
+                // Populate header
+                document.getElementById('detail-title').textContent = eng.name;
+                document.getElementById('detail-client').textContent = eng.client_name ? `Client: ${eng.client_name}` : '';
+                document.getElementById('detail-target').textContent = `Target: ${eng.target_domain}`;
+                document.getElementById('detail-created').textContent = eng.created_at
+                    ? `Created: ${new Date(eng.created_at).toLocaleDateString()}`
+                    : '';
+                document.getElementById('detail-description').textContent = eng.description || '';
+
+                const status = eng.status || 'active';
+                document.getElementById('detail-status').innerHTML =
+                    `<span class="status-dot ${status}"></span>${status}`;
+
+                // Show detail, hide list
+                document.getElementById('list-view').style.display = 'none';
+                document.getElementById('detail-view').style.display = 'block';
+
+                // Reset to scans tab
+                switchSubTab('scans');
+
+                // Load scans
+                await loadEngagementScans(engId);
+            } catch (e) {
+                console.error('Failed to open engagement:', e);
+            }
+        }
+
+        function showListView() {
+            document.getElementById('detail-view').style.display = 'none';
+            document.getElementById('list-view').style.display = 'block';
+            currentEngagement = null;
+
+            const url = new URL(window.location);
+            url.searchParams.delete('id');
+            window.history.pushState({}, '', url);
+
+            loadEngagements();
+        }
+
+        function initBackButton() {
+            document.getElementById('btn-back').addEventListener('click', showListView);
+
+            // Handle browser back/forward
+            window.addEventListener('popstate', () => {
+                const params = new URLSearchParams(window.location.search);
+                const id = params.get('id');
+                if (id) openDetail(id);
+                else showListView();
+            });
+        }
+
+        // ─── Scans Sub-tab ──────────────────────────────────────
+        async function loadEngagementScans(engId) {
+            const container = document.getElementById('scans-content');
+            try {
+                const data = await api.getEngagementScans(engId);
+                const scans = data.scans || data || [];
+
+                if (!scans.length) {
+                    container.innerHTML = `<p style="color:var(--text-secondary);text-align:center;padding:40px;">
+                        No scans linked to this engagement yet. Start a scan from the Scope page and select this engagement under Advanced Options.</p>`;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <table class="scan-table">
+                        <thead>
+                            <tr>
+                                <th>Scan ID</th>
+                                <th>Date</th>
+                                <th>Findings</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${scans.map(s => {
+                                const date = s.started_at ? new Date(s.started_at).toLocaleDateString() : '--';
+                                const duration = s.duration_ms ? `${(s.duration_ms / 1000).toFixed(1)}s` : '--';
+                                return `
+                                <tr>
+                                    <td style="font-family:monospace;font-size:0.75rem;">${s.id.substring(0, 8)}</td>
+                                    <td>${date}</td>
+                                    <td>${s.findings_count ?? s.total_findings ?? '--'}</td>
+                                    <td>${duration}</td>
+                                    <td>${s.status || '--'}</td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>`;
+            } catch (e) {
+                container.innerHTML = `<p style="color:var(--error);">Failed to load scans.</p>`;
+            }
+        }
+
+        // ─── Trend Sub-tab ──────────────────────────────────────
+        async function loadEngagementTrend(engId) {
+            const chartEl = document.getElementById('trend-chart');
+            const summaryEl = document.getElementById('trend-summary');
+            chartEl.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:40px;">Loading trend data...</p>';
+            summaryEl.style.display = 'none';
+
+            try {
+                const data = await api.getEngagementTrend(engId);
+                const points = data.scans || data.points || [];
+
+                if (!points.length) {
+                    chartEl.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:40px;">Not enough scan data for trend analysis. Run at least 2 scans in this engagement.</p>';
+                    return;
+                }
+
+                // Render summary stats
+                const latest = points[points.length - 1];
+                const first = points[0];
+                summaryEl.style.display = 'flex';
+                summaryEl.innerHTML = `
+                    <div class="trend-stat">
+                        <div class="trend-stat-value">${points.length}</div>
+                        <div class="trend-stat-label">Scans</div>
+                    </div>
+                    <div class="trend-stat">
+                        <div class="trend-stat-value">${latest.new || 0}</div>
+                        <div class="trend-stat-label">New</div>
+                    </div>
+                    <div class="trend-stat">
+                        <div class="trend-stat-value">${latest.resolved || 0}</div>
+                        <div class="trend-stat-label">Resolved</div>
+                    </div>
+                    <div class="trend-stat">
+                        <div class="trend-stat-value">${latest.recurring || 0}</div>
+                        <div class="trend-stat-label">Recurring</div>
+                    </div>
+                    <div class="trend-stat">
+                        <div class="trend-stat-value">${latest.regressed || 0}</div>
+                        <div class="trend-stat-label">Regressed</div>
+                    </div>
+                `;
+
+                // Render simple findings-over-time chart with D3
+                chartEl.innerHTML = '';
+                renderTrendChart(chartEl, points);
+
+            } catch (e) {
+                chartEl.innerHTML = `<p style="color:var(--error);">Failed to load trend data: ${e.message}</p>`;
+            }
+        }
+
+        function renderTrendChart(container, points) {
+            const margin = { top: 20, right: 30, bottom: 40, left: 50 };
+            const width = container.clientWidth - margin.left - margin.right;
+            const height = 260 - margin.top - margin.bottom;
+
+            const svg = d3.select(container).append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', height + margin.top + margin.bottom)
+                .append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scalePoint()
+                .domain(points.map((_, i) => `S${i + 1}`))
+                .range([0, width])
+                .padding(0.5);
+
+            const maxFindings = d3.max(points, d => d.total_findings || d.findings_count || 0);
+            const y = d3.scaleLinear()
+                .domain([0, Math.max(maxFindings, 1)])
+                .nice()
+                .range([height, 0]);
+
+            // Axes
+            svg.append('g')
+                .attr('transform', `translate(0,${height})`)
+                .call(d3.axisBottom(x))
+                .selectAll('text').style('fill', 'var(--text-secondary)').style('font-size', '0.6875rem');
+
+            svg.append('g')
+                .call(d3.axisLeft(y).ticks(5))
+                .selectAll('text').style('fill', 'var(--text-secondary)').style('font-size', '0.6875rem');
+
+            // Style axis lines
+            svg.selectAll('.domain, .tick line').style('stroke', 'var(--border)');
+
+            // Line
+            const line = d3.line()
+                .x((_, i) => x(`S${i + 1}`))
+                .y(d => y(d.total_findings || d.findings_count || 0))
+                .curve(d3.curveMonotoneX);
+
+            svg.append('path')
+                .datum(points)
+                .attr('fill', 'none')
+                .attr('stroke', 'var(--accent)')
+                .attr('stroke-width', 2)
+                .attr('d', line);
+
+            // Dots
+            svg.selectAll('.dot')
+                .data(points)
+                .enter().append('circle')
+                .attr('cx', (_, i) => x(`S${i + 1}`))
+                .attr('cy', d => y(d.total_findings || d.findings_count || 0))
+                .attr('r', 4)
+                .attr('fill', 'var(--accent)')
+                .attr('stroke', 'var(--bg-secondary)')
+                .attr('stroke-width', 2);
+        }
+
+        // ─── Reports Sub-tab ────────────────────────────────────
+        async function generateEngReport(type) {
+            if (!currentEngagement) return;
+            const resultEl = document.getElementById('report-result');
+            resultEl.innerHTML = '<p style="color:var(--text-secondary);">Generating report...</p>';
+
+            try {
+                let result;
+                const engId = currentEngagement.id;
+                // Get latest scan for scan-based reports
+                const scansData = await api.getEngagementScans(engId);
+                const scans = scansData.scans || scansData || [];
+                const latestScan = scans.length ? scans[0] : null;
+
+                switch (type) {
+                    case 'executive':
+                        if (!latestScan) { resultEl.innerHTML = '<p style="color:var(--error);">No scans available.</p>'; return; }
+                        result = await api.generateExecutiveReport(latestScan.id, 'html', engId);
+                        break;
+                    case 'trend':
+                        result = await api.generateTrendReport('html', engId);
+                        break;
+                    case 'compliance':
+                        if (!latestScan) { resultEl.innerHTML = '<p style="color:var(--error);">No scans available.</p>'; return; }
+                        result = await api.generateComplianceReport(latestScan.id, 'html', engId);
+                        break;
+                }
+
+                if (result.detail) throw new Error(result.detail);
+
+                const iframe = document.createElement('iframe');
+                iframe.style.cssText = 'width:100%;height:500px;border:1px solid var(--border);border-radius:8px;background:#fff;';
+                iframe.sandbox = 'allow-same-origin';
+                resultEl.innerHTML = '';
+                resultEl.appendChild(iframe);
+                iframe.srcdoc = result.content;
+
+            } catch (e) {
+                resultEl.innerHTML = `<p style="color:var(--error);">Failed to generate report: ${e.message}</p>`;
+            }
+        }
+
+        // ─── Sub-tabs ───────────────────────────────────────────
+        function initSubTabs() {
+            document.querySelectorAll('.sub-tab').forEach(tab => {
+                tab.addEventListener('click', () => switchSubTab(tab.dataset.tab));
+            });
+        }
+
+        function switchSubTab(tabName) {
+            document.querySelectorAll('.sub-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+            document.querySelectorAll('.sub-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${tabName}`));
+
+            // Lazy-load data
+            if (tabName === 'trend' && currentEngagement) {
+                loadEngagementTrend(currentEngagement.id);
+            }
+        }
+
+        // ─── Create/Edit Modal ──────────────────────────────────
+        function initEngagementModal() {
+            const overlay = document.getElementById('eng-modal-overlay');
+            const close = () => { overlay.classList.remove('open'); editingId = null; };
+
+            document.getElementById('btn-new-eng').addEventListener('click', () => {
+                editingId = null;
+                document.getElementById('eng-modal-title').textContent = 'New Engagement';
+                document.getElementById('eng-modal-save').textContent = 'Create';
+                document.getElementById('eng-name').value = '';
+                document.getElementById('eng-target').value = '';
+                document.getElementById('eng-client').value = '';
+                document.getElementById('eng-description').value = '';
+                overlay.classList.add('open');
+            });
+
+            document.getElementById('btn-edit-eng').addEventListener('click', () => {
+                if (!currentEngagement) return;
+                editingId = currentEngagement.id;
+                document.getElementById('eng-modal-title').textContent = 'Edit Engagement';
+                document.getElementById('eng-modal-save').textContent = 'Save';
+                document.getElementById('eng-name').value = currentEngagement.name;
+                document.getElementById('eng-target').value = currentEngagement.target_domain;
+                document.getElementById('eng-client').value = currentEngagement.client_name || '';
+                document.getElementById('eng-description').value = currentEngagement.description || '';
+                overlay.classList.add('open');
+            });
+
+            document.getElementById('eng-modal-close').addEventListener('click', close);
+            document.getElementById('eng-modal-cancel').addEventListener('click', close);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+            document.getElementById('eng-modal-save').addEventListener('click', async () => {
+                const name = document.getElementById('eng-name').value.trim();
+                const target_domain = document.getElementById('eng-target').value.trim();
+                const client_name = document.getElementById('eng-client').value.trim() || null;
+                const description = document.getElementById('eng-description').value.trim() || null;
+
+                if (!name || !target_domain) {
+                    alert('Name and Target Domain are required.');
+                    return;
+                }
+
+                try {
+                    if (editingId) {
+                        await api.updateEngagement(editingId, { name, description, client_name });
+                        close();
+                        await openDetail(editingId);
+                    } else {
+                        const created = await api.createEngagement({ name, target_domain, client_name, description });
+                        close();
+                        await loadEngagements();
+                        if (created.id) await openDetail(created.id);
+                    }
+                } catch (e) {
+                    alert('Failed to save engagement: ' + e.message);
+                }
+            });
+        }
+
+        // ─── Delete Modal ───────────────────────────────────────
+        function initDeleteModal() {
+            const overlay = document.getElementById('delete-modal-overlay');
+            const close = () => overlay.classList.remove('open');
+
+            document.getElementById('btn-delete-eng').addEventListener('click', () => {
+                overlay.classList.add('open');
+            });
+
+            document.getElementById('delete-modal-close').addEventListener('click', close);
+            document.getElementById('delete-modal-cancel').addEventListener('click', close);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+            document.getElementById('delete-modal-confirm').addEventListener('click', async () => {
+                if (!currentEngagement) return;
+                try {
+                    await api.deleteEngagement(currentEngagement.id);
+                    close();
+                    showListView();
+                } catch (e) {
+                    alert('Failed to delete: ' + e.message);
+                }
+            });
+        }
+
+        // ─── Utils ──────────────────────────────────────────────
+        function esc(str) {
+            const el = document.createElement('span');
+            el.textContent = str;
+            return el.innerHTML;
+        }
+    </script>
+</body>
+</html>

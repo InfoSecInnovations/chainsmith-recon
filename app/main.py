@@ -149,6 +149,12 @@ async def reports_page():
     return FileResponse(f"{_static_dir}/reports.html")
 
 
+@app.get("/engagements.html")
+async def engagements_page():
+    """Serve engagements management page."""
+    return FileResponse(f"{_static_dir}/engagements.html")
+
+
 # ─── Health ───────────────────────────────────────────────────
 
 @app.get("/health")

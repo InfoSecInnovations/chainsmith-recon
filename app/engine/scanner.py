@@ -178,10 +178,9 @@ async def run_scan(
 async def run_verification(state: "AppState"):
     """
     Run verification on findings.
-    
-    TODO: Implement verification logic if needed.
+
+    Placeholder — currently marks findings as verified without re-testing.
     """
     state.phase = "verifying"
-    # For now, just mark as complete
     state.phase = "done"
     state.status = "complete"

@@ -5,6 +5,7 @@ Production-viable reconnaissance using the modular check framework.
 Replaces LLM-driven tool selection with deterministic, chained checks.
 """
 
+import logging
 from typing import Optional, Callable, Awaitable
 from datetime import datetime
 
@@ -24,6 +25,8 @@ from app.models import (
     AgentType, AgentEvent, EventType, EventImportance, ScopeDefinition
 )
 from app.guardian import Guardian
+
+logger = logging.getLogger(__name__)
 
 
 class ScoutAgent:
@@ -149,7 +152,7 @@ class ScoutAgent:
                 self.findings.append(model_finding)
             except Exception as e:
                 # Log but continue with other findings
-                print(f"Error converting finding {cf.id}: {e}")
+                logger.warning("Error converting finding %s: %s", cf.id, e)
                 continue
         
         self.is_running = False

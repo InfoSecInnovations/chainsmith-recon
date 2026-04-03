@@ -476,6 +476,7 @@
         <a href="index.html" class="nav-item">Scope</a>
         <a href="scan.html" class="nav-item">Scan</a>
         <a href="findings.html" class="nav-item">Results</a>
+        <a href="engagements.html" class="nav-item">Engagements</a>
         <a href="trend.html" class="nav-item">Trends</a>
         <a href="reports.html" class="nav-item active">Reports</a>
     </nav>
@@ -650,7 +651,6 @@
         let lastFormat = null;
         let reportHistory = JSON.parse(localStorage.getItem('reportHistory') || '[]');
         let scansCache = null;
-        let engagementsCache = null;
         let pdfAvailable = false;
 
         // ─── Init ────────────────────────────────────────────────
@@ -678,15 +678,11 @@
             }
         }
 
-        // ─── Load scans & engagements for dropdowns ─────────────
+        // ─── Load scans for dropdowns ────────────────────────────
         async function loadDropdownData() {
             try {
-                const [scansData, engData] = await Promise.all([
-                    api.listScans(null, 100),
-                    api.listEngagements()
-                ]);
+                const scansData = await api.listScans(null, 100);
                 scansCache = scansData.scans || [];
-                engagementsCache = engData.engagements || [];
                 renderInputs();
             } catch (e) {
                 console.error('Failed to load dropdown data:', e);
@@ -725,10 +721,6 @@
                 const label = `${s.target} - ${date} (${s.total_findings || 0} findings)`;
                 return `<option value="${s.id}">${label}</option>`;
             }).join('');
-            const engOptions = (engagementsCache || []).map(e =>
-                `<option value="${e.id}">${e.name} (${e.target_domain})</option>`
-            ).join('');
-
             const scanSelect = `
                 <div class="input-group">
                     <label class="input-label">Scan</label>
@@ -748,30 +740,10 @@
                     </div>
                 </div>`;
 
-            const engSelect = `
-                <div class="input-group">
-                    <label class="input-label">Engagement <span style="color:var(--text-muted)">(optional)</span></label>
-                    <select class="input-field" id="input-engagement">
-                        <option value="">-- None --</option>
-                        ${engOptions}
-                    </select>
-                </div>`;
-
             const targetInput = `
                 <div class="input-group">
                     <label class="input-label">Target Domain</label>
                     <input type="text" class="input-field" id="input-target" placeholder="example.com">
-                    <div class="input-hint">OR select an engagement above</div>
-                </div>`;
-
-            const trendEngSelect = `
-                <div class="input-group">
-                    <label class="input-label">Engagement</label>
-                    <select class="input-field" id="input-engagement">
-                        <option value="">-- Select engagement --</option>
-                        ${engOptions}
-                    </select>
-                    <div class="input-hint">OR enter a target domain below</div>
                 </div>`;
 
             let html = '<div class="sidebar-section-title">Inputs</div>';
@@ -784,15 +756,17 @@
                     html += scanABSelect;
                     break;
                 case 'executive':
-                    html += scanSelect + engSelect;
+                    html += scanSelect;
                     break;
                 case 'compliance':
-                    html += scanSelect + engSelect;
+                    html += scanSelect;
                     break;
                 case 'trend':
-                    html += trendEngSelect + targetInput;
+                    html += targetInput;
                     break;
             }
+
+            html += '<div class="input-hint" style="margin-top:8px;">For engagement-scoped reports, use the <a href="engagements.html" style="color:var(--accent);">Engagements</a> tab.</div>';
 
             section.innerHTML = html;
 
@@ -831,13 +805,13 @@
                         result = await api.generateDeltaReport(params.scanAId, params.scanBId, currentFormat);
                         break;
                     case 'executive':
-                        result = await api.generateExecutiveReport(params.scanId, currentFormat, params.engagementId);
+                        result = await api.generateExecutiveReport(params.scanId, currentFormat);
                         break;
                     case 'compliance':
-                        result = await api.generateComplianceReport(params.scanId, currentFormat, params.engagementId);
+                        result = await api.generateComplianceReport(params.scanId, currentFormat);
                         break;
                     case 'trend':
-                        result = await api.generateTrendReport(currentFormat, params.engagementId, params.target);
+                        result = await api.generateTrendReport(currentFormat, null, params.target);
                         break;
                 }
 
@@ -904,14 +878,12 @@
                 case 'compliance': {
                     const scanId = document.getElementById('input-scan')?.value;
                     if (!scanId) { alert('Please select a scan.'); return null; }
-                    const engagementId = document.getElementById('input-engagement')?.value || null;
-                    return { scanId, engagementId };
+                    return { scanId };
                 }
                 case 'trend': {
-                    const engagementId = document.getElementById('input-engagement')?.value || null;
                     const target = document.getElementById('input-target')?.value.trim() || null;
-                    if (!engagementId && !target) { alert('Please select an engagement or enter a target domain.'); return null; }
-                    return { engagementId, target };
+                    if (!target) { alert('Please enter a target domain.'); return null; }
+                    return { target };
                 }
             }
         }
@@ -1122,8 +1094,6 @@
                     document.getElementById('input-scan-a').value = h.params.scanAId;
                 if (h.params.scanBId && document.getElementById('input-scan-b'))
                     document.getElementById('input-scan-b').value = h.params.scanBId;
-                if (h.params.engagementId && document.getElementById('input-engagement'))
-                    document.getElementById('input-engagement').value = h.params.engagementId;
                 if (h.params.target && document.getElementById('input-target'))
                     document.getElementById('input-target').value = h.params.target;
             }, 50);

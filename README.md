@@ -1,5 +1,8 @@
 # Chainsmith Recon
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/infosecinnovations/chainsmith-recon/actions/workflows/ci.yml/badge.svg)](https://github.com/infosecinnovations/chainsmith-recon/actions/workflows/ci.yml)
+
 **AI Reconnaissance Framework for Penetration Testers**
 
 Chainsmith Recon is an open-source reconnaissance tool designed for security professionals to assess AI/ML systems, LLM-powered applications, and traditional web infrastructure. It provides automated discovery, fingerprinting, and vulnerability identification with a focus on emerging AI attack surfaces.

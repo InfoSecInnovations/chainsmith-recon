@@ -33,5 +33,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 CMD uvicorn ${APP_MODULE} \
         --host ${HOST:-0.0.0.0} \
         --port ${PORT:-8000} \
-        --reload \
         --log-level info

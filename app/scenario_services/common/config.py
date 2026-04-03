@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import random
 import threading
@@ -36,6 +37,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -142,7 +145,7 @@ def _load_scenario_config() -> ScenarioConfig:
         return ScenarioConfig.from_dict(data)
     except (json.JSONDecodeError, OSError) as e:
         # Log but don't fail - return empty config
-        print(f"[config] Warning: Failed to load scenario config: {e}")
+        logger.warning("Failed to load scenario config: %s", e)
         return ScenarioConfig()
 
 

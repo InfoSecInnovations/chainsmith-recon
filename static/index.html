@@ -202,6 +202,7 @@
         <a href="index.html" class="nav-item active">Scope</a>
         <a href="scan.html" class="nav-item" id="nav-scan">Scan</a>
         <a href="findings.html" class="nav-item" id="nav-findings">Results</a>
+        <a href="engagements.html" class="nav-item" id="nav-engagements">Engagements</a>
         <a href="trend.html" class="nav-item" id="nav-trends">Trends</a>
         <a href="reports.html" class="nav-item" id="nav-reports">Reports</a>
     </nav>
@@ -231,35 +232,57 @@
                 <div class="form-hint">Hosts or paths to exclude from scanning</div>
             </div>
 
-            <!-- Scan Behavior -->
-            <div class="section-divider">Scan Behavior</div>
-            <div class="behavior-section">
-                <div class="behavior-row">
-                    <div>
-                        <div class="behavior-label">On Critical Finding</div>
-                        <div class="behavior-desc">What happens when any suite discovers a critical vulnerability on a host</div>
+            <!-- Advanced Options (collapsible) -->
+            <div class="section-divider" style="cursor:pointer;user-select:none;" onclick="toggleAdvanced()">
+                <svg id="advanced-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;transition:transform 0.2s;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                Advanced Options
+            </div>
+            <div id="advanced-section" style="display:none;">
+                <!-- Engagement Selector -->
+                <div class="behavior-section" style="margin-bottom: 12px;">
+                    <div class="behavior-row">
+                        <div style="flex:1;">
+                            <div class="behavior-label">Engagement</div>
+                            <div class="behavior-desc">Link this scan to a pentest engagement for tracking and reporting</div>
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <select class="form-input" id="scope-engagement" style="min-width:200px;">
+                                <option value="">-- None --</option>
+                            </select>
+                            <button class="btn btn-small" type="button" onclick="quickCreateEngagement()" title="Create new engagement">+</button>
+                        </div>
                     </div>
-                    <select class="form-input" id="on-critical-default" style="width: 220px;">
-                        <option value="annotate">Continue & flag downstream</option>
-                        <option value="skip_downstream">Skip later suites on host</option>
-                        <option value="stop">Stop scan immediately</option>
-                    </select>
                 </div>
-                <div style="font-size: 0.6875rem; color: var(--text-muted); margin-top: 6px;">
-                    Suites can override this individually below.
-                </div>
-                <div class="behavior-row" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-                    <div>
-                        <div class="behavior-label">Allow Active Testing</div>
-                        <div class="behavior-desc">Master gate for all intrusive checks (injection, credential testing, write probes)</div>
+
+                <!-- Scan Behavior -->
+                <div class="behavior-section">
+                    <div class="behavior-row">
+                        <div>
+                            <div class="behavior-label">On Critical Finding</div>
+                            <div class="behavior-desc">What happens when any suite discovers a critical vulnerability on a host</div>
+                        </div>
+                        <select class="form-input" id="on-critical-default" style="width: 220px;">
+                            <option value="annotate">Continue & flag downstream</option>
+                            <option value="skip_downstream">Skip later suites on host</option>
+                            <option value="stop">Stop scan immediately</option>
+                        </select>
                     </div>
-                    <label class="toggle">
-                        <input type="checkbox" id="global-intrusive" onchange="onGlobalIntrusiveToggle()">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-                <div id="global-intrusive-hint" class="intrusive-hint-off" style="font-size: 0.6875rem; margin-top: 6px;">
-                    All intrusive checks are locked. Enable to unlock per-suite controls below.
+                    <div style="font-size: 0.6875rem; color: var(--text-muted); margin-top: 6px;">
+                        Suites can override this individually below.
+                    </div>
+                    <div class="behavior-row" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+                        <div>
+                            <div class="behavior-label">Allow Active Testing</div>
+                            <div class="behavior-desc">Master gate for all intrusive checks (injection, credential testing, write probes)</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="global-intrusive" onchange="onGlobalIntrusiveToggle()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="global-intrusive-hint" class="intrusive-hint-off" style="font-size: 0.6875rem; margin-top: 6px;">
+                        All intrusive checks are locked. Enable to unlock per-suite controls below.
+                    </div>
                 </div>
             </div>
 
@@ -544,12 +567,55 @@
         // Exclusions state
         let exclusions = [];
 
+        // Advanced Options toggle
+        function toggleAdvanced() {
+            const section = document.getElementById('advanced-section');
+            const chevron = document.getElementById('advanced-chevron');
+            const isHidden = section.style.display === 'none';
+            section.style.display = isHidden ? 'block' : 'none';
+            chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
+        }
+
+        // Load engagements into scope page dropdown
+        async function loadScopeEngagements() {
+            const select = document.getElementById('scope-engagement');
+            if (!select) return;
+            try {
+                const data = await api.listEngagements();
+                const engs = data.engagements || data || [];
+                // Keep the "None" option, add engagements
+                select.innerHTML = '<option value="">-- None --</option>';
+                for (const eng of engs) {
+                    const opt = document.createElement('option');
+                    opt.value = eng.id;
+                    opt.textContent = `${eng.name} (${eng.target_domain})`;
+                    select.appendChild(opt);
+                }
+            } catch (e) { /* engagements may not exist yet */ }
+        }
+
+        // Quick-create engagement from scope page
+        async function quickCreateEngagement() {
+            const name = prompt('Engagement name:');
+            if (!name) return;
+            const target = document.getElementById('scope-target').value.trim() || prompt('Target domain:');
+            if (!target) return;
+            try {
+                const eng = await api.createEngagement({ name, target_domain: target });
+                await loadScopeEngagements();
+                if (eng.id) document.getElementById('scope-engagement').value = eng.id;
+            } catch (e) {
+                alert('Failed to create engagement: ' + e.message);
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
             initCommon();
             await loadCheckSuites();
             renderSuites();
             await loadExistingScope();
+            await loadScopeEngagements();
             updateNavLinks();
             initChipInput();
             initModals();
@@ -995,8 +1061,17 @@
                 scan_behavior: scanBehavior,
             });
 
-            // Start scan
-            await api.startScan();
+            // Start scan (with optional engagement link)
+            const engagementId = document.getElementById('scope-engagement')?.value || null;
+            if (engagementId) {
+                await fetch('/api/v1/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ engagement_id: engagementId })
+                });
+            } else {
+                await api.startScan();
+            }
 
             // Navigate to scan page
             navigateTo('scan.html');
