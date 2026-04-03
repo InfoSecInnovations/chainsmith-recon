@@ -117,15 +117,15 @@ Implementation notes:
 
 
 ==========================================================================
-WAVE 3 — CHECK PROFILES
+WAVE 3 — CHECK PRESETS
 ==========================================================================
 
-Extend the existing port_profile concept to full check profiles.
-A profile bundles suite selection, check enablement, and parameter
-overrides into a single switchable preset.
+Extend the existing port_profile concept to full check presets.
+A preset bundles suite selection, check enablement, and parameter
+overrides into a single switchable configuration.
 
 Schema:
-  profiles:
+  presets:
     quick:
       suites: [network, web]
       checks:
@@ -159,20 +159,20 @@ Schema:
           timeout_seconds: 90
 
 Usage:
-  - CLI: chainsmith scan --profile thorough
-  - API: ScanStartInput gains a profile field
-  - Config: default_profile: quick in chainsmith.yaml
+  - CLI: chainsmith scan --preset thorough
+  - API: ScanStartInput gains a preset field
+  - Config: default_preset: quick in chainsmith.yaml
 
 Resolution order:
-  1. Profile values
-  2. Top-level checks: values (profile-independent overrides)
+  1. Preset values
+  2. Top-level checks: values (preset-independent overrides)
   3. Runtime overrides (CLI flags, API params)
 
 Implementation notes:
-  - Profiles are pure config — no code changes to checks themselves
-  - Profile merges with top-level config; explicit values win
-  - Profile "inherits" from base config, not from other profiles
-    (no profile chaining — keep it simple)
+  - Presets are pure config — no code changes to checks themselves
+  - Preset merges with top-level config; explicit values win
+  - Preset "inherits" from base config, not from other presets
+    (no preset chaining — keep it simple)
 
 
 ==========================================================================
@@ -257,7 +257,7 @@ Validations:
   - wordlist/payload files exist if specified
   - Check names in config match registered checks (typo protection)
   - on_critical is one of: annotate, skip_downstream, stop
-  - Profile references valid suites
+  - Preset references valid suites
 
 On failure: raise ConfigError with clear message including the check
 name, the bad value, and what was expected.
@@ -267,8 +267,8 @@ name, the bad value, and what was expected.
 OPEN QUESTIONS
 ==========================================================================
 
-1. Should profiles support inheritance (profile extends another
-   profile)? Adds complexity but reduces duplication. Current
+1. Should presets support inheritance (preset extends another
+   preset)? Adds complexity but reduces duplication. Current
    recommendation: no, keep it flat.
 
 2. Should payload files support Jinja2 templating for target-specific
@@ -295,3 +295,74 @@ OPEN QUESTIONS
 
 7. Should enabled: false checks still appear in /api/checks output
    (marked as disabled) or be hidden entirely?
+
+8. "Profile" is already used by chainsmith.sh for AI provider
+   selection. This doc uses "preset" to avoid collision.
+   The port_profile field keeps its name since it predates this work.
+
+
+==========================================================================
+DESIGN DECISIONS TO RESOLVE
+==========================================================================
+
+Wave 1 — Per-check config
+----------------------------
+D1. Check name format in YAML: The doc uses snake_case
+    (dns_enumeration). Should this match the Python class name, a slug
+    derived from it, or the name attribute on the check? Need a
+    consistent mapping rule.
+
+D2. Unknown kwargs: The doc says unknown keys get passed as kwargs to
+    the check constructor. That's flexible but error-prone — a typo
+    silently becomes a kwarg. Should checks be required to declare
+    their accepted custom params explicitly?
+
+Wave 2 — Externalized payloads
+---------------------------------
+D3. Depth levels (light | standard | thorough): Is this a per-file
+    concept (three separate files per payload type) or a single file
+    with entries tagged by depth? Tagged entries in one file are easier
+    to maintain but more complex to parse.
+
+D4. Data dir location: Project root as default with a data_dir
+    setting in chainsmith.yaml? Or user home (~/.chainsmith/data/)?
+    Or always relative to project root?
+
+Wave 3 — Presets
+-------------------
+D5. Where do presets live? Inline in chainsmith.yaml, or separate
+    files under presets/quick.yaml, presets/thorough.yaml? Separate
+    files are cleaner for sharing/versioning but add file sprawl.
+
+D6. Default preset: Should there always be a default preset, or is
+    "no preset" (just raw config) the default behavior?
+
+Wave 4 — Enable/disable + on_critical
+-----------------------------------------
+D7. Disabled checks in API/UI: Should disabled checks appear in
+    /api/checks output (marked as disabled) so the WebUI can offer a
+    toggle to re-enable? Or hidden entirely?
+
+D8. The "reason" field on enabled: false — does anything consume it
+    (shown in UI, included in scan reports), or is it purely a
+    config-file comment for human readers?
+
+Wave 5 — Env vars + validation
+----------------------------------
+D9. Strict vs lenient for unknown check names in WebUI context: If
+    someone saves a config with a check name that doesn't load until
+    a plugin is installed, should we block the save, warn, or silently
+    accept?
+
+Cross-cutting — WebUI + CLI
+-------------------------------
+D10. How deep does the WebUI configuration go? Options:
+     (A) Preset picker + check enable/disable toggles only
+     (B) A + per-check parameter editing via form fields
+     (C) B + payload file management (upload/select/edit)
+     Each level is significantly more frontend work.
+
+D11. Config export / resolved view: Add a CLI command
+     (chainsmith config resolve) and a WebUI panel that shows the
+     fully merged config for a given preset? Useful for debugging
+     "why did this check behave that way?"
