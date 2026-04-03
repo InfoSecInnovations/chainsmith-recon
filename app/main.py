@@ -31,6 +31,7 @@ from app.routes import (
     preferences_router,
     compliance_router,
     swarm_router,
+    customizations_router,
 )
 
 # Setup logging
@@ -97,6 +98,7 @@ app.include_router(scenarios_router)
 app.include_router(preferences_router)
 app.include_router(compliance_router)
 app.include_router(swarm_router)
+app.include_router(customizations_router)
 
 
 # ─── Static Page Routes ───────────────────────────────────────

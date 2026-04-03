@@ -238,37 +238,61 @@ class FindingRepository:
         severity: Optional[str] = None,
         host: Optional[str] = None,
     ) -> list[dict]:
-        """Get findings for a scan with optional filters."""
+        """Get findings for a scan with optional filters.
+
+        Severity overrides from user customizations are applied before
+        filtering, so the severity parameter filters on effective severity.
+        """
         query = select(Finding).where(Finding.scan_id == scan_id)
-        if severity:
-            query = query.where(Finding.severity == severity)
+        # Host filter can still be applied at query level
         if host:
             query = query.where(Finding.host == host)
 
         async with get_session() as session:
             result = await session.execute(query)
-            return [_finding_to_dict(f) for f in result.scalars().all()]
+            findings = [_finding_to_dict(f) for f in result.scalars().all()]
+
+        # Apply scan-specific severity overrides from user customizations
+        from app.customizations import apply_scan_overrides
+        findings = apply_scan_overrides(findings, scan_id)
+
+        # Filter by severity AFTER overrides so filtering sees effective severity
+        if severity:
+            findings = [f for f in findings if f["severity"] == severity]
+
+        return findings
 
     async def get_findings_by_host(self, scan_id: str) -> list[dict]:
-        """Get findings for a scan grouped by host."""
+        """Get findings for a scan grouped by host.
+
+        Severity overrides from user customizations are applied.
+        """
         async with get_session() as session:
             result = await session.execute(
                 select(Finding).where(Finding.scan_id == scan_id)
             )
-            findings = result.scalars().all()
+            finding_dicts = [_finding_to_dict(f) for f in result.scalars().all()]
+
+        # Apply scan-specific severity overrides
+        from app.customizations import apply_scan_overrides
+        finding_dicts = apply_scan_overrides(finding_dicts, scan_id)
 
         hosts: dict[str, list[dict]] = {}
-        for f in findings:
-            host = f.host or "unknown"
+        for f in finding_dicts:
+            host = f.get("host") or "unknown"
             if host not in hosts:
                 hosts[host] = []
-            hosts[host].append(_finding_to_dict(f))
+            hosts[host].append(f)
 
         return [{"name": host, "findings": flist} for host, flist in hosts.items()]
 
 
 def _finding_to_dict(f: Finding) -> dict:
-    """Convert a Finding ORM object to a JSON-safe dict."""
+    """Convert a Finding ORM object to a JSON-safe dict.
+
+    Override fields (original_severity, severity_override_reason, override_source)
+    default to None and are populated by apply_scan_overrides() at read time.
+    """
     return {
         "id": f.id,
         "scan_id": f.scan_id,
@@ -286,6 +310,9 @@ def _finding_to_dict(f: Finding) -> dict:
         "confidence": f.confidence,
         "fingerprint": f.fingerprint,
         "created_at": f.created_at.isoformat() if f.created_at else None,
+        "original_severity": None,
+        "severity_override_reason": None,
+        "override_source": None,
     }
 
 

@@ -163,3 +163,41 @@ class ProfileUpdateInput(BaseModel):
     """Update an existing profile."""
     description: Optional[str] = None
     settings: Optional[dict] = None
+
+
+# ─── Severity Override Models ────────────────────────────────────
+
+
+class SeverityOverrideScope(BaseModel):
+    """Scope for a scan severity override."""
+    check_name: Optional[str] = None
+    title: Optional[str] = None
+
+
+class ScanSeverityOverrideInput(BaseModel):
+    """Add/update a scan-specific severity override."""
+    scope: SeverityOverrideScope
+    severity: str
+    reason: Optional[str] = None
+
+
+class ScanSeverityOverrideDeleteInput(BaseModel):
+    """Remove a scan-specific severity override by scope."""
+    scope: SeverityOverrideScope
+
+
+class PreRunSeverityOverridesInput(BaseModel):
+    """Full pre-run severity override config (replaces entire file)."""
+    check_level: dict[str, str] = {}
+    check_title_level: dict[str, dict[str, str]] = {}
+
+
+class PreRunCheckOverrideInput(BaseModel):
+    """Set a check-level severity override."""
+    severity: str
+
+
+class PreRunTitleOverrideInput(BaseModel):
+    """Set a check+title severity override."""
+    title: str
+    severity: str

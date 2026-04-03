@@ -24,6 +24,7 @@ from fastapi.responses import Response
 
 from pydantic import BaseModel
 
+from app.api_models import ScanSeverityOverrideDeleteInput, ScanSeverityOverrideInput
 from app.db.repositories import (
     ChainRepository,
     CheckLogRepository,
@@ -224,6 +225,82 @@ async def remove_finding_override(fingerprint: str):
     if not removed:
         raise HTTPException(404, f"No override found for fingerprint '{fingerprint}'")
     return {"fingerprint": fingerprint, "message": "Override removed", "reopened": True}
+
+
+# ─── Scan Severity Overrides ─────────────────────────────────────────────────
+
+
+@router.get("/api/v1/scans/{scan_id}/severity-overrides")
+@router.get("/api/scans/{scan_id}/severity-overrides")
+async def list_scan_severity_overrides(scan_id: str):
+    """List all severity overrides for a scan."""
+    from app.customizations import get_scan_overrides_raw
+    return get_scan_overrides_raw(scan_id)
+
+
+@router.put("/api/v1/scans/{scan_id}/severity-overrides")
+@router.put("/api/scans/{scan_id}/severity-overrides")
+async def set_scan_severity_override(scan_id: str, body: ScanSeverityOverrideInput):
+    """Add or update a severity override for findings in a scan.
+
+    The scope determines which findings are affected:
+    - {check_name, title}: findings matching both
+    - {title}: all findings with this title
+    - {check_name}: all findings from this check
+    """
+    scope = body.scope.model_dump(exclude_none=True)
+    if not scope:
+        raise HTTPException(400, "Scope must include at least check_name or title")
+
+    # Validate scan exists
+    scan = await _scan_repo.get_scan(scan_id)
+    if scan is None:
+        raise HTTPException(404, f"Scan '{scan_id}' not found")
+
+    from app.customizations import add_scan_override
+    try:
+        result = add_scan_override(scan_id, scope, body.severity, body.reason)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return result
+
+
+@router.delete("/api/v1/scans/{scan_id}/severity-overrides")
+@router.delete("/api/scans/{scan_id}/severity-overrides")
+async def delete_scan_severity_override(scan_id: str, body: ScanSeverityOverrideDeleteInput):
+    """Remove a severity override from a scan by scope."""
+    scope = body.scope.model_dump(exclude_none=True)
+    if not scope:
+        raise HTTPException(400, "Scope must include at least check_name or title")
+
+    from app.customizations import remove_scan_override
+    removed = remove_scan_override(scan_id, scope)
+    if not removed:
+        raise HTTPException(404, "No override found matching the given scope")
+    return {"scan_id": scan_id, "scope": scope, "message": "Override removed"}
+
+
+@router.post("/api/v1/scans/{scan_id}/severity-overrides/preview")
+@router.post("/api/scans/{scan_id}/severity-overrides/preview")
+async def preview_scan_severity_override(scan_id: str, body: ScanSeverityOverrideInput):
+    """Preview which findings would be affected by an override without persisting.
+
+    Returns a list of findings with their current and proposed severity.
+    """
+    scope = body.scope.model_dump(exclude_none=True)
+    if not scope:
+        raise HTTPException(400, "Scope must include at least check_name or title")
+
+    # Get raw findings (without existing scan overrides, to show true current state)
+    findings = await _finding_repo.get_findings(scan_id)
+
+    from app.customizations import preview_scan_override
+    try:
+        affected = preview_scan_override(findings, scope, body.severity)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"affected_count": len(affected), "findings": affected}
 
 
 # ─── Capabilities ────────────────────────────────────────────────────────────

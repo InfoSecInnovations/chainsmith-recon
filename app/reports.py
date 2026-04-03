@@ -184,7 +184,17 @@ def _technical_markdown(scan, findings, chains, severity_counts, risk, coverage)
                 ov = f["override"]
                 override_note = f" *[{ov['status'].upper()}]*"
 
-            lines.append(f"#### {f.get('title', 'Untitled')}{override_note}")
+            severity_note = ""
+            original_sev = f.get("original_severity")
+            if not original_sev:
+                raw = f.get("raw_data") or {}
+                original_sev = raw.get("original_severity")
+            if original_sev:
+                reason = f.get("severity_override_reason") or ""
+                reason_text = f" — {reason}" if reason else ""
+                severity_note = f" *(was {original_sev.upper()}{reason_text})*"
+
+            lines.append(f"#### {f.get('title', 'Untitled')}{override_note}{severity_note}")
             lines.append("")
             if f.get("description"):
                 lines.append(f"{f['description']}")

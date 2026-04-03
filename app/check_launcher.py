@@ -19,6 +19,8 @@ Usage:
 import logging
 from typing import Any
 
+from app.customizations import apply_pre_run_override
+
 logger = logging.getLogger(__name__)
 
 
@@ -229,6 +231,9 @@ class CheckLauncher:
 
                 # Annotate finding if host has prior critical findings from another suite
                 self._annotate_finding_if_needed(finding_dict, check_suite)
+
+                # Apply pre-run severity overrides from user customizations
+                apply_pre_run_override(finding_dict)
 
                 self.findings.append(finding_dict)
 

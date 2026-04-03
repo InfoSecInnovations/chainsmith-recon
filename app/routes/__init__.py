@@ -10,6 +10,7 @@ Organized by functional area:
 - scenarios: Scenario management
 - preferences: User preferences and profiles
 - compliance: Proof of scope and compliance
+- customizations: User severity override management
 """
 
 from app.routes.scope import router as scope_router
@@ -23,6 +24,7 @@ from app.routes.compliance import router as compliance_router
 from app.routes.scans import router as scans_router
 from app.routes.engagements import router as engagements_router
 from app.routes.swarm import router as swarm_router
+from app.routes.customizations import router as customizations_router
 
 __all__ = [
     "scope_router",
@@ -36,4 +38,5 @@ __all__ = [
     "scans_router",
     "engagements_router",
     "swarm_router",
+    "customizations_router",
 ]
