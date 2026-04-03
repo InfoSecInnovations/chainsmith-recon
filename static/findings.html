@@ -489,6 +489,7 @@
     <script src="/static/js/viz/treemap.js"></script>
     <script src="/static/js/viz/host-table.js"></script>
     <script src="/static/js/viz/chains-sankey.js"></script>
+    <script src="/static/js/viz/viz-fullscreen.js"></script>
     <script>
         let findings = [];
         let chains = [];
@@ -508,6 +509,23 @@
             initExpandAllButton();
             initTimelineToggle();
             await loadData();
+
+            // Re-render active viz on resize (fullscreen toggle, window resize)
+            var resizeTimer;
+            window.addEventListener('resize', function () {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(function () {
+                    if (!findings.length) return;
+                    var active = document.querySelector('.viz-panel.active');
+                    if (!active) return;
+                    var id = active.id;
+                    if (id === 'panel-treemap') Viz.renderTreemap();
+                    else if (id === 'panel-heatmap') Viz.renderHeatmap(findings, openModal);
+                    else if (id === 'panel-radar') Viz.renderRadar(findings, openModal);
+                    else if (id === 'panel-timeline') Viz.renderTimeline(findings, openModal, timelineGroupBy);
+                    else if (id === 'panel-coverage') Viz.renderCoverage(findings, openModal);
+                }, 150);
+            });
         });
 
         function updateNavLinks() {

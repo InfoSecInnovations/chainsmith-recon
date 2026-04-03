@@ -832,3 +832,84 @@
 }
 
 .grid path { stroke: none; }
+
+/* ================================================================
+   Fullscreen & Pop-Out Controls
+   ================================================================ */
+
+/* Control bar — floats top-right of each panel */
+.viz-ctrl-bar {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    z-index: 50;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+/* Show on panel hover or when fullscreen */
+.viz-panel:hover .viz-ctrl-bar,
+.chart-panel:hover .viz-ctrl-bar,
+.viz-fullscreen .viz-ctrl-bar {
+    opacity: 1;
+}
+
+.viz-ctrl-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.viz-ctrl-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+/* ─── Fullscreen overlay ─────────────────────────────────────── */
+.viz-fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 500 !important;
+    background: var(--bg-primary) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    transition: all 0.2s ease;
+}
+
+/* Ensure SVG / chart containers stretch in fullscreen */
+.viz-fullscreen .viz-container,
+.viz-fullscreen .treemap-container,
+.viz-fullscreen .heatmap-container,
+.viz-fullscreen .radar-container,
+.viz-fullscreen .coverage-container,
+.viz-fullscreen .timeline-container,
+.viz-fullscreen .host-table-container,
+.viz-fullscreen .chains-content,
+.viz-fullscreen .chart-wrapper {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+}
+
+/* Bump up the control bar z-index in fullscreen */
+.viz-fullscreen .viz-ctrl-bar {
+    z-index: 510;
+    top: 12px;
+    right: 12px;
+}

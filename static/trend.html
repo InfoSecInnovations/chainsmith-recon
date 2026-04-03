@@ -538,6 +538,7 @@
     <script src="/static/js/api.js"></script>
     <script src="/static/js/viz/viz-common.js"></script>
     <script src="/static/js/viz/trend-charts.js"></script>
+    <script src="/static/js/viz/viz-fullscreen.js"></script>
     <script>
         // ─── State ───────────────────────────────────────────────
         let trendData = null;
@@ -554,6 +555,13 @@
             initTabs();
             initSelectors();
             initExportPanel();
+
+            // Re-render active chart on resize (fullscreen toggle, window resize)
+            var resizeTimer;
+            window.addEventListener('resize', function () {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(function () { renderActiveChart(); }, 150);
+            });
         });
 
         function initTabs() {
