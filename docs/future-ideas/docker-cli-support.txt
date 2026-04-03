@@ -1,0 +1,49 @@
+Docker CLI Support
+==================
+
+Status: Not yet implemented
+Filed:  2026-04-03
+
+Problem
+-------
+The `chainsmith` CLI (Click-based, entry point in app.cli:main) is not
+available inside the Docker container. The Dockerfile only installs
+requirements.txt — it does not install the package itself, so the
+`chainsmith` console_scripts entry point is never created.
+
+Running `docker exec -it chainsmith-recon chainsmith --help` fails with:
+  exec: "chainsmith": executable file not found in $PATH
+
+Root Cause
+----------
+By design, the Dockerfile does NOT bake app code into the image (see
+Dockerfile comment line 7). App code is volume-mounted at runtime via
+docker-compose. This means `pip install -e .` cannot run at build time
+because pyproject.toml and the app/ source aren't present yet.
+
+Options
+-------
+1. Container entrypoint script
+   Add an entrypoint.sh that runs `pip install -e .` (or just
+   `pip install --no-deps -e .`) before exec'ing uvicorn. Downside:
+   adds a few seconds to every container start.
+
+2. Bake a minimal install into the image
+   COPY pyproject.toml into the image at build time and run
+   `pip install --no-deps -e .` so the console_scripts shim is
+   created. App code is still volume-mounted at runtime — only the
+   entry point wrapper needs to exist in the image. Needs testing to
+   confirm the shim resolves against the mounted /app/app path.
+
+3. Shell alias / wrapper script
+   Add a small /usr/local/bin/chainsmith script to the image:
+     #!/bin/sh
+     exec python -m app "$@"
+   This avoids pip install entirely and works with the existing
+   app/__main__.py. Simplest option.
+
+Recommendation
+--------------
+Option 3 (wrapper script) is the lowest-risk approach. It can be added
+to the Dockerfile in a single RUN line and requires no changes to the
+volume-mount design.
