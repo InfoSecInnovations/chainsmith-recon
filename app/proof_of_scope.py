@@ -161,9 +161,6 @@ class ComplianceReport(BaseModel):
 class TrafficLogger:
     """Handles traffic logging to JSONL file."""
 
-    def __init__(self):
-        self._ensure_data_dir()
-
     def _ensure_data_dir(self):
         """Ensure data directory exists."""
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -221,6 +218,7 @@ class TrafficLogger:
 
     def _append_entry(self, filepath: Path, entry: dict):
         """Append entry to JSONL file."""
+        self._ensure_data_dir()
         with open(filepath, "a") as f:
             f.write(json.dumps(entry) + "\n")
 
@@ -251,9 +249,6 @@ class TrafficLogger:
 class ViolationLogger:
     """Handles scope violation logging."""
 
-    def __init__(self):
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-
     def log_violation(
         self,
         violation_type: str,
@@ -278,6 +273,7 @@ class ViolationLogger:
             user_acknowledged=user_acknowledged,
         )
 
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
         with open(VIOLATIONS_LOG_FILE, "a") as f:
             f.write(entry.model_dump_json() + "\n")
 
