@@ -161,9 +161,13 @@ class ComplianceReport(BaseModel):
 class TrafficLogger:
     """Handles traffic logging to JSONL file."""
 
+    def __init__(self, data_dir: Path | None = None):
+        self._data_dir = data_dir or DATA_DIR
+        self._log_file = self._data_dir / "traffic_log.jsonl"
+
     def _ensure_data_dir(self):
         """Ensure data directory exists."""
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        self._data_dir.mkdir(parents=True, exist_ok=True)
 
     def log_request(
         self,
@@ -196,7 +200,7 @@ class TrafficLogger:
             response_time_ms=response_time_ms,
         )
 
-        self._append_entry(TRAFFIC_LOG_FILE, entry.model_dump())
+        self._append_entry(entry.model_dump())
         return entry
 
     def log_tool_call(
@@ -213,22 +217,22 @@ class TrafficLogger:
             scope_status=ScopeStatus.IN_SCOPE,  # Assume tool calls are in scope
         )
 
-        self._append_entry(TRAFFIC_LOG_FILE, entry.model_dump())
+        self._append_entry(entry.model_dump())
         return entry
 
-    def _append_entry(self, filepath: Path, entry: dict):
+    def _append_entry(self, entry: dict):
         """Append entry to JSONL file."""
         self._ensure_data_dir()
-        with open(filepath, "a") as f:
+        with open(self._log_file, "a") as f:
             f.write(json.dumps(entry) + "\n")
 
     def get_entries(self, limit: int = 1000) -> list[dict]:
         """Read traffic log entries."""
-        if not TRAFFIC_LOG_FILE.exists():
+        if not self._log_file.exists():
             return []
 
         entries = []
-        with open(TRAFFIC_LOG_FILE) as f:
+        with open(self._log_file) as f:
             for line in f:
                 if line.strip():
                     entries.append(json.loads(line))
@@ -239,8 +243,8 @@ class TrafficLogger:
 
     def clear(self):
         """Clear traffic log."""
-        if TRAFFIC_LOG_FILE.exists():
-            TRAFFIC_LOG_FILE.unlink()
+        if self._log_file.exists():
+            self._log_file.unlink()
 
 
 # ─── Violation Logger ──────────────────────────────────────────
@@ -248,6 +252,10 @@ class TrafficLogger:
 
 class ViolationLogger:
     """Handles scope violation logging."""
+
+    def __init__(self, data_dir: Path | None = None):
+        self._data_dir = data_dir or DATA_DIR
+        self._log_file = self._data_dir / "violations_log.jsonl"
 
     def log_violation(
         self,
@@ -273,19 +281,19 @@ class ViolationLogger:
             user_acknowledged=user_acknowledged,
         )
 
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        with open(VIOLATIONS_LOG_FILE, "a") as f:
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        with open(self._log_file, "a") as f:
             f.write(entry.model_dump_json() + "\n")
 
         return entry
 
     def get_violations(self) -> list[ViolationEntry]:
         """Read all violations."""
-        if not VIOLATIONS_LOG_FILE.exists():
+        if not self._log_file.exists():
             return []
 
         violations = []
-        with open(VIOLATIONS_LOG_FILE) as f:
+        with open(self._log_file) as f:
             for line in f:
                 if line.strip():
                     violations.append(ViolationEntry(**json.loads(line)))
@@ -294,8 +302,8 @@ class ViolationLogger:
 
     def clear(self):
         """Clear violations log."""
-        if VIOLATIONS_LOG_FILE.exists():
-            VIOLATIONS_LOG_FILE.unlink()
+        if self._log_file.exists():
+            self._log_file.unlink()
 
 
 # ─── Compliance Reporter ───────────────────────────────────────
@@ -304,9 +312,16 @@ class ViolationLogger:
 class ComplianceReporter:
     """Generates compliance reports from logs."""
 
-    def __init__(self, traffic_logger: TrafficLogger, violation_logger: ViolationLogger):
+    def __init__(
+        self,
+        traffic_logger: TrafficLogger,
+        violation_logger: ViolationLogger,
+        data_dir: Path | None = None,
+    ):
         self.traffic_logger = traffic_logger
         self.violation_logger = violation_logger
+        self._data_dir = data_dir or DATA_DIR
+        self._report_file = self._data_dir / "compliance_report.json"
 
     def generate_report(
         self,
@@ -345,17 +360,18 @@ class ComplianceReporter:
         )
 
         # Save report
-        with open(COMPLIANCE_REPORT_FILE, "w") as f:
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        with open(self._report_file, "w") as f:
             f.write(report.model_dump_json(indent=2))
 
         return report
 
     def get_latest_report(self) -> ComplianceReport | None:
         """Get the latest compliance report."""
-        if not COMPLIANCE_REPORT_FILE.exists():
+        if not self._report_file.exists():
             return None
 
-        with open(COMPLIANCE_REPORT_FILE) as f:
+        with open(self._report_file) as f:
             data = json.load(f)
 
         return ComplianceReport(**data)
@@ -406,5 +422,5 @@ def reset_proof_of_scope():
     """Reset all proof of scope data."""
     traffic_logger.clear()
     violation_logger.clear()
-    if COMPLIANCE_REPORT_FILE.exists():
-        COMPLIANCE_REPORT_FILE.unlink()
+    if compliance_reporter._report_file.exists():
+        compliance_reporter._report_file.unlink()
