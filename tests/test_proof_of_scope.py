@@ -246,14 +246,9 @@ class TestTrafficLogger:
     """Tests for TrafficLogger class."""
 
     @pytest.fixture
-    def logger(self, tmp_path: Path, monkeypatch):
+    def logger(self, tmp_path: Path):
         """Create a logger with temp data directory."""
-        import app.proof_of_scope as pos
-
-        monkeypatch.setattr(pos, "DATA_DIR", tmp_path)
-        monkeypatch.setattr(pos, "TRAFFIC_LOG_FILE", tmp_path / "traffic_log.jsonl")
-
-        return TrafficLogger()
+        return TrafficLogger(data_dir=tmp_path)
 
     def test_log_request(self, logger, tmp_path: Path):
         """log_request creates entry."""
@@ -351,14 +346,9 @@ class TestViolationLogger:
     """Tests for ViolationLogger class."""
 
     @pytest.fixture
-    def logger(self, tmp_path: Path, monkeypatch):
+    def logger(self, tmp_path: Path):
         """Create a logger with temp data directory."""
-        import app.proof_of_scope as pos
-
-        monkeypatch.setattr(pos, "DATA_DIR", tmp_path)
-        monkeypatch.setattr(pos, "VIOLATIONS_LOG_FILE", tmp_path / "violations_log.jsonl")
-
-        return ViolationLogger()
+        return ViolationLogger(data_dir=tmp_path)
 
     def test_log_violation(self, logger, tmp_path: Path):
         """log_violation creates entry."""
@@ -424,18 +414,11 @@ class TestComplianceReporter:
     """Tests for ComplianceReporter class."""
 
     @pytest.fixture
-    def setup_reporter(self, tmp_path: Path, monkeypatch):
+    def setup_reporter(self, tmp_path: Path):
         """Create reporter with temp data directory."""
-        import app.proof_of_scope as pos
-
-        monkeypatch.setattr(pos, "DATA_DIR", tmp_path)
-        monkeypatch.setattr(pos, "TRAFFIC_LOG_FILE", tmp_path / "traffic_log.jsonl")
-        monkeypatch.setattr(pos, "VIOLATIONS_LOG_FILE", tmp_path / "violations_log.jsonl")
-        monkeypatch.setattr(pos, "COMPLIANCE_REPORT_FILE", tmp_path / "compliance_report.json")
-
-        traffic = TrafficLogger()
-        violations = ViolationLogger()
-        reporter = ComplianceReporter(traffic, violations)
+        traffic = TrafficLogger(data_dir=tmp_path)
+        violations = ViolationLogger(data_dir=tmp_path)
+        reporter = ComplianceReporter(traffic, violations, data_dir=tmp_path)
 
         return reporter, traffic, violations, tmp_path
 
@@ -659,19 +642,19 @@ class TestResetProofOfScope:
         """reset_proof_of_scope clears all logs and report."""
         import app.proof_of_scope as pos
 
-        monkeypatch.setattr(pos, "DATA_DIR", tmp_path)
-        monkeypatch.setattr(pos, "TRAFFIC_LOG_FILE", tmp_path / "traffic_log.jsonl")
-        monkeypatch.setattr(pos, "VIOLATIONS_LOG_FILE", tmp_path / "violations_log.jsonl")
-        monkeypatch.setattr(pos, "COMPLIANCE_REPORT_FILE", tmp_path / "compliance_report.json")
-
         # Create files
         (tmp_path / "traffic_log.jsonl").write_text('{"test": 1}\n')
         (tmp_path / "violations_log.jsonl").write_text('{"test": 1}\n')
         (tmp_path / "compliance_report.json").write_text('{"test": 1}')
 
-        # Recreate loggers with patched paths
-        pos.traffic_logger = TrafficLogger()
-        pos.violation_logger = ViolationLogger()
+        # Replace global loggers with tmp_path-based instances
+        monkeypatch.setattr(pos, "traffic_logger", TrafficLogger(data_dir=tmp_path))
+        monkeypatch.setattr(pos, "violation_logger", ViolationLogger(data_dir=tmp_path))
+        monkeypatch.setattr(
+            pos,
+            "compliance_reporter",
+            ComplianceReporter(pos.traffic_logger, pos.violation_logger, data_dir=tmp_path),
+        )
 
         reset_proof_of_scope()
 
