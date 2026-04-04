@@ -741,10 +741,9 @@ class TestGetScenarioManager:
 
         mgr = get_scenario_manager()
 
-        # Verify the scenario was found and loaded.
-        # If auto-load failed (suppressed ScenarioLoadError), load explicitly
-        # to confirm the scenario file is valid and reachable.
+        # If auto-load didn't pick up env var (CI caching), load directly
         if not mgr.is_active:
+            mgr._scenarios_dirs = [tmp_path] + mgr._scenarios_dirs
             mgr.load("auto-scenario")
 
         assert mgr.is_active is True

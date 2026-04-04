@@ -488,91 +488,78 @@ class TestTrendReportSARIF:
 # =============================================================================
 
 
-class TestTargetedExport:
-    @pytest.fixture
-    async def targeted_db(self, tmp_path):
-        """Dedicated DB fixture for targeted export tests."""
-        db_path = tmp_path / "targeted.db"
-        await init_db(backend="sqlite", db_path=db_path)
-        yield db_path
-        await close_db()
+@pytest.fixture
+async def targeted_fingerprints(db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    """Set up a scan with findings and return fingerprints."""
+    await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    from sqlalchemy import select
 
-    @pytest.fixture
-    async def scan_with_fingerprints(self, targeted_db):
-        scan_repo = ScanRepository()
-        finding_repo = FindingRepository()
-        chain_repo = ChainRepository()
-        check_log_repo = CheckLogRepository()
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
-        # Get fingerprints
-        from sqlalchemy import select
+    async with get_session() as session:
+        result = await session.execute(select(Finding.fingerprint))
+        fps = [row[0] for row in result.all()]
+    return fps
 
-        async with get_session() as session:
-            result = await session.execute(select(Finding.fingerprint))
-            fps = [row[0] for row in result.all()]
-        return fps
 
-    @pytest.mark.asyncio
-    async def test_markdown_export(self, scan_with_fingerprints):
-        fps = scan_with_fingerprints
-        result = await generate_targeted_export(fps[:2], "md")
+async def test_targeted_markdown_export(targeted_fingerprints):
+    fps = targeted_fingerprints
+    result = await generate_targeted_export(fps[:2], "md")
 
-        assert result["format"] == "md"
-        assert result["filename"].startswith("targeted-export-")
-        assert result["filename"].endswith(".md")
-        content = result["content"]
-        assert "# Targeted Export" in content
-        assert "**Findings:** 2" in content
+    assert result["format"] == "md"
+    assert result["filename"].startswith("targeted-export-")
+    assert result["filename"].endswith(".md")
+    content = result["content"]
+    assert "# Targeted Export" in content
+    assert "**Findings:** 2" in content
 
-    @pytest.mark.asyncio
-    async def test_json_export(self, scan_with_fingerprints):
-        fps = scan_with_fingerprints
-        result = await generate_targeted_export(fps, "json")
 
-        assert result["format"] == "json"
-        report = json.loads(result["content"])
-        assert report["report_type"] == "targeted"
-        assert report["summary"]["total_findings"] == 4
+async def test_targeted_json_export(targeted_fingerprints):
+    fps = targeted_fingerprints
+    result = await generate_targeted_export(fps, "json")
 
-    @pytest.mark.asyncio
-    async def test_html_export(self, scan_with_fingerprints):
-        fps = scan_with_fingerprints
-        result = await generate_targeted_export(fps, "html")
+    assert result["format"] == "json"
+    report = json.loads(result["content"])
+    assert report["report_type"] == "targeted"
+    assert report["summary"]["total_findings"] == 4
 
-        assert result["format"] == "html"
-        assert "<!DOCTYPE html>" in result["content"]
-        assert "Targeted Export" in result["content"]
 
-    @pytest.mark.asyncio
-    async def test_sarif_export(self, scan_with_fingerprints):
-        fps = scan_with_fingerprints
-        result = await generate_targeted_export(fps, "sarif")
+async def test_targeted_html_export(targeted_fingerprints):
+    fps = targeted_fingerprints
+    result = await generate_targeted_export(fps, "html")
 
-        assert result["format"] == "sarif"
-        sarif = json.loads(result["content"])
-        assert sarif["version"] == "2.1.0"
-        assert len(sarif["runs"][0]["results"]) == 4
-        props = sarif["runs"][0]["invocations"][0]["properties"]
-        assert props["reportType"] == "targeted"
+    assert result["format"] == "html"
+    assert "<!DOCTYPE html>" in result["content"]
+    assert "Targeted Export" in result["content"]
 
-    @pytest.mark.asyncio
-    async def test_custom_title(self, scan_with_fingerprints):
-        fps = scan_with_fingerprints
-        result = await generate_targeted_export(fps[:1], "md", title="Critical Findings Only")
-        assert "# Critical Findings Only" in result["content"]
 
-    @pytest.mark.asyncio
-    async def test_no_findings_raises(self, targeted_db):
-        with pytest.raises(ValueError, match="No findings found"):
-            await generate_targeted_export(["nonexistent-fp"], "md")
+async def test_targeted_sarif_export(targeted_fingerprints):
+    fps = targeted_fingerprints
+    result = await generate_targeted_export(fps, "sarif")
 
-    @pytest.mark.asyncio
-    async def test_risk_score_calculation(self, scan_with_fingerprints):
-        fps = scan_with_fingerprints
-        result = await generate_targeted_export(fps, "json")
-        report = json.loads(result["content"])
-        # 1 critical(10) + 1 high(5) + 1 medium(2) + 1 info(0) = 17
-        assert report["summary"]["risk_score"] == 17
+    assert result["format"] == "sarif"
+    sarif = json.loads(result["content"])
+    assert sarif["version"] == "2.1.0"
+    assert len(sarif["runs"][0]["results"]) == 4
+    props = sarif["runs"][0]["invocations"][0]["properties"]
+    assert props["reportType"] == "targeted"
+
+
+async def test_targeted_custom_title(targeted_fingerprints):
+    fps = targeted_fingerprints
+    result = await generate_targeted_export(fps[:1], "md", title="Critical Findings Only")
+    assert "# Critical Findings Only" in result["content"]
+
+
+async def test_targeted_no_findings_raises(db):
+    with pytest.raises(ValueError, match="No findings found"):
+        await generate_targeted_export(["nonexistent-fp"], "md")
+
+
+async def test_targeted_risk_score_calculation(targeted_fingerprints):
+    fps = targeted_fingerprints
+    result = await generate_targeted_export(fps, "json")
+    report = json.loads(result["content"])
+    # 1 critical(10) + 1 high(5) + 1 medium(2) + 1 info(0) = 17
+    assert report["summary"]["risk_score"] == 17
 
 
 # =============================================================================
