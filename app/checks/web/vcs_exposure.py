@@ -9,10 +9,10 @@ Also checks .svn/entries and .hg/store.
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class VCSExposureCheck(ServiceIteratingCheck):
@@ -74,26 +74,31 @@ class VCSExposureCheck(ServiceIteratingCheck):
                 # ── Mercurial exposure ──
                 hg_resp = await client.get(service.with_path("/.hg/store"))
                 if not hg_resp.error and hg_resp.status_code == 200:
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Mercurial metadata exposed: {service.host}",
-                        description=".hg/store is accessible — source code may be recoverable",
-                        severity="high",
-                        evidence=fmt_status_evidence(
-                            service.with_path("/.hg/store"), 200,
-                            hg_resp.body[:200] if hg_resp.body else "",
-                        ),
-                        host=service.host,
-                        discriminator="hg-exposed",
-                        target=service,
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Mercurial metadata exposed: {service.host}",
+                            description=".hg/store is accessible — source code may be recoverable",
+                            severity="high",
+                            evidence=fmt_status_evidence(
+                                service.with_path("/.hg/store"),
+                                200,
+                                hg_resp.body[:200] if hg_resp.body else "",
+                            ),
+                            host=service.host,
+                            discriminator="hg-exposed",
+                            target=service,
+                        )
+                    )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
         return result
 
-    async def _check_git(self, client: AsyncHttpClient, service: Service, result: CheckResult) -> None:
+    async def _check_git(
+        self, client: AsyncHttpClient, service: Service, result: CheckResult
+    ) -> None:
         """Probe git metadata depth."""
         accessible_git = []
         git_config_body = ""
@@ -118,50 +123,59 @@ class VCSExposureCheck(ServiceIteratingCheck):
                     break
 
         if has_creds:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Git config contains credentials: {service.host}",
-                description="Remote URL with embedded token/password found in .git/config",
-                severity="critical",
-                evidence=f"Credential pattern found in .git/config (redacted). Accessible paths: {', '.join(accessible_git)}",
-                host=service.host,
-                discriminator="git-config-credentials",
-                target=service,
-                raw_data={"accessible_paths": accessible_git},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Git config contains credentials: {service.host}",
+                    description="Remote URL with embedded token/password found in .git/config",
+                    severity="critical",
+                    evidence=f"Credential pattern found in .git/config (redacted). Accessible paths: {', '.join(accessible_git)}",
+                    host=service.host,
+                    discriminator="git-config-credentials",
+                    target=service,
+                    raw_data={"accessible_paths": accessible_git},
+                )
+            )
         else:
             recoverable = len(accessible_git) >= 3
             severity = "critical" if recoverable else "high"
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Git repository exposed: {service.host}",
-                description=f"{len(accessible_git)} git metadata files accessible — "
-                            f"{'full source code likely recoverable' if recoverable else 'partial exposure'}",
-                severity=severity,
-                evidence=f"Accessible: {', '.join(accessible_git)}",
-                host=service.host,
-                discriminator="git-exposed",
-                target=service,
-                raw_data={"accessible_paths": accessible_git},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Git repository exposed: {service.host}",
+                    description=f"{len(accessible_git)} git metadata files accessible — "
+                    f"{'full source code likely recoverable' if recoverable else 'partial exposure'}",
+                    severity=severity,
+                    evidence=f"Accessible: {', '.join(accessible_git)}",
+                    host=service.host,
+                    discriminator="git-exposed",
+                    target=service,
+                    raw_data={"accessible_paths": accessible_git},
+                )
+            )
 
-    async def _check_svn(self, client: AsyncHttpClient, service: Service, result: CheckResult) -> None:
+    async def _check_svn(
+        self, client: AsyncHttpClient, service: Service, result: CheckResult
+    ) -> None:
         """Probe SVN metadata."""
         resp = await client.get(service.with_path("/.svn/entries"))
         if not resp.error and resp.status_code == 200:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"SVN metadata exposed: {service.host}",
-                description=".svn/entries is accessible — source code may be recoverable",
-                severity="high",
-                evidence=fmt_status_evidence(
-                    service.with_path("/.svn/entries"), 200,
-                    resp.body[:200] if resp.body else "",
-                ),
-                host=service.host,
-                discriminator="svn-exposed",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"SVN metadata exposed: {service.host}",
+                    description=".svn/entries is accessible — source code may be recoverable",
+                    severity="high",
+                    evidence=fmt_status_evidence(
+                        service.with_path("/.svn/entries"),
+                        200,
+                        resp.body[:200] if resp.body else "",
+                    ),
+                    host=service.host,
+                    discriminator="svn-exposed",
+                    target=service,
+                )
+            )
 
     @staticmethod
     def _get_accessible_paths(service: Service, context: dict) -> list[str]:

@@ -10,10 +10,9 @@ References:
 
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Per-store default credential attempts
 STORE_AUTH_ATTEMPTS = {
@@ -107,7 +106,10 @@ class RAGAuthBypassCheck(ServiceIteratingCheck):
         # Build store base URLs
         store_urls: dict[str, str] = {}
         for ep in rag_endpoints:
-            if ep.get("endpoint_type") == "vector_store" and ep.get("service", {}).get("host") == service.host:
+            if (
+                ep.get("endpoint_type") == "vector_store"
+                and ep.get("service", {}).get("host") == service.host
+            ):
                 url = ep.get("url", service.url)
                 if "://" in url:
                     store_urls.setdefault(ep["store_type"], "/".join(url.split("/")[:3]))
@@ -129,27 +131,34 @@ class RAGAuthBypassCheck(ServiceIteratingCheck):
                     # First check if endpoint requires auth at all
                     baseline_resp = await client.get(url)
                     if not baseline_resp.error and baseline_resp.status_code == 200:
-                        bypass_results.append({
-                            "store_type": store_type,
-                            "bypass_type": "no_auth_required",
-                            "path": test_path,
-                        })
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Vector store requires no authentication: {store_type}",
-                            description=(
-                                f"Vector store '{store_type}' at {test_path} requires "
-                                f"no authentication. Full API access available."
-                            ),
-                            severity="critical",
-                            evidence=f"GET {url} -> HTTP {baseline_resp.status_code}",
-                            host=service.host,
-                            discriminator=f"noauth-{store_type}",
-                            target=service,
-                            target_url=url,
-                            raw_data={"store_type": store_type, "status": baseline_resp.status_code},
-                            references=self.references,
-                        ))
+                        bypass_results.append(
+                            {
+                                "store_type": store_type,
+                                "bypass_type": "no_auth_required",
+                                "path": test_path,
+                            }
+                        )
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Vector store requires no authentication: {store_type}",
+                                description=(
+                                    f"Vector store '{store_type}' at {test_path} requires "
+                                    f"no authentication. Full API access available."
+                                ),
+                                severity="critical",
+                                evidence=f"GET {url} -> HTTP {baseline_resp.status_code}",
+                                host=service.host,
+                                discriminator=f"noauth-{store_type}",
+                                target=service,
+                                target_url=url,
+                                raw_data={
+                                    "store_type": store_type,
+                                    "status": baseline_resp.status_code,
+                                },
+                                references=self.references,
+                            )
+                        )
                         continue
 
                     if baseline_resp.status_code not in (401, 403):
@@ -164,22 +173,24 @@ class RAGAuthBypassCheck(ServiceIteratingCheck):
                         )
                         if bypass:
                             bypass_results.append(bypass)
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Vector store default key accepted: {store_type}",
-                                description=(
-                                    f"Default credential '{cred['type']}' grants access "
-                                    f"to {store_type} at {test_path}."
-                                ),
-                                severity="high",
-                                evidence=f"Auth type: {cred['type']}\nPath: {test_path}",
-                                host=service.host,
-                                discriminator=f"default-{store_type}-{cred['type']}",
-                                target=service,
-                                target_url=url,
-                                raw_data=bypass,
-                                references=self.references,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Vector store default key accepted: {store_type}",
+                                    description=(
+                                        f"Default credential '{cred['type']}' grants access "
+                                        f"to {store_type} at {test_path}."
+                                    ),
+                                    severity="high",
+                                    evidence=f"Auth type: {cred['type']}\nPath: {test_path}",
+                                    host=service.host,
+                                    discriminator=f"default-{store_type}-{cred['type']}",
+                                    target=service,
+                                    target_url=url,
+                                    raw_data=bypass,
+                                    references=self.references,
+                                )
+                            )
                             break  # Found working cred, stop
 
                     # Try common auth headers
@@ -189,63 +200,72 @@ class RAGAuthBypassCheck(ServiceIteratingCheck):
                         )
                         if bypass:
                             bypass_results.append(bypass)
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Vector store auth bypass via common header: {store_type}",
-                                description=(
-                                    f"Common auth header '{cred['type']}' bypasses "
-                                    f"authentication on {store_type}."
-                                ),
-                                severity="high",
-                                evidence=f"Auth type: {cred['type']}\nHeaders: {cred['headers']}",
-                                host=service.host,
-                                discriminator=f"common-{store_type}-{cred['type']}",
-                                target=service,
-                                target_url=url,
-                                raw_data=bypass,
-                                references=self.references,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Vector store auth bypass via common header: {store_type}",
+                                    description=(
+                                        f"Common auth header '{cred['type']}' bypasses "
+                                        f"authentication on {store_type}."
+                                    ),
+                                    severity="high",
+                                    evidence=f"Auth type: {cred['type']}\nHeaders: {cred['headers']}",
+                                    host=service.host,
+                                    discriminator=f"common-{store_type}-{cred['type']}",
+                                    target=service,
+                                    target_url=url,
+                                    raw_data=bypass,
+                                    references=self.references,
+                                )
+                            )
                             break
 
                     # Try IP-based bypasses
                     for ip_headers in IP_BYPASS_HEADERS:
                         bypass = await self._try_auth(
-                            client, url, ip_headers, store_type,
+                            client,
+                            url,
+                            ip_headers,
+                            store_type,
                             f"ip_bypass_{list(ip_headers.keys())[0]}",
                         )
                         if bypass:
                             bypass_results.append(bypass)
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Vector store auth bypass via IP spoofing: {store_type}",
-                                description=(
-                                    f"IP-based header bypass accepted on {store_type}. "
-                                    f"Headers: {ip_headers}"
-                                ),
-                                severity="medium",
-                                evidence=f"Headers: {ip_headers}\nPath: {test_path}",
-                                host=service.host,
-                                discriminator=f"ip-{store_type}",
-                                target=service,
-                                target_url=url,
-                                raw_data=bypass,
-                                references=self.references,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Vector store auth bypass via IP spoofing: {store_type}",
+                                    description=(
+                                        f"IP-based header bypass accepted on {store_type}. "
+                                        f"Headers: {ip_headers}"
+                                    ),
+                                    severity="medium",
+                                    evidence=f"Headers: {ip_headers}\nPath: {test_path}",
+                                    host=service.host,
+                                    discriminator=f"ip-{store_type}",
+                                    target=service,
+                                    target_url=url,
+                                    raw_data=bypass,
+                                    references=self.references,
+                                )
+                            )
                             break
 
                     # If no bypass found
                     if not any(b["store_type"] == store_type for b in bypass_results):
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Vector store authentication enforced: {store_type}",
-                            description=f"Authentication on {store_type} appears properly enforced.",
-                            severity="info",
-                            evidence=f"All bypass attempts returned 401/403",
-                            host=service.host,
-                            discriminator=f"auth-ok-{store_type}",
-                            target=service,
-                            target_url=url,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Vector store authentication enforced: {store_type}",
+                                description=f"Authentication on {store_type} appears properly enforced.",
+                                severity="info",
+                                evidence="All bypass attempts returned 401/403",
+                                host=service.host,
+                                discriminator=f"auth-ok-{store_type}",
+                                target=service,
+                                target_url=url,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")

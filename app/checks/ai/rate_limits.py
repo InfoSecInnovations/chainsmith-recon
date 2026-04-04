@@ -7,10 +7,10 @@ Map rate limiting behavior and identify bypass opportunities.
 import asyncio
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.lib.ai_helpers import fmt_rate_limit_evidence, format_chat_request
 from app.lib.findings import build_finding
-from app.lib.ai_helpers import format_chat_request, fmt_rate_limit_evidence
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import extract_headers_dict
 
 
@@ -91,36 +91,50 @@ class RateLimitCheck(BaseCheck):
         host = service.host
 
         if rate_info["detected"]:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Rate limiting detected (threshold: ~{rate_info['threshold']} requests)",
-                description="Endpoint enforces rate limiting",
-                severity="info",
-                evidence=fmt_rate_limit_evidence(rate_info["threshold"], 429, rate_info["headers"]),
-                host=host, discriminator="rate-limit-detected",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Rate limiting detected (threshold: ~{rate_info['threshold']} requests)",
+                    description="Endpoint enforces rate limiting",
+                    severity="info",
+                    evidence=fmt_rate_limit_evidence(
+                        rate_info["threshold"], 429, rate_info["headers"]
+                    ),
+                    host=host,
+                    discriminator="rate-limit-detected",
+                    target=service,
+                    target_url=url,
+                )
+            )
         elif rate_info["headers"]:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Rate limit headers present",
-                description="Rate limiting configured but threshold not reached in testing",
-                severity="info",
-                evidence=fmt_rate_limit_evidence(self.TEST_REQUESTS, 200, rate_info["headers"]),
-                host=host, discriminator="rate-limit-headers",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Rate limit headers present",
+                    description="Rate limiting configured but threshold not reached in testing",
+                    severity="info",
+                    evidence=fmt_rate_limit_evidence(self.TEST_REQUESTS, 200, rate_info["headers"]),
+                    host=host,
+                    discriminator="rate-limit-headers",
+                    target=service,
+                    target_url=url,
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="No rate limiting detected",
-                description=f"No rate limiting after {self.TEST_REQUESTS} requests — potential DoS vector",
-                severity="medium",
-                evidence=fmt_rate_limit_evidence(self.TEST_REQUESTS, 200, {}),
-                host=host, discriminator="no-rate-limit",
-                target=service, target_url=url,
-                references=["OWASP API4:2023"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="No rate limiting detected",
+                    description=f"No rate limiting after {self.TEST_REQUESTS} requests — potential DoS vector",
+                    severity="medium",
+                    evidence=fmt_rate_limit_evidence(self.TEST_REQUESTS, 200, {}),
+                    host=host,
+                    discriminator="no-rate-limit",
+                    target=service,
+                    target_url=url,
+                    references=["OWASP API4:2023"],
+                )
+            )
 
         result.outputs[f"rate_limit_{service.port}"] = rate_info
         return result

@@ -25,25 +25,24 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.checks.base import Service
-from app.checks.agent.multi_agent_detection import AgentMultiAgentDetectionCheck
-from app.checks.agent.framework_version import AgentFrameworkVersionCheck
-from app.checks.agent.memory_extraction import AgentMemoryExtractionCheck
-from app.checks.agent.tool_abuse import AgentToolAbuseCheck
-from app.checks.agent.privilege_escalation import AgentPrivilegeEscalationCheck
-from app.checks.agent.loop_detection import AgentLoopDetectionCheck
 from app.checks.agent.callback_injection import AgentCallbackInjectionCheck
-from app.checks.agent.streaming_injection import AgentStreamingInjectionCheck
-from app.checks.agent.framework_exploits import AgentFrameworkExploitsCheck
-from app.checks.agent.memory_poisoning import AgentMemoryPoisoningCheck
 from app.checks.agent.context_overflow import AgentContextOverflowCheck
+from app.checks.agent.cross_injection import AgentCrossInjectionCheck
+from app.checks.agent.framework_exploits import AgentFrameworkExploitsCheck
+from app.checks.agent.framework_version import AgentFrameworkVersionCheck
+from app.checks.agent.goal_injection import FRAMEWORK_PAYLOADS, AgentGoalInjectionCheck
+from app.checks.agent.loop_detection import AgentLoopDetectionCheck
+from app.checks.agent.memory_extraction import AgentMemoryExtractionCheck
+from app.checks.agent.memory_poisoning import AgentMemoryPoisoningCheck
+from app.checks.agent.multi_agent_detection import AgentMultiAgentDetectionCheck
+from app.checks.agent.privilege_escalation import AgentPrivilegeEscalationCheck
 from app.checks.agent.reflection_abuse import AgentReflectionAbuseCheck
 from app.checks.agent.state_manipulation import AgentStateManipulationCheck
+from app.checks.agent.streaming_injection import AgentStreamingInjectionCheck
+from app.checks.agent.tool_abuse import AgentToolAbuseCheck
 from app.checks.agent.trust_chain import AgentTrustChainCheck
-from app.checks.agent.cross_injection import AgentCrossInjectionCheck
-from app.checks.agent.goal_injection import AgentGoalInjectionCheck, FRAMEWORK_PAYLOADS
+from app.checks.base import Service
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
@@ -138,10 +137,12 @@ class TestMultiAgentDetection:
         async def mock_get(url, **kw):
             if "/agents" in url and "list" not in url:
                 return make_response(
-                    body=json.dumps([
-                        {"name": "researcher"},
-                        {"name": "reviewer"},
-                    ]),
+                    body=json.dumps(
+                        [
+                            {"name": "researcher"},
+                            {"name": "reviewer"},
+                        ]
+                    ),
                     headers={"content-type": "application/json"},
                 )
             return make_response(status_code=404)
@@ -164,9 +165,7 @@ class TestMultiAgentDetection:
             return make_response(status_code=404)
 
         async def mock_post(url, **kw):
-            return make_response(
-                body="I'm delegating to the research agent for this task."
-            )
+            return make_response(body="I'm delegating to the research agent for this task.")
 
         client = _mock_client(get_fn=mock_get, post_fn=mock_post)
 
@@ -237,7 +236,9 @@ class TestFrameworkVersion:
 
         vuln_findings = [f for f in result.findings if f.severity in ("high", "medium")]
         assert len(vuln_findings) >= 1
-        assert any("vulnerable" in f.title.lower() or "vuln" in f.title.lower() for f in vuln_findings)
+        assert any(
+            "vulnerable" in f.title.lower() or "vuln" in f.title.lower() for f in vuln_findings
+        )
 
     def test_version_comparison(self):
         check = AgentFrameworkVersionCheck()
@@ -259,12 +260,14 @@ class TestMemoryExtraction:
         async def mock_get(url, **kw):
             if "/memory" in url or "/agent/memory" in url:
                 return make_response(
-                    body=json.dumps({
-                        "messages": [
-                            {"role": "user", "content": "hello"},
-                            {"role": "assistant", "content": "Hi, how can I help?"},
-                        ]
-                    }),
+                    body=json.dumps(
+                        {
+                            "messages": [
+                                {"role": "user", "content": "hello"},
+                                {"role": "assistant", "content": "Hi, how can I help?"},
+                            ]
+                        }
+                    ),
                     headers={"content-type": "application/json"},
                 )
             if "/threads" in url:
@@ -466,7 +469,7 @@ class TestStreamingInjection:
         async def mock_post(url, **kw):
             body = kw.get("json", {})
             prompt = body.get("input", "")
-            headers = kw.get("headers", {})
+            kw.get("headers", {})
             if "stream" in url and "INJECTED" in prompt:
                 return make_response(
                     body="data: INJECTED\ndata: more content",
@@ -483,12 +486,14 @@ class TestStreamingInjection:
 
         # Add streaming endpoint to context
         ctx = dict(agent_context)
-        ctx["agent_endpoints"].append({
-            "url": "http://agent.example.com:8080/stream",
-            "path": "/stream",
-            "framework": "langserve",
-            "service": sample_service.to_dict(),
-        })
+        ctx["agent_endpoints"].append(
+            {
+                "url": "http://agent.example.com:8080/stream",
+                "path": "/stream",
+                "framework": "langserve",
+                "service": sample_service.to_dict(),
+            }
+        )
 
         with patch("app.checks.agent.streaming_injection.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, ctx)
@@ -520,7 +525,7 @@ class TestAdaptivePayloads:
     def test_goal_injection_uses_framework_payloads(self):
         check = AgentGoalInjectionCheck()
         # Framework payloads are added in _test_endpoint based on endpoint framework
-        assert hasattr(check, '_test_endpoint')
+        assert hasattr(check, "_test_endpoint")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -562,12 +567,14 @@ class TestFrameworkExploits:
     async def test_no_exploits_unknown_framework(self, sample_service):
         check = AgentFrameworkExploitsCheck()
         ctx = {
-            "agent_endpoints": [{
-                "url": "http://agent.example.com:8080/invoke",
-                "path": "/invoke",
-                "framework": "",
-                "service": sample_service.to_dict(),
-            }],
+            "agent_endpoints": [
+                {
+                    "url": "http://agent.example.com:8080/invoke",
+                    "path": "/invoke",
+                    "framework": "",
+                    "service": sample_service.to_dict(),
+                }
+            ],
             "agent_frameworks": [],
         }
 
@@ -843,17 +850,20 @@ class TestCrossInjection:
 class TestRegistration:
     def test_all_checks_in_init(self):
         from app.checks.agent import get_checks
+
         checks = get_checks()
         assert len(checks) == 17  # 2 existing + 15 new
 
     def test_check_resolver_includes_agents(self):
         from app.check_resolver import get_real_checks
+
         checks = get_real_checks()
         agent_checks = [c for c in checks if "agent" in c.name]
         assert len(agent_checks) == 17
 
     def test_suite_filter(self):
         from app.check_resolver import infer_suite
+
         assert infer_suite("agent_discovery") == "agent"
         assert infer_suite("agent_multi_agent_detection") == "agent"
         assert infer_suite("agent_trust_chain") == "agent"

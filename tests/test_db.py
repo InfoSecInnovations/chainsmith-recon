@@ -5,23 +5,21 @@ Covers engine lifecycle, ORM models, repositories, fingerprinting,
 and the scan persistence orchestrator.
 """
 
-import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from app.db.engine import init_db, close_db, get_session, _engine
-from app.db.models import Base, Scan, Finding, Chain, CheckLog
+from app.db.engine import close_db, get_session, init_db
+from app.db.models import Chain, CheckLog, Finding, Scan
 from app.db.repositories import (
-    ScanRepository,
-    FindingRepository,
     ChainRepository,
     CheckLogRepository,
+    FindingRepository,
+    ScanRepository,
     _generate_fingerprint,
 )
-
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -347,9 +345,7 @@ class TestFindingRepository:
         await finding_repo.bulk_create("scan-001", sample_findings)
 
         async with get_session() as session:
-            result = await session.execute(
-                select(Finding).where(Finding.scan_id == "scan-001")
-            )
+            result = await session.execute(select(Finding).where(Finding.scan_id == "scan-001"))
             findings = result.scalars().all()
             for f in findings:
                 assert f.fingerprint is not None
@@ -361,27 +357,30 @@ class TestFindingRepository:
         await finding_repo.bulk_create("scan-001", sample_findings)
 
         async with get_session() as session:
-            result = await session.execute(
-                select(Finding.id).where(Finding.scan_id == "scan-001")
-            )
+            result = await session.execute(select(Finding.id).where(Finding.scan_id == "scan-001"))
             ids = [row[0] for row in result.all()]
             assert len(ids) == len(set(ids))
 
     @pytest.mark.asyncio
     async def test_finding_fields_mapped(self, db, finding_repo):
         """Finding fields are correctly mapped from dict."""
-        await finding_repo.bulk_create("scan-001", [{
-            "title": "Test XSS",
-            "description": "Reflected XSS",
-            "severity": "high",
-            "check_name": "xss_check",
-            "suite": "web",
-            "host": "example.com",
-            "target_url": "http://example.com/search",
-            "evidence": "alert(1) in response",
-            "references": ["https://owasp.org"],
-            "confidence": 0.95,
-        }])
+        await finding_repo.bulk_create(
+            "scan-001",
+            [
+                {
+                    "title": "Test XSS",
+                    "description": "Reflected XSS",
+                    "severity": "high",
+                    "check_name": "xss_check",
+                    "suite": "web",
+                    "host": "example.com",
+                    "target_url": "http://example.com/search",
+                    "evidence": "alert(1) in response",
+                    "references": ["https://owasp.org"],
+                    "confidence": 0.95,
+                }
+            ],
+        )
 
         async with get_session() as session:
             result = await session.execute(select(Finding).where(Finding.scan_id == "scan-001"))
@@ -400,11 +399,16 @@ class TestFindingRepository:
     @pytest.mark.asyncio
     async def test_finding_uses_check_fallback(self, db, finding_repo):
         """Finding maps 'check' key when 'check_name' is missing."""
-        await finding_repo.bulk_create("scan-001", [{
-            "title": "Test",
-            "severity": "info",
-            "check": "legacy_check_name",
-        }])
+        await finding_repo.bulk_create(
+            "scan-001",
+            [
+                {
+                    "title": "Test",
+                    "severity": "info",
+                    "check": "legacy_check_name",
+                }
+            ],
+        )
 
         async with get_session() as session:
             result = await session.execute(select(Finding).where(Finding.scan_id == "scan-001"))
@@ -414,12 +418,17 @@ class TestFindingRepository:
     @pytest.mark.asyncio
     async def test_finding_preserves_existing_id(self, db, finding_repo):
         """If a finding has an 'id' field, it is used as-is."""
-        await finding_repo.bulk_create("scan-001", [{
-            "id": "custom-id-123",
-            "title": "Test",
-            "severity": "info",
-            "check_name": "test",
-        }])
+        await finding_repo.bulk_create(
+            "scan-001",
+            [
+                {
+                    "id": "custom-id-123",
+                    "title": "Test",
+                    "severity": "info",
+                    "check_name": "test",
+                }
+            ],
+        )
 
         async with get_session() as session:
             result = await session.execute(select(Finding).where(Finding.id == "custom-id-123"))
@@ -454,13 +463,18 @@ class TestChainRepository:
     @pytest.mark.asyncio
     async def test_chain_fields_mapped(self, db, chain_repo):
         """Chain fields are correctly mapped from dict."""
-        await chain_repo.bulk_create("scan-001", [{
-            "title": "Test Chain",
-            "description": "A test chain",
-            "severity": "critical",
-            "source": "llm",
-            "finding_ids": ["f1", "f2", "f3"],
-        }])
+        await chain_repo.bulk_create(
+            "scan-001",
+            [
+                {
+                    "title": "Test Chain",
+                    "description": "A test chain",
+                    "severity": "critical",
+                    "source": "llm",
+                    "finding_ids": ["f1", "f2", "f3"],
+                }
+            ],
+        )
 
         async with get_session() as session:
             result = await session.execute(select(Chain).where(Chain.scan_id == "scan-001"))
@@ -473,12 +487,17 @@ class TestChainRepository:
     @pytest.mark.asyncio
     async def test_chain_findings_fallback(self, db, chain_repo):
         """Chain maps 'findings' key when 'finding_ids' is missing."""
-        await chain_repo.bulk_create("scan-001", [{
-            "title": "Test",
-            "severity": "high",
-            "source": "rule-based",
-            "findings": ["a", "b"],
-        }])
+        await chain_repo.bulk_create(
+            "scan-001",
+            [
+                {
+                    "title": "Test",
+                    "severity": "high",
+                    "source": "rule-based",
+                    "findings": ["a", "b"],
+                }
+            ],
+        )
 
         async with get_session() as session:
             result = await session.execute(select(Chain).where(Chain.scan_id == "scan-001"))
@@ -513,18 +532,21 @@ class TestCheckLogRepository:
     @pytest.mark.asyncio
     async def test_log_entry_fields(self, db, check_log_repo):
         """Log entry fields are correctly mapped."""
-        await check_log_repo.bulk_create("scan-001", [{
-            "check": "port_scan",
-            "event": "completed",
-            "findings": 3,
-            "suite": "network",
-            "duration_ms": 1500,
-        }])
+        await check_log_repo.bulk_create(
+            "scan-001",
+            [
+                {
+                    "check": "port_scan",
+                    "event": "completed",
+                    "findings": 3,
+                    "suite": "network",
+                    "duration_ms": 1500,
+                }
+            ],
+        )
 
         async with get_session() as session:
-            result = await session.execute(
-                select(CheckLog).where(CheckLog.scan_id == "scan-001")
-            )
+            result = await session.execute(select(CheckLog).where(CheckLog.scan_id == "scan-001"))
             entry = result.scalar_one()
             assert entry.check_name == "port_scan"
             assert entry.event == "completed"
@@ -571,7 +593,12 @@ class TestPersistOrchestrator:
             "header_check": "failed",
         }
         state.findings = [
-            {"title": "XSS Found", "severity": "high", "check_name": "xss_check", "host": "example.com"},
+            {
+                "title": "XSS Found",
+                "severity": "high",
+                "check_name": "xss_check",
+                "host": "example.com",
+            },
         ]
         state.chains = [
             {"title": "Attack Chain", "severity": "high", "source": "rule-based"},
@@ -615,8 +642,10 @@ class TestPersistOrchestrator:
         """on_scan_start returns None (doesn't raise) on DB error."""
         from app.db.persist import on_scan_start
 
-        with patch("app.db.persist.get_config") as mock_cfg, \
-             patch("app.db.persist._scan_repo") as mock_repo:
+        with (
+            patch("app.db.persist.get_config") as mock_cfg,
+            patch("app.db.persist._scan_repo") as mock_repo,
+        ):
             mock_cfg.return_value.storage.auto_persist = True
             mock_repo.create_scan = AsyncMock(side_effect=Exception("DB down"))
             scan_id = await on_scan_start(mock_state)
@@ -626,8 +655,9 @@ class TestPersistOrchestrator:
     @pytest.mark.asyncio
     async def test_on_scan_complete_persists_all(self, db, mock_state):
         """on_scan_complete writes findings, chains, log, and updates scan."""
-        from app.db.persist import on_scan_start, on_scan_complete
         import time
+
+        from app.db.persist import on_scan_complete, on_scan_start
 
         with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = True
@@ -665,8 +695,9 @@ class TestPersistOrchestrator:
     @pytest.mark.asyncio
     async def test_on_scan_complete_skips_when_no_scan_id(self, db, mock_state):
         """on_scan_complete does nothing when scan_id is None."""
-        from app.db.persist import on_scan_complete
         import time
+
+        from app.db.persist import on_scan_complete
 
         # Should not raise
         await on_scan_complete(mock_state, None, time.time())
@@ -678,11 +709,14 @@ class TestPersistOrchestrator:
     @pytest.mark.asyncio
     async def test_on_scan_complete_graceful_on_error(self, db, mock_state):
         """on_scan_complete logs warning but doesn't raise on DB error."""
-        from app.db.persist import on_scan_complete
         import time
 
-        with patch("app.db.persist.get_config") as mock_cfg, \
-             patch("app.db.persist._finding_repo") as mock_repo:
+        from app.db.persist import on_scan_complete
+
+        with (
+            patch("app.db.persist.get_config") as mock_cfg,
+            patch("app.db.persist._finding_repo") as mock_repo,
+        ):
             mock_cfg.return_value.storage.auto_persist = True
             mock_repo.bulk_create = AsyncMock(side_effect=Exception("DB full"))
             # Should not raise
@@ -698,6 +732,7 @@ class TestStorageConfig:
     def test_default_storage_config(self):
         """Default config has SQLite with auto_persist enabled."""
         from app.config import StorageConfig
+
         cfg = StorageConfig()
         assert cfg.backend == "sqlite"
         assert cfg.db_path == Path("./data/chainsmith.db")
@@ -707,6 +742,7 @@ class TestStorageConfig:
     def test_storage_in_yaml(self, tmp_path, clean_env):
         """Storage config loads from YAML."""
         from app.config import load_config
+
         config_file = tmp_path / "chainsmith.yaml"
         config_file.write_text("""
 storage:
@@ -724,6 +760,7 @@ storage:
     def test_storage_env_overrides(self, monkeypatch, clean_env):
         """Storage config responds to environment variables."""
         from app.config import load_config
+
         monkeypatch.setenv("CHAINSMITH_STORAGE_BACKEND", "postgresql")
         monkeypatch.setenv("CHAINSMITH_SQLITE_PATH", "/env/path.db")
         monkeypatch.setenv("CHAINSMITH_POSTGRESQL_URL", "postgresql://localhost/cs")

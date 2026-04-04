@@ -7,7 +7,7 @@ structured data normalization for check outputs.
 
 import json
 import re
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 
@@ -46,7 +46,7 @@ def detect_content_type(headers: dict[str, str], body: str) -> str:
     return "unknown"
 
 
-def safe_json(body: str) -> Optional[Any]:
+def safe_json(body: str) -> Any | None:
     """
     Parse JSON body, returning None on failure (no exceptions).
     """
@@ -87,13 +87,13 @@ def extract_paths_from_openapi(spec: dict) -> list[str]:
     return list(spec.get("paths", {}).keys())
 
 
-def extract_server_header(headers: dict[str, str]) -> Optional[str]:
+def extract_server_header(headers: dict[str, str]) -> str | None:
     """Return the Server header value if present."""
     normalized = extract_headers_dict(headers)
     return normalized.get("server")
 
 
-def extract_security_headers(headers: dict[str, str]) -> dict[str, Optional[str]]:
+def extract_security_headers(headers: dict[str, str]) -> dict[str, str | None]:
     """
     Extract presence/value of common security headers.
 
@@ -113,7 +113,7 @@ def extract_security_headers(headers: dict[str, str]) -> dict[str, Optional[str]
     return {h: normalized.get(h) for h in security_headers}
 
 
-def extract_cors_headers(headers: dict[str, str]) -> dict[str, Optional[str]]:
+def extract_cors_headers(headers: dict[str, str]) -> dict[str, str | None]:
     """
     Extract CORS-related response headers.
     """

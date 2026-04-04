@@ -22,7 +22,6 @@ from app.swarm.models import (
     CoordinatorStatus,
     HeartbeatRequest,
     KeyCreateRequest,
-    KeyInfo,
     RegisterRequest,
     RegisterResponse,
     TaskFailPayload,
@@ -37,6 +36,7 @@ router = APIRouter(prefix="/api/swarm", tags=["swarm"])
 
 
 # ── Agent registration ───────────────────────────────────────────
+
 
 @router.post("/register", response_model=RegisterResponse)
 async def register_agent(
@@ -53,7 +53,7 @@ async def register_agent(
             max_concurrent=body.max_concurrent,
         )
     except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
     return RegisterResponse(
         agent_id=agent.agent_id,
@@ -75,6 +75,7 @@ async def deregister_agent(
 
 # ── Heartbeat ────────────────────────────────────────────────────
 
+
 @router.post("/heartbeat", status_code=200)
 async def heartbeat(
     body: HeartbeatRequest,
@@ -88,6 +89,7 @@ async def heartbeat(
 
 
 # ── Task polling & lifecycle ─────────────────────────────────────
+
 
 @router.get("/tasks/next")
 async def get_next_task(
@@ -151,6 +153,7 @@ async def fail_task(
 
 # ── Status (public) ──────────────────────────────────────────────
 
+
 @router.get("/status", response_model=CoordinatorStatus)
 async def coordinator_status():
     """Coordinator status -- no auth required."""
@@ -164,6 +167,7 @@ async def list_agents(key_id: str = Depends(require_swarm_auth)):
 
 
 # ── Key management ───────────────────────────────────────────────
+
 
 @router.post("/keys", status_code=201)
 async def create_key(body: KeyCreateRequest):

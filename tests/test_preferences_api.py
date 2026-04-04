@@ -3,7 +3,6 @@ tests/test_preferences_api.py - Tests for preferences and profiles REST API endp
 """
 
 import pytest
-from pathlib import Path
 
 
 @pytest.fixture
@@ -11,12 +10,13 @@ def prefs_env(tmp_path, monkeypatch):
     """Set up isolated preferences environment."""
     prefs_path = tmp_path / "preferences.yaml"
     monkeypatch.setenv("CHAINSMITH_PREFERENCES_PATH", str(prefs_path))
-    
+
     import app.preferences as prefs_module
+
     prefs_module._profile_store = None
-    
+
     yield prefs_path
-    
+
     prefs_module._profile_store = None
 
 
@@ -24,23 +24,26 @@ def prefs_env(tmp_path, monkeypatch):
 def client(prefs_env, monkeypatch):
     """Create test client with mocked static files."""
     from unittest.mock import MagicMock
+
     import fastapi.staticfiles
-    
-    original_init = fastapi.staticfiles.StaticFiles.__init__
+
     def mock_init(self, *args, **kwargs):
         pass
+
     monkeypatch.setattr(fastapi.staticfiles.StaticFiles, "__init__", mock_init)
     monkeypatch.setattr(fastapi.staticfiles.StaticFiles, "__call__", MagicMock())
-    
+
     # Force reimport
     import sys
+
     for mod in list(sys.modules.keys()):
         if mod.startswith("app."):
             del sys.modules[mod]
-    
+
     from fastapi.testclient import TestClient
+
     from app.main import app
-    
+
     return TestClient(app)
 
 
@@ -53,9 +56,7 @@ class TestPreferencesEndpoints:
         assert data["preferences"]["network"]["timeout_seconds"] == 30.0
 
     def test_update_preferences(self, client):
-        response = client.put("/api/preferences", json={
-            "network": {"timeout_seconds": 99.0}
-        })
+        response = client.put("/api/preferences", json={"network": {"timeout_seconds": 99.0}})
         assert response.status_code == 200
         assert response.json()["preferences"]["network"]["timeout_seconds"] == 99.0
 
@@ -82,21 +83,23 @@ class TestProfilesList:
 
 class TestProfileCreate:
     def test_create_profile(self, client):
-        response = client.post("/api/profiles", json={
-            "name": "test-profile",
-            "description": "Test",
-            "overrides": {"network": {"timeout_seconds": 77.0}}
-        })
+        response = client.post(
+            "/api/profiles",
+            json={
+                "name": "test-profile",
+                "description": "Test",
+                "overrides": {"network": {"timeout_seconds": 77.0}},
+            },
+        )
         assert response.status_code == 200
         assert response.json()["created"] is True
 
     def test_create_from_base(self, client):
-        response = client.post("/api/profiles", json={
-            "name": "my-aggressive",
-            "base": "aggressive"
-        })
+        response = client.post(
+            "/api/profiles", json={"name": "my-aggressive", "base": "aggressive"}
+        )
         assert response.status_code == 200
-        
+
         response = client.get("/api/profiles/my-aggressive")
         assert response.json()["resolved_preferences"]["network"]["timeout_seconds"] == 120.0
 
@@ -108,9 +111,7 @@ class TestProfileCreate:
 class TestProfileUpdate:
     def test_update_profile(self, client):
         client.post("/api/profiles", json={"name": "updatable"})
-        response = client.put("/api/profiles/updatable", json={
-            "description": "Updated"
-        })
+        response = client.put("/api/profiles/updatable", json={"description": "Updated"})
         assert response.status_code == 200
         assert response.json()["profile"]["description"] == "Updated"
 
@@ -127,9 +128,9 @@ class TestProfileDelete:
         assert response.json()["deleted"] is True
 
     def test_delete_builtin_resets(self, client):
-        client.put("/api/profiles/aggressive", json={
-            "overrides": {"network": {"timeout_seconds": 999.0}}
-        })
+        client.put(
+            "/api/profiles/aggressive", json={"overrides": {"network": {"timeout_seconds": 999.0}}}
+        )
         response = client.delete("/api/profiles/aggressive")
         assert response.status_code == 200
         assert response.json()["reset"] is True
@@ -152,9 +153,10 @@ class TestProfileActivate:
 
 class TestProfileReset:
     def test_reset_profile(self, client):
-        client.put("/api/profiles/stealth", json={
-            "overrides": {"rate_limiting": {"requests_per_second": 99.0}}
-        })
+        client.put(
+            "/api/profiles/stealth",
+            json={"overrides": {"rate_limiting": {"requests_per_second": 99.0}}},
+        )
         response = client.post("/api/profiles/stealth/reset")
         assert response.status_code == 200
 
@@ -168,7 +170,7 @@ class TestProfileResolve:
         response = client.get("/api/profiles/stealth/resolve")
         assert response.status_code == 200
         assert response.json()["preferences"]["rate_limiting"]["requests_per_second"] == 1.0
-        
+
         # Active unchanged
         response = client.get("/api/preferences")
         assert response.json()["active_profile"] == "default"

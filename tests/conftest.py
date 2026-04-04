@@ -13,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.checks.base import BaseCheck, CheckResult, Finding, Service
 
-
 # ─── Path Fixtures ────────────────────────────────────────────────────────────
 
 

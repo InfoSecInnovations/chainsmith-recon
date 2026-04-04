@@ -7,10 +7,9 @@ model parameter values.
 
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.findings import build_finding
-from app.lib.ai_helpers import extract_response_text
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
 
@@ -28,30 +27,55 @@ class ModelEnumerationCheck(BaseCheck):
     sequential = True
     requests_per_second = 2.0
 
-    reason = "Reveals the full model inventory; internal/staging models often have weaker guardrails"
+    reason = (
+        "Reveals the full model inventory; internal/staging models often have weaker guardrails"
+    )
     references = ["OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure"]
     techniques = ["model enumeration", "service fingerprinting"]
 
     # Models grouped by provider
     MODEL_WORDLISTS = {
         "openai": [
-            "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
-            "gpt-3.5-turbo", "o1", "o1-mini", "o3-mini",
+            "gpt-4",
+            "gpt-4-turbo",
+            "gpt-4o",
+            "gpt-4o-mini",
+            "gpt-3.5-turbo",
+            "o1",
+            "o1-mini",
+            "o3-mini",
         ],
         "anthropic": [
-            "claude-3-opus-20240229", "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307", "claude-3-5-sonnet-20241022",
-            "claude-sonnet-4-20250514", "claude-opus-4-20250514",
+            "claude-3-opus-20240229",
+            "claude-3-sonnet-20240229",
+            "claude-3-haiku-20240307",
+            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-20250514",
+            "claude-opus-4-20250514",
         ],
         "meta": [
-            "llama2", "llama-2-7b", "llama-2-13b", "llama-2-70b",
-            "llama3", "llama-3-8b", "llama-3-70b", "llama-3.1-405b",
+            "llama2",
+            "llama-2-7b",
+            "llama-2-13b",
+            "llama-2-70b",
+            "llama3",
+            "llama-3-8b",
+            "llama-3-70b",
+            "llama-3.1-405b",
         ],
         "mistral": [
-            "mistral-7b", "mixtral-8x7b", "mistral-large", "mistral-medium",
+            "mistral-7b",
+            "mixtral-8x7b",
+            "mistral-large",
+            "mistral-medium",
         ],
         "generic": [
-            "default", "base", "production", "staging", "test", "internal",
+            "default",
+            "base",
+            "production",
+            "staging",
+            "test",
+            "internal",
         ],
     }
 
@@ -96,7 +120,8 @@ class ModelEnumerationCheck(BaseCheck):
                     body = self._build_request(model_name, api_format)
 
                     resp = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
 
@@ -121,41 +146,53 @@ class ModelEnumerationCheck(BaseCheck):
         internal_models = [m for m in available if m in ("staging", "test", "internal", "base")]
 
         if internal_models:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Internal/staging model accessible: {', '.join(internal_models)}",
-                description="Internal or staging models are accessible and may have weaker guardrails",
-                severity="high",
-                evidence=f"Models responding: {', '.join(internal_models)}",
-                host=host, discriminator="internal-model",
-                target=service, target_url=url,
-                raw_data={"internal_models": internal_models},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Internal/staging model accessible: {', '.join(internal_models)}",
+                    description="Internal or staging models are accessible and may have weaker guardrails",
+                    severity="high",
+                    evidence=f"Models responding: {', '.join(internal_models)}",
+                    host=host,
+                    discriminator="internal-model",
+                    target=service,
+                    target_url=url,
+                    raw_data={"internal_models": internal_models},
+                )
+            )
 
         if available:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"{len(available)} models available",
-                description=f"Enumerated models: {', '.join(available)}",
-                severity="medium" if len(available) > 1 else "info",
-                evidence=f"Available: {', '.join(available)}",
-                host=host, discriminator="models-enumerated",
-                target=service, target_url=url,
-                raw_data={
-                    "available": available,
-                    "recognized_unavailable": recognized_unavailable,
-                },
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"{len(available)} models available",
+                    description=f"Enumerated models: {', '.join(available)}",
+                    severity="medium" if len(available) > 1 else "info",
+                    evidence=f"Available: {', '.join(available)}",
+                    host=host,
+                    discriminator="models-enumerated",
+                    target=service,
+                    target_url=url,
+                    raw_data={
+                        "available": available,
+                        "recognized_unavailable": recognized_unavailable,
+                    },
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Single model available (no enumeration possible)",
-                description="Model parameter is not accepted or only one model is configured",
-                severity="info",
-                evidence=f"Tested {len(models_to_test)} model names, none accepted",
-                host=host, discriminator="no-enum",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Single model available (no enumeration possible)",
+                    description="Model parameter is not accepted or only one model is configured",
+                    severity="info",
+                    evidence=f"Tested {len(models_to_test)} model names, none accepted",
+                    host=host,
+                    discriminator="no-enum",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
         result.outputs["available_models"] = available
         return result
@@ -164,7 +201,9 @@ class ModelEnumerationCheck(BaseCheck):
         """Select model names to test based on detected framework."""
         framework_key = f"ai_framework_{service.port}"
         framework = context.get(framework_key, {})
-        detected = str(framework.get("framework", "")).lower() if isinstance(framework, dict) else ""
+        detected = (
+            str(framework.get("framework", "")).lower() if isinstance(framework, dict) else ""
+        )
 
         # Always test generic names
         models = list(self.MODEL_WORDLISTS["generic"])
@@ -186,13 +225,7 @@ class ModelEnumerationCheck(BaseCheck):
 
     def _build_request(self, model_name: str, api_format: str) -> dict:
         """Build a chat request with the given model name."""
-        if api_format == "openai":
-            return {
-                "model": model_name,
-                "messages": [{"role": "user", "content": self.TEST_PROMPT}],
-                "max_tokens": 10,
-            }
-        elif api_format == "anthropic":
+        if api_format == "openai" or api_format == "anthropic":
             return {
                 "model": model_name,
                 "messages": [{"role": "user", "content": self.TEST_PROMPT}],

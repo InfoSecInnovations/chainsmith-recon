@@ -12,27 +12,24 @@ import json
 
 import pytest
 
-from app.db.engine import init_db, close_db, get_session
+from app.db.engine import close_db, get_session, init_db
 from app.db.models import Finding
 from app.db.repositories import (
     ChainRepository,
     CheckLogRepository,
-    ComparisonRepository,
     EngagementRepository,
     FindingOverrideRepository,
     FindingRepository,
     ScanRepository,
-    TrendRepository,
 )
 from app.reports import (
-    generate_technical_report,
+    generate_compliance_report,
     generate_delta_report,
     generate_executive_report,
-    generate_compliance_report,
-    generate_trend_report,
     generate_targeted_export,
+    generate_technical_report,
+    generate_trend_report,
 )
-
 
 # --- Fixtures ----------------------------------------------------------------
 
@@ -75,45 +72,121 @@ def engagement_repo():
     return EngagementRepository()
 
 
-async def _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo,
-                                  scan_id="sarif-scan", target="example.com"):
+async def _create_populated_scan(
+    scan_repo, finding_repo, chain_repo, check_log_repo, scan_id="sarif-scan", target="example.com"
+):
     """Create a scan with findings, chains, and log entries."""
     await scan_repo.create_scan(
-        scan_id=scan_id, session_id=f"s-{scan_id}", target_domain=target,
+        scan_id=scan_id,
+        session_id=f"s-{scan_id}",
+        target_domain=target,
     )
-    await finding_repo.bulk_create(scan_id, [
-        {"title": "XSS in Search", "severity": "high", "check_name": "xss_reflected",
-         "host": "example.com", "suite": "web", "target_url": "http://example.com/search",
-         "evidence": "<script>alert(1)</script>", "description": "Reflected XSS via q param",
-         "references": ["https://owasp.org/xss"]},
-        {"title": "SQL Injection", "severity": "critical", "check_name": "sqli",
-         "host": "example.com", "suite": "web", "target_url": "http://example.com/api/users",
-         "evidence": "Error-based SQLi confirmed", "description": "SQL injection in user endpoint"},
-        {"title": "Missing CSP", "severity": "medium", "check_name": "header_analysis",
-         "host": "example.com", "suite": "web", "description": "No CSP header found"},
-        {"title": "Server Info Leak", "severity": "info", "check_name": "server_header",
-         "host": "example.com", "suite": "network", "evidence": "Server: Apache/2.4.41"},
-    ])
-    await chain_repo.bulk_create(scan_id, [
-        {"title": "XSS to Session Hijack", "severity": "critical",
-         "source": "rule-based", "description": "XSS enables session theft",
-         "finding_ids": ["f1", "f2"]},
-    ])
-    await check_log_repo.bulk_create(scan_id, [
-        {"check": "xss_reflected", "suite": "web", "event": "started"},
-        {"check": "xss_reflected", "suite": "web", "event": "completed", "findings": 1, "duration_ms": 500},
-        {"check": "sqli", "suite": "web", "event": "started"},
-        {"check": "sqli", "suite": "web", "event": "completed", "findings": 1, "duration_ms": 800},
-        {"check": "header_analysis", "suite": "web", "event": "started"},
-        {"check": "header_analysis", "suite": "web", "event": "completed", "findings": 1, "duration_ms": 200},
-        {"check": "server_header", "suite": "network", "event": "started"},
-        {"check": "server_header", "suite": "network", "event": "completed", "findings": 1, "duration_ms": 100},
-        {"check": "port_scan", "suite": "network", "event": "started"},
-        {"check": "port_scan", "suite": "network", "event": "failed", "error_message": "Timeout"},
-    ])
-    await scan_repo.complete_scan(scan_id, status="complete", findings_count=4,
-                                   checks_total=5, checks_completed=4,
-                                   duration_ms=2000)
+    await finding_repo.bulk_create(
+        scan_id,
+        [
+            {
+                "title": "XSS in Search",
+                "severity": "high",
+                "check_name": "xss_reflected",
+                "host": "example.com",
+                "suite": "web",
+                "target_url": "http://example.com/search",
+                "evidence": "<script>alert(1)</script>",
+                "description": "Reflected XSS via q param",
+                "references": ["https://owasp.org/xss"],
+            },
+            {
+                "title": "SQL Injection",
+                "severity": "critical",
+                "check_name": "sqli",
+                "host": "example.com",
+                "suite": "web",
+                "target_url": "http://example.com/api/users",
+                "evidence": "Error-based SQLi confirmed",
+                "description": "SQL injection in user endpoint",
+            },
+            {
+                "title": "Missing CSP",
+                "severity": "medium",
+                "check_name": "header_analysis",
+                "host": "example.com",
+                "suite": "web",
+                "description": "No CSP header found",
+            },
+            {
+                "title": "Server Info Leak",
+                "severity": "info",
+                "check_name": "server_header",
+                "host": "example.com",
+                "suite": "network",
+                "evidence": "Server: Apache/2.4.41",
+            },
+        ],
+    )
+    await chain_repo.bulk_create(
+        scan_id,
+        [
+            {
+                "title": "XSS to Session Hijack",
+                "severity": "critical",
+                "source": "rule-based",
+                "description": "XSS enables session theft",
+                "finding_ids": ["f1", "f2"],
+            },
+        ],
+    )
+    await check_log_repo.bulk_create(
+        scan_id,
+        [
+            {"check": "xss_reflected", "suite": "web", "event": "started"},
+            {
+                "check": "xss_reflected",
+                "suite": "web",
+                "event": "completed",
+                "findings": 1,
+                "duration_ms": 500,
+            },
+            {"check": "sqli", "suite": "web", "event": "started"},
+            {
+                "check": "sqli",
+                "suite": "web",
+                "event": "completed",
+                "findings": 1,
+                "duration_ms": 800,
+            },
+            {"check": "header_analysis", "suite": "web", "event": "started"},
+            {
+                "check": "header_analysis",
+                "suite": "web",
+                "event": "completed",
+                "findings": 1,
+                "duration_ms": 200,
+            },
+            {"check": "server_header", "suite": "network", "event": "started"},
+            {
+                "check": "server_header",
+                "suite": "network",
+                "event": "completed",
+                "findings": 1,
+                "duration_ms": 100,
+            },
+            {"check": "port_scan", "suite": "network", "event": "started"},
+            {
+                "check": "port_scan",
+                "suite": "network",
+                "event": "failed",
+                "error_message": "Timeout",
+            },
+        ],
+    )
+    await scan_repo.complete_scan(
+        scan_id,
+        status="complete",
+        findings_count=4,
+        checks_total=5,
+        checks_completed=4,
+        duration_ms=2000,
+    )
 
 
 # =============================================================================
@@ -122,7 +195,6 @@ async def _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_
 
 
 class TestTechnicalReportSARIF:
-
     @pytest.mark.asyncio
     async def test_sarif_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -184,10 +256,15 @@ class TestTechnicalReportSARIF:
         results = sarif["runs"][0]["results"]
         xss_result = next(r for r in results if r["ruleId"] == "xss_reflected")
         assert "locations" in xss_result
-        assert xss_result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "http://example.com/search"
+        assert (
+            xss_result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+            == "http://example.com/search"
+        )
 
     @pytest.mark.asyncio
-    async def test_sarif_fingerprints(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def test_sarif_fingerprints(
+        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
@@ -198,7 +275,9 @@ class TestTechnicalReportSARIF:
             assert "chainsmith/v1" in r["fingerprints"]
 
     @pytest.mark.asyncio
-    async def test_sarif_evidence_attachments(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def test_sarif_evidence_attachments(
+        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
@@ -210,7 +289,9 @@ class TestTechnicalReportSARIF:
         assert xss_result["attachments"][0]["contents"]["text"] == "<script>alert(1)</script>"
 
     @pytest.mark.asyncio
-    async def test_sarif_invocation_props(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def test_sarif_invocation_props(
+        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
@@ -235,21 +316,50 @@ class TestTechnicalReportSARIF:
 
 
 class TestDeltaReportSARIF:
-
     @pytest.fixture
     async def two_scans(self, db, scan_repo, finding_repo):
         await scan_repo.create_scan(scan_id="ds-a", session_id="s1", target_domain="sarif.com")
-        await finding_repo.bulk_create("ds-a", [
-            {"title": "XSS", "severity": "high", "check_name": "xss", "host": "sarif.com", "suite": "web"},
-            {"title": "SQLi", "severity": "critical", "check_name": "sqli", "host": "sarif.com", "suite": "web"},
-        ])
+        await finding_repo.bulk_create(
+            "ds-a",
+            [
+                {
+                    "title": "XSS",
+                    "severity": "high",
+                    "check_name": "xss",
+                    "host": "sarif.com",
+                    "suite": "web",
+                },
+                {
+                    "title": "SQLi",
+                    "severity": "critical",
+                    "check_name": "sqli",
+                    "host": "sarif.com",
+                    "suite": "web",
+                },
+            ],
+        )
         await scan_repo.complete_scan("ds-a", status="complete", findings_count=2)
 
         await scan_repo.create_scan(scan_id="ds-b", session_id="s2", target_domain="sarif.com")
-        await finding_repo.bulk_create("ds-b", [
-            {"title": "XSS", "severity": "high", "check_name": "xss", "host": "sarif.com", "suite": "web"},
-            {"title": "CSRF", "severity": "medium", "check_name": "csrf", "host": "sarif.com", "suite": "web"},
-        ])
+        await finding_repo.bulk_create(
+            "ds-b",
+            [
+                {
+                    "title": "XSS",
+                    "severity": "high",
+                    "check_name": "xss",
+                    "host": "sarif.com",
+                    "suite": "web",
+                },
+                {
+                    "title": "CSRF",
+                    "severity": "medium",
+                    "check_name": "csrf",
+                    "host": "sarif.com",
+                    "suite": "web",
+                },
+            ],
+        )
         await scan_repo.complete_scan("ds-b", status="complete", findings_count=2)
 
     @pytest.mark.asyncio
@@ -279,7 +389,6 @@ class TestDeltaReportSARIF:
 
 
 class TestExecutiveReportSARIF:
-
     @pytest.mark.asyncio
     async def test_sarif_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -291,7 +400,9 @@ class TestExecutiveReportSARIF:
         assert len(sarif["runs"][0]["results"]) <= 5
 
     @pytest.mark.asyncio
-    async def test_sarif_invocation_metadata(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def test_sarif_invocation_metadata(
+        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
@@ -302,7 +413,6 @@ class TestExecutiveReportSARIF:
 
 
 class TestComplianceReportSARIF:
-
     @pytest.mark.asyncio
     async def test_sarif_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -313,11 +423,18 @@ class TestComplianceReportSARIF:
 
     @pytest.mark.asyncio
     async def test_sarif_with_overrides(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo, override_repo,
+        self,
+        db,
+        scan_repo,
+        finding_repo,
+        chain_repo,
+        check_log_repo,
+        override_repo,
     ):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
 
         from sqlalchemy import select
+
         async with get_session() as session:
             result = await session.execute(
                 select(Finding.fingerprint).where(Finding.title == "Missing CSP")
@@ -335,12 +452,15 @@ class TestComplianceReportSARIF:
 
 
 class TestTrendReportSARIF:
-
     @pytest.fixture
     async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(
-            scan_repo, finding_repo, chain_repo, check_log_repo,
-            scan_id="ts-1", target="sarif-trend.com",
+            scan_repo,
+            finding_repo,
+            chain_repo,
+            check_log_repo,
+            scan_id="ts-1",
+            target="sarif-trend.com",
         )
 
     @pytest.mark.asyncio
@@ -369,12 +489,12 @@ class TestTrendReportSARIF:
 
 
 class TestTargetedExport:
-
     @pytest.fixture
     async def scan_with_fingerprints(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
         # Get fingerprints
         from sqlalchemy import select
+
         async with get_session() as session:
             result = await session.execute(select(Finding.fingerprint))
             fps = [row[0] for row in result.all()]
@@ -449,44 +569,50 @@ class TestTargetedExport:
 
 
 class TestReportsUIPhase8B:
-
     def test_reports_html_has_sarif_button(self):
         import pathlib
+
         content = pathlib.Path("static/reports.html").read_text()
         assert 'data-format="sarif"' in content
         assert "SARIF" in content
 
     def test_reports_html_has_pdf_capability_check(self):
         import pathlib
+
         content = pathlib.Path("static/reports.html").read_text()
         assert "checkCapabilities" in content
         assert "pdf-unavailable" in content
 
     def test_reports_html_has_history_delete(self):
         import pathlib
+
         content = pathlib.Path("static/reports.html").read_text()
         assert "history-action-btn delete" in content
         assert "history-action-btn regen" in content
 
     def test_api_js_has_capabilities(self):
         import pathlib
+
         content = pathlib.Path("static/js/api.js").read_text()
         assert "getCapabilities" in content
         assert "/api/v1/capabilities" in content
 
     def test_api_js_has_targeted_export(self):
         import pathlib
+
         content = pathlib.Path("static/js/api.js").read_text()
         assert "generateTargetedExport" in content
         assert "/api/v1/reports/targeted" in content
 
     def test_api_js_has_scan_findings(self):
         import pathlib
+
         content = pathlib.Path("static/js/api.js").read_text()
         assert "getScanFindings" in content
 
     def test_trend_html_has_export_panel(self):
         import pathlib
+
         content = pathlib.Path("static/trend.html").read_text()
         assert "export-panel" in content
         assert "export-findings-list" in content
@@ -495,27 +621,33 @@ class TestReportsUIPhase8B:
 
     def test_trend_html_has_click_to_export(self):
         import pathlib
-        content = pathlib.Path("static/trend.html").read_text()
+
+        # "Click to view findings" lives in the chart rendering JS, not trend.html
+        content = pathlib.Path("static/js/viz/trend-charts.js").read_text()
         assert "Click to view findings" in content
 
     def test_scans_routes_has_capabilities(self):
         import pathlib
+
         content = pathlib.Path("app/routes/scans.py").read_text()
         assert "/api/v1/capabilities" in content
         assert "pdf" in content and "sarif" in content
 
     def test_scans_routes_has_targeted_export(self):
         import pathlib
+
         content = pathlib.Path("app/routes/scans.py").read_text()
         assert "/api/v1/reports/targeted" in content
         assert "TargetedExportInput" in content
 
     def test_valid_formats_includes_sarif(self):
         import pathlib
+
         content = pathlib.Path("app/routes/scans.py").read_text()
         assert '"sarif"' in content
 
     def test_cli_format_choices_include_sarif(self):
         import pathlib
+
         content = pathlib.Path("app/cli.py").read_text(encoding="utf-8")
         assert '"sarif"' in content

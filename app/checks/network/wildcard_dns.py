@@ -69,10 +69,7 @@ class WildcardDnsCheck(BaseCheck):
             return result
 
         # Resolve PROBE_COUNT random subdomains
-        probes = [
-            f"{_random_subdomain()}.{base_domain}"
-            for _ in range(self.PROBE_COUNT)
-        ]
+        probes = [f"{_random_subdomain()}.{base_domain}" for _ in range(self.PROBE_COUNT)]
 
         resolved_ips: list[str] = []
         for hostname in probes:
@@ -113,14 +110,16 @@ class WildcardDnsCheck(BaseCheck):
                 f"round-robin or geo-DNS."
             )
 
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"Wildcard DNS detected: *.{base_domain}",
-            description=desc,
-            severity=severity,
-            evidence=evidence,
-            host=base_domain,
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"Wildcard DNS detected: *.{base_domain}",
+                description=desc,
+                severity=severity,
+                evidence=evidence,
+                host=base_domain,
+            )
+        )
 
         return result
 

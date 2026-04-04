@@ -24,9 +24,10 @@ from app.lib.findings import build_finding
 logger = logging.getLogger(__name__)
 
 try:
+    import dns.exception
     import dns.resolver
     import dns.reversename
-    import dns.exception
+
     HAS_DNSPYTHON = True
 except ImportError:
     HAS_DNSPYTHON = False
@@ -40,7 +41,7 @@ INTERNAL_PATTERNS = [
     ".lan.",
     ".private.",
     ".intranet.",
-    "ip-",          # AWS internal naming
+    "ip-",  # AWS internal naming
     ".ec2.internal",
     ".compute.internal",
     ".googleapis.com",
@@ -109,8 +110,7 @@ class ReverseDnsCheck(BaseCheck):
         for ip, forward_hosts in ip_to_hosts.items():
             ptr_records = await self._ptr_lookup(ip)
             is_internal = any(
-                any(pat in ptr.lower() for pat in INTERNAL_PATTERNS)
-                for ptr in ptr_records
+                any(pat in ptr.lower() for pat in INTERNAL_PATTERNS) for ptr in ptr_records
             )
 
             reverse_dns_data[ip] = {
@@ -126,8 +126,13 @@ class ReverseDnsCheck(BaseCheck):
 
             # Generate findings
             self._generate_findings(
-                result, ip, forward_hosts, ptr_records, is_internal,
-                known_hosts, base_domain,
+                result,
+                ip,
+                forward_hosts,
+                ptr_records,
+                is_internal,
+                known_hosts,
+                base_domain,
             )
 
             # Collect genuinely new hostnames
@@ -160,7 +165,7 @@ class ReverseDnsCheck(BaseCheck):
                 timeout=5.0,
             )
             return [str(rdata.target).rstrip(".") for rdata in answers]
-        except (dns.exception.DNSException, asyncio.TimeoutError, Exception) as exc:
+        except (TimeoutError, dns.exception.DNSException, Exception) as exc:
             logger.debug(f"PTR lookup failed for {ip}: {exc}")
             return []
 
@@ -169,14 +174,12 @@ class ReverseDnsCheck(BaseCheck):
         loop = asyncio.get_event_loop()
         try:
             hostname, aliases, _ = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None, socket.gethostbyaddr, ip
-                ),
+                loop.run_in_executor(None, socket.gethostbyaddr, ip),
                 timeout=5.0,
             )
             records = [hostname] + list(aliases)
             return [r for r in records if r]
-        except (socket.herror, socket.gaierror, asyncio.TimeoutError, OSError):
+        except (TimeoutError, socket.herror, socket.gaierror, OSError):
             return []
 
     def _generate_findings(
@@ -194,53 +197,58 @@ class ReverseDnsCheck(BaseCheck):
         ptr_str = ", ".join(ptr_records)
 
         # Base info finding: PTR record(s)
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"Reverse DNS: {ip} -> {ptr_records[0]}",
-            description=(
-                f"PTR lookup for {ip} (forward: {', '.join(forward_hosts)}) "
-                f"returned {len(ptr_records)} record(s)."
-            ),
-            severity="info",
-            evidence=f"IP: {ip} | PTR: {ptr_str}",
-            host=host_label,
-            discriminator=f"ptr-{ip}",
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"Reverse DNS: {ip} -> {ptr_records[0]}",
+                description=(
+                    f"PTR lookup for {ip} (forward: {', '.join(forward_hosts)}) "
+                    f"returned {len(ptr_records)} record(s)."
+                ),
+                severity="info",
+                evidence=f"IP: {ip} | PTR: {ptr_str}",
+                host=host_label,
+                discriminator=f"ptr-{ip}",
+            )
+        )
 
         # Multiple PTR records — possible virtual hosting
         if len(ptr_records) > 1:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Multiple PTR records for {ip} (possible virtual hosting)",
-                description=(
-                    f"{ip} has {len(ptr_records)} PTR records, suggesting "
-                    f"multiple services or virtual hosts share this IP address."
-                ),
-                severity="info",
-                evidence=f"IP: {ip} | PTR records: {ptr_str}",
-                host=host_label,
-                discriminator=f"multi-ptr-{ip}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Multiple PTR records for {ip} (possible virtual hosting)",
+                    description=(
+                        f"{ip} has {len(ptr_records)} PTR records, suggesting "
+                        f"multiple services or virtual hosts share this IP address."
+                    ),
+                    severity="info",
+                    evidence=f"IP: {ip} | PTR records: {ptr_str}",
+                    host=host_label,
+                    discriminator=f"multi-ptr-{ip}",
+                )
+            )
 
         # Internal hostname in PTR — infrastructure leak
         if is_internal:
             internal_ptrs = [
-                ptr for ptr in ptr_records
-                if any(pat in ptr.lower() for pat in INTERNAL_PATTERNS)
+                ptr for ptr in ptr_records if any(pat in ptr.lower() for pat in INTERNAL_PATTERNS)
             ]
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Internal hostname in PTR: {ip}",
-                description=(
-                    f"PTR record for {ip} reveals internal infrastructure "
-                    f"naming convention(s). This exposes details about the "
-                    f"hosting environment and internal network structure."
-                ),
-                severity="low",
-                evidence=f"IP: {ip} | Internal PTR: {', '.join(internal_ptrs)}",
-                host=host_label,
-                discriminator=f"internal-{ip}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Internal hostname in PTR: {ip}",
+                    description=(
+                        f"PTR record for {ip} reveals internal infrastructure "
+                        f"naming convention(s). This exposes details about the "
+                        f"hosting environment and internal network structure."
+                    ),
+                    severity="low",
+                    evidence=f"IP: {ip} | Internal PTR: {', '.join(internal_ptrs)}",
+                    host=host_label,
+                    discriminator=f"internal-{ip}",
+                )
+            )
 
         # PTR mismatch — forward host doesn't match reverse
         for ptr in ptr_records:
@@ -251,21 +259,22 @@ class ReverseDnsCheck(BaseCheck):
                 and base_domain
                 and base_domain not in cleaned
             ):
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"PTR/forward mismatch: {ip}",
-                    description=(
-                        f"PTR record for {ip} points to {cleaned}, which does "
-                        f"not match any known forward DNS records and is outside "
-                        f"the target domain ({base_domain}). This may indicate "
-                        f"shared hosting or infrastructure reuse."
-                    ),
-                    severity="info",
-                    evidence=(
-                        f"IP: {ip} | PTR: {cleaned} | "
-                        f"Forward hosts: {', '.join(forward_hosts)}"
-                    ),
-                    host=host_label,
-                    discriminator=f"mismatch-{ip}",
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"PTR/forward mismatch: {ip}",
+                        description=(
+                            f"PTR record for {ip} points to {cleaned}, which does "
+                            f"not match any known forward DNS records and is outside "
+                            f"the target domain ({base_domain}). This may indicate "
+                            f"shared hosting or infrastructure reuse."
+                        ),
+                        severity="info",
+                        evidence=(
+                            f"IP: {ip} | PTR: {cleaned} | Forward hosts: {', '.join(forward_hosts)}"
+                        ),
+                        host=host_label,
+                        discriminator=f"mismatch-{ip}",
+                    )
+                )
                 break  # One mismatch finding per IP is sufficient

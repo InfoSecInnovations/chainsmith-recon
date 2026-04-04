@@ -18,16 +18,16 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import (
     build_probe_payload,
+    cap_response,
     classify_tool_probe_type,
     is_payload_safe,
-    cap_response,
     log_invocation,
 )
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class MCPToolInvocationCheck(BaseCheck):
@@ -105,23 +105,26 @@ class MCPToolInvocationCheck(BaseCheck):
                     )
 
                     inv_log = log_invocation(
-                        tool_name, payload,
+                        tool_name,
+                        payload,
                         resp.status_code if not resp.error else None,
                         resp.body or "",
                     )
                     invocation_results.append(inv_log)
 
                     if resp.error:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Tool invocation failed: {tool_name} returned error for test payload",
-                            description=f"Tool '{tool_name}' returned an error when invoked with a safe test payload.",
-                            severity="info",
-                            evidence=f"Tool: {tool_name}\nPayload: {json.dumps(payload)[:200]}\nError: {resp.error}",
-                            host=tool_host,
-                            discriminator=f"invoke-error-{tool_name}",
-                            raw_data=inv_log,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Tool invocation failed: {tool_name} returned error for test payload",
+                                description=f"Tool '{tool_name}' returned an error when invoked with a safe test payload.",
+                                severity="info",
+                                evidence=f"Tool: {tool_name}\nPayload: {json.dumps(payload)[:200]}\nError: {resp.error}",
+                                host=tool_host,
+                                discriminator=f"invoke-error-{tool_name}",
+                                raw_data=inv_log,
+                            )
+                        )
                         continue
 
                     # Analyze response
@@ -138,8 +141,14 @@ class MCPToolInvocationCheck(BaseCheck):
         return result
 
     def _analyze_invocation_response(
-        self, tool: dict, probe_type: str, payload: dict,
-        resp, host: str, result: CheckResult, inv_log: dict
+        self,
+        tool: dict,
+        probe_type: str,
+        payload: dict,
+        resp,
+        host: str,
+        result: CheckResult,
+        inv_log: dict,
     ) -> None:
         """Analyze tool invocation response to determine actual risk."""
         tool_name = tool.get("name", "unknown")
@@ -147,29 +156,33 @@ class MCPToolInvocationCheck(BaseCheck):
         status = resp.status_code
 
         if status == 401 or status == 403:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Tool executes but requires auth: '{tool_name}' returned permission denied",
-                description=f"Tool '{tool_name}' is protected by authentication/authorization.",
-                severity="medium",
-                evidence=f"Tool: {tool_name}\nStatus: {status}\nResponse: {body[:200]}",
-                host=host,
-                discriminator=f"invoke-auth-{tool_name}",
-                raw_data=inv_log,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Tool executes but requires auth: '{tool_name}' returned permission denied",
+                    description=f"Tool '{tool_name}' is protected by authentication/authorization.",
+                    severity="medium",
+                    evidence=f"Tool: {tool_name}\nStatus: {status}\nResponse: {body[:200]}",
+                    host=host,
+                    discriminator=f"invoke-auth-{tool_name}",
+                    raw_data=inv_log,
+                )
+            )
             return
 
         if status != 200:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Tool invocation failed: {tool_name} (status {status})",
-                description=f"Tool '{tool_name}' returned non-200 status.",
-                severity="info",
-                evidence=f"Tool: {tool_name}\nStatus: {status}\nResponse: {body[:200]}",
-                host=host,
-                discriminator=f"invoke-fail-{tool_name}",
-                raw_data=inv_log,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Tool invocation failed: {tool_name} (status {status})",
+                    description=f"Tool '{tool_name}' returned non-200 status.",
+                    severity="info",
+                    evidence=f"Tool: {tool_name}\nStatus: {status}\nResponse: {body[:200]}",
+                    host=host,
+                    discriminator=f"invoke-fail-{tool_name}",
+                    raw_data=inv_log,
+                )
+            )
             return
 
         # Parse JSON-RPC result
@@ -181,81 +194,91 @@ class MCPToolInvocationCheck(BaseCheck):
             if "chainsmith-probe" in result_text or any(
                 kw in result_text.lower() for kw in ["root", "uid=", "hostname", "\\users\\"]
             ):
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Tool executes commands: '{tool_name}' returned real output",
-                    description=(
-                        f"Tool '{tool_name}' executed a command and returned real system output. "
-                        "This confirms arbitrary command execution capability."
-                    ),
-                    severity="critical",
-                    evidence=f"Tool: {tool_name}\nPayload: {json.dumps(payload)[:200]}\nOutput: {result_text[:300]}",
-                    host=host,
-                    discriminator=f"invoke-exec-{tool_name}",
-                    raw_data=inv_log,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Tool executes commands: '{tool_name}' returned real output",
+                        description=(
+                            f"Tool '{tool_name}' executed a command and returned real system output. "
+                            "This confirms arbitrary command execution capability."
+                        ),
+                        severity="critical",
+                        evidence=f"Tool: {tool_name}\nPayload: {json.dumps(payload)[:200]}\nOutput: {result_text[:300]}",
+                        host=host,
+                        discriminator=f"invoke-exec-{tool_name}",
+                        raw_data=inv_log,
+                    )
+                )
                 return
 
         elif probe_type == "file" and tool_result:
             if result_text and len(result_text) > 5:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Tool reads files: '{tool_name}' returned file contents",
-                    description=(
-                        f"Tool '{tool_name}' returned content when asked to read a file. "
-                        "This confirms filesystem read access."
-                    ),
-                    severity="critical",
-                    evidence=f"Tool: {tool_name}\nPayload: {json.dumps(payload)[:200]}\nOutput: {result_text[:300]}",
-                    host=host,
-                    discriminator=f"invoke-file-{tool_name}",
-                    raw_data=inv_log,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Tool reads files: '{tool_name}' returned file contents",
+                        description=(
+                            f"Tool '{tool_name}' returned content when asked to read a file. "
+                            "This confirms filesystem read access."
+                        ),
+                        severity="critical",
+                        evidence=f"Tool: {tool_name}\nPayload: {json.dumps(payload)[:200]}\nOutput: {result_text[:300]}",
+                        host=host,
+                        discriminator=f"invoke-file-{tool_name}",
+                        raw_data=inv_log,
+                    )
+                )
                 return
 
         elif probe_type == "fetch" and tool_result:
             if any(kw in result_text.lower() for kw in ["origin", "headers", "url", "http"]):
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Tool makes HTTP requests: '{tool_name}' fetched external URL (SSRF risk)",
-                    description=(
-                        f"Tool '{tool_name}' successfully fetched an external URL. "
-                        "This can be used for SSRF attacks."
-                    ),
-                    severity="high",
-                    evidence=f"Tool: {tool_name}\nPayload: {json.dumps(payload)[:200]}\nOutput: {result_text[:300]}",
-                    host=host,
-                    discriminator=f"invoke-fetch-{tool_name}",
-                    raw_data=inv_log,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Tool makes HTTP requests: '{tool_name}' fetched external URL (SSRF risk)",
+                        description=(
+                            f"Tool '{tool_name}' successfully fetched an external URL. "
+                            "This can be used for SSRF attacks."
+                        ),
+                        severity="high",
+                        evidence=f"Tool: {tool_name}\nPayload: {json.dumps(payload)[:200]}\nOutput: {result_text[:300]}",
+                        host=host,
+                        discriminator=f"invoke-fetch-{tool_name}",
+                        raw_data=inv_log,
+                    )
+                )
                 return
 
         elif probe_type == "search" and tool_result:
             if result_text and len(result_text) > 10:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Tool queries database: '{tool_name}' returned real data",
-                    description=f"Tool '{tool_name}' returned data from a query/search operation.",
-                    severity="high",
-                    evidence=f"Tool: {tool_name}\nPayload: {json.dumps(payload)[:200]}\nOutput: {result_text[:300]}",
-                    host=host,
-                    discriminator=f"invoke-search-{tool_name}",
-                    raw_data=inv_log,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Tool queries database: '{tool_name}' returned real data",
+                        description=f"Tool '{tool_name}' returned data from a query/search operation.",
+                        severity="high",
+                        evidence=f"Tool: {tool_name}\nPayload: {json.dumps(payload)[:200]}\nOutput: {result_text[:300]}",
+                        host=host,
+                        discriminator=f"invoke-search-{tool_name}",
+                        raw_data=inv_log,
+                    )
+                )
                 return
 
         # Generic: tool responded with data
         if tool_result and result_text:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Tool '{tool_name}' executed successfully with test payload",
-                description=f"Tool '{tool_name}' returned a result for the probe payload.",
-                severity="medium" if tool.get("risk_level") in ("critical", "high") else "low",
-                evidence=f"Tool: {tool_name}\nProbe type: {probe_type}\nOutput: {result_text[:300]}",
-                host=host,
-                discriminator=f"invoke-ok-{tool_name}",
-                raw_data=inv_log,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Tool '{tool_name}' executed successfully with test payload",
+                    description=f"Tool '{tool_name}' returned a result for the probe payload.",
+                    severity="medium" if tool.get("risk_level") in ("critical", "high") else "low",
+                    evidence=f"Tool: {tool_name}\nProbe type: {probe_type}\nOutput: {result_text[:300]}",
+                    host=host,
+                    discriminator=f"invoke-ok-{tool_name}",
+                    raw_data=inv_log,
+                )
+            )
 
     def _extract_tool_result(self, body: str | None) -> Any:
         """Extract the result from a JSON-RPC tool call response."""

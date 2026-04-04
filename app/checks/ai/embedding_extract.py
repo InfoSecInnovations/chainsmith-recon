@@ -7,9 +7,9 @@ vectors, test similarity relationships, and check for information leakage.
 
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
 
@@ -27,7 +27,9 @@ class EmbeddingExtractionCheck(BaseCheck):
     sequential = True
     requests_per_second = 2.0
 
-    reason = "Embedding endpoints reveal model architecture via vector dimensions and may leak metadata"
+    reason = (
+        "Embedding endpoints reveal model architecture via vector dimensions and may leak metadata"
+    )
     references = [
         "OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure",
     ]
@@ -72,7 +74,10 @@ class EmbeddingExtractionCheck(BaseCheck):
         return result
 
     async def _analyze_endpoint(
-        self, url: str, service: Service, api_format: str,
+        self,
+        url: str,
+        service: Service,
+        api_format: str,
     ) -> CheckResult:
         result = CheckResult(success=True)
         host = service.host
@@ -87,7 +92,8 @@ class EmbeddingExtractionCheck(BaseCheck):
 
                     body = self._build_embedding_request(text, api_format)
                     resp = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
 
@@ -112,57 +118,73 @@ class EmbeddingExtractionCheck(BaseCheck):
         dimensions = len(vectors[0])
         model_guess = self.DIMENSION_MAP.get(dimensions, "unknown")
 
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"Embedding endpoint functional: {dimensions}-dimensional vectors",
-            description=f"Embedding endpoint returns {dimensions}-dimensional vectors",
-            severity="info",
-            evidence=f"Dimensions: {dimensions}, vectors captured: {len(vectors)}",
-            host=host, discriminator="embedding-dimensions",
-            target=service, target_url=url,
-            raw_data={"dimensions": dimensions, "vectors_captured": len(vectors)},
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"Embedding endpoint functional: {dimensions}-dimensional vectors",
+                description=f"Embedding endpoint returns {dimensions}-dimensional vectors",
+                severity="info",
+                evidence=f"Dimensions: {dimensions}, vectors captured: {len(vectors)}",
+                host=host,
+                discriminator="embedding-dimensions",
+                target=service,
+                target_url=url,
+                raw_data={"dimensions": dimensions, "vectors_captured": len(vectors)},
+            )
+        )
 
         if model_guess != "unknown":
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Embedding model identified: {model_guess}",
-                description=f"Vector dimensionality ({dimensions}) matches known model: {model_guess}",
-                severity="low",
-                evidence=f"Dimensions: {dimensions} -> {model_guess}",
-                host=host, discriminator="embedding-model-id",
-                target=service, target_url=url,
-                raw_data={"dimensions": dimensions, "model_guess": model_guess},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Embedding model identified: {model_guess}",
+                    description=f"Vector dimensionality ({dimensions}) matches known model: {model_guess}",
+                    severity="low",
+                    evidence=f"Dimensions: {dimensions} -> {model_guess}",
+                    host=host,
+                    discriminator="embedding-model-id",
+                    target=service,
+                    target_url=url,
+                    raw_data={"dimensions": dimensions, "model_guess": model_guess},
+                )
+            )
 
         # Check for extra metadata beyond vectors
         unique_fields = list(set(extra_fields))
         if unique_fields:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Embedding endpoint returns metadata beyond vectors: {', '.join(unique_fields[:5])}",
-                description="Extra fields in embedding response may reveal configuration or usage data",
-                severity="medium",
-                evidence=f"Extra fields: {', '.join(unique_fields)}",
-                host=host, discriminator="embedding-metadata",
-                target=service, target_url=url,
-                raw_data={"extra_fields": unique_fields},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Embedding endpoint returns metadata beyond vectors: {', '.join(unique_fields[:5])}",
+                    description="Extra fields in embedding response may reveal configuration or usage data",
+                    severity="medium",
+                    evidence=f"Extra fields: {', '.join(unique_fields)}",
+                    host=host,
+                    discriminator="embedding-metadata",
+                    target=service,
+                    target_url=url,
+                    raw_data={"extra_fields": unique_fields},
+                )
+            )
 
         # Check similarity if we have enough vectors
         if len(vectors) >= 2:
             sim = self._cosine_similarity(vectors[0], vectors[1])
             if sim > 0.5:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="Embedding similarity confirms real model",
-                    description=f"Similar texts produce cosine similarity {sim:.3f} (> 0.5 threshold)",
-                    severity="info",
-                    evidence=f"Cosine similarity between similar texts: {sim:.3f}",
-                    host=host, discriminator="embedding-similarity",
-                    target=service, target_url=url,
-                    raw_data={"cosine_similarity": round(sim, 4)},
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="Embedding similarity confirms real model",
+                        description=f"Similar texts produce cosine similarity {sim:.3f} (> 0.5 threshold)",
+                        severity="info",
+                        evidence=f"Cosine similarity between similar texts: {sim:.3f}",
+                        host=host,
+                        discriminator="embedding-similarity",
+                        target=service,
+                        target_url=url,
+                        raw_data={"cosine_similarity": round(sim, 4)},
+                    )
+                )
 
         analysis = {
             "dimensions": dimensions,
@@ -192,12 +214,12 @@ class EmbeddingExtractionCheck(BaseCheck):
                 vec = body["data"][0]["embedding"]
             # Check for extra fields beyond standard
             standard = {"object", "data", "model", "usage"}
-            extra = [k for k in body.keys() if k not in standard]
+            extra = [k for k in body if k not in standard]
         # Ollama format
         elif "embedding" in body:
             vec = body["embedding"]
             standard = {"embedding"}
-            extra = [k for k in body.keys() if k not in standard]
+            extra = [k for k in body if k not in standard]
         # Generic
         elif "embeddings" in body and isinstance(body["embeddings"], list):
             if body["embeddings"]:

@@ -16,14 +16,12 @@ References:
 
 import asyncio
 import hashlib
-import json
 import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # TTL test intervals in seconds
 TTL_TEST_INTERVALS = [5, 15, 30, 60]
@@ -61,8 +59,7 @@ class TTLMappingCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -81,19 +78,21 @@ class TTLMappingCheck(ServiceIteratingCheck):
                         ttl_results.append(ttl_info)
 
                         severity = self._determine_severity(ttl_info)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=self._build_title(ttl_info),
-                            description=self._build_description(ttl_info),
-                            severity=severity,
-                            evidence=self._build_evidence(ttl_info),
-                            host=service.host,
-                            discriminator=f"ttl-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=ttl_info,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=self._build_title(ttl_info),
+                                description=self._build_description(ttl_info),
+                                severity=severity,
+                                evidence=self._build_evidence(ttl_info),
+                                host=service.host,
+                                discriminator=f"ttl-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=ttl_info,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -260,9 +259,7 @@ class TTLMappingCheck(ServiceIteratingCheck):
         elif ttl_info.get("observed_ttl_seconds"):
             ttl = ttl_info["observed_ttl_seconds"]
             risk = "high" if ttl > 300 else "moderate" if ttl > 60 else "low"
-            parts.append(
-                f"Cache TTL observed at approximately {ttl} seconds ({risk} risk). "
-            )
+            parts.append(f"Cache TTL observed at approximately {ttl} seconds ({risk} risk). ")
 
         if ttl_info.get("ttl_mismatch"):
             parts.append(

@@ -13,18 +13,19 @@ Organized by functional area:
 - customizations: User severity override management
 """
 
-from app.routes.scope import router as scope_router
-from app.routes.scan import router as scan_router
-from app.routes.findings import router as findings_router
-from app.routes.checks import router as checks_router
+from app.routes.advisor import router as advisor_router
 from app.routes.chains import router as chains_router
-from app.routes.scenarios import router as scenarios_router
-from app.routes.preferences import router as preferences_router
+from app.routes.checks import router as checks_router
 from app.routes.compliance import router as compliance_router
-from app.routes.scans import router as scans_router
-from app.routes.engagements import router as engagements_router
-from app.routes.swarm import router as swarm_router
 from app.routes.customizations import router as customizations_router
+from app.routes.engagements import router as engagements_router
+from app.routes.findings import router as findings_router
+from app.routes.preferences import router as preferences_router
+from app.routes.scan import router as scan_router
+from app.routes.scans import router as scans_router
+from app.routes.scenarios import router as scenarios_router
+from app.routes.scope import router as scope_router
+from app.routes.swarm import router as swarm_router
 
 __all__ = [
     "scope_router",
@@ -39,4 +40,5 @@ __all__ = [
     "engagements_router",
     "swarm_router",
     "customizations_router",
+    "advisor_router",
 ]

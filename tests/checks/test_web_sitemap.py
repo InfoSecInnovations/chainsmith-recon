@@ -15,12 +15,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.checks.base import Service
-from app.checks.web.sitemap import SitemapCheck
-from app.checks.web.redirect_chain import RedirectChainCheck
 from app.checks.web.error_page import ErrorPageCheck
+from app.checks.web.redirect_chain import RedirectChainCheck
+from app.checks.web.sitemap import SitemapCheck
 from app.checks.web.ssrf_indicator import SSRFIndicatorCheck
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
@@ -29,16 +28,31 @@ from app.lib.http import HttpResponse
 
 @pytest.fixture
 def service():
-    return Service(url="http://target.com:80", host="target.com", port=80, scheme="http", service_type="http")
+    return Service(
+        url="http://target.com:80", host="target.com", port=80, scheme="http", service_type="http"
+    )
 
 
 @pytest.fixture
 def https_service():
-    return Service(url="https://target.com:443", host="target.com", port=443, scheme="https", service_type="http")
+    return Service(
+        url="https://target.com:443",
+        host="target.com",
+        port=443,
+        scheme="https",
+        service_type="http",
+    )
 
 
 def resp(status_code=200, body="", headers=None, error=None, url="http://target.com:80"):
-    return HttpResponse(url=url, status_code=status_code, headers=headers or {}, body=body, elapsed_ms=50.0, error=error)
+    return HttpResponse(
+        url=url,
+        status_code=status_code,
+        headers=headers or {},
+        body=body,
+        elapsed_ms=50.0,
+        error=error,
+    )
 
 
 def mock_client_multi(response_map=None, default=None):
@@ -109,11 +123,20 @@ class TestSitemapCheck:
     async def test_sitemap_from_robots(self, service):
         """Sitemap URL from robots.txt output is fetched and parsed."""
         check = SitemapCheck()
-        context = {"robots_80": {"sitemaps": ["https://target.com/sitemap.xml"], "disallowed": [], "interesting": []}}
+        context = {
+            "robots_80": {
+                "sitemaps": ["https://target.com/sitemap.xml"],
+                "disallowed": [],
+                "interesting": [],
+            }
+        }
 
-        with patch("app.checks.web.sitemap.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
-        )):
+        with patch(
+            "app.checks.web.sitemap.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
+            ),
+        ):
             result = await check.check_service(service, context)
 
         assert result.success
@@ -129,9 +152,12 @@ class TestSitemapCheck:
         check = SitemapCheck()
         context = {}
 
-        with patch("app.checks.web.sitemap.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
-        )):
+        with patch(
+            "app.checks.web.sitemap.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
+            ),
+        ):
             result = await check.check_service(service, context)
 
         assert result.success
@@ -143,9 +169,12 @@ class TestSitemapCheck:
         check = SitemapCheck()
         context = {}
 
-        with patch("app.checks.web.sitemap.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.sitemap.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, context)
 
         assert result.success
@@ -157,9 +186,12 @@ class TestSitemapCheck:
         check = SitemapCheck()
         context = {}
 
-        with patch("app.checks.web.sitemap.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
-        )):
+        with patch(
+            "app.checks.web.sitemap.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
+            ),
+        ):
             result = await check.check_service(service, context)
 
         sensitive = [f for f in result.findings if "sensitive-paths" in (f.id or "")]
@@ -171,9 +203,12 @@ class TestSitemapCheck:
         check = SitemapCheck()
         context = {}
 
-        with patch("app.checks.web.sitemap.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
-        )):
+        with patch(
+            "app.checks.web.sitemap.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
+            ),
+        ):
             result = await check.check_service(service, context)
 
         versioning = [f for f in result.findings if "api-versioning" in (f.id or "")]
@@ -187,13 +222,16 @@ class TestSitemapCheck:
         check = SitemapCheck()
         context = {}
 
-        with patch("app.checks.web.sitemap.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={
-                ("GET", "/sitemap.xml"): resp(200, body=SITEMAP_INDEX_XML),
-                ("GET", "sitemap-main.xml"): resp(200, body=SUB_SITEMAP_XML),
-                ("GET", "sitemap-api.xml"): resp(200, body=SUB_SITEMAP_XML),
-            },
-        )):
+        with patch(
+            "app.checks.web.sitemap.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={
+                    ("GET", "/sitemap.xml"): resp(200, body=SITEMAP_INDEX_XML),
+                    ("GET", "sitemap-main.xml"): resp(200, body=SUB_SITEMAP_XML),
+                    ("GET", "sitemap-api.xml"): resp(200, body=SUB_SITEMAP_XML),
+                },
+            ),
+        ):
             result = await check.check_service(service, context)
 
         assert result.success
@@ -205,9 +243,12 @@ class TestSitemapCheck:
         check = SitemapCheck()
         context = {}
 
-        with patch("app.checks.web.sitemap.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
-        )):
+        with patch(
+            "app.checks.web.sitemap.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
+            ),
+        ):
             result = await check.check_service(service, context)
 
         assert "sitemap_paths" in result.outputs
@@ -219,9 +260,12 @@ class TestSitemapCheck:
         check = SitemapCheck()
         context = {}
 
-        with patch("app.checks.web.sitemap.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={("GET", "sitemap.xml"): resp(200, body="")},
-        )):
+        with patch(
+            "app.checks.web.sitemap.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={("GET", "sitemap.xml"): resp(200, body="")},
+            ),
+        ):
             result = await check.check_service(service, context)
 
         assert result.success
@@ -233,9 +277,12 @@ class TestSitemapCheck:
         check = SitemapCheck()
         context = {}
 
-        with patch("app.checks.web.sitemap.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={("GET", "sitemap.xml"): resp(200, body="<not valid xml!!!")},
-        )):
+        with patch(
+            "app.checks.web.sitemap.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={("GET", "sitemap.xml"): resp(200, body="<not valid xml!!!")},
+            ),
+        ):
             result = await check.check_service(service, context)
 
         assert result.success
@@ -258,9 +305,12 @@ class TestRedirectChainCheck:
         """HTTP service with no HTTPS redirect is flagged."""
         check = RedirectChainCheck()
 
-        with patch("app.checks.web.redirect_chain.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, body="<html>Hello</html>"),
-        )):
+        with patch(
+            "app.checks.web.redirect_chain.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(200, body="<html>Hello</html>"),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         no_https = [f for f in result.findings if "no-https-redirect" in (f.id or "")]
@@ -272,12 +322,17 @@ class TestRedirectChainCheck:
         """HTTP -> HTTPS redirect is correctly detected."""
         check = RedirectChainCheck()
 
-        with patch("app.checks.web.redirect_chain.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={
-                ("GET", "http://target.com:80"): resp(301, headers={"location": "https://target.com/"}),
-            },
-            default=resp(200),
-        )):
+        with patch(
+            "app.checks.web.redirect_chain.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={
+                    ("GET", "http://target.com:80"): resp(
+                        301, headers={"location": "https://target.com/"}
+                    ),
+                },
+                default=resp(200),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         ok = [f for f in result.findings if "https-redirect-ok" in (f.id or "")]
@@ -289,9 +344,12 @@ class TestRedirectChainCheck:
         """HTTPS service skips the HTTP->HTTPS check."""
         check = RedirectChainCheck()
 
-        with patch("app.checks.web.redirect_chain.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200),
-        )):
+        with patch(
+            "app.checks.web.redirect_chain.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(200),
+            ),
+        ):
             result = await check.check_service(https_service, {})
 
         no_https = [f for f in result.findings if "no-https-redirect" in (f.id or "")]
@@ -327,12 +385,17 @@ class TestRedirectChainCheck:
         """Open redirect via URL parameter is flagged."""
         check = RedirectChainCheck()
 
-        with patch("app.checks.web.redirect_chain.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={
-                ("GET", "redirect?url="): resp(302, headers={"location": "https://evil.example.com"}),
-            },
-            default=resp(200, body="<html>OK</html>"),
-        )):
+        with patch(
+            "app.checks.web.redirect_chain.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={
+                    ("GET", "redirect?url="): resp(
+                        302, headers={"location": "https://evil.example.com"}
+                    ),
+                },
+                default=resp(200, body="<html>OK</html>"),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         open_redir = [f for f in result.findings if "open-redirect" in (f.id or "")]
@@ -373,9 +436,12 @@ class TestRedirectChainCheck:
         """No open redirect when redirect params are not accepted."""
         check = RedirectChainCheck()
 
-        with patch("app.checks.web.redirect_chain.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.redirect_chain.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         open_redir = [f for f in result.findings if "open-redirect" in (f.id or "")]
@@ -386,9 +452,12 @@ class TestRedirectChainCheck:
         """Connection errors are handled gracefully."""
         check = RedirectChainCheck()
 
-        with patch("app.checks.web.redirect_chain.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(0, error="Connection refused"),
-        )):
+        with patch(
+            "app.checks.web.redirect_chain.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(0, error="Connection refused"),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         assert result.success
@@ -411,9 +480,12 @@ class TestErrorPageCheck:
         check = ErrorPageCheck()
         body = "<html>You're seeing this error because you have DEBUG = True in your Django settings file.</html>"
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404, body=body),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404, body=body),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         django = [f for f in result.findings if "django" in (f.id or "")]
@@ -425,11 +497,16 @@ class TestErrorPageCheck:
     async def test_werkzeug_debugger_high_severity(self, service):
         """Werkzeug debugger is flagged as high severity."""
         check = ErrorPageCheck()
-        body = '<html><title>Werkzeug Debugger</title><p>The debugger caught an exception</p></html>'
+        body = (
+            "<html><title>Werkzeug Debugger</title><p>The debugger caught an exception</p></html>"
+        )
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(500, body=body),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(500, body=body),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         werkzeug = [f for f in result.findings if "werkzeug" in (f.id or "")]
@@ -440,11 +517,14 @@ class TestErrorPageCheck:
     async def test_spring_boot_identified(self, service):
         """Spring Boot Whitelabel Error Page is identified."""
         check = ErrorPageCheck()
-        body = '<html><body><h1>Whitelabel Error Page</h1><p>This application has no explicit mapping for /error</p></body></html>'
+        body = "<html><body><h1>Whitelabel Error Page</h1><p>This application has no explicit mapping for /error</p></body></html>"
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404, body=body),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404, body=body),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         spring = [f for f in result.findings if "spring-boot" in (f.id or "")]
@@ -456,11 +536,14 @@ class TestErrorPageCheck:
     async def test_express_identified(self, service):
         """Express.js Cannot GET is identified."""
         check = ErrorPageCheck()
-        body = '<!DOCTYPE html><html><body><pre>Cannot GET /nonexistent-path</pre></body></html>'
+        body = "<!DOCTYPE html><html><body><pre>Cannot GET /nonexistent-path</pre></body></html>"
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404, body=body),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404, body=body),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         express = [f for f in result.findings if "express" in (f.id or "")]
@@ -472,9 +555,12 @@ class TestErrorPageCheck:
         check = ErrorPageCheck()
         body = '{"detail": "Not Found"}'
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404, body=body),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404, body=body),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         fastapi = [f for f in result.findings if "fastapi" in (f.id or "")]
@@ -485,14 +571,17 @@ class TestErrorPageCheck:
     async def test_stack_trace_detected(self, service):
         """Python stack trace in error response is flagged."""
         check = ErrorPageCheck()
-        body = '''<html>
+        body = """<html>
         Traceback (most recent call last)
         File "app.py", line 42
-        </html>'''
+        </html>"""
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(500, body=body),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(500, body=body),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         stack = [f for f in result.findings if "stack-trace" in (f.id or "")]
@@ -502,11 +591,14 @@ class TestErrorPageCheck:
     async def test_custom_error_pages(self, service):
         """Custom error pages with no framework signature produce info finding."""
         check = ErrorPageCheck()
-        body = '<html><body><h1>Page Not Found</h1><p>Sorry, we could not find that page.</p></body></html>'
+        body = "<html><body><h1>Page Not Found</h1><p>Sorry, we could not find that page.</p></body></html>"
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404, body=body),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404, body=body),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         custom = [f for f in result.findings if "custom-errors" in (f.id or "")]
@@ -517,11 +609,14 @@ class TestErrorPageCheck:
     async def test_outputs_error_page_info(self, service):
         """Check outputs error_page_info with frameworks and debug status."""
         check = ErrorPageCheck()
-        body = '<html>Whitelabel Error Page</html>'
+        body = "<html>Whitelabel Error Page</html>"
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404, body=body),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404, body=body),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         assert "error_page_info" in result.outputs
@@ -533,9 +628,12 @@ class TestErrorPageCheck:
         check = ErrorPageCheck()
         body = "<html><body><h1>Server Error in '/' Application.</h1></body></html>"
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(500, body=body),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(500, body=body),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         asp = [f for f in result.findings if "asp.net" in (f.id or "")]
@@ -546,12 +644,17 @@ class TestErrorPageCheck:
         """Malformed JSON to API paths triggers error analysis."""
         check = ErrorPageCheck()
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={
-                ("POST", "/api"): resp(500, body='Traceback (most recent call last)\nFile "app.py", line 42'),
-            },
-            default=resp(404, body="not found"),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={
+                    ("POST", "/api"): resp(
+                        500, body='Traceback (most recent call last)\nFile "app.py", line 42'
+                    ),
+                },
+                default=resp(404, body="not found"),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         assert result.success
@@ -561,9 +664,12 @@ class TestErrorPageCheck:
         """Connection errors produce no findings."""
         check = ErrorPageCheck()
 
-        with patch("app.checks.web.error_page.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(0, error="Connection refused"),
-        )):
+        with patch(
+            "app.checks.web.error_page.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(0, error="Connection refused"),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         assert result.success
@@ -590,7 +696,11 @@ class TestSSRFIndicatorCheck:
                     "/api/summarize": {
                         "post": {
                             "parameters": [
-                                {"name": "url", "in": "query", "schema": {"type": "string", "format": "uri"}},
+                                {
+                                    "name": "url",
+                                    "in": "query",
+                                    "schema": {"type": "string", "format": "uri"},
+                                },
                             ],
                         },
                     },
@@ -598,9 +708,12 @@ class TestSSRFIndicatorCheck:
             },
         }
 
-        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, context)
 
         ssrf = [f for f in result.findings if "ssrf" in (f.id or "")]
@@ -634,9 +747,12 @@ class TestSSRFIndicatorCheck:
             },
         }
 
-        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, context)
 
         ssrf = [f for f in result.findings if "ssrf" in (f.id or "")]
@@ -648,13 +764,16 @@ class TestSSRFIndicatorCheck:
         """SSRF-prone paths returning validation errors are detected."""
         check = SSRFIndicatorCheck()
 
-        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={
-                ("GET", "/api/fetch"): resp(400, body='{"error": "url parameter is required"}'),
-                ("GET", "/api/proxy"): resp(422, body='{"detail": "field required: url"}'),
-            },
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={
+                    ("GET", "/api/fetch"): resp(400, body='{"error": "url parameter is required"}'),
+                    ("GET", "/api/proxy"): resp(422, body='{"detail": "field required: url"}'),
+                },
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         ssrf = [f for f in result.findings if "ssrf" in (f.id or "")]
@@ -665,9 +784,12 @@ class TestSSRFIndicatorCheck:
         """No SSRF findings when all probed paths return 404."""
         check = SSRFIndicatorCheck()
 
-        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         ssrf = [f for f in result.findings if "ssrf" in (f.id or "")]
@@ -687,9 +809,12 @@ class TestSSRFIndicatorCheck:
             },
         }
 
-        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, context)
 
         ssrf = [f for f in result.findings if "ssrf" in (f.id or "")]
@@ -715,9 +840,12 @@ class TestSSRFIndicatorCheck:
             },
         }
 
-        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, context)
 
         assert "ssrf_candidates" in result.outputs
@@ -741,9 +869,12 @@ class TestSSRFIndicatorCheck:
             },
         }
 
-        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, context)
 
         proxy_findings = [f for f in result.findings if "proxy" in (f.id or "")]
@@ -771,9 +902,12 @@ class TestSSRFIndicatorCheck:
             },
         }
 
-        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, context)
 
         # /api/fetch should appear only once despite being in both sources
@@ -785,9 +919,12 @@ class TestSSRFIndicatorCheck:
         """Connection errors don't crash the check."""
         check = SSRFIndicatorCheck()
 
-        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(0, error="Connection refused"),
-        )):
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                default=resp(0, error="Connection refused"),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         assert result.success
@@ -797,12 +934,17 @@ class TestSSRFIndicatorCheck:
         """HTML form with type='url' input is detected."""
         check = SSRFIndicatorCheck()
 
-        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock_client_multi(
-            response_map={
-                ("GET", "/api/preview"): resp(200, body='<form><input type="url" name="url" /></form>'),
-            },
-            default=resp(404),
-        )):
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={
+                    ("GET", "/api/preview"): resp(
+                        200, body='<form><input type="url" name="url" /></form>'
+                    ),
+                },
+                default=resp(404),
+            ),
+        ):
             result = await check.check_service(service, {})
 
         ssrf = [f for f in result.findings if "preview" in (f.id or "")]

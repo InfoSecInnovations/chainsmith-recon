@@ -22,7 +22,7 @@ If database files are not available, the check skips gracefully.
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 try:
     import geoip2.database
     import geoip2.errors
+
     HAS_GEOIP2 = True
 except ImportError:
     HAS_GEOIP2 = False
@@ -97,7 +98,7 @@ DEFAULT_DB_DIRS = [
 ]
 
 
-def _find_db_file(filename: str) -> Optional[str]:
+def _find_db_file(filename: str) -> str | None:
     """Search for a GeoIP database file in standard locations."""
     # Check env var first
     env_dir = os.environ.get("GEOIP_DB_DIR")
@@ -152,9 +153,7 @@ class GeoIpCheck(BaseCheck):
         result = CheckResult(success=True)
 
         if not HAS_GEOIP2:
-            result.errors.append(
-                "geoip2 not installed. Install with: pip install geoip2"
-            )
+            result.errors.append("geoip2 not installed. Install with: pip install geoip2")
             result.success = False
             return result
 
@@ -239,9 +238,7 @@ class GeoIpCheck(BaseCheck):
                 entry["country"] = resp.country.name
                 entry["country_code"] = resp.country.iso_code
                 entry["region"] = (
-                    resp.subdivisions.most_specific.name
-                    if resp.subdivisions
-                    else None
+                    resp.subdivisions.most_specific.name if resp.subdivisions else None
                 )
                 entry["city"] = resp.city.name
                 entry["latitude"] = resp.location.latitude
@@ -282,8 +279,7 @@ class GeoIpCheck(BaseCheck):
         """Generate findings based on GeoIP/ASN data for an IP."""
         host_label = hostnames[0] if hostnames else ip
         location_parts = [
-            p for p in [entry.get("country_code"), entry.get("region"), entry.get("city")]
-            if p
+            p for p in [entry.get("country_code"), entry.get("region"), entry.get("city")] if p
         ]
         location = ", ".join(location_parts) if location_parts else "unknown location"
         org = entry.get("org", "unknown")
@@ -293,48 +289,54 @@ class GeoIpCheck(BaseCheck):
 
         # Base info finding for every IP
         evidence = f"IP: {ip} | Location: {location} | {org} ({asn_str})"
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"Host geo: {host_label} -> {location} ({org})",
-            description=(
-                f"Geolocation and ASN data for {', '.join(hostnames)} "
-                f"({ip}). Classification: {classification}."
-            ),
-            severity="info",
-            evidence=evidence,
-            host=host_label,
-            discriminator=f"geo-{ip}",
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"Host geo: {host_label} -> {location} ({org})",
+                description=(
+                    f"Geolocation and ASN data for {', '.join(hostnames)} "
+                    f"({ip}). Classification: {classification}."
+                ),
+                severity="info",
+                evidence=evidence,
+                host=host_label,
+                discriminator=f"geo-{ip}",
+            )
+        )
 
         # Residential IP hosting a service — notable finding
         if classification == "residential":
             provider = entry.get("provider", org)
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Residential IP hosting service: {host_label}",
-                description=(
-                    f"{host_label} ({ip}) belongs to a residential ISP ({provider}). "
-                    f"This may indicate a developer's home machine, misconfigured "
-                    f"tunnel, or compromised host."
-                ),
-                severity="medium",
-                evidence=f"IP: {ip} | ISP: {provider} ({asn_str}) | Hosts: {', '.join(hostnames)}",
-                host=host_label,
-                discriminator=f"residential-{ip}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Residential IP hosting service: {host_label}",
+                    description=(
+                        f"{host_label} ({ip}) belongs to a residential ISP ({provider}). "
+                        f"This may indicate a developer's home machine, misconfigured "
+                        f"tunnel, or compromised host."
+                    ),
+                    severity="medium",
+                    evidence=f"IP: {ip} | ISP: {provider} ({asn_str}) | Hosts: {', '.join(hostnames)}",
+                    host=host_label,
+                    discriminator=f"residential-{ip}",
+                )
+            )
 
         # Non-standard hosting (ASN exists but not in our known lists)
         elif classification == "other" and asn is not None:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Non-standard hosting: {host_label}",
-                description=(
-                    f"{host_label} ({ip}) is hosted on a network not in the "
-                    f"known hosting provider list ({org}, {asn_str}). "
-                    f"May warrant investigation."
-                ),
-                severity="low",
-                evidence=f"IP: {ip} | Org: {org} ({asn_str})",
-                host=host_label,
-                discriminator=f"other-hosting-{ip}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Non-standard hosting: {host_label}",
+                    description=(
+                        f"{host_label} ({ip}) is hosted on a network not in the "
+                        f"known hosting provider list ({org}, {asn_str}). "
+                        f"May warrant investigation."
+                    ),
+                    severity="low",
+                    evidence=f"IP: {ip} | Org: {org} ({asn_str})",
+                    host=host_label,
+                    discriminator=f"other-hosting-{ip}",
+                )
+            )

@@ -16,15 +16,14 @@ References:
 """
 
 import asyncio
-import json
+import contextlib
 import time
 import uuid
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Prompt injection patterns to test
 INJECTION_PATTERNS = [
@@ -79,8 +78,7 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -95,44 +93,46 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
                     url = endpoint.get("url", service.url)
 
                     for pattern in INJECTION_PATTERNS:
-                        test_result = await self._test_injection_persistence(
-                            client, url, pattern
-                        )
+                        test_result = await self._test_injection_persistence(client, url, pattern)
 
                         if test_result and test_result.get("persistence_detected"):
                             persistence_results.append(test_result)
 
                             severity = self._determine_severity(test_result)
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=self._build_title(test_result),
-                                description=self._build_description(test_result),
-                                severity=severity,
-                                evidence=self._build_evidence(test_result),
-                                host=service.host,
-                                discriminator=f"injection-persist-{pattern['id']}",
-                                target=service,
-                                target_url=url,
-                                raw_data=test_result,
-                                references=self.references,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=self._build_title(test_result),
+                                    description=self._build_description(test_result),
+                                    severity=severity,
+                                    evidence=self._build_evidence(test_result),
+                                    host=service.host,
+                                    discriminator=f"injection-persist-{pattern['id']}",
+                                    target=service,
+                                    target_url=url,
+                                    raw_data=test_result,
+                                    references=self.references,
+                                )
+                            )
 
                         elif test_result and test_result.get("injection_worked"):
                             persistence_results.append(test_result)
 
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Injection response cached but cross-user delivery unconfirmed ({pattern['id']})",
-                                description=self._build_description(test_result),
-                                severity="high",
-                                evidence=self._build_evidence(test_result),
-                                host=service.host,
-                                discriminator=f"injection-cached-{pattern['id']}",
-                                target=service,
-                                target_url=url,
-                                raw_data=test_result,
-                                references=self.references,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Injection response cached but cross-user delivery unconfirmed ({pattern['id']})",
+                                    description=self._build_description(test_result),
+                                    severity="high",
+                                    evidence=self._build_evidence(test_result),
+                                    host=service.host,
+                                    discriminator=f"injection-cached-{pattern['id']}",
+                                    target=service,
+                                    target_url=url,
+                                    raw_data=test_result,
+                                    references=self.references,
+                                )
+                            )
 
                     # Test semantic amplification if any injection worked
                     if persistence_results:
@@ -143,19 +143,21 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
                             persistence_results.append(semantic_result)
                             n = semantic_result.get("variations_affected", 0)
 
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Semantic cache amplifies injection: poisoned response served to {n} variations",
-                                description=self._build_description(semantic_result),
-                                severity="critical",
-                                evidence=self._build_evidence(semantic_result),
-                                host=service.host,
-                                discriminator="injection-semantic-amplify",
-                                target=service,
-                                target_url=url,
-                                raw_data=semantic_result,
-                                references=self.references,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Semantic cache amplifies injection: poisoned response served to {n} variations",
+                                    description=self._build_description(semantic_result),
+                                    severity="critical",
+                                    evidence=self._build_evidence(semantic_result),
+                                    host=service.host,
+                                    discriminator="injection-semantic-amplify",
+                                    target=service,
+                                    target_url=url,
+                                    raw_data=semantic_result,
+                                    references=self.references,
+                                )
+                            )
 
                     # Attempt cleanup
                     await self._attempt_cleanup(client, service)
@@ -167,16 +169,18 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
             result.outputs["injection_persistence_results"] = persistence_results
         else:
             # Info finding: no injection persistence
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Injection responses not cached",
-                description="Prompt injection attempts did not result in cached responses being served to other users.",
-                severity="info",
-                evidence="All injection persistence tests negative",
-                host=service.host,
-                discriminator="injection-persist-none",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Injection responses not cached",
+                    description="Prompt injection attempts did not result in cached responses being served to other users.",
+                    severity="info",
+                    evidence="All injection persistence tests negative",
+                    host=service.host,
+                    discriminator="injection-persist-none",
+                    target=service,
+                )
+            )
 
         return result
 
@@ -303,19 +307,15 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
             "marker": marker,
         }
 
-    async def _attempt_cleanup(
-        self, client: AsyncHttpClient, service: Service
-    ) -> None:
+    async def _attempt_cleanup(self, client: AsyncHttpClient, service: Service) -> None:
         """Attempt to clean up injected cache entries."""
         for path in ["/cache/clear", "/cache/invalidate"]:
-            try:
+            with contextlib.suppress(Exception):
                 await client.post(
                     service.with_path(path),
                     json={},
                     headers={"Content-Type": "application/json"},
                 )
-            except Exception:
-                pass
 
     def _determine_severity(self, test_result: dict) -> str:
         """Determine finding severity."""

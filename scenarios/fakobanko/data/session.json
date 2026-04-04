@@ -1,8 +1,22 @@
 {
-  "session_id": "4236920b",
+  "session_id": "ccd762b4",
   "scenario": "fakobanko",
-  "created_at": "2026-03-31T18:31:07.210199",
+  "created_at": "2026-03-31T20:39:31.823058",
   "selected_chains": [
+    {
+      "id": "model_info_disclosure",
+      "chain_name": "Model Architecture Intelligence",
+      "description": "Model serving endpoint leaks architecture details",
+      "severity": "medium",
+      "required_services": [
+        "ml"
+      ],
+      "required_findings": [
+        "model_info_endpoint",
+        "framework_fingerprint",
+        "model_config_exposed"
+      ]
+    },
     {
       "id": "embedding_theft",
       "chain_name": "Embedding Model Extraction",
@@ -16,45 +30,14 @@
         "embedding_endpoint_exposed",
         "no_rate_limit"
       ]
-    },
-    {
-      "id": "admin_debug_exposure",
-      "chain_name": "Admin Debug Information Leak",
-      "description": "Debug endpoints leak sensitive configuration",
-      "severity": "high",
-      "required_services": [
-        "admin"
-      ],
-      "required_findings": [
-        "debug_endpoints_enabled",
-        "stack_trace_leak",
-        "config_dump_endpoint"
-      ]
-    },
-    {
-      "id": "credential_leak_chain",
-      "chain_name": "Credential Exposure via Errors",
-      "description": "Error messages leak API keys and secrets",
-      "severity": "critical",
-      "required_services": [
-        "api",
-        "ml"
-      ],
-      "required_findings": [
-        "verbose_errors",
-        "model_config_exposed"
-      ]
     }
   ],
   "active_services": [
-    "admin",
-    "api",
     "ml",
     "vector"
   ],
   "extra_findings": [
-    "internal_announcement_tool",
-    "employee_directory_exposed",
-    "graphql_introspection"
+    "jwt_shared_secret",
+    "employee_directory_exposed"
   ]
 }

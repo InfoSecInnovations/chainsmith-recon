@@ -8,14 +8,14 @@ that could cause downstream injection when parsed by a consuming application.
 import re
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import (
+    extract_response_text,
     format_chat_request,
     format_chat_request_with_extra,
-    extract_response_text,
 )
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
 
@@ -87,9 +87,7 @@ class OutputFormatManipulationCheck(BaseCheck):
 
         return result
 
-    async def _test_formats(
-        self, url: str, service: Service, api_format: str
-    ) -> CheckResult:
+    async def _test_formats(self, url: str, service: Service, api_format: str) -> CheckResult:
         result = CheckResult(success=True)
         manipulable = []
         constrained = []
@@ -115,11 +113,13 @@ class OutputFormatManipulationCheck(BaseCheck):
 
                     detect_fn = getattr(self, detect_fn_name)
                     if detect_fn(text):
-                        manipulable.append({
-                            "test": test_name,
-                            "description": desc,
-                            "preview": text[:200],
-                        })
+                        manipulable.append(
+                            {
+                                "test": test_name,
+                                "description": desc,
+                                "preview": text[:200],
+                            }
+                        )
                     else:
                         constrained.append(test_name)
 
@@ -140,11 +140,13 @@ class OutputFormatManipulationCheck(BaseCheck):
                     json_body = safe_json(json_mode_resp.body) or {}
                     json_text = extract_response_text(json_body, api_format)
                     if "{" in json_text and "}" in json_text:
-                        manipulable.append({
-                            "test": "response_format_json",
-                            "description": "response_format parameter accepted — JSON mode enabled",
-                            "preview": json_text[:200],
-                        })
+                        manipulable.append(
+                            {
+                                "test": "response_format_json",
+                                "description": "response_format parameter accepted — JSON mode enabled",
+                                "preview": json_text[:200],
+                            }
+                        )
 
         except Exception as e:
             result.errors.append(f"{url}: {e}")
@@ -153,30 +155,38 @@ class OutputFormatManipulationCheck(BaseCheck):
         host = service.host
 
         if manipulable:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Output format manipulable ({len(manipulable)} techniques)",
-                description=(
-                    f"Model output can be controlled: "
-                    f"{', '.join(m['description'] for m in manipulable[:3])}"
-                ),
-                severity="medium",
-                evidence=f"Manipulable via: {', '.join(m['test'] for m in manipulable)}",
-                host=host, discriminator="format-manipulable",
-                target=service, target_url=url,
-                raw_data={"manipulable": manipulable, "constrained": constrained},
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Output format manipulable ({len(manipulable)} techniques)",
+                    description=(
+                        f"Model output can be controlled: "
+                        f"{', '.join(m['description'] for m in manipulable[:3])}"
+                    ),
+                    severity="medium",
+                    evidence=f"Manipulable via: {', '.join(m['test'] for m in manipulable)}",
+                    host=host,
+                    discriminator="format-manipulable",
+                    target=service,
+                    target_url=url,
+                    raw_data={"manipulable": manipulable, "constrained": constrained},
+                    references=self.references,
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Output format constrained by service",
-                description="Model output could not be coerced into unexpected formats",
-                severity="info",
-                evidence=f"Tested {len(self.FORMAT_TESTS) + 1} format manipulations",
-                host=host, discriminator="format-constrained",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Output format constrained by service",
+                    description="Model output could not be coerced into unexpected formats",
+                    severity="info",
+                    evidence=f"Tested {len(self.FORMAT_TESTS) + 1} format manipulations",
+                    host=host,
+                    discriminator="format-constrained",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
         result.outputs[f"format_risks_{service.port}"] = {
             "manipulable": [m["test"] for m in manipulable],
@@ -196,7 +206,7 @@ class OutputFormatManipulationCheck(BaseCheck):
 
     @staticmethod
     def _detect_markdown_link(text: str) -> bool:
-        return bool(re.search(r'\[.*?\]\(https?://.*?\)', text))
+        return bool(re.search(r"\[.*?\]\(https?://.*?\)", text))
 
     @staticmethod
     def _detect_code_output(text: str) -> bool:

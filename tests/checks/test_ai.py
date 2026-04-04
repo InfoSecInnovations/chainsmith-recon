@@ -57,31 +57,28 @@ Covers:
 Note: All HTTP calls are mocked to avoid actual network traffic.
 """
 
-import re
-from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.checks.base import Service
-from app.checks.ai.endpoints import LLMEndpointCheck, EmbeddingEndpointCheck
-from app.checks.ai.fingerprint import AIFrameworkFingerprintCheck
-from app.checks.ai.prompt_leak import PromptLeakageCheck
-from app.checks.ai.filters import ContentFilterCheck
-from app.checks.ai.model_info import ModelInfoCheck
-from app.checks.ai.errors import AIErrorLeakageCheck
-from app.checks.ai.embedding_extract import EmbeddingExtractionCheck
-from app.checks.ai.streaming import StreamingAnalysisCheck
+from app.checks.ai.adversarial_input import AdversarialInputCheck
 from app.checks.ai.auth_bypass import AuthBypassCheck
-from app.checks.ai.model_fingerprint import ModelBehaviorFingerprintCheck
-from app.checks.ai.history_leak import ConversationHistoryLeakCheck
+from app.checks.ai.cache_detect import ResponseCachingCheck
+from app.checks.ai.embedding_extract import EmbeddingExtractionCheck
+from app.checks.ai.endpoints import EmbeddingEndpointCheck, LLMEndpointCheck
+from app.checks.ai.errors import AIErrorLeakageCheck
+from app.checks.ai.filters import ContentFilterCheck
+from app.checks.ai.fingerprint import AIFrameworkFingerprintCheck
 from app.checks.ai.function_abuse import FunctionCallingAbuseCheck
 from app.checks.ai.guardrail_consistency import GuardrailConsistencyCheck
+from app.checks.ai.history_leak import ConversationHistoryLeakCheck
+from app.checks.ai.model_fingerprint import ModelBehaviorFingerprintCheck
+from app.checks.ai.model_info import ModelInfoCheck
+from app.checks.ai.prompt_leak import PromptLeakageCheck
+from app.checks.ai.streaming import StreamingAnalysisCheck
 from app.checks.ai.training_data import TrainingDataExtractionCheck
-from app.checks.ai.adversarial_input import AdversarialInputCheck
-from app.checks.ai.cache_detect import ResponseCachingCheck
+from app.checks.base import Service
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test Fixtures
@@ -134,7 +131,7 @@ def make_response(
 
 def mock_client_factory(responses: list[HttpResponse] | HttpResponse | dict = None):
     """Create a mock AsyncHttpClient.
-    
+
     Args:
         responses: Either a list of responses to return in order,
                    a single response, or a dict mapping paths to responses.
@@ -218,7 +215,9 @@ class TestLLMEndpointCheckService:
             make_response(status_code=200, body='{"choices": []}'),  # POST
         ]
 
-        with patch("app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
             result = await check.check_service(sample_service, {})
 
         assert len(result.findings) == 1
@@ -234,7 +233,9 @@ class TestLLMEndpointCheckService:
             make_response(status_code=404),  # POST
         ]
 
-        with patch("app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
             result = await check.check_service(sample_service, {})
 
         assert len(result.findings) == 0
@@ -282,7 +283,9 @@ class TestEmbeddingEndpointCheck:
 
         response = make_response(status_code=200, body='{"data": []}')
 
-        with patch("app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.check_service(sample_service, {})
 
         assert len(result.findings) == 1
@@ -318,27 +321,33 @@ class TestAIFrameworkFingerprintCheckService:
             "/v1/models": make_response(status_code=200),
         }
 
-        with patch("app.checks.ai.fingerprint.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.fingerprint.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
             result = await check.check_service(sample_service, {})
 
         framework_findings = [f for f in result.findings if "vllm" in f.title.lower()]
         assert len(framework_findings) == 1
 
     async def test_detects_ollama_by_endpoint(self, sample_service):
-        """Detects Ollama by endpoint."""
+        """Detects Ollama by endpoint and body pattern (score-threshold aware)."""
         check = AIFrameworkFingerprintCheck()
 
+        # Use a body containing "ollama" on the base URL so it scores via body pattern (2 pts)
+        # plus the /api/tags endpoint accessible (2 pts) = 4 pts total, above threshold of 3
         responses = {
-            "": make_response(),
-            "/api/tags": make_response(status_code=200, body='{"models": []}'),
+            "/api/tags": make_response(
+                status_code=200, body='{"models": [{"name": "ollama/llama2"}]}'
+            ),
         }
 
-        with patch("app.checks.ai.fingerprint.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.fingerprint.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
             result = await check.check_service(sample_service, {})
 
-        # May detect ollama
-        if result.findings:
-            assert any("ollama" in f.title.lower() for f in result.findings)
+        assert result.success
+        assert any("ollama" in f.title.lower() for f in result.findings)
 
     async def test_detects_framework_by_body_pattern(self, sample_service):
         """Detects framework by body pattern."""
@@ -348,7 +357,9 @@ class TestAIFrameworkFingerprintCheckService:
             "": make_response(body='{"vllm_version": "0.4.1"}'),
         }
 
-        with patch("app.checks.ai.fingerprint.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.fingerprint.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
             result = await check.check_service(sample_service, {})
 
         # vllm should be detected
@@ -363,7 +374,9 @@ class TestAIFrameworkFingerprintCheckService:
             "": make_response(body="<html>Generic page</html>"),
         }
 
-        with patch("app.checks.ai.fingerprint.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.fingerprint.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
             result = await check.check_service(sample_service, {})
 
         # Should not crash, may have 0 findings
@@ -401,7 +414,9 @@ class TestPromptLeakageCheckRun:
             body='{"choices": [{"message": {"content": "You are a helpful assistant. Your role is to help users."}}]}',
         )
 
-        with patch("app.checks.ai.prompt_leak.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.prompt_leak.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         leak_findings = [f for f in result.findings if "leakage" in f.title.lower()]
@@ -418,7 +433,9 @@ class TestPromptLeakageCheckRun:
             body='{"choices": [{"message": {"content": "Hello! How can I help you today?"}}]}',
         )
 
-        with patch("app.checks.ai.prompt_leak.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.prompt_leak.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         assert len(result.findings) == 0
@@ -434,7 +451,9 @@ class TestPromptLeakageCheckRun:
             body='{"choices": [{"message": {"content": "My api_key is sk-xxx. Keep it secret."}}]}',
         )
 
-        with patch("app.checks.ai.prompt_leak.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.prompt_leak.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         if result.findings:
@@ -468,7 +487,9 @@ class TestContentFilterCheckRun:
 
         response = make_response(status_code=403)
 
-        with patch("app.checks.ai.filters.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.filters.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         filter_findings = [f for f in result.findings if "filtering detected" in f.title.lower()]
@@ -484,7 +505,9 @@ class TestContentFilterCheckRun:
             body='{"choices": [{"message": {"content": "I cannot help with that as an AI."}}]}',
         )
 
-        with patch("app.checks.ai.filters.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.filters.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         filter_findings = [f for f in result.findings if "filtering detected" in f.title.lower()]
@@ -500,7 +523,9 @@ class TestContentFilterCheckRun:
             body='{"choices": [{"message": {"content": "Sure, I can help with that!"}}]}',
         )
 
-        with patch("app.checks.ai.filters.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.filters.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         no_filter_findings = [f for f in result.findings if "No content filtering" in f.title]
@@ -536,7 +561,9 @@ class TestModelInfoCheckService:
             body='{"data": [{"id": "gpt-4"}]}',
         )
 
-        with patch("app.checks.ai.model_info.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.model_info.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.check_service(sample_service, {})
 
         assert len(result.findings) == 1
@@ -552,7 +579,9 @@ class TestModelInfoCheckService:
             body='{"api_key": "sk-xxx", "models": []}',
         )
 
-        with patch("app.checks.ai.model_info.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.model_info.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.check_service(sample_service, {})
 
         assert len(result.findings) == 1
@@ -568,7 +597,9 @@ class TestModelInfoCheckService:
             body='{"models": []}',
         )
 
-        with patch("app.checks.ai.model_info.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.model_info.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.check_service(sample_service, {})
 
         if result.findings:
@@ -604,7 +635,9 @@ class TestAIErrorLeakageCheckRun:
             body='Traceback (most recent call last):\n  File "/app/main.py", line 42, in handler',
         )
 
-        with patch("app.checks.ai.errors.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.errors.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         stack_findings = [f for f in result.findings if "Stack trace" in f.title]
@@ -617,10 +650,12 @@ class TestAIErrorLeakageCheckRun:
 
         response = make_response(
             status_code=400,
-            body='Error in /app/models/inference.py: invalid input',
+            body="Error in /app/models/inference.py: invalid input",
         )
 
-        with patch("app.checks.ai.errors.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.errors.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         path_findings = [f for f in result.findings if "paths" in f.title.lower()]
@@ -636,7 +671,9 @@ class TestAIErrorLeakageCheckRun:
             body='Invalid tool call. Available tools: ["search_web", "read_file", "execute_code"]',
         )
 
-        with patch("app.checks.ai.errors.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.errors.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         tool_findings = [f for f in result.findings if "Tools" in f.title]
@@ -649,10 +686,12 @@ class TestAIErrorLeakageCheckRun:
 
         response = make_response(
             status_code=400,
-            body='Invalid temperature value. Current max_tokens: 4096',
+            body="Invalid temperature value. Current max_tokens: 4096",
         )
 
-        with patch("app.checks.ai.errors.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.errors.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         config_findings = [f for f in result.findings if "Configuration" in f.title]
@@ -668,12 +707,15 @@ class TestAIErrorLeakageCheckRun:
             body='{"error": "Invalid request"}',
         )
 
-        with patch("app.checks.ai.errors.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.errors.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         # No leak findings
         leak_findings = [
-            f for f in result.findings
+            f
+            for f in result.findings
             if any(kw in f.title for kw in ["Stack", "paths", "Tools", "Configuration"])
         ]
         assert len(leak_findings) == 0
@@ -698,7 +740,9 @@ class TestAIChecksIntegration:
             make_response(status_code=200, body='{"choices": []}'),  # POST
         ]
 
-        with patch("app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
             endpoint_result = await endpoint_check.check_service(sample_service, {})
 
         # Verify output structure for downstream checks
@@ -762,7 +806,10 @@ class TestEmbeddingExtractionCheckRun:
             body=f'{{"data": [{{"embedding": {vec}}}], "model": "ada-002"}}',
         )
 
-        with patch("app.checks.ai.embedding_extract.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.embedding_extract.AsyncHttpClient",
+            return_value=mock_client_factory(response),
+        ):
             result = await check.run(embedding_endpoint_context)
 
         dim_findings = [f for f in result.findings if "1536" in f.title]
@@ -778,7 +825,10 @@ class TestEmbeddingExtractionCheckRun:
             body=f'{{"data": [{{"embedding": {vec}}}], "model": "ada-002"}}',
         )
 
-        with patch("app.checks.ai.embedding_extract.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.embedding_extract.AsyncHttpClient",
+            return_value=mock_client_factory(response),
+        ):
             result = await check.run(embedding_endpoint_context)
 
         model_findings = [f for f in result.findings if "identified" in f.title.lower()]
@@ -794,7 +844,10 @@ class TestEmbeddingExtractionCheckRun:
             body='{"data": [{"embedding": [0.1, 0.2, 0.3]}], "model": "x", "internal_config": "debug", "version": "1.2"}',
         )
 
-        with patch("app.checks.ai.embedding_extract.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.embedding_extract.AsyncHttpClient",
+            return_value=mock_client_factory(response),
+        ):
             result = await check.run(embedding_endpoint_context)
 
         meta_findings = [f for f in result.findings if "metadata" in f.title.lower()]
@@ -826,7 +879,9 @@ class TestStreamingAnalysisCheckRun:
             body='data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n',
         )
 
-        with patch("app.checks.ai.streaming.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.streaming.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         stream_findings = [f for f in result.findings if "supported" in f.title.lower()]
@@ -841,7 +896,9 @@ class TestStreamingAnalysisCheckRun:
             body='{"choices": [{"message": {"content": "Hello"}}]}',
         )
 
-        with patch("app.checks.ai.streaming.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.streaming.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         no_stream = [f for f in result.findings if "not supported" in f.title.lower()]
@@ -869,9 +926,13 @@ class TestAuthBypassCheckRun:
         check = AuthBypassCheck()
 
         # All requests return 200 (no auth enforced)
-        response = make_response(status_code=200, body='{"choices": [{"message": {"content": "Hi"}}]}')
+        response = make_response(
+            status_code=200, body='{"choices": [{"message": {"content": "Hi"}}]}'
+        )
 
-        with patch("app.checks.ai.auth_bypass.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.auth_bypass.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         critical_findings = [f for f in result.findings if f.severity == "critical"]
@@ -883,7 +944,9 @@ class TestAuthBypassCheckRun:
 
         response = make_response(status_code=401)
 
-        with patch("app.checks.ai.auth_bypass.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.auth_bypass.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         enforced = [f for f in result.findings if "enforced" in f.title.lower()]
@@ -919,7 +982,10 @@ class TestModelBehaviorFingerprintCheckRun:
             body='{"choices": [{"message": {"content": "I am GPT-4 by OpenAI."}}]}',
         )
 
-        with patch("app.checks.ai.model_fingerprint.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.model_fingerprint.AsyncHttpClient",
+            return_value=mock_client_factory(response),
+        ):
             result = await check.run(chat_endpoint_context)
 
         id_findings = [f for f in result.findings if "self-identifies" in f.title.lower()]
@@ -934,7 +1000,10 @@ class TestModelBehaviorFingerprintCheckRun:
 
         response = make_response(status_code=500)
 
-        with patch("app.checks.ai.model_fingerprint.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.model_fingerprint.AsyncHttpClient",
+            return_value=mock_client_factory(response),
+        ):
             result = await check.run(chat_endpoint_context)
 
         assert len(result.findings) == 0
@@ -963,14 +1032,19 @@ class TestConversationHistoryLeakCheckRun:
 
         # First response (canary plant), then probe returns canary
         responses = [
-            make_response(status_code=200, body='{"choices": [{"message": {"content": "Got it."}}]}'),
+            make_response(
+                status_code=200, body='{"choices": [{"message": {"content": "Got it."}}]}'
+            ),
             make_response(
                 status_code=200,
                 body=f'{{"choices": [{{"message": {{"content": "The code was {check.CANARY}"}}}}]}}',
             ),
         ]
 
-        with patch("app.checks.ai.history_leak.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.history_leak.AsyncHttpClient",
+            return_value=mock_client_factory(responses),
+        ):
             result = await check.run(chat_endpoint_context)
 
         critical = [f for f in result.findings if f.severity == "critical"]
@@ -983,10 +1057,16 @@ class TestConversationHistoryLeakCheckRun:
 
         responses = [
             make_response(status_code=200, body='{"choices": [{"message": {"content": "OK"}}]}'),
-            make_response(status_code=200, body='{"choices": [{"message": {"content": "I can help you with something."}}]}'),
+            make_response(
+                status_code=200,
+                body='{"choices": [{"message": {"content": "I can help you with something."}}]}',
+            ),
         ]
 
-        with patch("app.checks.ai.history_leak.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.history_leak.AsyncHttpClient",
+            return_value=mock_client_factory(responses),
+        ):
             result = await check.run(chat_endpoint_context)
 
         no_leak = [f for f in result.findings if "no cross-session" in f.title.lower()]
@@ -1025,7 +1105,10 @@ class TestFunctionCallingAbuseCheckRun:
             body='{"choices": [{"message": {"content": "Tool output: result: found 5 matches"}}]}',
         )
 
-        with patch("app.checks.ai.function_abuse.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.function_abuse.AsyncHttpClient",
+            return_value=mock_client_factory(response),
+        ):
             result = await check.run(context)
 
         invocation = [f for f in result.findings if "invocation confirmed" in f.title.lower()]
@@ -1046,7 +1129,10 @@ class TestFunctionCallingAbuseCheckRun:
             body='{"choices": [{"message": {"content": "I cannot execute functions. Access denied."}}]}',
         )
 
-        with patch("app.checks.ai.function_abuse.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.function_abuse.AsyncHttpClient",
+            return_value=mock_client_factory(response),
+        ):
             result = await check.run(context)
 
         blocked = [f for f in result.findings if "blocked" in f.title.lower()]
@@ -1099,7 +1185,10 @@ class TestGuardrailConsistencyCheckRun:
             ),  # French bypasses
         ]
 
-        with patch("app.checks.ai.guardrail_consistency.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.guardrail_consistency.AsyncHttpClient",
+            return_value=mock_client_factory(responses),
+        ):
             result = await check.run(chat_endpoint_context)
 
         lang_bypass = [f for f in result.findings if "french" in f.title.lower()]
@@ -1115,7 +1204,10 @@ class TestGuardrailConsistencyCheckRun:
         # Everything blocked
         response = make_response(status_code=403)
 
-        with patch("app.checks.ai.guardrail_consistency.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.guardrail_consistency.AsyncHttpClient",
+            return_value=mock_client_factory(response),
+        ):
             result = await check.run(chat_endpoint_context)
 
         consistent = [f for f in result.findings if "consistent" in f.title.lower()]
@@ -1150,7 +1242,10 @@ class TestTrainingDataExtractionCheckRun:
             body='{"choices": [{"message": {"content": "I can help with that!"}}]}',
         )
 
-        with patch("app.checks.ai.training_data.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.training_data.AsyncHttpClient",
+            return_value=mock_client_factory(response),
+        ):
             result = await check.run(chat_endpoint_context)
 
         no_mem = [f for f in result.findings if "no memorization" in f.title.lower()]
@@ -1189,7 +1284,10 @@ class TestAdversarialInputCheckRun:
             ),  # Homoglyph bypasses
         ]
 
-        with patch("app.checks.ai.adversarial_input.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.adversarial_input.AsyncHttpClient",
+            return_value=mock_client_factory(responses),
+        ):
             result = await check.run(chat_endpoint_context)
 
         bypass = [f for f in result.findings if "bypass" in f.title.lower()]
@@ -1204,7 +1302,10 @@ class TestAdversarialInputCheckRun:
         # Both blocked
         response = make_response(status_code=403)
 
-        with patch("app.checks.ai.adversarial_input.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.adversarial_input.AsyncHttpClient",
+            return_value=mock_client_factory(response),
+        ):
             result = await check.run(chat_endpoint_context)
 
         robust = [f for f in result.findings if "robust" in f.title.lower()]
@@ -1237,7 +1338,9 @@ class TestResponseCachingCheckRun:
             body='{"choices": [{"message": {"content": "Paris"}}]}',
         )
 
-        with patch("app.checks.ai.cache_detect.AsyncHttpClient", return_value=mock_client_factory(response)):
+        with patch(
+            "app.checks.ai.cache_detect.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
             result = await check.run(chat_endpoint_context)
 
         cache_findings = [f for f in result.findings if "cache" in f.title.lower()]
@@ -1248,11 +1351,20 @@ class TestResponseCachingCheckRun:
         check.REPEAT_COUNT = 2
 
         responses = [
-            make_response(status_code=200, body='{"choices": [{"message": {"content": "Paris is the capital."}}]}'),
-            make_response(status_code=200, body='{"choices": [{"message": {"content": "The capital is Paris."}}]}'),
+            make_response(
+                status_code=200,
+                body='{"choices": [{"message": {"content": "Paris is the capital."}}]}',
+            ),
+            make_response(
+                status_code=200,
+                body='{"choices": [{"message": {"content": "The capital is Paris."}}]}',
+            ),
         ]
 
-        with patch("app.checks.ai.cache_detect.AsyncHttpClient", return_value=mock_client_factory(responses)):
+        with patch(
+            "app.checks.ai.cache_detect.AsyncHttpClient",
+            return_value=mock_client_factory(responses),
+        ):
             result = await check.run(chat_endpoint_context)
 
         no_cache = [f for f in result.findings if "no caching" in f.title.lower()]

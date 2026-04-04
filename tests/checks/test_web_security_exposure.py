@@ -17,14 +17,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.checks.base import Service
-from app.checks.web.webdav import WebDAVCheck
-from app.checks.web.vcs_exposure import VCSExposureCheck
 from app.checks.web.config_exposure import ConfigExposureCheck
-from app.checks.web.directory_listing import DirectoryListingCheck
-from app.checks.web.default_creds import DefaultCredsCheck
 from app.checks.web.debug_endpoints import DebugEndpointCheck
+from app.checks.web.default_creds import DefaultCredsCheck
+from app.checks.web.directory_listing import DirectoryListingCheck
+from app.checks.web.vcs_exposure import VCSExposureCheck
+from app.checks.web.webdav import WebDAVCheck
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
@@ -33,11 +32,20 @@ from app.lib.http import HttpResponse
 
 @pytest.fixture
 def service():
-    return Service(url="http://target.com:80", host="target.com", port=80, scheme="http", service_type="http")
+    return Service(
+        url="http://target.com:80", host="target.com", port=80, scheme="http", service_type="http"
+    )
 
 
 def resp(status_code=200, body="", headers=None, error=None):
-    return HttpResponse(url="http://target.com:80", status_code=status_code, headers=headers or {}, body=body, elapsed_ms=50.0, error=error)
+    return HttpResponse(
+        url="http://target.com:80",
+        status_code=status_code,
+        headers=headers or {},
+        body=body,
+        elapsed_ms=50.0,
+        error=error,
+    )
 
 
 def mock_client_multi(response_map=None, default=None):
@@ -91,7 +99,7 @@ class TestWebDAVCheck:
     @pytest.mark.asyncio
     async def test_skips_when_intrusive_disabled(self, service):
         check = WebDAVCheck()
-        with patch.object(WebDAVCheck, '_is_intrusive_allowed', return_value=False):
+        with patch.object(WebDAVCheck, "_is_intrusive_allowed", return_value=False):
             result = await check.check_service(service, {})
         assert len(result.findings) == 0
         assert result.outputs.get("webdav_skipped") is True
@@ -104,8 +112,12 @@ class TestWebDAVCheck:
             ("PUT", "chainsmith-webdav-test"): resp(403),
             ("MKCOL", "chainsmith-webdav-test"): resp(403),
         }
-        with patch.object(WebDAVCheck, '_is_intrusive_allowed', return_value=True), \
-             patch("app.checks.web.webdav.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with (
+            patch.object(WebDAVCheck, "_is_intrusive_allowed", return_value=True),
+            patch(
+                "app.checks.web.webdav.AsyncHttpClient", return_value=mock_client_multi(responses)
+            ),
+        ):
             result = await check.check_service(service, {})
         assert any("PROPFIND" in f.title for f in result.findings)
         assert any(f.severity == "high" for f in result.findings)
@@ -119,8 +131,12 @@ class TestWebDAVCheck:
             ("DELETE", "chainsmith-webdav-test"): resp(204),
             ("MKCOL", "chainsmith-webdav-test"): resp(403),
         }
-        with patch.object(WebDAVCheck, '_is_intrusive_allowed', return_value=True), \
-             patch("app.checks.web.webdav.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with (
+            patch.object(WebDAVCheck, "_is_intrusive_allowed", return_value=True),
+            patch(
+                "app.checks.web.webdav.AsyncHttpClient", return_value=mock_client_multi(responses)
+            ),
+        ):
             result = await check.check_service(service, {})
         critical = [f for f in result.findings if f.severity == "critical"]
         assert len(critical) >= 1
@@ -134,8 +150,12 @@ class TestWebDAVCheck:
             ("PUT", "chainsmith-webdav-test"): resp(401),
             ("MKCOL", "chainsmith-webdav-test"): resp(401),
         }
-        with patch.object(WebDAVCheck, '_is_intrusive_allowed', return_value=True), \
-             patch("app.checks.web.webdav.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with (
+            patch.object(WebDAVCheck, "_is_intrusive_allowed", return_value=True),
+            patch(
+                "app.checks.web.webdav.AsyncHttpClient", return_value=mock_client_multi(responses)
+            ),
+        ):
             result = await check.check_service(service, {})
         medium = [f for f in result.findings if f.severity == "medium"]
         assert len(medium) >= 1
@@ -165,7 +185,9 @@ class TestVCSExposureCheck:
         }
         context = {f"paths_{service.port}": {"accessible": ["/.git/config", "/.git/HEAD"]}}
 
-        with patch("app.checks.web.vcs_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.vcs_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)
+        ):
             result = await check.check_service(service, context)
 
         assert len(result.findings) >= 1
@@ -177,7 +199,10 @@ class TestVCSExposureCheck:
     async def test_detects_git_credentials(self, service):
         check = VCSExposureCheck()
         responses = {
-            ("GET", ".git/config"): resp(200, body='[remote "origin"]\n\turl = https://user:ghp_secret123@github.com/org/repo'),
+            ("GET", ".git/config"): resp(
+                200,
+                body='[remote "origin"]\n\turl = https://user:ghp_secret123@github.com/org/repo',
+            ),
             ("GET", ".git/COMMIT_EDITMSG"): resp(404),
             ("GET", ".git/refs"): resp(404),
             ("GET", ".git/logs"): resp(404),
@@ -187,7 +212,9 @@ class TestVCSExposureCheck:
         }
         context = {f"paths_{service.port}": {"accessible": ["/.git/config"]}}
 
-        with patch("app.checks.web.vcs_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.vcs_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)
+        ):
             result = await check.check_service(service, context)
 
         cred_findings = [f for f in result.findings if "credential" in f.title.lower()]
@@ -203,7 +230,9 @@ class TestVCSExposureCheck:
         }
         context = {f"paths_{service.port}": {"accessible": ["/.svn/entries"]}}
 
-        with patch("app.checks.web.vcs_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.vcs_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)
+        ):
             result = await check.check_service(service, context)
 
         assert any("SVN" in f.title for f in result.findings)
@@ -217,7 +246,9 @@ class TestVCSExposureCheck:
         }
         context = {f"paths_{service.port}": {"accessible": []}}
 
-        with patch("app.checks.web.vcs_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.vcs_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)
+        ):
             result = await check.check_service(service, context)
 
         assert len(result.findings) == 0
@@ -242,10 +273,17 @@ class TestConfigExposureCheck:
         }
         context = {f"paths_{service.port}": {"accessible": ["/.env"]}}
 
-        with patch("app.checks.web.config_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.config_exposure.AsyncHttpClient",
+            return_value=mock_client_multi(responses),
+        ):
             result = await check.check_service(service, context)
 
-        secrets = [f for f in result.findings if "secret" in f.title.lower() or "contains" in f.title.lower()]
+        secrets = [
+            f
+            for f in result.findings
+            if "secret" in f.title.lower() or "contains" in f.title.lower()
+        ]
         assert len(secrets) >= 1
         assert secrets[0].severity == "critical"
         # Verify actual secret values are NOT in evidence
@@ -259,12 +297,18 @@ class TestConfigExposureCheck:
         }
         context = {f"paths_{service.port}": {"accessible": ["/config.json"]}}
 
-        with patch("app.checks.web.config_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.config_exposure.AsyncHttpClient",
+            return_value=mock_client_multi(responses),
+        ):
             result = await check.check_service(service, context)
 
         assert len(result.findings) >= 1
         assert result.findings[0].severity == "high"
-        assert "no secrets detected" in result.findings[0].description.lower() or "accessible" in result.findings[0].title.lower()
+        assert (
+            "no secrets detected" in result.findings[0].description.lower()
+            or "accessible" in result.findings[0].title.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_no_findings_when_no_config(self, service):
@@ -277,7 +321,10 @@ class TestConfigExposureCheck:
         }
         context = {f"paths_{service.port}": {"accessible": []}}
 
-        with patch("app.checks.web.config_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.config_exposure.AsyncHttpClient",
+            return_value=mock_client_multi(responses),
+        ):
             result = await check.check_service(service, context)
 
         assert len(result.findings) == 0
@@ -291,7 +338,10 @@ class TestConfigExposureCheck:
         }
         context = {f"paths_{service.port}": {"accessible": ["/.env"]}}
 
-        with patch("app.checks.web.config_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.config_exposure.AsyncHttpClient",
+            return_value=mock_client_multi(responses),
+        ):
             result = await check.check_service(service, context)
 
         assert any(f.severity == "critical" for f in result.findings)
@@ -315,7 +365,10 @@ class TestDirectoryListingCheck:
             ("GET", "target.com:80/"): resp(200, body=listing_body),
         }
 
-        with patch("app.checks.web.directory_listing.AsyncHttpClient", return_value=mock_client_multi(responses, default=resp(404))):
+        with patch(
+            "app.checks.web.directory_listing.AsyncHttpClient",
+            return_value=mock_client_multi(responses, default=resp(404)),
+        ):
             result = await check.check_service(service, {})
 
         assert len(result.findings) >= 1
@@ -326,12 +379,17 @@ class TestDirectoryListingCheck:
     @pytest.mark.asyncio
     async def test_detects_sensitive_files(self, service):
         check = DirectoryListingCheck()
-        listing_body = '<h1>Index of /data/</h1><a href=".env">.env</a><a href="model.pt">model.pt</a>'
+        listing_body = (
+            '<h1>Index of /data/</h1><a href=".env">.env</a><a href="model.pt">model.pt</a>'
+        )
         responses = {
             ("GET", "/data/"): resp(200, body=listing_body),
         }
 
-        with patch("app.checks.web.directory_listing.AsyncHttpClient", return_value=mock_client_multi(responses, default=resp(404))):
+        with patch(
+            "app.checks.web.directory_listing.AsyncHttpClient",
+            return_value=mock_client_multi(responses, default=resp(404)),
+        ):
             result = await check.check_service(service, {})
 
         sensitive = [f for f in result.findings if "sensitive" in f.title.lower()]
@@ -340,7 +398,10 @@ class TestDirectoryListingCheck:
     @pytest.mark.asyncio
     async def test_no_listing_no_findings(self, service):
         check = DirectoryListingCheck()
-        with patch("app.checks.web.directory_listing.AsyncHttpClient", return_value=mock_client_multi(default=resp(200, body="<html>Normal page</html>"))):
+        with patch(
+            "app.checks.web.directory_listing.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, body="<html>Normal page</html>")),
+        ):
             result = await check.check_service(service, {})
         assert len(result.findings) == 0
 
@@ -358,7 +419,7 @@ class TestDefaultCredsCheck:
     @pytest.mark.asyncio
     async def test_skips_when_intrusive_disabled(self, service):
         check = DefaultCredsCheck()
-        with patch.object(DefaultCredsCheck, '_is_intrusive_allowed', return_value=False):
+        with patch.object(DefaultCredsCheck, "_is_intrusive_allowed", return_value=False):
             result = await check.check_service(service, {})
         assert len(result.findings) == 0
         assert result.outputs.get("default_creds_skipped") is True
@@ -372,8 +433,13 @@ class TestDefaultCredsCheck:
         }
         context = {f"paths_{service.port}": {"accessible": ["/admin"]}}
 
-        with patch.object(DefaultCredsCheck, '_is_intrusive_allowed', return_value=True), \
-             patch("app.checks.web.default_creds.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with (
+            patch.object(DefaultCredsCheck, "_is_intrusive_allowed", return_value=True),
+            patch(
+                "app.checks.web.default_creds.AsyncHttpClient",
+                return_value=mock_client_multi(responses),
+            ),
+        ):
             result = await check.check_service(service, context)
 
         no_auth = [f for f in result.findings if "no authentication" in f.title.lower()]
@@ -384,15 +450,20 @@ class TestDefaultCredsCheck:
     async def test_detects_login_form_creds_rejected(self, service):
         check = DefaultCredsCheck()
         login_body = '<form action="/admin" method="POST"><input type="text" name="username"><input type="password" name="password"></form>'
-        fail_body = '<p>Invalid credentials. Please try again.</p>'
+        fail_body = "<p>Invalid credentials. Please try again.</p>"
         responses = {
             ("GET", "/admin"): resp(200, body=login_body),
             ("POST", "/admin"): resp(200, body=fail_body),
         }
         context = {f"paths_{service.port}": {"accessible": ["/admin"]}}
 
-        with patch.object(DefaultCredsCheck, '_is_intrusive_allowed', return_value=True), \
-             patch("app.checks.web.default_creds.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with (
+            patch.object(DefaultCredsCheck, "_is_intrusive_allowed", return_value=True),
+            patch(
+                "app.checks.web.default_creds.AsyncHttpClient",
+                return_value=mock_client_multi(responses),
+            ),
+        ):
             result = await check.check_service(service, context)
 
         login_form = [f for f in result.findings if "Login form" in f.title]
@@ -404,7 +475,7 @@ class TestDefaultCredsCheck:
         check = DefaultCredsCheck()
         context = {f"paths_{service.port}": {"accessible": ["/api", "/health"]}}
 
-        with patch.object(DefaultCredsCheck, '_is_intrusive_allowed', return_value=True):
+        with patch.object(DefaultCredsCheck, "_is_intrusive_allowed", return_value=True):
             result = await check.check_service(service, context)
 
         assert len(result.findings) == 0
@@ -428,7 +499,10 @@ class TestDebugEndpointCheck:
             ("GET", "/__debug__/"): resp(200, body=werkzeug_body),
         }
 
-        with patch("app.checks.web.debug_endpoints.AsyncHttpClient", return_value=mock_client_multi(responses, default=resp(404))):
+        with patch(
+            "app.checks.web.debug_endpoints.AsyncHttpClient",
+            return_value=mock_client_multi(responses, default=resp(404)),
+        ):
             result = await check.check_service(service, {})
 
         werkzeug = [f for f in result.findings if "Werkzeug" in f.title or "werkzeug" in f.title]
@@ -443,7 +517,10 @@ class TestDebugEndpointCheck:
             ("GET", "/debug"): resp(200, body=django_body),
         }
 
-        with patch("app.checks.web.debug_endpoints.AsyncHttpClient", return_value=mock_client_multi(responses, default=resp(404))):
+        with patch(
+            "app.checks.web.debug_endpoints.AsyncHttpClient",
+            return_value=mock_client_multi(responses, default=resp(404)),
+        ):
             result = await check.check_service(service, {})
 
         django = [f for f in result.findings if "Django" in f.title or "django" in f.title.lower()]
@@ -465,31 +542,46 @@ class TestDebugEndpointCheck:
             ("GET", "/actuator/threaddump"): resp(404),
         }
 
-        with patch("app.checks.web.debug_endpoints.AsyncHttpClient", return_value=mock_client_multi(responses, default=resp(404))):
+        with patch(
+            "app.checks.web.debug_endpoints.AsyncHttpClient",
+            return_value=mock_client_multi(responses, default=resp(404)),
+        ):
             result = await check.check_service(service, {})
 
-        actuator = [f for f in result.findings if "Actuator" in f.title or "actuator" in f.title.lower()]
+        actuator = [
+            f for f in result.findings if "Actuator" in f.title or "actuator" in f.title.lower()
+        ]
         assert len(actuator) >= 1
         assert actuator[0].severity == "high"
 
     @pytest.mark.asyncio
     async def test_detects_sensitive_env_vars(self, service):
         check = DebugEndpointCheck()
-        env_body = 'DATABASE_URL=postgres://user:pass@db:5432/app\nSECRET_KEY=supersecret123'
+        env_body = "DATABASE_URL=postgres://user:pass@db:5432/app\nSECRET_KEY=supersecret123"
         responses = {
             ("GET", "/actuator/env"): resp(200, body=env_body),
         }
 
-        with patch("app.checks.web.debug_endpoints.AsyncHttpClient", return_value=mock_client_multi(responses, default=resp(404))):
+        with patch(
+            "app.checks.web.debug_endpoints.AsyncHttpClient",
+            return_value=mock_client_multi(responses, default=resp(404)),
+        ):
             result = await check.check_service(service, {})
 
-        sensitive = [f for f in result.findings if "sensitive" in f.title.lower() or "leaks" in f.title.lower()]
+        sensitive = [
+            f
+            for f in result.findings
+            if "sensitive" in f.title.lower() or "leaks" in f.title.lower()
+        ]
         assert len(sensitive) >= 1
 
     @pytest.mark.asyncio
     async def test_no_debug_endpoints_no_findings(self, service):
         check = DebugEndpointCheck()
-        with patch("app.checks.web.debug_endpoints.AsyncHttpClient", return_value=mock_client_multi(default=resp(404))):
+        with patch(
+            "app.checks.web.debug_endpoints.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(404)),
+        ):
             result = await check.check_service(service, {})
         assert len(result.findings) == 0
 
@@ -502,21 +594,39 @@ class TestDebugEndpointCheck:
 class TestCheckRegistration:
     def test_all_checks_registered(self):
         from app.check_resolver import get_real_checks, infer_suite
+
         checks = get_real_checks()
         web_checks = [c for c in checks if infer_suite(c.name) == "web"]
         web_names = {c.name for c in web_checks}
 
-        expected = {"webdav_check", "vcs_exposure", "config_exposure",
-                    "directory_listing", "default_creds", "debug_endpoints"}
+        expected = {
+            "webdav_check",
+            "vcs_exposure",
+            "config_exposure",
+            "directory_listing",
+            "default_creds",
+            "debug_endpoints",
+        }
         assert expected.issubset(web_names), f"Missing: {expected - web_names}"
 
     def test_all_checks_importable(self):
         from app.checks.web import (
-            WebDAVCheck, VCSExposureCheck, ConfigExposureCheck,
-            DirectoryListingCheck, DefaultCredsCheck, DebugEndpointCheck,
+            ConfigExposureCheck,
+            DebugEndpointCheck,
+            DefaultCredsCheck,
+            DirectoryListingCheck,
+            VCSExposureCheck,
+            WebDAVCheck,
         )
-        for cls in [WebDAVCheck, VCSExposureCheck, ConfigExposureCheck,
-                     DirectoryListingCheck, DefaultCredsCheck, DebugEndpointCheck]:
+
+        for cls in [
+            WebDAVCheck,
+            VCSExposureCheck,
+            ConfigExposureCheck,
+            DirectoryListingCheck,
+            DefaultCredsCheck,
+            DebugEndpointCheck,
+        ]:
             instance = cls()
             assert instance.name
             assert instance.description

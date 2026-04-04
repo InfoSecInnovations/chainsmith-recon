@@ -20,9 +20,9 @@ import hashlib
 import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class MultiLayerCacheCheck(ServiceIteratingCheck):
@@ -57,8 +57,7 @@ class MultiLayerCacheCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -77,19 +76,21 @@ class MultiLayerCacheCheck(ServiceIteratingCheck):
                         layer_results.append(layer_info)
 
                         severity = self._determine_severity(layer_info)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=self._build_title(layer_info),
-                            description=self._build_description(layer_info),
-                            severity=severity,
-                            evidence=self._build_evidence(layer_info),
-                            host=service.host,
-                            discriminator=f"layers-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=layer_info,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=self._build_title(layer_info),
+                                description=self._build_description(layer_info),
+                                severity=severity,
+                                evidence=self._build_evidence(layer_info),
+                                host=service.host,
+                                discriminator=f"layers-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=layer_info,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -115,13 +116,17 @@ class MultiLayerCacheCheck(ServiceIteratingCheck):
 
         # Strategy 2: Cache-Control: no-cache (bypass HTTP cache)
         timing_no_cache = await self._timed_request(
-            client, url, payload,
+            client,
+            url,
+            payload,
             {"Cache-Control": "no-cache"},
         )
 
         # Strategy 3: Pragma: no-cache (bypass older HTTP caches)
         timing_pragma = await self._timed_request(
-            client, url, payload,
+            client,
+            url,
+            payload,
             {"Pragma": "no-cache"},
         )
 
@@ -154,8 +159,7 @@ class MultiLayerCacheCheck(ServiceIteratingCheck):
         }
 
     async def _timed_request(
-        self, client: AsyncHttpClient, url: str, payload: dict,
-        extra_headers: dict
+        self, client: AsyncHttpClient, url: str, payload: dict, extra_headers: dict
     ) -> dict | None:
         """Send a request and measure timing."""
         headers = {"Content-Type": "application/json"}
@@ -171,8 +175,16 @@ class MultiLayerCacheCheck(ServiceIteratingCheck):
 
             # Collect cache-related headers
             cache_headers = {}
-            for h in ["x-cache", "x-cache-hit", "x-cache-status", "age",
-                       "x-served-by", "x-cache-node", "via", "cf-cache-status"]:
+            for h in [
+                "x-cache",
+                "x-cache-hit",
+                "x-cache-status",
+                "age",
+                "x-served-by",
+                "x-cache-node",
+                "via",
+                "cf-cache-status",
+            ]:
                 val = resp.headers.get(h) or resp.headers.get(h.title())
                 if val:
                     cache_headers[h] = val
@@ -198,45 +210,52 @@ class MultiLayerCacheCheck(ServiceIteratingCheck):
         # Layer 1: HTTP cache (bypassed by Cache-Control/Pragma)
         http_cache_bypassed = no_cache > normal * 1.5 or pragma > normal * 1.5
         if http_cache_bypassed:
-            layers.append({
-                "type": "http_cache",
-                "bypass_method": "Cache-Control: no-cache",
-                "normal_ms": normal,
-                "bypassed_ms": no_cache,
-            })
+            layers.append(
+                {
+                    "type": "http_cache",
+                    "bypass_method": "Cache-Control: no-cache",
+                    "normal_ms": normal,
+                    "bypassed_ms": no_cache,
+                }
+            )
 
         # Layer 2: Semantic/application cache (not bypassed by HTTP headers)
         # If no-cache is still faster than cache-buster, there's another layer
         if no_cache < buster * 0.7 and http_cache_bypassed:
-            layers.append({
-                "type": "application_cache",
-                "bypass_method": "none (ignores HTTP cache headers)",
-                "normal_ms": no_cache,
-                "bypassed_ms": buster,
-            })
+            layers.append(
+                {
+                    "type": "application_cache",
+                    "bypass_method": "none (ignores HTTP cache headers)",
+                    "normal_ms": no_cache,
+                    "bypassed_ms": buster,
+                }
+            )
 
         # If all strategies yield similar fast times, single cache layer
         all_fast = all(
-            timings[k]["elapsed_ms"] < normal * 1.5
-            for k in ["no_cache", "pragma", "cache_buster"]
+            timings[k]["elapsed_ms"] < normal * 1.5 for k in ["no_cache", "pragma", "cache_buster"]
         )
         if all_fast and normal < 500:
-            layers.append({
-                "type": "semantic_or_application_cache",
-                "bypass_method": "none detected",
-                "note": "Cache ignores all HTTP cache-busting strategies",
-            })
+            layers.append(
+                {
+                    "type": "semantic_or_application_cache",
+                    "bypass_method": "none detected",
+                    "note": "Cache ignores all HTTP cache-busting strategies",
+                }
+            )
 
         # Check for CDN indicators in headers
-        for strategy, data in timings.items():
+        for _strategy, data in timings.items():
             for header in ["cf-cache-status", "x-cache", "via"]:
                 if header in data.get("cache_headers", {}):
-                    if not any(l["type"] == "cdn" for l in layers):
-                        layers.append({
-                            "type": "cdn",
-                            "header": header,
-                            "value": data["cache_headers"][header],
-                        })
+                    if not any(layer["type"] == "cdn" for layer in layers):
+                        layers.append(
+                            {
+                                "type": "cdn",
+                                "header": header,
+                                "value": data["cache_headers"][header],
+                            }
+                        )
 
         return layers
 

@@ -12,10 +12,9 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Standard MCP capabilities and their probe methods
 STANDARD_CAPABILITIES = [
@@ -72,9 +71,7 @@ class UndeclaredCapabilityCheck(BaseCheck):
             server_url = server.get("url", "")
             service_data = server.get("service", {})
             host = service_data.get("host", "unknown")
-            declared_caps = set(
-                str(c).lower() for c in server.get("capabilities", [])
-            )
+            declared_caps = {str(c).lower() for c in server.get("capabilities", [])}
 
             if not server_url:
                 continue
@@ -97,58 +94,71 @@ class UndeclaredCapabilityCheck(BaseCheck):
                         accessible = await self._probe_method(client, server_url, method)
 
                         if accessible:
-                            server_undeclared["undeclared_accessible"].append({
-                                "capability": cap_name,
-                                "method": method,
-                            })
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Undeclared capability accessible: {method} returns data but {cap_name} not declared",
-                                description=(
-                                    f"The server responds to {method} even though '{cap_name}' "
-                                    f"was not declared in capabilities. {desc} is accessible "
-                                    "despite not being advertised."
-                                ),
-                                severity="high",
-                                evidence=f"URL: {server_url}\nMethod: {method}\nDeclared caps: {', '.join(declared_caps) or 'none'}",
-                                host=host,
-                                discriminator=f"undeclared-{cap_name}",
-                                raw_data={"capability": cap_name, "method": method},
-                            ))
+                            server_undeclared["undeclared_accessible"].append(
+                                {
+                                    "capability": cap_name,
+                                    "method": method,
+                                }
+                            )
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Undeclared capability accessible: {method} returns data but {cap_name} not declared",
+                                    description=(
+                                        f"The server responds to {method} even though '{cap_name}' "
+                                        f"was not declared in capabilities. {desc} is accessible "
+                                        "despite not being advertised."
+                                    ),
+                                    severity="high",
+                                    evidence=f"URL: {server_url}\nMethod: {method}\nDeclared caps: {', '.join(declared_caps) or 'none'}",
+                                    host=host,
+                                    discriminator=f"undeclared-{cap_name}",
+                                    raw_data={"capability": cap_name, "method": method},
+                                )
+                            )
 
                     # Test non-standard methods
                     for method, desc in NON_STANDARD_METHODS:
                         accessible = await self._probe_method(client, server_url, method)
 
                         if accessible:
-                            server_undeclared["non_standard_accessible"].append({
-                                "method": method,
-                                "description": desc,
-                            })
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Non-standard method accepted: {method} returns data",
-                                description=(
-                                    f"The MCP server responds to non-standard method '{method}' "
-                                    f"({desc}). This may expose administrative or debug functionality."
-                                ),
-                                severity="medium",
-                                evidence=f"URL: {server_url}\nMethod: {method}",
-                                host=host,
-                                discriminator=f"nonstandard-{method.replace('/', '-')}",
-                                raw_data={"method": method},
-                            ))
+                            server_undeclared["non_standard_accessible"].append(
+                                {
+                                    "method": method,
+                                    "description": desc,
+                                }
+                            )
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Non-standard method accepted: {method} returns data",
+                                    description=(
+                                        f"The MCP server responds to non-standard method '{method}' "
+                                        f"({desc}). This may expose administrative or debug functionality."
+                                    ),
+                                    severity="medium",
+                                    evidence=f"URL: {server_url}\nMethod: {method}",
+                                    host=host,
+                                    discriminator=f"nonstandard-{method.replace('/', '-')}",
+                                    raw_data={"method": method},
+                                )
+                            )
 
-                    if not server_undeclared["undeclared_accessible"] and not server_undeclared["non_standard_accessible"]:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Server correctly rejects requests for undeclared capabilities",
-                            description="All probed undeclared capabilities and non-standard methods were rejected.",
-                            severity="info",
-                            evidence=f"URL: {server_url}\nMethods tested: {len(STANDARD_CAPABILITIES) + len(NON_STANDARD_METHODS)}",
-                            host=host,
-                            discriminator="caps-clean",
-                        ))
+                    if (
+                        not server_undeclared["undeclared_accessible"]
+                        and not server_undeclared["non_standard_accessible"]
+                    ):
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Server correctly rejects requests for undeclared capabilities",
+                                description="All probed undeclared capabilities and non-standard methods were rejected.",
+                                severity="info",
+                                evidence=f"URL: {server_url}\nMethods tested: {len(STANDARD_CAPABILITIES) + len(NON_STANDARD_METHODS)}",
+                                host=host,
+                                discriminator="caps-clean",
+                            )
+                        )
 
             except Exception as e:
                 result.errors.append(f"Capability probe on {server_url}: {e}")
@@ -195,9 +205,7 @@ class UndeclaredCapabilityCheck(BaseCheck):
                 if "result" in data:
                     rpc_result = data["result"]
                     # Empty result might just be an echo
-                    if rpc_result in (None, {}, [], ""):
-                        return False
-                    return True
+                    return rpc_result not in (None, {}, [], "")
         except (json.JSONDecodeError, TypeError):
             pass
 

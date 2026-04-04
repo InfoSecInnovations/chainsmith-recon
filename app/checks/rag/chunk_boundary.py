@@ -12,12 +12,12 @@ References:
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 """
 
+import contextlib
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Approximate tokens → characters (rough: 1 token ≈ 4 chars)
 CHUNK_SIZES = [
@@ -75,7 +75,8 @@ class RAGChunkBoundaryCheck(ServiceIteratingCheck):
 
         writable = [ep for ep in (ingestion_endpoints or []) if ep.get("writable")]
         query_eps = [
-            ep for ep in rag_endpoints
+            ep
+            for ep in rag_endpoints
             if ep.get("service", {}).get("host") == service.host
             and ep.get("endpoint_type") == "rag_query"
         ]
@@ -97,56 +98,68 @@ class RAGChunkBoundaryCheck(ServiceIteratingCheck):
 
                 for size_name, char_count in CHUNK_SIZES:
                     test_result = await self._test_boundary(
-                        client, ingest_url, query_url, base_url,
-                        size_name, char_count,
+                        client,
+                        ingest_url,
+                        query_url,
+                        base_url,
+                        size_name,
+                        char_count,
                     )
                     boundary_results.append(test_result)
 
                     if test_result.get("bypass_confirmed"):
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Chunk boundary bypass: split payload at {size_name} reassembled",
-                            description=(
-                                f"Injection payload split at {size_name} boundary was "
-                                f"reassembled in LLM context. Per-chunk filtering bypassed."
-                            ),
-                            severity="high",
-                            evidence=f"Boundary: {size_name}\nCanary: {CANARY}\nDetected in response",
-                            host=service.host,
-                            discriminator=f"chunk-bypass-{size_name}",
-                            target=service,
-                            raw_data=test_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Chunk boundary bypass: split payload at {size_name} reassembled",
+                                description=(
+                                    f"Injection payload split at {size_name} boundary was "
+                                    f"reassembled in LLM context. Per-chunk filtering bypassed."
+                                ),
+                                severity="high",
+                                evidence=f"Boundary: {size_name}\nCanary: {CANARY}\nDetected in response",
+                                host=service.host,
+                                discriminator=f"chunk-bypass-{size_name}",
+                                target=service,
+                                raw_data=test_result,
+                                references=self.references,
+                            )
+                        )
                     elif test_result.get("chunks_retrieved"):
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Chunk boundary: both chunks retrieved at {size_name}",
-                            description=(
-                                f"Both chunks retrieved but injection not confirmed in LLM output."
-                            ),
-                            severity="medium",
-                            evidence=f"Boundary: {size_name}\nBoth chunks in context",
-                            host=service.host,
-                            discriminator=f"chunk-retrieved-{size_name}",
-                            target=service,
-                            raw_data=test_result,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Chunk boundary: both chunks retrieved at {size_name}",
+                                description=(
+                                    "Both chunks retrieved but injection not confirmed in LLM output."
+                                ),
+                                severity="medium",
+                                evidence=f"Boundary: {size_name}\nBoth chunks in context",
+                                host=service.host,
+                                discriminator=f"chunk-retrieved-{size_name}",
+                                target=service,
+                                raw_data=test_result,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        if not any(r.get("bypass_confirmed") or r.get("chunks_retrieved") for r in boundary_results):
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Chunk boundary exploitation not effective",
-                description="Split payloads did not bypass filtering at tested boundaries.",
-                severity="info",
-                evidence=f"Tested boundaries: {', '.join(s for s, _ in CHUNK_SIZES)}",
-                host=service.host,
-                discriminator="chunk-not-effective",
-                target=service,
-            ))
+        if not any(
+            r.get("bypass_confirmed") or r.get("chunks_retrieved") for r in boundary_results
+        ):
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Chunk boundary exploitation not effective",
+                    description="Split payloads did not bypass filtering at tested boundaries.",
+                    severity="info",
+                    evidence=f"Tested boundaries: {', '.join(s for s, _ in CHUNK_SIZES)}",
+                    host=service.host,
+                    discriminator="chunk-not-effective",
+                    target=service,
+                )
+            )
 
         if boundary_results:
             result.outputs["chunk_boundary_results"] = boundary_results
@@ -181,7 +194,8 @@ class RAGChunkBoundaryCheck(ServiceIteratingCheck):
             "metadatas": [{"source": "chainsmith-test", "topic": topic}],
         }
         resp = await client.post(
-            ingest_url, json=payload,
+            ingest_url,
+            json=payload,
             headers={"Content-Type": "application/json"},
         )
 
@@ -206,7 +220,8 @@ class RAGChunkBoundaryCheck(ServiceIteratingCheck):
             "k": 10,
         }
         query_resp = await client.post(
-            query_url, json=query_body,
+            query_url,
+            json=query_body,
             headers={"Content-Type": "application/json"},
         )
 
@@ -223,11 +238,12 @@ class RAGChunkBoundaryCheck(ServiceIteratingCheck):
                 test_result["bypass_confirmed"] = True
 
         # Cleanup
-        for path in [f"/documents/{doc_id}", f"/api/documents/{doc_id}",
-                      f"/api/v1/documents/{doc_id}"]:
-            try:
+        for path in [
+            f"/documents/{doc_id}",
+            f"/api/documents/{doc_id}",
+            f"/api/v1/documents/{doc_id}",
+        ]:
+            with contextlib.suppress(Exception):
                 await client.delete(f"{base_url}{path}")
-            except Exception:
-                pass
 
         return test_result

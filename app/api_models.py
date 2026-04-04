@@ -4,14 +4,14 @@ app/api_models.py - API Request/Response Models
 Pydantic models for HTTP API endpoints.
 """
 
-from typing import Optional
 from pydantic import BaseModel
-
 
 # ─── Scope Models ─────────────────────────────────────────────
 
+
 class ScopeInput(BaseModel):
     """Basic scope input."""
+
     target: str
     exclude: list[str] = []
     techniques: list[str] = []  # Empty = all techniques
@@ -19,12 +19,14 @@ class ScopeInput(BaseModel):
 
 class EngagementWindowInput(BaseModel):
     """Time window for authorized testing."""
+
     start: str  # ISO format
-    end: str    # ISO format
+    end: str  # ISO format
 
 
 class ProofSettingsInput(BaseModel):
     """Proof of scope settings."""
+
     traffic_logging: bool = True
     screenshot_findings: bool = False
     hash_responses: bool = True
@@ -32,46 +34,53 @@ class ProofSettingsInput(BaseModel):
 
 class OnCriticalSettings(BaseModel):
     """On-critical finding behavior settings."""
+
     default: str = "annotate"  # annotate, skip_downstream, stop
-    network: Optional[str] = None
-    web: Optional[str] = None
-    ai: Optional[str] = None
-    mcp: Optional[str] = None
-    agent: Optional[str] = None
-    rag: Optional[str] = None
-    cag: Optional[str] = None
+    network: str | None = None
+    web: str | None = None
+    ai: str | None = None
+    mcp: str | None = None
+    agent: str | None = None
+    rag: str | None = None
+    cag: str | None = None
 
 
 class ScanBehaviorSettings(BaseModel):
     """Scan behavior settings (on_critical + intrusive gating)."""
-    on_critical: Optional[OnCriticalSettings] = None
+
+    on_critical: OnCriticalSettings | None = None
     intrusive_web: bool = False
 
 
 class ExtendedScopeInput(BaseModel):
     """Extended scope with engagement window and proof settings."""
+
     target: str
     exclude: list[str] = []
     techniques: list[str] = []
-    engagement_window: Optional[EngagementWindowInput] = None
-    proof_of_scope: Optional[ProofSettingsInput] = None
-    scan_behavior: Optional[ScanBehaviorSettings] = None
+    engagement_window: EngagementWindowInput | None = None
+    proof_of_scope: ProofSettingsInput | None = None
+    scan_behavior: ScanBehaviorSettings | None = None
 
 
 # ─── Scan Start Models ───────────────────────────────────────
 
+
 class ScanStartInput(BaseModel):
     """Optional body for POST /api/scan with check/suite filtering."""
-    checks: list[str] = []   # Run only these check names
-    suites: list[str] = []   # Run only checks from these suites
-    engagement_id: Optional[str] = None  # Link scan to an engagement
-    port_profile: Optional[str] = None   # Port profile: web, ai, full, lab
+
+    checks: list[str] = []  # Run only these check names
+    suites: list[str] = []  # Run only checks from these suites
+    engagement_id: str | None = None  # Link scan to an engagement
+    port_profile: str | None = None  # Port profile: web, ai, full, lab
 
 
 # ─── Settings Models ──────────────────────────────────────────
 
+
 class ScanSettings(BaseModel):
     """Scan configuration settings."""
+
     parallel: bool = False
     rate_limit: float = 10.0
     default_techniques: list[str] = []
@@ -80,20 +89,23 @@ class ScanSettings(BaseModel):
 
 # ─── Status/Info Models ───────────────────────────────────────
 
+
 class ScanStatus(BaseModel):
     """Scan status response."""
+
     status: str
     phase: str
-    target: Optional[str] = None
+    target: str | None = None
     checks_total: int = 0
     checks_completed: int = 0
-    current_check: Optional[str] = None
+    current_check: str | None = None
     findings_count: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class CheckInfo(BaseModel):
     """Check metadata."""
+
     name: str
     description: str
     reason: str = ""
@@ -104,18 +116,20 @@ class CheckInfo(BaseModel):
 
 class FindingDetail(BaseModel):
     """Detailed finding information."""
+
     id: str
     title: str
     description: str
     severity: str
     evidence: str
-    target_url: Optional[str] = None
-    check_name: Optional[str] = None
-    host: Optional[str] = None
+    target_url: str | None = None
+    check_name: str | None = None
+    host: str | None = None
 
 
 class AttackChain(BaseModel):
     """Attack chain combining multiple findings."""
+
     id: str
     title: str
     description: str
@@ -126,34 +140,40 @@ class AttackChain(BaseModel):
 
 class ChainStatus(BaseModel):
     """Chain analysis status."""
+
     status: str
     chains_count: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 # ─── Scenario Models ──────────────────────────────────────────
 
+
 class ScenarioLoadRequest(BaseModel):
     """Request to load a scenario."""
+
     name: str
 
 
 # ─── Preferences/Profiles Models ──────────────────────────────
 
+
 class PreferencesUpdateInput(BaseModel):
     """Update preferences."""
-    parallel: Optional[bool] = None
-    rate_limit: Optional[float] = None
-    timeout_seconds: Optional[float] = None
-    max_findings_per_check: Optional[int] = None
-    politeness_delay: Optional[float] = None
-    llm_provider: Optional[str] = None
-    enabled_checks: Optional[list[str]] = None
-    disabled_checks: Optional[list[str]] = None
+
+    parallel: bool | None = None
+    rate_limit: float | None = None
+    timeout_seconds: float | None = None
+    max_findings_per_check: int | None = None
+    politeness_delay: float | None = None
+    llm_provider: str | None = None
+    enabled_checks: list[str] | None = None
+    disabled_checks: list[str] | None = None
 
 
 class ProfileCreateInput(BaseModel):
     """Create a new profile."""
+
     name: str
     description: str = ""
     settings: dict = {}
@@ -161,8 +181,9 @@ class ProfileCreateInput(BaseModel):
 
 class ProfileUpdateInput(BaseModel):
     """Update an existing profile."""
-    description: Optional[str] = None
-    settings: Optional[dict] = None
+
+    description: str | None = None
+    settings: dict | None = None
 
 
 # ─── Severity Override Models ────────────────────────────────────
@@ -170,34 +191,40 @@ class ProfileUpdateInput(BaseModel):
 
 class SeverityOverrideScope(BaseModel):
     """Scope for a scan severity override."""
-    check_name: Optional[str] = None
-    title: Optional[str] = None
+
+    check_name: str | None = None
+    title: str | None = None
 
 
 class ScanSeverityOverrideInput(BaseModel):
     """Add/update a scan-specific severity override."""
+
     scope: SeverityOverrideScope
     severity: str
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 class ScanSeverityOverrideDeleteInput(BaseModel):
     """Remove a scan-specific severity override by scope."""
+
     scope: SeverityOverrideScope
 
 
 class PreRunSeverityOverridesInput(BaseModel):
     """Full pre-run severity override config (replaces entire file)."""
+
     check_level: dict[str, str] = {}
     check_title_level: dict[str, dict[str, str]] = {}
 
 
 class PreRunCheckOverrideInput(BaseModel):
     """Set a check-level severity override."""
+
     severity: str
 
 
 class PreRunTitleOverrideInput(BaseModel):
     """Set a check+title severity override."""
+
     title: str
     severity: str

@@ -10,7 +10,6 @@ Depends on: services (needs HTTP services from service_probe)
 Feeds: security posture assessment, web checks
 """
 
-import asyncio
 import logging
 from typing import Any
 
@@ -48,8 +47,7 @@ DANGEROUS_METHODS = {
     "PATCH": {
         "severity": "low",
         "desc": (
-            "PATCH method is accepted, which may allow unauthorized partial "
-            "resource modification."
+            "PATCH method is accepted, which may allow unauthorized partial resource modification."
         ),
     },
 }
@@ -113,10 +111,7 @@ class HttpMethodEnumCheck(BaseCheck):
             return result
 
         # Filter to HTTP/HTTPS services only
-        http_services = [
-            svc for svc in services
-            if svc.scheme in ("http", "https")
-        ]
+        http_services = [svc for svc in services if svc.scheme in ("http", "https")]
 
         if not http_services:
             result.outputs["http_methods"] = {}
@@ -161,15 +156,15 @@ class HttpMethodEnumCheck(BaseCheck):
         # Step 1: OPTIONS request to get Allow header
         try:
             async with httpx.AsyncClient(
-                verify=False, timeout=10.0, follow_redirects=False,
+                verify=False,
+                timeout=10.0,
+                follow_redirects=False,
             ) as client:
                 resp = await client.options(base_url + "/")
                 allow_header = resp.headers.get("allow", "")
                 if allow_header:
                     info["options_allow"] = allow_header
-                    info["allowed"] = [
-                        m.strip().upper() for m in allow_header.split(",")
-                    ]
+                    info["allowed"] = [m.strip().upper() for m in allow_header.split(",")]
         except Exception as exc:
             logger.debug(f"OPTIONS failed for {base_url}: {exc}")
 
@@ -197,7 +192,9 @@ class HttpMethodEnumCheck(BaseCheck):
 
         try:
             async with httpx.AsyncClient(
-                verify=False, timeout=8.0, follow_redirects=False,
+                verify=False,
+                timeout=8.0,
+                follow_redirects=False,
             ) as client:
                 resp = await client.request(method, base_url + "/")
                 # Method is "accepted" if server doesn't return 405/501
@@ -219,50 +216,54 @@ class HttpMethodEnumCheck(BaseCheck):
 
         # Info finding: allowed methods summary
         if allowed:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Allowed methods: {endpoint}",
-                description=(
-                    f"HTTP method enumeration on {endpoint} discovered "
-                    f"{len(allowed)} allowed method(s)."
-                ),
-                severity="info",
-                evidence=f"Allowed: {', '.join(sorted(allowed))}",
-                host=svc.host,
-                discriminator=f"methods-{svc.port}",
-                raw_data=method_info,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Allowed methods: {endpoint}",
+                    description=(
+                        f"HTTP method enumeration on {endpoint} discovered "
+                        f"{len(allowed)} allowed method(s)."
+                    ),
+                    severity="info",
+                    evidence=f"Allowed: {', '.join(sorted(allowed))}",
+                    host=svc.host,
+                    discriminator=f"methods-{svc.port}",
+                    raw_data=method_info,
+                )
+            )
 
         # Dangerous method findings
         for method in dangerous:
             meta = DANGEROUS_METHODS[method]
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"{method} method enabled: {endpoint}",
-                description=meta["desc"],
-                severity=meta["severity"],
-                evidence=f"HTTP {method} {svc.url}/ returned a non-405 response",
-                host=svc.host,
-                discriminator=f"{method.lower()}-{svc.port}",
-                references=(
-                    ["CWE-693 — Protection Mechanism Failure"]
-                    if method == "TRACE"
-                    else []
-                ),
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"{method} method enabled: {endpoint}",
+                    description=meta["desc"],
+                    severity=meta["severity"],
+                    evidence=f"HTTP {method} {svc.url}/ returned a non-405 response",
+                    host=svc.host,
+                    discriminator=f"{method.lower()}-{svc.port}",
+                    references=(
+                        ["CWE-693 — Protection Mechanism Failure"] if method == "TRACE" else []
+                    ),
+                )
+            )
 
         # WebDAV methods finding
         if webdav:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"WebDAV methods enabled: {endpoint}",
-                description=(
-                    f"WebDAV methods ({', '.join(webdav)}) are enabled on "
-                    f"{endpoint}. This indicates extended file management "
-                    f"capabilities that may expose sensitive operations."
-                ),
-                severity="medium",
-                evidence=f"WebDAV methods: {', '.join(webdav)}",
-                host=svc.host,
-                discriminator=f"webdav-{svc.port}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"WebDAV methods enabled: {endpoint}",
+                    description=(
+                        f"WebDAV methods ({', '.join(webdav)}) are enabled on "
+                        f"{endpoint}. This indicates extended file management "
+                        f"capabilities that may expose sensitive operations."
+                    ),
+                    severity="medium",
+                    evidence=f"WebDAV methods: {', '.join(webdav)}",
+                    host=svc.host,
+                    discriminator=f"webdav-{svc.port}",
+                )
+            )

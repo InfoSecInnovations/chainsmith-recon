@@ -16,19 +16,19 @@ Entry point and network-level reconnaissance:
 - IPv6 discovery
 """
 
+from app.checks.network.banner_grab import BannerGrabCheck
 from app.checks.network.dns_enumeration import DnsEnumerationCheck
-from app.checks.network.wildcard_dns import WildcardDnsCheck
 from app.checks.network.dns_records import DnsRecordCheck
 from app.checks.network.geoip import GeoIpCheck
-from app.checks.network.reverse_dns import ReverseDnsCheck
-from app.checks.network.ports import PortScanCheck
-from app.checks.network.tls_analysis import TlsAnalysisCheck
-from app.checks.network.service_probe import ServiceProbeCheck
 from app.checks.network.http_method_enum import HttpMethodEnumCheck
-from app.checks.network.banner_grab import BannerGrabCheck
-from app.checks.network.whois_lookup import WhoisLookupCheck
-from app.checks.network.traceroute import TracerouteCheck
 from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
+from app.checks.network.ports import PortScanCheck
+from app.checks.network.reverse_dns import ReverseDnsCheck
+from app.checks.network.service_probe import ServiceProbeCheck
+from app.checks.network.tls_analysis import TlsAnalysisCheck
+from app.checks.network.traceroute import TracerouteCheck
+from app.checks.network.whois_lookup import WhoisLookupCheck
+from app.checks.network.wildcard_dns import WildcardDnsCheck
 
 __all__ = [
     "DnsEnumerationCheck",

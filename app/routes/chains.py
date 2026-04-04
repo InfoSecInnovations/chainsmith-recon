@@ -13,13 +13,12 @@ in-memory data is returned.
 
 import asyncio
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.db.repositories import ChainRepository
-from app.state import state
 from app.engine.chains import run_chain_analysis
+from app.state import state
 
 logger = logging.getLogger(__name__)
 
@@ -34,27 +33,27 @@ async def analyze_chains():
     """Start chain analysis (rule-based + LLM)."""
     if len(state.findings) == 0:
         raise HTTPException(400, "No findings to analyze. Run a scan first.")
-    
+
     if state.chain_status == "analyzing":
         raise HTTPException(409, "Chain analysis already running.")
-    
+
     state.chain_status = "analyzing"
     state.chains = []
     state.chain_error = None
-    
+
     # Launch analysis in background
     asyncio.create_task(run_chain_analysis(state))
-    
+
     return {
         "status": "accepted",
-        "message": "Chain analysis started. Poll GET /api/chains for status."
+        "message": "Chain analysis started. Poll GET /api/chains for status.",
     }
 
 
 @router.get("/api/v1/chains")
 @router.get("/api/chains")
 async def get_chains(
-    scan_id: Optional[str] = Query(None, description="Historical scan ID"),
+    scan_id: str | None = Query(None, description="Historical scan ID"),
 ):
     """Get chain analysis status and results. Pass scan_id for historical data."""
     if scan_id:
@@ -114,10 +113,8 @@ async def get_chain_detail(chain_id: str):
     chain = next((c for c in state.chains if c["id"] == chain_id), None)
     if not chain:
         raise HTTPException(404, f"Chain '{chain_id}' not found")
-    
+
     # Include the actual finding objects
     chain_with_findings = chain.copy()
-    chain_with_findings["findings"] = [
-        f for f in state.findings if f["id"] in chain["finding_ids"]
-    ]
+    chain_with_findings["findings"] = [f for f in state.findings if f["id"] in chain["finding_ids"]]
     return chain_with_findings

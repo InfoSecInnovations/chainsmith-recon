@@ -18,12 +18,11 @@ from click.testing import CliRunner
 
 from app.cli import cli
 from app.cli_formatters import (
-    format_finding_terminal,
     findings_to_json,
     findings_to_markdown,
     findings_to_sarif,
+    format_finding_terminal,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures
@@ -275,8 +274,12 @@ class TestScenariosCommand:
         client = _mock_client()
         client.list_scenarios.return_value = {
             "scenarios": [
-                {"name": "fakobanko", "description": "Test bank",
-                 "version": "1.0", "simulation_count": 10}
+                {
+                    "name": "fakobanko",
+                    "description": "Test bank",
+                    "version": "1.0",
+                    "simulation_count": 10,
+                }
             ],
             "active": None,
         }
@@ -384,15 +387,14 @@ class TestScanCommand:
         client.get_findings.return_value = {"total": 0, "findings": []}
 
         with _patch_client(client):
-            result = runner.invoke(cli, [
-                "scan", "example.com", "--suite", "network", "--quiet"
-            ])
+            result = runner.invoke(cli, ["scan", "example.com", "--suite", "network", "--quiet"])
             assert result.exit_code == 0
 
         # Suite passed to start_scan, not set_scope
         call_kwargs = client.start_scan.call_args
-        assert call_kwargs[1].get("suites") == ["network"] or \
-               (call_kwargs[0] and "network" in (call_kwargs[1].get("suites") or []))
+        assert call_kwargs[1].get("suites") == ["network"] or (
+            call_kwargs[0] and "network" in (call_kwargs[1].get("suites") or [])
+        )
 
     def test_scan_with_checks(self, runner):
         """scan --checks passes check names to start_scan."""
@@ -404,11 +406,18 @@ class TestScanCommand:
         client.get_findings.return_value = {"total": 0, "findings": []}
 
         with _patch_client(client):
-            result = runner.invoke(cli, [
-                "scan", "example.com",
-                "-c", "dns_enumeration", "-c", "header_analysis",
-                "--quiet",
-            ])
+            result = runner.invoke(
+                cli,
+                [
+                    "scan",
+                    "example.com",
+                    "-c",
+                    "dns_enumeration",
+                    "-c",
+                    "header_analysis",
+                    "--quiet",
+                ],
+            )
             assert result.exit_code == 0
 
         call_kwargs = client.start_scan.call_args[1]
@@ -426,9 +435,9 @@ class TestScanCommand:
         client.get_findings.return_value = {"total": 0, "findings": []}
 
         with _patch_client(client):
-            result = runner.invoke(cli, [
-                "scan", "example.com", "--scenario", "fakobanko", "--quiet"
-            ])
+            result = runner.invoke(
+                cli, ["scan", "example.com", "--scenario", "fakobanko", "--quiet"]
+            )
             assert result.exit_code == 0
 
         client.load_scenario.assert_called_once_with("fakobanko")
@@ -440,7 +449,12 @@ class TestScanCommand:
         client.update_settings.return_value = {"status": "ok"}
         client.get_scan_checks.return_value = {
             "checks": [
-                {"name": "dns_enumeration", "suite": "network", "conditions": [], "produces": ["subdomains"]},
+                {
+                    "name": "dns_enumeration",
+                    "suite": "network",
+                    "conditions": [],
+                    "produces": ["subdomains"],
+                },
                 {"name": "header_analysis", "suite": "web", "conditions": [], "produces": []},
             ],
         }

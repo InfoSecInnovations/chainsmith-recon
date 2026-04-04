@@ -12,8 +12,7 @@ Evidence should be:
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Optional
-
+from typing import Any
 
 MAX_EVIDENCE_LENGTH = 1000  # chars; truncated beyond this
 
@@ -26,7 +25,8 @@ class EvidenceBundle:
     Carries both a human-readable summary and structured raw data
     for downstream processing or replay.
     """
-    summary: str                        # One-line human-readable evidence
+
+    summary: str  # One-line human-readable evidence
     raw: dict[str, Any] = field(default_factory=dict)  # Full structured data
     snippets: list[str] = field(default_factory=list)  # Key response snippets
 
@@ -42,7 +42,7 @@ class EvidenceBundle:
         }
 
 
-def fmt_header_evidence(header_name: str, header_value: Optional[str]) -> str:
+def fmt_header_evidence(header_name: str, header_value: str | None) -> str:
     """Format a header finding as evidence string."""
     if header_value is None:
         return f"Header '{header_name}' not present in response"
@@ -66,7 +66,7 @@ def fmt_json_field_evidence(field_path: str, value: Any) -> str:
     return f"JSON field '{field_path}': {_truncate(value_str)}"
 
 
-def fmt_cors_evidence(origin_sent: str, acao_header: Optional[str]) -> str:
+def fmt_cors_evidence(origin_sent: str, acao_header: str | None) -> str:
     """Format a CORS check result as evidence."""
     if acao_header is None:
         return f"Origin: {origin_sent} -> No ACAO header returned"
@@ -99,7 +99,7 @@ def bundle_http_response(
     status_code: int,
     headers: dict[str, str],
     body: str,
-    summary: Optional[str] = None,
+    summary: str | None = None,
 ) -> EvidenceBundle:
     """
     Create an EvidenceBundle from an HTTP response.

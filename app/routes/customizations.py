@@ -66,7 +66,7 @@ async def put_check_level_override(check_name: str, body: PreRunCheckOverrideInp
     try:
         result = set_check_level_override(check_name, body.severity)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
     return result
 
 
@@ -90,7 +90,7 @@ async def put_check_title_override(check_name: str, body: PreRunTitleOverrideInp
     try:
         result = set_check_title_override(check_name, body.title, body.severity)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
     return result
 
 

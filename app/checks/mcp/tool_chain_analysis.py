@@ -15,61 +15,109 @@ References:
 import re
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
-
 
 # ── Capability tags ─────────────────────────────────────────────────
 # Maps tool name/description patterns to capability tags.
 
 CAPABILITY_PATTERNS: dict[str, list[str]] = {
     "file_read": [
-        r"read(_|\s)?file", r"file(_|\s)?read", r"fs(_|\s)?read",
-        r"cat\b", r"get(_|\s)?file", r"load(_|\s)?file",
-        r"open(_|\s)?file", r"view(_|\s)?file",
+        r"read(_|\s)?file",
+        r"file(_|\s)?read",
+        r"fs(_|\s)?read",
+        r"cat\b",
+        r"get(_|\s)?file",
+        r"load(_|\s)?file",
+        r"open(_|\s)?file",
+        r"view(_|\s)?file",
     ],
     "file_write": [
-        r"write(_|\s)?file", r"file(_|\s)?write", r"create(_|\s)?file",
-        r"save(_|\s)?file", r"put(_|\s)?file", r"fs(_|\s)?write",
+        r"write(_|\s)?file",
+        r"file(_|\s)?write",
+        r"create(_|\s)?file",
+        r"save(_|\s)?file",
+        r"put(_|\s)?file",
+        r"fs(_|\s)?write",
     ],
     "command_exec": [
-        r"exec(ute)?(_|\s)?command", r"run(_|\s)?shell", r"shell(_|\s)?exec",
-        r"spawn(_|\s)?process", r"eval(uate)?(_|\s)?code", r"run(_|\s)?code",
-        r"system(_|\s)?command", r"bash", r"powershell", r"cmd\b", r"terminal",
+        r"exec(ute)?(_|\s)?command",
+        r"run(_|\s)?shell",
+        r"shell(_|\s)?exec",
+        r"spawn(_|\s)?process",
+        r"eval(uate)?(_|\s)?code",
+        r"run(_|\s)?code",
+        r"system(_|\s)?command",
+        r"bash",
+        r"powershell",
+        r"cmd\b",
+        r"terminal",
     ],
     "network_request": [
-        r"http(_|\s)?(fetch|request|get|post)", r"fetch(_|\s)?url",
-        r"curl", r"wget", r"request\b", r"browse",
+        r"http(_|\s)?(fetch|request|get|post)",
+        r"fetch(_|\s)?url",
+        r"curl",
+        r"wget",
+        r"request\b",
+        r"browse",
     ],
     "data_exfil": [
         r"send(_|\s)?(email|mail|message|notification)",
-        r"upload", r"post(_|\s)?data", r"webhook",
-        r"slack", r"discord", r"telegram",
+        r"upload",
+        r"post(_|\s)?data",
+        r"webhook",
+        r"slack",
+        r"discord",
+        r"telegram",
     ],
     "database_access": [
         r"(sql|database|db)(_|\s)?(query|execute|read|write)",
-        r"select\b.*from", r"insert\b.*into",
+        r"select\b.*from",
+        r"insert\b.*into",
     ],
     "credential_access": [
-        r"(get|read)(_|\s)?secret", r"env(ironment)?(_|\s)?(get|read)",
-        r"config(_|\s)?(get|read)", r"credential", r"api(_|\s)?key",
-        r"password", r"vault",
+        r"(get|read)(_|\s)?secret",
+        r"env(ironment)?(_|\s)?(get|read)",
+        r"config(_|\s)?(get|read)",
+        r"credential",
+        r"api(_|\s)?key",
+        r"password",
+        r"vault",
     ],
     "remote_access": [
-        r"ssh", r"ftp", r"rdp", r"vnc", r"telnet",
+        r"ssh",
+        r"ftp",
+        r"rdp",
+        r"vnc",
+        r"telnet",
         r"remote(_|\s)?(exec|connect|access)",
     ],
     "scheduling": [
-        r"schedule", r"cron", r"timer", r"at\b.*job",
-        r"task(_|\s)?schedule", r"periodic",
+        r"schedule",
+        r"cron",
+        r"timer",
+        r"at\b.*job",
+        r"task(_|\s)?schedule",
+        r"periodic",
     ],
     "search_recon": [
-        r"list(_|\s)?file", r"search", r"find\b", r"directory(_|\s)?list",
-        r"glob", r"ls\b", r"dir\b",
+        r"list(_|\s)?file",
+        r"search",
+        r"find\b",
+        r"directory(_|\s)?list",
+        r"glob",
+        r"ls\b",
+        r"dir\b",
     ],
     "browser": [
-        r"browser", r"screenshot", r"navigate", r"scrape",
-        r"headless", r"puppeteer", r"playwright", r"selenium",
+        r"browser",
+        r"screenshot",
+        r"navigate",
+        r"scrape",
+        r"headless",
+        r"puppeteer",
+        r"playwright",
+        r"selenium",
     ],
 }
 
@@ -80,43 +128,55 @@ DANGEROUS_CHAINS: list[tuple[str, str, list[list[str]], str]] = [
     (
         "Data Read + Exfiltration",
         "critical",
-        [["file_read", "database_access", "search_recon"],  # source (any)
-         ["data_exfil", "network_request"]],                  # sink (any)
+        [
+            ["file_read", "database_access", "search_recon"],  # source (any)
+            ["data_exfil", "network_request"],
+        ],  # sink (any)
         "Data can be read via {source_tools} and exfiltrated via {sink_tools}",
     ),
     (
         "Credential Access + Network",
         "critical",
-        [["credential_access"],                               # source (any)
-         ["network_request", "remote_access", "data_exfil"]], # sink (any)
+        [
+            ["credential_access"],  # source (any)
+            ["network_request", "remote_access", "data_exfil"],
+        ],  # sink (any)
         "Credentials can be extracted via {source_tools} and used/exfiltrated via {sink_tools}",
     ),
     (
         "File Access + Code Execution",
         "critical",
-        [["file_read", "file_write"],  # file (any)
-         ["command_exec"]],             # exec (any)
+        [
+            ["file_read", "file_write"],  # file (any)
+            ["command_exec"],
+        ],  # exec (any)
         "Files accessible via {source_tools}, code execution via {sink_tools} enables arbitrary payload deployment",
     ),
     (
         "Write + Persistence",
         "critical",
-        [["file_write"],               # write (any)
-         ["command_exec", "scheduling"]],  # persist (any)
+        [
+            ["file_write"],  # write (any)
+            ["command_exec", "scheduling"],
+        ],  # persist (any)
         "File write via {source_tools} combined with {sink_tools} enables persistent backdoor installation",
     ),
     (
         "Recon + Lateral Movement",
         "high",
-        [["search_recon", "browser"],                         # recon (any)
-         ["remote_access", "network_request", "data_exfil"]], # move (any)
+        [
+            ["search_recon", "browser"],  # recon (any)
+            ["remote_access", "network_request", "data_exfil"],
+        ],  # move (any)
         "Reconnaissance via {source_tools} enables targeted lateral movement via {sink_tools}",
     ),
     (
         "Database + Exfiltration",
         "critical",
-        [["database_access"],            # db (any)
-         ["data_exfil", "network_request"]],  # exfil (any)
+        [
+            ["database_access"],  # db (any)
+            ["data_exfil", "network_request"],
+        ],  # exfil (any)
         "Database access via {source_tools} with exfiltration via {sink_tools}",
     ),
 ]
@@ -195,9 +255,7 @@ class ToolChainAnalysisCheck(BaseCheck):
             if all_groups_satisfied and len(group_matches) >= 2:
                 source_tools = ", ".join(group_matches[0][:3])
                 sink_tools = ", ".join(group_matches[1][:3])
-                description = desc_template.format(
-                    source_tools=source_tools, sink_tools=sink_tools
-                )
+                description = desc_template.format(source_tools=source_tools, sink_tools=sink_tools)
 
                 chain_info = {
                     "chain_name": chain_name,
@@ -207,16 +265,18 @@ class ToolChainAnalysisCheck(BaseCheck):
                 }
                 detected_chains.append(chain_info)
 
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Dangerous tool chain: {chain_name}",
-                    description=description,
-                    severity=severity,
-                    evidence=self._build_chain_evidence(chain_info, tool_capabilities),
-                    host=host,
-                    discriminator=f"chain-{chain_name.lower().replace(' ', '-').replace('+', '')}",
-                    raw_data=chain_info,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Dangerous tool chain: {chain_name}",
+                        description=description,
+                        severity=severity,
+                        evidence=self._build_chain_evidence(chain_info, tool_capabilities),
+                        host=host,
+                        discriminator=f"chain-{chain_name.lower().replace(' ', '-').replace('+', '')}",
+                        raw_data=chain_info,
+                    )
+                )
 
         if not detected_chains:
             # Check for partial chains
@@ -225,15 +285,17 @@ class ToolChainAnalysisCheck(BaseCheck):
                 for finding in partial:
                     result.findings.append(finding)
             else:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="No dangerous tool chain categories detected",
-                    description="The discovered tool set does not form any known dangerous capability combinations.",
-                    severity="info",
-                    evidence=f"Tools analyzed: {len(mcp_tools)}\nCapabilities: {', '.join(sorted(all_caps)) or 'none'}",
-                    host=host,
-                    discriminator="no-chains",
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="No dangerous tool chain categories detected",
+                        description="The discovered tool set does not form any known dangerous capability combinations.",
+                        severity="info",
+                        evidence=f"Tools analyzed: {len(mcp_tools)}\nCapabilities: {', '.join(sorted(all_caps)) or 'none'}",
+                        host=host,
+                        discriminator="no-chains",
+                    )
+                )
 
         if detected_chains:
             result.outputs["mcp_dangerous_chains"] = detected_chains
@@ -253,9 +315,7 @@ class ToolChainAnalysisCheck(BaseCheck):
 
         return caps
 
-    def _check_partial_chains(
-        self, all_caps: set, capability_to_tools: dict, host: str
-    ) -> list:
+    def _check_partial_chains(self, all_caps: set, capability_to_tools: dict, host: str) -> list:
         """Check for partial dangerous chains (source present but no sink, or vice versa)."""
         findings = []
 
@@ -271,20 +331,22 @@ class ToolChainAnalysisCheck(BaseCheck):
                 source_tools.extend(capability_to_tools.get(cap, []))
             source_tools = list(set(source_tools))
 
-            findings.append(build_finding(
-                check_name=self.name,
-                title="Partial dangerous chain: data access tools present but no exfiltration vector",
-                description=(
-                    f"Tools with data access capabilities ({', '.join(source_tools[:5])}) "
-                    "are present but no exfiltration or network request tools were found. "
-                    "The chain is incomplete but could be enabled by additional tool registration."
-                ),
-                severity="medium",
-                evidence=f"Source capabilities: {', '.join(has_source)}\nTools: {', '.join(source_tools[:5])}",
-                host=host,
-                discriminator="partial-chain-source",
-                raw_data={"source_caps": list(has_source), "tools": source_tools},
-            ))
+            findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Partial dangerous chain: data access tools present but no exfiltration vector",
+                    description=(
+                        f"Tools with data access capabilities ({', '.join(source_tools[:5])}) "
+                        "are present but no exfiltration or network request tools were found. "
+                        "The chain is incomplete but could be enabled by additional tool registration."
+                    ),
+                    severity="medium",
+                    evidence=f"Source capabilities: {', '.join(has_source)}\nTools: {', '.join(source_tools[:5])}",
+                    host=host,
+                    discriminator="partial-chain-source",
+                    raw_data={"source_caps": list(has_source), "tools": source_tools},
+                )
+            )
 
         return findings
 

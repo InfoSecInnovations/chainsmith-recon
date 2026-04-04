@@ -3,11 +3,12 @@ Tests for engagements, finding status tracking, and scan comparison.
 """
 
 import pytest
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from app.db.engine import init_db, close_db, get_session
+from app.db.engine import close_db, get_session, init_db
 from app.db.models import (
-    Engagement, Finding, FindingStatusHistory, Scan, ScanComparison,
+    Finding,
+    ScanComparison,
 )
 from app.db.repositories import (
     ComparisonRepository,
@@ -15,7 +16,6 @@ from app.db.repositories import (
     FindingRepository,
     ScanRepository,
 )
-
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -63,7 +63,6 @@ async def sample_engagement(db, engagement_repo):
 
 
 class TestEngagementCRUD:
-
     @pytest.mark.asyncio
     async def test_create_engagement(self, db, engagement_repo):
         eng = await engagement_repo.create_engagement(
@@ -140,7 +139,9 @@ class TestEngagementCRUD:
         assert eng is None
 
     @pytest.mark.asyncio
-    async def test_delete_engagement_unlinks_scans(self, sample_engagement, engagement_repo, scan_repo):
+    async def test_delete_engagement_unlinks_scans(
+        self, sample_engagement, engagement_repo, scan_repo
+    ):
         """Deleting engagement unlinks scans but doesn't delete them."""
         await scan_repo.create_scan(
             scan_id="scan-linked",
@@ -162,8 +163,14 @@ class TestEngagementCRUD:
     @pytest.mark.asyncio
     async def test_engagement_dict_shape(self, sample_engagement):
         expected_keys = {
-            "id", "name", "target_domain", "description",
-            "client_name", "created_at", "updated_at", "status",
+            "id",
+            "name",
+            "target_domain",
+            "description",
+            "client_name",
+            "created_at",
+            "updated_at",
+            "status",
         }
         assert expected_keys == set(sample_engagement.keys())
 
@@ -172,7 +179,6 @@ class TestEngagementCRUD:
 
 
 class TestScanEngagementLink:
-
     @pytest.mark.asyncio
     async def test_create_scan_with_engagement(self, sample_engagement, scan_repo):
         await scan_repo.create_scan(
@@ -187,17 +193,20 @@ class TestScanEngagementLink:
     @pytest.mark.asyncio
     async def test_list_scans_by_engagement(self, sample_engagement, scan_repo):
         await scan_repo.create_scan(
-            scan_id="scan-e1", session_id="s1",
+            scan_id="scan-e1",
+            session_id="s1",
             target_domain="example.com",
             engagement_id=sample_engagement["id"],
         )
         await scan_repo.create_scan(
-            scan_id="scan-e2", session_id="s2",
+            scan_id="scan-e2",
+            session_id="s2",
             target_domain="example.com",
             engagement_id=sample_engagement["id"],
         )
         await scan_repo.create_scan(
-            scan_id="scan-no-eng", session_id="s3",
+            scan_id="scan-no-eng",
+            session_id="s3",
             target_domain="example.com",
         )
 
@@ -209,7 +218,9 @@ class TestScanEngagementLink:
     @pytest.mark.asyncio
     async def test_scan_dict_includes_engagement_id(self, db, scan_repo):
         await scan_repo.create_scan(
-            scan_id="scan-plain", session_id="s1", target_domain="x.com",
+            scan_id="scan-plain",
+            session_id="s1",
+            target_domain="x.com",
         )
         scan = await scan_repo.get_scan("scan-plain")
         assert "engagement_id" in scan
@@ -220,17 +231,31 @@ class TestScanEngagementLink:
 
 
 class TestFindingStatusTracking:
-
     @pytest.mark.asyncio
     async def test_first_scan_all_new(self, db, scan_repo, finding_repo, comparison_repo):
         """First scan for a target: all findings are 'new'."""
         await scan_repo.create_scan(
-            scan_id="first-scan", session_id="s1", target_domain="fresh.com",
+            scan_id="first-scan",
+            session_id="s1",
+            target_domain="fresh.com",
         )
-        await finding_repo.bulk_create("first-scan", [
-            {"title": "Finding A", "severity": "high", "check_name": "check_a", "host": "fresh.com"},
-            {"title": "Finding B", "severity": "low", "check_name": "check_b", "host": "fresh.com"},
-        ])
+        await finding_repo.bulk_create(
+            "first-scan",
+            [
+                {
+                    "title": "Finding A",
+                    "severity": "high",
+                    "check_name": "check_a",
+                    "host": "fresh.com",
+                },
+                {
+                    "title": "Finding B",
+                    "severity": "low",
+                    "check_name": "check_b",
+                    "host": "fresh.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("first-scan", status="complete", findings_count=2)
 
         result = await comparison_repo.compute_finding_statuses("first-scan")
@@ -245,16 +270,36 @@ class TestFindingStatusTracking:
         """Second scan correctly identifies new, recurring, and resolved."""
         # Scan 1: findings A, B, C
         await scan_repo.create_scan(
-            scan_id="scan-v1", session_id="s1", target_domain="example.com",
+            scan_id="scan-v1",
+            session_id="s1",
+            target_domain="example.com",
         )
-        await finding_repo.bulk_create("scan-v1", [
-            {"id": "f-a", "title": "XSS", "severity": "high",
-             "check_name": "xss", "host": "example.com"},
-            {"id": "f-b", "title": "SQLi", "severity": "critical",
-             "check_name": "sqli", "host": "example.com"},
-            {"id": "f-c", "title": "Open Port", "severity": "info",
-             "check_name": "port_scan", "host": "example.com"},
-        ])
+        await finding_repo.bulk_create(
+            "scan-v1",
+            [
+                {
+                    "id": "f-a",
+                    "title": "XSS",
+                    "severity": "high",
+                    "check_name": "xss",
+                    "host": "example.com",
+                },
+                {
+                    "id": "f-b",
+                    "title": "SQLi",
+                    "severity": "critical",
+                    "check_name": "sqli",
+                    "host": "example.com",
+                },
+                {
+                    "id": "f-c",
+                    "title": "Open Port",
+                    "severity": "info",
+                    "check_name": "port_scan",
+                    "host": "example.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("scan-v1", status="complete", findings_count=3)
 
         # Compute statuses for scan-v1 BEFORE scan-v2 exists
@@ -263,20 +308,35 @@ class TestFindingStatusTracking:
 
         # Scan 2: findings A, D (B and C resolved, D is new)
         await scan_repo.create_scan(
-            scan_id="scan-v2", session_id="s2", target_domain="example.com",
+            scan_id="scan-v2",
+            session_id="s2",
+            target_domain="example.com",
         )
-        await finding_repo.bulk_create("scan-v2", [
-            {"id": "f-a2", "title": "XSS", "severity": "high",
-             "check_name": "xss", "host": "example.com"},
-            {"id": "f-d", "title": "CSRF", "severity": "medium",
-             "check_name": "csrf", "host": "example.com"},
-        ])
+        await finding_repo.bulk_create(
+            "scan-v2",
+            [
+                {
+                    "id": "f-a2",
+                    "title": "XSS",
+                    "severity": "high",
+                    "check_name": "xss",
+                    "host": "example.com",
+                },
+                {
+                    "id": "f-d",
+                    "title": "CSRF",
+                    "severity": "medium",
+                    "check_name": "csrf",
+                    "host": "example.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("scan-v2", status="complete", findings_count=2)
 
         # Now compute for scan-v2
         result2 = await comparison_repo.compute_finding_statuses("scan-v2")
         assert result2["recurring"] == 1  # XSS still present
-        assert result2["resolved"] == 2   # SQLi and Open Port gone
+        assert result2["resolved"] == 2  # SQLi and Open Port gone
         assert result2["previous_scan_id"] == "scan-v1"
         assert result2["new"] + result2["regressed"] >= 1
 
@@ -284,57 +344,83 @@ class TestFindingStatusTracking:
     async def test_comparison_stored(self, db, scan_repo, finding_repo, comparison_repo):
         """Scan comparison is stored in scan_comparisons table."""
         await scan_repo.create_scan(
-            scan_id="cmp-s1", session_id="s1", target_domain="store.com",
+            scan_id="cmp-s1",
+            session_id="s1",
+            target_domain="store.com",
         )
-        await finding_repo.bulk_create("cmp-s1", [
-            {"title": "F1", "severity": "high", "check_name": "c1", "host": "store.com"},
-        ])
+        await finding_repo.bulk_create(
+            "cmp-s1",
+            [
+                {"title": "F1", "severity": "high", "check_name": "c1", "host": "store.com"},
+            ],
+        )
         await scan_repo.complete_scan("cmp-s1", status="complete", findings_count=1)
         await comparison_repo.compute_finding_statuses("cmp-s1")
 
         await scan_repo.create_scan(
-            scan_id="cmp-s2", session_id="s2", target_domain="store.com",
+            scan_id="cmp-s2",
+            session_id="s2",
+            target_domain="store.com",
         )
-        await finding_repo.bulk_create("cmp-s2", [
-            {"title": "F1", "severity": "high", "check_name": "c1", "host": "store.com"},
-        ])
+        await finding_repo.bulk_create(
+            "cmp-s2",
+            [
+                {"title": "F1", "severity": "high", "check_name": "c1", "host": "store.com"},
+            ],
+        )
         await scan_repo.complete_scan("cmp-s2", status="complete", findings_count=1)
         await comparison_repo.compute_finding_statuses("cmp-s2")
 
         async with get_session() as session:
-            result = await session.execute(
-                select(func.count()).select_from(ScanComparison)
-            )
+            result = await session.execute(select(func.count()).select_from(ScanComparison))
             assert result.scalar() == 1
 
     @pytest.mark.asyncio
     async def test_finding_history(self, db, scan_repo, finding_repo, comparison_repo):
         """Finding history tracks status across scans."""
         await scan_repo.create_scan(
-            scan_id="hist-s1", session_id="s1", target_domain="hist.com",
+            scan_id="hist-s1",
+            session_id="s1",
+            target_domain="hist.com",
         )
-        await finding_repo.bulk_create("hist-s1", [
-            {"id": "h-a", "title": "XSS", "severity": "high",
-             "check_name": "xss", "host": "hist.com"},
-        ])
+        await finding_repo.bulk_create(
+            "hist-s1",
+            [
+                {
+                    "id": "h-a",
+                    "title": "XSS",
+                    "severity": "high",
+                    "check_name": "xss",
+                    "host": "hist.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("hist-s1", status="complete", findings_count=1)
         await comparison_repo.compute_finding_statuses("hist-s1")
 
         await scan_repo.create_scan(
-            scan_id="hist-s2", session_id="s2", target_domain="hist.com",
+            scan_id="hist-s2",
+            session_id="s2",
+            target_domain="hist.com",
         )
-        await finding_repo.bulk_create("hist-s2", [
-            {"id": "h-a2", "title": "XSS", "severity": "high",
-             "check_name": "xss", "host": "hist.com"},
-        ])
+        await finding_repo.bulk_create(
+            "hist-s2",
+            [
+                {
+                    "id": "h-a2",
+                    "title": "XSS",
+                    "severity": "high",
+                    "check_name": "xss",
+                    "host": "hist.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("hist-s2", status="complete", findings_count=1)
         await comparison_repo.compute_finding_statuses("hist-s2")
 
         # Get the XSS fingerprint
         async with get_session() as session:
-            result = await session.execute(
-                select(Finding.fingerprint).where(Finding.id == "h-a")
-            )
+            result = await session.execute(select(Finding.fingerprint).where(Finding.id == "h-a"))
             xss_fp = result.scalar_one()
 
         history = await comparison_repo.get_finding_history(xss_fp)
@@ -348,32 +434,66 @@ class TestFindingStatusTracking:
 
 
 class TestScanComparison:
-
     @pytest.fixture
     async def comparable_scans(self, db, scan_repo, finding_repo):
         """Two scans with known fingerprint overlap."""
         await scan_repo.create_scan(
-            scan_id="cmp-a", session_id="s1", target_domain="example.com",
+            scan_id="cmp-a",
+            session_id="s1",
+            target_domain="example.com",
         )
-        await finding_repo.bulk_create("cmp-a", [
-            {"id": "ca-1", "title": "F1", "severity": "high",
-             "check_name": "c1", "host": "example.com"},
-            {"id": "ca-2", "title": "F2", "severity": "medium",
-             "check_name": "c2", "host": "example.com"},
-            {"id": "ca-3", "title": "F3", "severity": "low",
-             "check_name": "c3", "host": "example.com"},
-        ])
+        await finding_repo.bulk_create(
+            "cmp-a",
+            [
+                {
+                    "id": "ca-1",
+                    "title": "F1",
+                    "severity": "high",
+                    "check_name": "c1",
+                    "host": "example.com",
+                },
+                {
+                    "id": "ca-2",
+                    "title": "F2",
+                    "severity": "medium",
+                    "check_name": "c2",
+                    "host": "example.com",
+                },
+                {
+                    "id": "ca-3",
+                    "title": "F3",
+                    "severity": "low",
+                    "check_name": "c3",
+                    "host": "example.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("cmp-a", status="complete", findings_count=3)
 
         await scan_repo.create_scan(
-            scan_id="cmp-b", session_id="s2", target_domain="example.com",
+            scan_id="cmp-b",
+            session_id="s2",
+            target_domain="example.com",
         )
-        await finding_repo.bulk_create("cmp-b", [
-            {"id": "cb-1", "title": "F1", "severity": "high",
-             "check_name": "c1", "host": "example.com"},  # Same as ca-1
-            {"id": "cb-4", "title": "F4", "severity": "critical",
-             "check_name": "c4", "host": "example.com"},  # New
-        ])
+        await finding_repo.bulk_create(
+            "cmp-b",
+            [
+                {
+                    "id": "cb-1",
+                    "title": "F1",
+                    "severity": "high",
+                    "check_name": "c1",
+                    "host": "example.com",
+                },  # Same as ca-1
+                {
+                    "id": "cb-4",
+                    "title": "F4",
+                    "severity": "critical",
+                    "check_name": "c4",
+                    "host": "example.com",
+                },  # New
+            ],
+        )
         await scan_repo.complete_scan("cmp-b", status="complete", findings_count=2)
 
         return {"a": "cmp-a", "b": "cmp-b"}
@@ -384,8 +504,8 @@ class TestScanComparison:
         assert result["scan_a_id"] == "cmp-a"
         assert result["scan_b_id"] == "cmp-b"
         assert result["recurring_count"] == 1  # F1
-        assert result["new_count"] == 1         # F4
-        assert result["resolved_count"] == 2    # F2 and F3
+        assert result["new_count"] == 1  # F4
+        assert result["resolved_count"] == 2  # F2 and F3
 
     @pytest.mark.asyncio
     async def test_compare_new_findings_detail(self, comparable_scans, comparison_repo):
@@ -404,11 +524,16 @@ class TestScanComparison:
     async def test_compare_identical_scans(self, db, scan_repo, finding_repo, comparison_repo):
         """Comparing a scan with itself: all recurring, no new/resolved."""
         await scan_repo.create_scan(
-            scan_id="same-a", session_id="s1", target_domain="x.com",
+            scan_id="same-a",
+            session_id="s1",
+            target_domain="x.com",
         )
-        await finding_repo.bulk_create("same-a", [
-            {"title": "F1", "severity": "high", "check_name": "c1", "host": "x.com"},
-        ])
+        await finding_repo.bulk_create(
+            "same-a",
+            [
+                {"title": "F1", "severity": "high", "check_name": "c1", "host": "x.com"},
+            ],
+        )
 
         result = await comparison_repo.compare_scans("same-a", "same-a")
         assert result["new_count"] == 0

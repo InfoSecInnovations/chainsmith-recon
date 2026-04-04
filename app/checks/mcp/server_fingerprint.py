@@ -14,10 +14,9 @@ import json
 import re
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Server fingerprint signatures
 SERVER_SIGNATURES = [
@@ -134,9 +133,7 @@ class MCPServerFingerprintCheck(BaseCheck):
             if not impl["identified"]:
                 try:
                     async with AsyncHttpClient(cfg) as client:
-                        error_match = await self._probe_error_fingerprint(
-                            client, server_url, host
-                        )
+                        error_match = await self._probe_error_fingerprint(client, server_url, host)
                         if error_match:
                             impl.update(error_match)
                 except Exception as e:
@@ -158,34 +155,38 @@ class MCPServerFingerprintCheck(BaseCheck):
             # Generate findings
             if impl["identified"]:
                 version_str = f" v{impl['version']}" if impl.get("version") else ""
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"MCP server identified: {impl['implementation']}{version_str}",
-                    description=(
-                        f"The MCP server at {server_url} is running "
-                        f"{impl['implementation']}{version_str} "
-                        f"(confidence: {impl['confidence']})."
-                    ),
-                    severity="info",
-                    evidence=self._build_evidence(impl, server_info),
-                    host=host,
-                    discriminator=f"impl-{impl['implementation'].lower().replace(' ', '-')}",
-                    raw_data=impl,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"MCP server identified: {impl['implementation']}{version_str}",
+                        description=(
+                            f"The MCP server at {server_url} is running "
+                            f"{impl['implementation']}{version_str} "
+                            f"(confidence: {impl['confidence']})."
+                        ),
+                        severity="info",
+                        evidence=self._build_evidence(impl, server_info),
+                        host=host,
+                        discriminator=f"impl-{impl['implementation'].lower().replace(' ', '-')}",
+                        raw_data=impl,
+                    )
+                )
             else:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="MCP server is custom implementation (non-standard)",
-                    description=(
-                        "The MCP server could not be matched to a known implementation. "
-                        "Custom implementations may have unique vulnerabilities."
-                    ),
-                    severity="low",
-                    evidence=f"URL: {server_url}\nServer info: {json.dumps(server_info)[:200]}",
-                    host=host,
-                    discriminator="impl-custom",
-                    raw_data=impl,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="MCP server is custom implementation (non-standard)",
+                        description=(
+                            "The MCP server could not be matched to a known implementation. "
+                            "Custom implementations may have unique vulnerabilities."
+                        ),
+                        severity="low",
+                        evidence=f"URL: {server_url}\nServer info: {json.dumps(server_info)[:200]}",
+                        host=host,
+                        discriminator="impl-custom",
+                        raw_data=impl,
+                    )
+                )
 
         if implementations:
             result.outputs["mcp_server_implementations"] = implementations
@@ -220,9 +221,7 @@ class MCPServerFingerprintCheck(BaseCheck):
 
         return None
 
-    async def _probe_error_fingerprint(
-        self, client, server_url: str, host: str
-    ) -> dict | None:
+    async def _probe_error_fingerprint(self, client, server_url: str, host: str) -> dict | None:
         """Send invalid requests and fingerprint from error responses."""
         # Send malformed JSON-RPC to trigger an error
         resp = await client.post(
@@ -252,7 +251,7 @@ class MCPServerFingerprintCheck(BaseCheck):
                     }
 
         # Check for Python-style tracebacks
-        if "traceback" in body or "file \"" in body:
+        if "traceback" in body or 'file "' in body:
             return {
                 "identified": True,
                 "implementation": "Python-based (unknown SDK)",
@@ -275,7 +274,7 @@ class MCPServerFingerprintCheck(BaseCheck):
 
     def _match_capabilities(self, capabilities: list) -> dict | None:
         """Heuristic matching based on capability set."""
-        cap_set = set(c.lower() if isinstance(c, str) else "" for c in capabilities)
+        cap_set = {c.lower() if isinstance(c, str) else "" for c in capabilities}
 
         # Most complete capability set suggests official SDK
         if {"tools", "resources", "prompts"}.issubset(cap_set):

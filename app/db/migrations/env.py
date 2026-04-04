@@ -30,6 +30,7 @@ def _get_url() -> str:
     """Resolve DB URL from Chainsmith config, falling back to alembic.ini."""
     try:
         from app.config import get_config
+
         cfg = get_config()
         if cfg.storage.backend == "postgresql" and cfg.storage.postgresql_url:
             url = cfg.storage.postgresql_url

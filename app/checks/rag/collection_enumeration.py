@@ -9,14 +9,14 @@ References:
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 """
 
+import contextlib
 import json
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Collection name patterns suggesting sensitive content
 SENSITIVE_PATTERNS = [
@@ -69,11 +69,9 @@ class RAGCollectionEnumerationCheck(ServiceIteratingCheck):
 
         # Filter to this service's stores
         service_stores = [
-            s for s in accessible_stores
-            if any(
-                op.get("status") == 200
-                for op in s.get("accessible_ops", [])
-            )
+            s
+            for s in accessible_stores
+            if any(op.get("status") == 200 for op in s.get("accessible_ops", []))
         ]
 
         if not service_stores:
@@ -100,18 +98,20 @@ class RAGCollectionEnumerationCheck(ServiceIteratingCheck):
                     sensitive_names = self._flag_sensitive(collections)
                     severity = self._determine_severity(enum_result, sensitive_names)
 
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Knowledge base structure exposed: {store_type}",
-                        description=self._build_description(enum_result, sensitive_names),
-                        severity=severity,
-                        evidence=self._build_evidence(enum_result, sensitive_names),
-                        host=service.host,
-                        discriminator=f"enum-{store_type}",
-                        target=service,
-                        raw_data=enum_result,
-                        references=self.references,
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Knowledge base structure exposed: {store_type}",
+                            description=self._build_description(enum_result, sensitive_names),
+                            severity=severity,
+                            evidence=self._build_evidence(enum_result, sensitive_names),
+                            host=service.host,
+                            discriminator=f"enum-{store_type}",
+                            target=service,
+                            raw_data=enum_result,
+                            references=self.references,
+                        )
+                    )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -166,10 +166,8 @@ class RAGCollectionEnumerationCheck(ServiceIteratingCheck):
     async def _enum_chroma(self, client, base_url, name, detail):
         resp = await client.get(f"{base_url}/api/v1/collections/{name}/count")
         if not resp.error and resp.status_code == 200:
-            try:
+            with contextlib.suppress(ValueError):
                 detail["doc_count"] = int(resp.body or "0")
-            except ValueError:
-                pass
         # Get a sample to see metadata fields
         resp2 = await client.get(f"{base_url}/api/v1/collections/{name}/get?limit=1")
         if not resp2.error and resp2.status_code == 200:

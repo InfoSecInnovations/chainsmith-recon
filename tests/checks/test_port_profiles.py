@@ -8,16 +8,18 @@ Covers:
 - PortScanCheck port resolution from config and context
 """
 
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from app.checks.network.port_profiles import (
-    WEB, API, AI, DATA, LAB,
-    PROFILES, DEFAULT_PROFILE,
+    AI,
+    API,
+    DATA,
+    DEFAULT_PROFILE,
+    LAB,
+    PROFILES,
+    WEB,
     resolve_ports,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Port Constants
@@ -33,13 +35,13 @@ class TestPortConstants:
         assert 8080 in WEB
 
     def test_api_has_gateway_ports(self):
-        assert 4000 in API   # LiteLLM
-        assert 8001 in API   # Kong
+        assert 4000 in API  # LiteLLM
+        assert 8001 in API  # Kong
 
     def test_ai_has_ml_ports(self):
-        assert 11434 in AI   # Ollama
-        assert 7860 in AI    # Gradio
-        assert 8501 in AI    # Streamlit
+        assert 11434 in AI  # Ollama
+        assert 7860 in AI  # Gradio
+        assert 8501 in AI  # Streamlit
 
     def test_data_has_db_ports(self):
         assert 5432 in DATA  # PostgreSQL
@@ -49,11 +51,10 @@ class TestPortConstants:
     def test_lab_has_container_ports(self):
         assert 8081 in LAB
         assert 8089 in LAB
-        assert 5173 in LAB   # Vite
+        assert 5173 in LAB  # Vite
 
     def test_no_duplicates_within_categories(self):
-        for name, ports in [("WEB", WEB), ("API", API), ("AI", AI),
-                            ("DATA", DATA), ("LAB", LAB)]:
+        for name, ports in [("WEB", WEB), ("API", API), ("AI", AI), ("DATA", DATA), ("LAB", LAB)]:
             assert len(ports) == len(set(ports)), f"Duplicates in {name}"
 
 
@@ -155,6 +156,7 @@ class TestPortScanCheckResolution:
     @patch("app.checks.network.ports.get_config")
     def test_uses_config_profile(self, mock_get_config):
         from app.checks.network.ports import PortScanCheck
+
         mock_get_config.return_value = self._make_config(port_profile="web")
 
         check = PortScanCheck()
@@ -165,6 +167,7 @@ class TestPortScanCheckResolution:
     @patch("app.checks.network.ports.get_config")
     def test_context_overrides_config_profile(self, mock_get_config):
         from app.checks.network.ports import PortScanCheck
+
         mock_get_config.return_value = self._make_config(port_profile="web")
 
         check = PortScanCheck()
@@ -175,6 +178,7 @@ class TestPortScanCheckResolution:
     @patch("app.checks.network.ports.get_config")
     def test_explicit_profile_overrides_context(self, mock_get_config):
         from app.checks.network.ports import PortScanCheck
+
         mock_get_config.return_value = self._make_config(port_profile="web")
 
         check = PortScanCheck(profile="full")
@@ -185,6 +189,7 @@ class TestPortScanCheckResolution:
     @patch("app.checks.network.ports.get_config")
     def test_explicit_ports_bypass_profile(self, mock_get_config):
         from app.checks.network.ports import PortScanCheck
+
         mock_get_config.return_value = self._make_config()
 
         check = PortScanCheck(ports=[22, 80, 443])
@@ -195,6 +200,7 @@ class TestPortScanCheckResolution:
     @patch("app.checks.network.ports.get_config")
     def test_in_scope_ports_filters_profile(self, mock_get_config):
         from app.checks.network.ports import PortScanCheck
+
         mock_get_config.return_value = self._make_config(
             port_profile="lab",
             in_scope_ports=[80, 443],
@@ -208,6 +214,7 @@ class TestPortScanCheckResolution:
     @patch("app.checks.network.ports.get_config")
     def test_in_scope_ports_filters_explicit_ports(self, mock_get_config):
         from app.checks.network.ports import PortScanCheck
+
         mock_get_config.return_value = self._make_config(
             in_scope_ports=[80, 443],
         )

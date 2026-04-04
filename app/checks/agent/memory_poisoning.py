@@ -9,13 +9,11 @@ References:
   https://atlas.mitre.org/
 """
 
-import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Benign poisoning payloads (detectable but not harmful)
 POISONING_PAYLOADS = [
@@ -85,12 +83,10 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
 
         agent_endpoints = context.get("agent_endpoints", [])
         exec_endpoints = [
-            ep for ep in agent_endpoints
+            ep
+            for ep in agent_endpoints
             if ep.get("service", {}).get("host") == service.host
-            and any(
-                kw in ep.get("path", "").lower()
-                for kw in ["invoke", "run", "execute", "chat"]
-            )
+            and any(kw in ep.get("path", "").lower() for kw in ["invoke", "run", "execute", "chat"])
         ]
         if not exec_endpoints:
             return result
@@ -105,9 +101,7 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
 
                 # 1. Test conversational memory poisoning
                 for payload in POISONING_PAYLOADS:
-                    res = await self._test_conversational_poisoning(
-                        client, url, ep, payload
-                    )
+                    res = await self._test_conversational_poisoning(client, url, ep, payload)
                     poisoning_results.append(res)
 
                     if res["poisoned"]:
@@ -141,8 +135,8 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
                                 check_name=self.name,
                                 title=f"Memory poisoning partially successful: {payload['id']}",
                                 description=(
-                                    f"Agent acknowledged storing instruction but effect "
-                                    f"unconfirmed in verification step."
+                                    "Agent acknowledged storing instruction but effect "
+                                    "unconfirmed in verification step."
                                 ),
                                 severity="high",
                                 evidence=(
@@ -186,7 +180,8 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
                 for cleanup in CLEANUP_MESSAGES:
                     body = self._build_request_body(cleanup, ep)
                     await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
 
@@ -199,13 +194,19 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
         return result
 
     async def _test_conversational_poisoning(
-        self, client: AsyncHttpClient, url: str, ep: dict, payload: dict,
+        self,
+        client: AsyncHttpClient,
+        url: str,
+        ep: dict,
+        payload: dict,
     ) -> dict:
         """Test memory poisoning via conversational injection."""
         # Step 1: Send poisoning message
         body = self._build_request_body(payload["message"], ep)
         poison_resp = await client.post(
-            url, json=body, headers={"Content-Type": "application/json"},
+            url,
+            json=body,
+            headers={"Content-Type": "application/json"},
         )
 
         if poison_resp.error or poison_resp.status_code >= 400:
@@ -220,14 +221,23 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
         poison_body = (poison_resp.body or "").lower()
         acknowledged = any(
             ind in poison_body
-            for ind in ["noted", "stored", "remembered", "i'll remember",
-                        "saved", "recorded", "understood"]
+            for ind in [
+                "noted",
+                "stored",
+                "remembered",
+                "i'll remember",
+                "saved",
+                "recorded",
+                "understood",
+            ]
         )
 
         # Step 2: Send verification prompt
         verify_body = self._build_request_body(payload["verification"], ep)
         verify_resp = await client.post(
-            url, json=verify_body, headers={"Content-Type": "application/json"},
+            url,
+            json=verify_body,
+            headers={"Content-Type": "application/json"},
         )
 
         if verify_resp.error or verify_resp.status_code >= 400:
@@ -241,10 +251,7 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
 
         verify_text = verify_resp.body or ""
         verify_lower = verify_text.lower()
-        matched = [
-            ind for ind in payload["success_indicators"]
-            if ind.lower() in verify_lower
-        ]
+        matched = [ind for ind in payload["success_indicators"] if ind.lower() in verify_lower]
 
         return {
             "payload_id": payload["id"],
@@ -255,7 +262,9 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
         }
 
     async def _test_state_write(
-        self, client: AsyncHttpClient, service: Service,
+        self,
+        client: AsyncHttpClient,
+        service: Service,
     ) -> dict | None:
         """Test direct state write via PUT /state."""
         url = service.with_path("/state")
@@ -268,7 +277,8 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
             "state": {"chainsmith_test": True, "note": "security test marker"},
         }
         put_resp = await client.post(
-            url, json=state_payload,
+            url,
+            json=state_payload,
             headers={"Content-Type": "application/json"},
         )
 

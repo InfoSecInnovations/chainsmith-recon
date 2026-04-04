@@ -3,7 +3,7 @@ app/scenario_services/banking - Banking/financial services templates.
 
 Services:
 - www: Public-facing bank website
-- api: REST API for banking operations  
+- api: REST API for banking operations
 - chatbot: LLM-powered customer service chat
 - tools: Banking tool definitions and execution
 

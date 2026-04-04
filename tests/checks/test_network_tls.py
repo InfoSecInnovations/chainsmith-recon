@@ -7,12 +7,11 @@ Tests for Phase 7b network checks:
 """
 
 import datetime
-import ssl
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import patch
+
 import pytest
 
-from app.checks.base import CheckResult, Service
-
+from app.checks.base import Service
 
 # ═══════════════════════════════════════════════════════════════════
 # TLS Analysis Check Tests
@@ -24,12 +23,14 @@ class TestTlsAnalysisCheckInit:
 
     def test_check_metadata(self):
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
         assert check.name == "tls_analysis"
         assert "TLS" in check.description or "tls" in check.description.lower()
 
     def test_conditions(self):
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
         assert len(check.conditions) == 1
         assert check.conditions[0].output_name == "services"
@@ -37,18 +38,21 @@ class TestTlsAnalysisCheckInit:
 
     def test_produces(self):
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
         assert "tls_data" in check.produces
         assert "tls_hosts" in check.produces
 
     def test_references(self):
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
         assert len(check.references) > 0
         assert any("OWASP" in r or "CWE" in r for r in check.references)
 
     def test_tls_ports(self):
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
         assert 443 in check.TLS_PORTS
         assert 8443 in check.TLS_PORTS
@@ -60,6 +64,7 @@ class TestTlsAnalysisCheckRun:
     @pytest.mark.asyncio
     async def test_no_services_fails(self):
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
         result = await check.run({"services": []})
         assert result.success is False
@@ -69,10 +74,12 @@ class TestTlsAnalysisCheckRun:
     async def test_no_tls_services_empty_output(self):
         """Non-TLS services on non-TLS ports produce empty output."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
         # Port 6379 is Redis, not TLS, and scheme is not https
-        svc = Service(url="http://db.example.com:6379", host="db.example.com",
-                      port=6379, scheme="http")
+        svc = Service(
+            url="http://db.example.com:6379", host="db.example.com", port=6379, scheme="http"
+        )
         result = await check.run({"services": [svc]})
         assert result.success is True
         assert result.outputs["tls_data"] == {}
@@ -82,17 +89,22 @@ class TestTlsAnalysisCheckRun:
     async def test_https_service_cert_inspection(self):
         """Successfully inspect certificate on an HTTPS service."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
 
-        svc = Service(url="https://www.example.com:443", host="www.example.com",
-                      port=443, scheme="https")
+        svc = Service(
+            url="https://www.example.com:443", host="www.example.com", port=443, scheme="https"
+        )
 
         future_date = (datetime.datetime.utcnow() + datetime.timedelta(days=365)).isoformat()
         past_date = (datetime.datetime.utcnow() - datetime.timedelta(days=365)).isoformat()
 
         mock_cert_info = {
             "subject": {"commonName": "www.example.com"},
-            "issuer": {"commonName": "Let's Encrypt Authority X3", "organizationName": "Let's Encrypt"},
+            "issuer": {
+                "commonName": "Let's Encrypt Authority X3",
+                "organizationName": "Let's Encrypt",
+            },
             "sans": ["www.example.com", "api.example.com", "staging.example.com"],
             "not_before": past_date,
             "not_after": future_date,
@@ -104,10 +116,12 @@ class TestTlsAnalysisCheckRun:
 
         with patch.object(check, "_get_cert_info", return_value=mock_cert_info):
             with patch.object(check, "_probe_protocols", return_value=["TLS 1.2", "TLS 1.3"]):
-                result = await check.run({
-                    "services": [svc],
-                    "base_domain": "example.com",
-                })
+                result = await check.run(
+                    {
+                        "services": [svc],
+                        "base_domain": "example.com",
+                    }
+                )
 
         assert result.success is True
         assert "www.example.com:443" in result.outputs["tls_data"]
@@ -129,10 +143,12 @@ class TestTlsAnalysisCheckRun:
     async def test_self_signed_certificate(self):
         """Self-signed cert should produce medium severity finding."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
 
-        svc = Service(url="https://dev.example.com:8443", host="dev.example.com",
-                      port=8443, scheme="https")
+        svc = Service(
+            url="https://dev.example.com:8443", host="dev.example.com", port=8443, scheme="https"
+        )
 
         future_date = (datetime.datetime.utcnow() + datetime.timedelta(days=365)).isoformat()
         past_date = (datetime.datetime.utcnow() - datetime.timedelta(days=365)).isoformat()
@@ -151,15 +167,15 @@ class TestTlsAnalysisCheckRun:
 
         with patch.object(check, "_get_cert_info", return_value=mock_cert_info):
             with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({
-                    "services": [svc],
-                    "base_domain": "example.com",
-                })
+                result = await check.run(
+                    {
+                        "services": [svc],
+                        "base_domain": "example.com",
+                    }
+                )
 
         assert result.success is True
-        self_signed_findings = [
-            f for f in result.findings if "self-signed" in f.title.lower()
-        ]
+        self_signed_findings = [f for f in result.findings if "self-signed" in f.title.lower()]
         assert len(self_signed_findings) == 1
         assert self_signed_findings[0].severity == "medium"
 
@@ -167,10 +183,12 @@ class TestTlsAnalysisCheckRun:
     async def test_expired_certificate(self):
         """Expired cert should produce medium severity finding."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
 
-        svc = Service(url="https://old.example.com:443", host="old.example.com",
-                      port=443, scheme="https")
+        svc = Service(
+            url="https://old.example.com:443", host="old.example.com", port=443, scheme="https"
+        )
 
         expired_date = (datetime.datetime.utcnow() - datetime.timedelta(days=30)).isoformat()
         past_date = (datetime.datetime.utcnow() - datetime.timedelta(days=730)).isoformat()
@@ -189,15 +207,15 @@ class TestTlsAnalysisCheckRun:
 
         with patch.object(check, "_get_cert_info", return_value=mock_cert_info):
             with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({
-                    "services": [svc],
-                    "base_domain": "example.com",
-                })
+                result = await check.run(
+                    {
+                        "services": [svc],
+                        "base_domain": "example.com",
+                    }
+                )
 
         assert result.success is True
-        expired_findings = [
-            f for f in result.findings if "expired" in f.title.lower()
-        ]
+        expired_findings = [f for f in result.findings if "expired" in f.title.lower()]
         assert len(expired_findings) == 1
         assert expired_findings[0].severity == "medium"
 
@@ -205,10 +223,12 @@ class TestTlsAnalysisCheckRun:
     async def test_expiring_soon_certificate(self):
         """Cert expiring within 30 days should produce low severity finding."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
 
-        svc = Service(url="https://app.example.com:443", host="app.example.com",
-                      port=443, scheme="https")
+        svc = Service(
+            url="https://app.example.com:443", host="app.example.com", port=443, scheme="https"
+        )
 
         soon_date = (datetime.datetime.utcnow() + datetime.timedelta(days=15)).isoformat()
         past_date = (datetime.datetime.utcnow() - datetime.timedelta(days=350)).isoformat()
@@ -227,15 +247,15 @@ class TestTlsAnalysisCheckRun:
 
         with patch.object(check, "_get_cert_info", return_value=mock_cert_info):
             with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({
-                    "services": [svc],
-                    "base_domain": "example.com",
-                })
+                result = await check.run(
+                    {
+                        "services": [svc],
+                        "base_domain": "example.com",
+                    }
+                )
 
         assert result.success is True
-        expiring_findings = [
-            f for f in result.findings if "expires soon" in f.title.lower()
-        ]
+        expiring_findings = [f for f in result.findings if "expires soon" in f.title.lower()]
         assert len(expiring_findings) == 1
         assert expiring_findings[0].severity == "low"
 
@@ -243,10 +263,15 @@ class TestTlsAnalysisCheckRun:
     async def test_deprecated_tls_protocol(self):
         """Deprecated TLS versions should produce low severity findings."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
 
-        svc = Service(url="https://legacy.example.com:443", host="legacy.example.com",
-                      port=443, scheme="https")
+        svc = Service(
+            url="https://legacy.example.com:443",
+            host="legacy.example.com",
+            port=443,
+            scheme="https",
+        )
 
         future_date = (datetime.datetime.utcnow() + datetime.timedelta(days=365)).isoformat()
         past_date = (datetime.datetime.utcnow() - datetime.timedelta(days=365)).isoformat()
@@ -264,17 +289,19 @@ class TestTlsAnalysisCheckRun:
         }
 
         with patch.object(check, "_get_cert_info", return_value=mock_cert_info):
-            with patch.object(check, "_probe_protocols",
-                              return_value=["TLS 1.0", "TLS 1.1", "TLS 1.2"]):
-                result = await check.run({
-                    "services": [svc],
-                    "base_domain": "example.com",
-                })
+            with patch.object(
+                check, "_probe_protocols", return_value=["TLS 1.0", "TLS 1.1", "TLS 1.2"]
+            ):
+                result = await check.run(
+                    {
+                        "services": [svc],
+                        "base_domain": "example.com",
+                    }
+                )
 
         assert result.success is True
         deprecated_findings = [
-            f for f in result.findings
-            if "TLS 1.0" in f.title or "TLS 1.1" in f.title
+            f for f in result.findings if "TLS 1.0" in f.title or "TLS 1.1" in f.title
         ]
         assert len(deprecated_findings) == 2
         assert all(f.severity == "low" for f in deprecated_findings)
@@ -283,16 +310,23 @@ class TestTlsAnalysisCheckRun:
     async def test_tls_connect_failure_skips(self):
         """If TLS connection fails, skip the endpoint gracefully."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
 
-        svc = Service(url="https://unreachable.example.com:443",
-                      host="unreachable.example.com", port=443, scheme="https")
+        svc = Service(
+            url="https://unreachable.example.com:443",
+            host="unreachable.example.com",
+            port=443,
+            scheme="https",
+        )
 
         with patch.object(check, "_get_cert_info", return_value=None):
-            result = await check.run({
-                "services": [svc],
-                "base_domain": "example.com",
-            })
+            result = await check.run(
+                {
+                    "services": [svc],
+                    "base_domain": "example.com",
+                }
+            )
 
         assert result.success is True
         assert result.outputs["tls_data"] == {}
@@ -302,10 +336,12 @@ class TestTlsAnalysisCheckRun:
     async def test_wildcard_sans_excluded_from_hosts(self):
         """Wildcard SANs (*.example.com) should not appear in tls_hosts."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
 
-        svc = Service(url="https://www.example.com:443", host="www.example.com",
-                      port=443, scheme="https")
+        svc = Service(
+            url="https://www.example.com:443", host="www.example.com", port=443, scheme="https"
+        )
 
         future_date = (datetime.datetime.utcnow() + datetime.timedelta(days=365)).isoformat()
         past_date = (datetime.datetime.utcnow() - datetime.timedelta(days=365)).isoformat()
@@ -324,10 +360,12 @@ class TestTlsAnalysisCheckRun:
 
         with patch.object(check, "_get_cert_info", return_value=mock_cert_info):
             with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({
-                    "services": [svc],
-                    "base_domain": "example.com",
-                })
+                result = await check.run(
+                    {
+                        "services": [svc],
+                        "base_domain": "example.com",
+                    }
+                )
 
         tls_hosts = result.outputs["tls_hosts"]
         assert "api.example.com" in tls_hosts
@@ -339,12 +377,15 @@ class TestTlsAnalysisCheckRun:
     async def test_multiple_services_deduplication(self):
         """Same host:port should only be checked once."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
 
-        svc1 = Service(url="https://www.example.com:443", host="www.example.com",
-                       port=443, scheme="https")
-        svc2 = Service(url="https://www.example.com:443", host="www.example.com",
-                       port=443, scheme="https")
+        svc1 = Service(
+            url="https://www.example.com:443", host="www.example.com", port=443, scheme="https"
+        )
+        svc2 = Service(
+            url="https://www.example.com:443", host="www.example.com", port=443, scheme="https"
+        )
 
         future_date = (datetime.datetime.utcnow() + datetime.timedelta(days=365)).isoformat()
         past_date = (datetime.datetime.utcnow() - datetime.timedelta(days=365)).isoformat()
@@ -362,6 +403,7 @@ class TestTlsAnalysisCheckRun:
         }
 
         call_count = 0
+
         async def counting_get_cert_info(host, port):
             nonlocal call_count
             call_count += 1
@@ -369,10 +411,12 @@ class TestTlsAnalysisCheckRun:
 
         with patch.object(check, "_get_cert_info", side_effect=counting_get_cert_info):
             with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({
-                    "services": [svc1, svc2],
-                    "base_domain": "example.com",
-                })
+                await check.run(
+                    {
+                        "services": [svc1, svc2],
+                        "base_domain": "example.com",
+                    }
+                )
 
         assert call_count == 1  # Only checked once despite 2 services
 
@@ -380,18 +424,22 @@ class TestTlsAnalysisCheckRun:
     async def test_non_https_on_tls_port_checked(self):
         """Services on known TLS ports should be checked even if scheme is http."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
 
         # Port 443 but marked as http (service_probe may not have run yet)
-        svc = Service(url="http://www.example.com:443", host="www.example.com",
-                      port=443, scheme="http")
+        svc = Service(
+            url="http://www.example.com:443", host="www.example.com", port=443, scheme="http"
+        )
 
         with patch.object(check, "_get_cert_info", return_value=None):
             with patch.object(check, "_probe_protocols", return_value=[]):
-                result = await check.run({
-                    "services": [svc],
-                    "base_domain": "example.com",
-                })
+                result = await check.run(
+                    {
+                        "services": [svc],
+                        "base_domain": "example.com",
+                    }
+                )
 
         # Should have attempted the check (even though it returned None)
         assert result.success is True
@@ -399,6 +447,7 @@ class TestTlsAnalysisCheckRun:
     def test_parse_dn(self):
         """Test distinguished name parsing."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
         dn = (
             (("commonName", "example.com"),),
@@ -411,6 +460,7 @@ class TestTlsAnalysisCheckRun:
     def test_parse_cert_date(self):
         """Test certificate date parsing."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
         date_str = "Mar 10 12:00:00 2025 GMT"
         result = check._parse_cert_date(date_str)
@@ -419,6 +469,7 @@ class TestTlsAnalysisCheckRun:
     def test_parse_cert_date_invalid(self):
         """Invalid date string should be returned as-is."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
+
         check = TlsAnalysisCheck()
         result = check._parse_cert_date("not-a-date")
         assert result == "not-a-date"
@@ -434,12 +485,14 @@ class TestReverseDnsCheckInit:
 
     def test_check_metadata(self):
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
         assert check.name == "reverse_dns"
         assert "PTR" in check.description or "reverse" in check.description.lower()
 
     def test_conditions(self):
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
         assert len(check.conditions) == 1
         assert check.conditions[0].output_name == "dns_records"
@@ -447,17 +500,20 @@ class TestReverseDnsCheckInit:
 
     def test_produces(self):
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
         assert "reverse_dns" in check.produces
         assert "reverse_dns_hosts" in check.produces
 
     def test_references(self):
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
         assert len(check.references) > 0
 
     def test_internal_patterns(self):
         from app.checks.network.reverse_dns import INTERNAL_PATTERNS
+
         assert ".internal." in INTERNAL_PATTERNS
         assert ".local." in INTERNAL_PATTERNS
         assert ".ec2.internal" in INTERNAL_PATTERNS
@@ -470,6 +526,7 @@ class TestReverseDnsCheckRun:
     @pytest.mark.asyncio
     async def test_no_dns_records_fails(self):
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
         result = await check.run({"dns_records": {}})
         assert result.success is False
@@ -478,6 +535,7 @@ class TestReverseDnsCheckRun:
     async def test_single_ip_with_ptr(self):
         """Single IP with a PTR record should produce info finding."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -485,8 +543,7 @@ class TestReverseDnsCheckRun:
             "base_domain": "example.com",
         }
 
-        with patch.object(check, "_ptr_lookup",
-                          return_value=["www.example.com"]):
+        with patch.object(check, "_ptr_lookup", return_value=["www.example.com"]):
             result = await check.run(context)
 
         assert result.success is True
@@ -502,6 +559,7 @@ class TestReverseDnsCheckRun:
     async def test_multiple_ptr_records_virtual_hosting(self):
         """Multiple PTR records suggest virtual hosting."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -509,20 +567,22 @@ class TestReverseDnsCheckRun:
             "base_domain": "example.com",
         }
 
-        with patch.object(check, "_ptr_lookup",
-                          return_value=["host1.example.com", "host2.other.com", "host3.another.com"]):
+        with patch.object(
+            check,
+            "_ptr_lookup",
+            return_value=["host1.example.com", "host2.other.com", "host3.another.com"],
+        ):
             result = await check.run(context)
 
         assert result.success is True
-        multi_findings = [
-            f for f in result.findings if "multiple ptr" in f.title.lower()
-        ]
+        multi_findings = [f for f in result.findings if "multiple ptr" in f.title.lower()]
         assert len(multi_findings) == 1
 
     @pytest.mark.asyncio
     async def test_internal_hostname_detection(self):
         """Internal hostnames in PTR should produce low severity finding."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -530,14 +590,11 @@ class TestReverseDnsCheckRun:
             "base_domain": "example.com",
         }
 
-        with patch.object(check, "_ptr_lookup",
-                          return_value=["ip-10-0-1-42.ec2.internal"]):
+        with patch.object(check, "_ptr_lookup", return_value=["ip-10-0-1-42.ec2.internal"]):
             result = await check.run(context)
 
         assert result.success is True
-        internal_findings = [
-            f for f in result.findings if "Internal hostname in PTR" in f.title
-        ]
+        internal_findings = [f for f in result.findings if "Internal hostname in PTR" in f.title]
         assert len(internal_findings) == 1
         assert internal_findings[0].severity == "low"
 
@@ -545,6 +602,7 @@ class TestReverseDnsCheckRun:
     async def test_ptr_mismatch_finding(self):
         """PTR pointing outside target domain should produce info finding."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -552,14 +610,11 @@ class TestReverseDnsCheckRun:
             "base_domain": "example.com",
         }
 
-        with patch.object(check, "_ptr_lookup",
-                          return_value=["fastly-edge.fastly.net"]):
+        with patch.object(check, "_ptr_lookup", return_value=["fastly-edge.fastly.net"]):
             result = await check.run(context)
 
         assert result.success is True
-        mismatch_findings = [
-            f for f in result.findings if "mismatch" in f.title.lower()
-        ]
+        mismatch_findings = [f for f in result.findings if "mismatch" in f.title.lower()]
         assert len(mismatch_findings) == 1
         assert mismatch_findings[0].severity == "info"
 
@@ -567,6 +622,7 @@ class TestReverseDnsCheckRun:
     async def test_no_ptr_records_no_findings(self):
         """IPs with no PTR records should not generate findings."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -585,6 +641,7 @@ class TestReverseDnsCheckRun:
     async def test_new_hosts_from_ptr(self):
         """PTR hostnames not in known hosts should appear in reverse_dns_hosts."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -592,8 +649,7 @@ class TestReverseDnsCheckRun:
             "base_domain": "example.com",
         }
 
-        with patch.object(check, "_ptr_lookup",
-                          return_value=["new-host.example.com"]):
+        with patch.object(check, "_ptr_lookup", return_value=["new-host.example.com"]):
             result = await check.run(context)
 
         assert "new-host.example.com" in result.outputs["reverse_dns_hosts"]
@@ -602,6 +658,7 @@ class TestReverseDnsCheckRun:
     async def test_known_hosts_excluded_from_new(self):
         """PTR hostnames already in dns_records should NOT appear in reverse_dns_hosts."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -609,8 +666,7 @@ class TestReverseDnsCheckRun:
             "base_domain": "example.com",
         }
 
-        with patch.object(check, "_ptr_lookup",
-                          return_value=["www.example.com"]):
+        with patch.object(check, "_ptr_lookup", return_value=["www.example.com"]):
             result = await check.run(context)
 
         assert "www.example.com" not in result.outputs["reverse_dns_hosts"]
@@ -619,6 +675,7 @@ class TestReverseDnsCheckRun:
     async def test_trailing_dot_stripped(self):
         """PTR records with trailing dots should be cleaned."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -626,8 +683,7 @@ class TestReverseDnsCheckRun:
             "base_domain": "example.com",
         }
 
-        with patch.object(check, "_ptr_lookup",
-                          return_value=["newhost.example.com."]):
+        with patch.object(check, "_ptr_lookup", return_value=["newhost.example.com."]):
             result = await check.run(context)
 
         # The trailing dot should be stripped when adding to new hosts
@@ -637,6 +693,7 @@ class TestReverseDnsCheckRun:
     async def test_deduplicated_ips(self):
         """Multiple hostnames resolving to same IP should only trigger one PTR lookup."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -648,6 +705,7 @@ class TestReverseDnsCheckRun:
         }
 
         lookup_count = 0
+
         async def counting_ptr_lookup(ip):
             nonlocal lookup_count
             lookup_count += 1
@@ -664,6 +722,7 @@ class TestReverseDnsCheckRun:
     async def test_multiple_ips(self):
         """Multiple different IPs should each get PTR lookups."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -691,6 +750,7 @@ class TestReverseDnsCheckRun:
     async def test_corp_pattern_detected_as_internal(self):
         """Hostnames with .corp. pattern should be flagged as internal."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         context = {
@@ -698,27 +758,29 @@ class TestReverseDnsCheckRun:
             "base_domain": "example.com",
         }
 
-        with patch.object(check, "_ptr_lookup",
-                          return_value=["mail-01.corp.example.com"]):
+        with patch.object(check, "_ptr_lookup", return_value=["mail-01.corp.example.com"]):
             result = await check.run(context)
 
         assert result.outputs["reverse_dns"]["10.0.0.5"]["internal"] is True
-        internal_findings = [
-            f for f in result.findings if "internal" in f.title.lower()
-        ]
+        internal_findings = [f for f in result.findings if "internal" in f.title.lower()]
         assert len(internal_findings) == 1
 
     @pytest.mark.asyncio
     async def test_socket_fallback_when_no_dnspython(self):
         """When dnspython is not available, should use socket fallback."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         # Test the socket-based lookup path
-        with patch("app.checks.network.reverse_dns.HAS_DNSPYTHON", False):
-            with patch("socket.gethostbyaddr",
-                       return_value=("host1.example.com", ["alias1.example.com"], ["1.2.3.4"])):
-                records = await check._ptr_lookup_socket("1.2.3.4")
+        with (
+            patch("app.checks.network.reverse_dns.HAS_DNSPYTHON", False),
+            patch(
+                "socket.gethostbyaddr",
+                return_value=("host1.example.com", ["alias1.example.com"], ["1.2.3.4"]),
+            ),
+        ):
+            records = await check._ptr_lookup_socket("1.2.3.4")
 
         assert "host1.example.com" in records
         assert "alias1.example.com" in records
@@ -727,9 +789,11 @@ class TestReverseDnsCheckRun:
     async def test_socket_fallback_failure(self):
         """Socket fallback should return empty list on failure."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
+
         check = ReverseDnsCheck()
 
         import socket as socket_mod
+
         with patch("app.checks.network.reverse_dns.HAS_DNSPYTHON", False):
             with patch("socket.gethostbyaddr", side_effect=socket_mod.herror):
                 records = await check._ptr_lookup_socket("1.2.3.4")
@@ -747,6 +811,7 @@ class TestPhase7bRegistration:
 
     def test_checks_present_in_resolver(self):
         from app.check_resolver import get_real_checks
+
         checks = get_real_checks()
         names = [c.name for c in checks]
         assert "tls_analysis" in names
@@ -755,6 +820,7 @@ class TestPhase7bRegistration:
     def test_reverse_dns_before_port_scan(self):
         """reverse_dns should run before port_scan (Phase 2 ordering)."""
         from app.check_resolver import get_real_checks
+
         checks = get_real_checks()
         names = [c.name for c in checks]
         rdns_idx = names.index("reverse_dns")
@@ -764,6 +830,7 @@ class TestPhase7bRegistration:
     def test_tls_analysis_after_port_scan(self):
         """tls_analysis should run after port_scan (needs services)."""
         from app.check_resolver import get_real_checks
+
         checks = get_real_checks()
         names = [c.name for c in checks]
         tls_idx = names.index("tls_analysis")
@@ -773,12 +840,14 @@ class TestPhase7bRegistration:
     def test_suite_inference_network(self):
         """Both checks should be inferred as 'network' suite."""
         from app.check_resolver import infer_suite
+
         assert infer_suite("tls_analysis") == "network"
         assert infer_suite("reverse_dns") == "network"
 
     def test_suite_filter(self):
         """Both checks should appear when filtering by 'network' suite."""
         from app.check_resolver import resolve_checks
+
         checks = resolve_checks(suites=["network"])
         names = [c.name for c in checks]
         assert "tls_analysis" in names
@@ -787,6 +856,7 @@ class TestPhase7bRegistration:
     def test_total_check_count(self):
         """Total check count should have increased by 2 (from 41 to 43)."""
         from app.check_resolver import get_real_checks
+
         checks = get_real_checks()
         # 39 from Phase 7a + 2 new = 41
         # Actually let's just verify it's at least 41

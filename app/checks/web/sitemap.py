@@ -17,10 +17,9 @@ import xml.etree.ElementTree as ET
 from typing import Any
 from urllib.parse import urlparse
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-from app.lib.evidence import fmt_status_evidence
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +100,9 @@ class SitemapCheck(ServiceIteratingCheck):
                         # Follow sub-sitemaps (limited)
                         for sub_url in sub_sitemaps[:MAX_SITEMAPS]:
                             if not sub_url.startswith("http"):
-                                sub_url = service.with_path(sub_url if sub_url.startswith("/") else f"/{sub_url}")
+                                sub_url = service.with_path(
+                                    sub_url if sub_url.startswith("/") else f"/{sub_url}"
+                                )
                             await self._rate_limit()
                             sub_resp = await client.get(sub_url)
                             if sub_resp.error or sub_resp.status_code != 200:
@@ -138,33 +139,42 @@ class SitemapCheck(ServiceIteratingCheck):
                 api_paths.append(path)
 
         # Base finding: sitemap discovered
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"Sitemap contains {len(all_paths)} URLs ({len(set(all_paths))} unique paths)",
-            description=f"Sitemap parsing discovered {len(all_paths)} URLs from {service.host}",
-            severity="info",
-            evidence=f"Paths sample: {', '.join(all_paths[:10])}",
-            host=service.host,
-            discriminator="sitemap-discovered",
-            target=service,
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"Sitemap contains {len(all_paths)} URLs ({len(set(all_paths))} unique paths)",
+                description=f"Sitemap parsing discovered {len(all_paths)} URLs from {service.host}",
+                severity="info",
+                evidence=f"Paths sample: {', '.join(all_paths[:10])}",
+                host=service.host,
+                discriminator="sitemap-discovered",
+                target=service,
+            )
+        )
 
         # Sensitive paths finding
         if sensitive_paths:
-            severity = "medium" if any(
-                re.search(r"/(staging|debug|internal|backup)/", p, re.I) for p in sensitive_paths
-            ) else "low"
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Sitemap reveals sensitive paths ({len(sensitive_paths)})",
-                description="Sitemap contains paths suggesting internal or sensitive resources",
-                severity=severity,
-                evidence=f"Sensitive paths: {', '.join(sensitive_paths[:10])}",
-                host=service.host,
-                discriminator="sensitive-paths",
-                target=service,
-                raw_data={"sensitive_paths": sensitive_paths[:50]},
-            ))
+            severity = (
+                "medium"
+                if any(
+                    re.search(r"/(staging|debug|internal|backup)/", p, re.I)
+                    for p in sensitive_paths
+                )
+                else "low"
+            )
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Sitemap reveals sensitive paths ({len(sensitive_paths)})",
+                    description="Sitemap contains paths suggesting internal or sensitive resources",
+                    severity=severity,
+                    evidence=f"Sensitive paths: {', '.join(sensitive_paths[:10])}",
+                    host=service.host,
+                    discriminator="sensitive-paths",
+                    target=service,
+                    raw_data={"sensitive_paths": sensitive_paths[:50]},
+                )
+            )
 
         # API versioning finding
         api_versions = set()
@@ -173,16 +183,18 @@ class SitemapCheck(ServiceIteratingCheck):
             if m:
                 api_versions.add(f"v{m.group(1)}")
         if len(api_versions) > 1:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Sitemap reveals API versioning: {', '.join(sorted(api_versions))}",
-                description="Multiple API versions discovered, older versions may lack security controls",
-                severity="low",
-                evidence=f"API versions: {', '.join(sorted(api_versions))}; sample paths: {', '.join(api_paths[:5])}",
-                host=service.host,
-                discriminator="api-versioning",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Sitemap reveals API versioning: {', '.join(sorted(api_versions))}",
+                    description="Multiple API versions discovered, older versions may lack security controls",
+                    severity="low",
+                    evidence=f"API versions: {', '.join(sorted(api_versions))}; sample paths: {', '.join(api_paths[:5])}",
+                    host=service.host,
+                    discriminator="api-versioning",
+                    target=service,
+                )
+            )
 
         # Output for downstream checks
         result.outputs["sitemap_paths"] = {
@@ -199,7 +211,6 @@ class SitemapCheck(ServiceIteratingCheck):
         try:
             root = ET.fromstring(xml_body)
             # Handle namespace
-            ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
             # Try with namespace
             locs = root.findall(".//{http://www.sitemaps.org/schemas/sitemap/0.9}loc")
             if not locs:

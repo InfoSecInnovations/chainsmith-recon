@@ -19,11 +19,10 @@ import json
 import re
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import cap_response
-
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Injection payloads by type
 INJECTION_PAYLOADS = {
@@ -122,55 +121,62 @@ class ResourceTemplateInjectionCheck(BaseCheck):
                                         else:
                                             test_uri = test_uri.replace(f"{{{p}}}", "test")
 
-                                    probe = await self._probe_template(
-                                        client, server_url, test_uri
+                                    probe = await self._probe_template(client, server_url, test_uri)
+                                    injection_results.append(
+                                        {
+                                            "template": uri_template,
+                                            "param": param,
+                                            "injection_type": inj_type,
+                                            "payload": payload,
+                                            "result": probe,
+                                        }
                                     )
-                                    injection_results.append({
-                                        "template": uri_template,
-                                        "param": param,
-                                        "injection_type": inj_type,
-                                        "payload": payload,
-                                        "result": probe,
-                                    })
 
                                     if probe["vulnerable"]:
                                         severity = self._injection_severity(inj_type, probe)
-                                        result.findings.append(build_finding(
-                                            check_name=self.name,
-                                            title=f"Resource template {inj_type} injection: parameter '{param}' is vulnerable",
-                                            description=(
-                                                f"Template '{uri_template}' parameter '{param}' "
-                                                f"is vulnerable to {desc}. "
-                                                f"Payload '{payload}' was processed without sanitization."
-                                            ),
-                                            severity=severity,
-                                            evidence=(
-                                                f"Template: {uri_template}\n"
-                                                f"Parameter: {param}\n"
-                                                f"Payload: {payload}\n"
-                                                f"Response: {cap_response(probe.get('body', ''))[:200]}"
-                                            ),
-                                            host=host,
-                                            discriminator=f"tmpl-{inj_type}-{param}",
-                                            raw_data={"template": uri_template, "param": param, "payload": payload},
-                                        ))
+                                        result.findings.append(
+                                            build_finding(
+                                                check_name=self.name,
+                                                title=f"Resource template {inj_type} injection: parameter '{param}' is vulnerable",
+                                                description=(
+                                                    f"Template '{uri_template}' parameter '{param}' "
+                                                    f"is vulnerable to {desc}. "
+                                                    f"Payload '{payload}' was processed without sanitization."
+                                                ),
+                                                severity=severity,
+                                                evidence=(
+                                                    f"Template: {uri_template}\n"
+                                                    f"Parameter: {param}\n"
+                                                    f"Payload: {payload}\n"
+                                                    f"Response: {cap_response(probe.get('body', ''))[:200]}"
+                                                ),
+                                                host=host,
+                                                discriminator=f"tmpl-{inj_type}-{param}",
+                                                raw_data={
+                                                    "template": uri_template,
+                                                    "param": param,
+                                                    "payload": payload,
+                                                },
+                                            )
+                                        )
                                         # Found injection in this param for this type, skip remaining payloads
                                         break
 
                     # If templates exist but no injection found
                     if templates and not any(
-                        f.check_name == self.name and f.severity != "info"
-                        for f in result.findings
+                        f.check_name == self.name and f.severity != "info" for f in result.findings
                     ):
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Resource template parameters properly validated",
-                            description=f"Tested {len(templates)} resource templates, no injection vulnerabilities found.",
-                            severity="info",
-                            evidence=f"Templates tested: {len(templates)}\nPayloads per param: {sum(len(p) for p in INJECTION_PAYLOADS.values())}",
-                            host=host,
-                            discriminator="template-safe",
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Resource template parameters properly validated",
+                                description=f"Tested {len(templates)} resource templates, no injection vulnerabilities found.",
+                                severity="info",
+                                evidence=f"Templates tested: {len(templates)}\nPayloads per param: {sum(len(p) for p in INJECTION_PAYLOADS.values())}",
+                                host=host,
+                                discriminator="template-safe",
+                            )
+                        )
 
             except Exception as e:
                 result.errors.append(f"Template injection on {server_url}: {e}")
@@ -231,10 +237,18 @@ class ResourceTemplateInjectionCheck(BaseCheck):
 
         if resp.status_code != 200:
             # Check if error message reveals injection
-            if any(kw in body.lower() for kw in [
-                "sql", "syntax error", "unterminated", "unexpected",
-                "operand", "column", "table",
-            ]):
+            if any(
+                kw in body.lower()
+                for kw in [
+                    "sql",
+                    "syntax error",
+                    "unterminated",
+                    "unexpected",
+                    "operand",
+                    "column",
+                    "table",
+                ]
+            ):
                 probe["vulnerable"] = True
                 probe["indicator"] = "sql_error"
             return probe
@@ -244,23 +258,35 @@ class ResourceTemplateInjectionCheck(BaseCheck):
             data = json.loads(body)
             if isinstance(data, dict) and "error" in data:
                 error_msg = str(data["error"]).lower()
-                if any(kw in error_msg for kw in [
-                    "sql", "syntax", "column", "table", "relation",
-                    "no such", "permission",
-                ]):
+                if any(
+                    kw in error_msg
+                    for kw in [
+                        "sql",
+                        "syntax",
+                        "column",
+                        "table",
+                        "relation",
+                        "no such",
+                        "permission",
+                    ]
+                ):
                     probe["vulnerable"] = True
                     probe["indicator"] = "sql_error_in_rpc"
                 return probe
 
             result = data.get("result", data)
-            if result and str(result) not in ('{}', '[]', 'None', '""'):
+            if result and str(result) not in ("{}", "[]", "None", '""'):
                 # Got actual content — check if it's the injected data
                 result_str = str(result).lower()
-                if any(kw in result_str for kw in [
-                    "root:", "/bin/bash",  # path traversal success
-                    "chainsmith-probe",  # command injection success
-                    "49",  # 7*7 template injection
-                ]):
+                if any(
+                    kw in result_str
+                    for kw in [
+                        "root:",
+                        "/bin/bash",  # path traversal success
+                        "chainsmith-probe",  # command injection success
+                        "49",  # 7*7 template injection
+                    ]
+                ):
                     probe["vulnerable"] = True
                     probe["indicator"] = "content_injection"
         except (json.JSONDecodeError, TypeError):

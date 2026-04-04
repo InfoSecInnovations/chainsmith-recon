@@ -16,12 +16,11 @@ References:
 """
 
 import json
-import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class ProviderCachingCheck(ServiceIteratingCheck):
@@ -56,8 +55,7 @@ class ProviderCachingCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -70,27 +68,27 @@ class ProviderCachingCheck(ServiceIteratingCheck):
             async with AsyncHttpClient(cfg) as client:
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
-                    cache_info = await self._analyze_provider_caching(
-                        client, url, service
-                    )
+                    cache_info = await self._analyze_provider_caching(client, url, service)
 
                     if cache_info:
                         provider_results.append(cache_info)
 
                         severity = self._determine_severity(cache_info)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=self._build_title(cache_info),
-                            description=self._build_description(cache_info),
-                            severity=severity,
-                            evidence=self._build_evidence(cache_info),
-                            host=service.host,
-                            discriminator=f"provider-cache-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=cache_info,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=self._build_title(cache_info),
+                                description=self._build_description(cache_info),
+                                severity=severity,
+                                evidence=self._build_evidence(cache_info),
+                                host=service.host,
+                                discriminator=f"provider-cache-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=cache_info,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -235,10 +233,7 @@ class ProviderCachingCheck(ServiceIteratingCheck):
             return {
                 "cached_tokens": cached_tokens,
                 "total_tokens": total_tokens,
-                "cache_ratio": (
-                    round(cached_tokens / total_tokens, 2)
-                    if total_tokens > 0 else 0
-                ),
+                "cache_ratio": (round(cached_tokens / total_tokens, 2) if total_tokens > 0 else 0),
                 "provider_style": "openai",
                 "raw_usage": usage,
             }
@@ -248,7 +243,9 @@ class ProviderCachingCheck(ServiceIteratingCheck):
 
     def _detect_shared_prefix(self, results: list[dict]) -> bool:
         """Detect if cached tokens suggest shared system prompt prefix."""
-        cached_counts = [r.get("cached_tokens", 0) for r in results if r.get("cached_tokens", 0) > 0]
+        cached_counts = [
+            r.get("cached_tokens", 0) for r in results if r.get("cached_tokens", 0) > 0
+        ]
         if len(cached_counts) < 2:
             return False
 

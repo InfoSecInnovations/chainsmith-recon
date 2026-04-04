@@ -10,15 +10,13 @@ References:
   OWASP - API4:2023 Unrestricted Resource Consumption
 """
 
-import asyncio
-import json
 import time
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import build_safe_payload
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class ToolRateLimitCheck(BaseCheck):
@@ -108,12 +106,14 @@ class ToolRateLimitCheck(BaseCheck):
                         },
                         headers={"Content-Type": "application/json"},
                     )
-                    results_list.append({
-                        "index": i,
-                        "status": resp.status_code if not resp.error else None,
-                        "error": resp.error,
-                        "time": time.monotonic() - start_time,
-                    })
+                    results_list.append(
+                        {
+                            "index": i,
+                            "status": resp.status_code if not resp.error else None,
+                            "error": resp.error,
+                            "time": time.monotonic() - start_time,
+                        }
+                    )
 
                 elapsed = time.monotonic() - start_time
 
@@ -134,42 +134,46 @@ class ToolRateLimitCheck(BaseCheck):
                 rate_limit_status.append(status)
 
                 if rate_limited > 0:
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Tool rate limiting detected: {tool_name} limited to ~{success_count}/{self.BURST_SIZE} in {elapsed:.1f}s",
-                        description=(
-                            f"Tool '{tool_name}' was rate-limited after {success_count} "
-                            f"successful invocations ({rate_limited} got 429 responses)."
-                        ),
-                        severity="info",
-                        evidence=(
-                            f"Tool: {tool_name}\n"
-                            f"Burst: {self.BURST_SIZE} requests in {elapsed:.1f}s\n"
-                            f"Success: {success_count}, Rate limited: {rate_limited}"
-                        ),
-                        host=host,
-                        discriminator=f"ratelimit-{tool_name}",
-                        raw_data=status,
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Tool rate limiting detected: {tool_name} limited to ~{success_count}/{self.BURST_SIZE} in {elapsed:.1f}s",
+                            description=(
+                                f"Tool '{tool_name}' was rate-limited after {success_count} "
+                                f"successful invocations ({rate_limited} got 429 responses)."
+                            ),
+                            severity="info",
+                            evidence=(
+                                f"Tool: {tool_name}\n"
+                                f"Burst: {self.BURST_SIZE} requests in {elapsed:.1f}s\n"
+                                f"Success: {success_count}, Rate limited: {rate_limited}"
+                            ),
+                            host=host,
+                            discriminator=f"ratelimit-{tool_name}",
+                            raw_data=status,
+                        )
+                    )
                 elif success_count == self.BURST_SIZE:
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"No per-tool rate limiting: {tool_name} accepts unlimited rapid invocations",
-                        description=(
-                            f"Tool '{tool_name}' accepted all {self.BURST_SIZE} invocations "
-                            f"in {elapsed:.1f}s without rate limiting. "
-                            "This could be abused for SSRF proxying or resource exhaustion."
-                        ),
-                        severity="medium",
-                        evidence=(
-                            f"Tool: {tool_name}\n"
-                            f"Burst: {self.BURST_SIZE} requests in {elapsed:.1f}s\n"
-                            f"All succeeded with status 200"
-                        ),
-                        host=host,
-                        discriminator=f"no-ratelimit-{tool_name}",
-                        raw_data=status,
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"No per-tool rate limiting: {tool_name} accepts unlimited rapid invocations",
+                            description=(
+                                f"Tool '{tool_name}' accepted all {self.BURST_SIZE} invocations "
+                                f"in {elapsed:.1f}s without rate limiting. "
+                                "This could be abused for SSRF proxying or resource exhaustion."
+                            ),
+                            severity="medium",
+                            evidence=(
+                                f"Tool: {tool_name}\n"
+                                f"Burst: {self.BURST_SIZE} requests in {elapsed:.1f}s\n"
+                                f"All succeeded with status 200"
+                            ),
+                            host=host,
+                            discriminator=f"no-ratelimit-{tool_name}",
+                            raw_data=status,
+                        )
+                    )
 
         except Exception as e:
             result.errors.append(f"Rate limit test: {e}")

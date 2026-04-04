@@ -33,29 +33,27 @@ import json
 import os
 import traceback
 from datetime import datetime
-from typing import Optional
 
 import httpx
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.scenario_services.common.config import (
-    VERBOSE_ERRORS,
-    RATE_LIMIT_ENABLED,
-    WAF_ENABLED,
-    SERVICE_NAME,
-    is_finding_active,
-    get_or_create_session,
-    get_brand_name,
-)
-from app.scenario_services.banking.tools import (
-    get_active_tools,
-    execute_tool,
-    TOOL_DEFINITIONS,
-)
 from app.scenario_services.ai.rag import get_rag_context, get_session_context
-
+from app.scenario_services.banking.tools import (
+    TOOL_DEFINITIONS,
+    execute_tool,
+    get_active_tools,
+)
+from app.scenario_services.common.config import (
+    RATE_LIMIT_ENABLED,
+    SERVICE_NAME,
+    VERBOSE_ERRORS,
+    WAF_ENABLED,
+    get_brand_name,
+    get_or_create_session,
+    is_finding_active,
+)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -84,9 +82,10 @@ app = FastAPI(
 # MODELS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class ChatRequest(BaseModel):
     message: str
-    conversation_id: Optional[str] = None
+    conversation_id: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -98,6 +97,7 @@ class ChatResponse(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════════
 # MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.middleware("http")
 async def add_headers_and_check_limits(request: Request, call_next):
@@ -128,31 +128,30 @@ async def add_headers_and_check_limits(request: Request, call_next):
         request_counts[client_ip].append(now)
 
     # WAF check
-    if WAF_ENABLED:
-        if request.method == "POST":
-            body = await request.body()
-            body_text = body.decode("utf-8", errors="ignore").lower()
+    if WAF_ENABLED and request.method == "POST":
+        body = await request.body()
+        body_text = body.decode("utf-8", errors="ignore").lower()
 
-            blocked_patterns = [
-                "ignore previous",
-                "ignore your instructions",
-                "disregard",
-                "system prompt",
-                "you are now",
-                "jailbreak",
-                "dan mode",
-            ]
+        blocked_patterns = [
+            "ignore previous",
+            "ignore your instructions",
+            "disregard",
+            "system prompt",
+            "you are now",
+            "jailbreak",
+            "dan mode",
+        ]
 
-            for pattern in blocked_patterns:
-                if pattern in body_text:
-                    return JSONResponse(
-                        status_code=403,
-                        content={
-                            "error": "Request blocked by security filter",
-                            "reason": "Suspicious content detected",
-                            "pattern": pattern if VERBOSE_ERRORS else "[redacted]",
-                        },
-                    )
+        for pattern in blocked_patterns:
+            if pattern in body_text:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "error": "Request blocked by security filter",
+                        "reason": "Suspicious content detected",
+                        "pattern": pattern if VERBOSE_ERRORS else "[redacted]",
+                    },
+                )
 
     response = await call_next(request)
 
@@ -160,7 +159,7 @@ async def add_headers_and_check_limits(request: Request, call_next):
     if is_finding_active("header_vllm_version"):
         response.headers["X-Powered-By"] = "vLLM/0.4.1"
 
-    brand = get_brand_name()
+    get_brand_name()
     response.headers["X-Chatbot-Version"] = CHATBOT_VERSION
 
     # Finding: model_temperature_exposed - leak model config
@@ -174,11 +173,12 @@ async def add_headers_and_check_limits(request: Request, call_next):
 # ERROR HANDLING
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.exception_handler(Exception)
 async def verbose_exception_handler(request: Request, exc: Exception):
     """
     Verbose error handler that leaks tool information.
-    
+
     Finding: chatbot_tool_leak
     When active, error messages expose available tool names.
     """
@@ -217,6 +217,7 @@ async def verbose_exception_handler(request: Request, exc: Exception):
 # SYSTEM PROMPT
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def get_system_prompt() -> str:
     """Generate the system prompt with brand customization."""
     brand = get_brand_name()
@@ -253,6 +254,7 @@ CONTEXT:
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.get("/")
 async def root():
@@ -326,7 +328,7 @@ async def chat(request: ChatRequest):
 
         except httpx.HTTPError as e:
             # Error that might leak tool names
-            raise Exception(f"LLM call failed: {str(e)}")
+            raise Exception(f"LLM call failed: {str(e)}") from e
 
         # Process response
         assistant_message = result["choices"][0]["message"]
@@ -347,11 +349,13 @@ async def chat(request: ChatRequest):
                 # Execute the tool
                 tool_result = execute_tool(tool_name, arguments)
 
-                tool_results.append({
-                    "tool_call_id": tool_call["id"],
-                    "role": "tool",
-                    "content": json.dumps(tool_result),
-                })
+                tool_results.append(
+                    {
+                        "tool_call_id": tool_call["id"],
+                        "role": "tool",
+                        "content": json.dumps(tool_result),
+                    }
+                )
 
             # Get final response with tool results
             messages.append(assistant_message)
@@ -386,7 +390,7 @@ async def chat(request: ChatRequest):
 async def debug_tools():
     """
     Debug endpoint - exposes tool list.
-    
+
     Finding: tool_schema_disclosure
     Only available when this finding is active.
     """

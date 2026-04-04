@@ -27,19 +27,17 @@ Usage in docker-compose.yml:
 
 import os
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from app.scenario_services.common.config import (
-    SERVICE_NAME,
-    is_finding_active,
-    get_or_create_session,
-    get_brand_name,
     get_brand_domain,
+    get_brand_name,
+    get_or_create_session,
+    is_finding_active,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -63,6 +61,7 @@ app = FastAPI(
 # MODELS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class Announcement(BaseModel):
     id: str
     title: str
@@ -83,6 +82,7 @@ class Employee(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════════
 # FAKE DATA
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def _get_announcements() -> list[Announcement]:
     """Generate announcements with brand-specific content."""
@@ -119,18 +119,55 @@ def _get_employees() -> list[Employee]:
     """Generate employee list with brand-specific email domain."""
     domain = get_brand_domain()
     return [
-        Employee(id="emp-001", name="Sarah Chen", email=f"schen@{domain}", department="Executive", title="CEO"),
-        Employee(id="emp-002", name="Mike Johnson", email=f"mjohnson@{domain}", department="Technology", title="CTO"),
-        Employee(id="emp-003", name="Lisa Park", email=f"lpark@{domain}", department="Technology", title="VP Engineering"),
-        Employee(id="emp-004", name="James Wilson", email=f"jwilson@{domain}", department="Security", title="CISO"),
-        Employee(id="emp-005", name="Maria Garcia", email=f"mgarcia@{domain}", department="HR", title="VP Human Resources"),
-        Employee(id="emp-006", name="David Lee", email=f"dlee@{domain}", department="Finance", title="CFO"),
+        Employee(
+            id="emp-001",
+            name="Sarah Chen",
+            email=f"schen@{domain}",
+            department="Executive",
+            title="CEO",
+        ),
+        Employee(
+            id="emp-002",
+            name="Mike Johnson",
+            email=f"mjohnson@{domain}",
+            department="Technology",
+            title="CTO",
+        ),
+        Employee(
+            id="emp-003",
+            name="Lisa Park",
+            email=f"lpark@{domain}",
+            department="Technology",
+            title="VP Engineering",
+        ),
+        Employee(
+            id="emp-004",
+            name="James Wilson",
+            email=f"jwilson@{domain}",
+            department="Security",
+            title="CISO",
+        ),
+        Employee(
+            id="emp-005",
+            name="Maria Garcia",
+            email=f"mgarcia@{domain}",
+            department="HR",
+            title="VP Human Resources",
+        ),
+        Employee(
+            id="emp-006",
+            name="David Lee",
+            email=f"dlee@{domain}",
+            department="Finance",
+            title="CFO",
+        ),
     ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CORS CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.on_event("startup")
 async def configure_cors():
@@ -152,6 +189,7 @@ async def configure_cors():
 # MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     """Add headers based on active findings."""
@@ -171,10 +209,11 @@ async def add_headers(request: Request, call_next):
 # AUTH CHECK
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def check_internal_auth(request: Request) -> bool:
     """
     Check if request is authorized for internal access.
-    
+
     Finding: no_auth_internal
     When active, all requests are authorized (auth bypass).
     """
@@ -182,15 +221,13 @@ def check_internal_auth(request: Request) -> bool:
         return True  # Auth bypass!
 
     auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        return True
-
-    return False
+    return bool(auth_header and auth_header.startswith("Bearer "))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -227,7 +264,7 @@ async def health():
 async def get_announcements(request: Request):
     """
     Get internal announcements.
-    
+
     Requires authentication unless no_auth_internal is active.
     """
     if not check_internal_auth(request):
@@ -244,7 +281,7 @@ async def get_announcements(request: Request):
 async def get_directory(request: Request):
     """
     Employee directory.
-    
+
     Finding: employee_directory_exposed
     When active, returns full employee details including email.
     Otherwise, returns limited info (name and department only).
@@ -277,7 +314,7 @@ async def get_employees(request: Request):
 async def get_org_chart(request: Request):
     """
     Organization chart.
-    
+
     Finding: employee_directory_exposed
     When active, includes reporting structure.
     """

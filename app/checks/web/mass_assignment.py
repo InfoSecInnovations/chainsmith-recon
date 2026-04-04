@@ -13,28 +13,45 @@ import json
 import logging
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
 
 # Fields to inject, grouped by risk category
 PRIVILEGE_FIELDS = [
-    "is_admin", "admin", "role", "permissions", "is_superuser",
-    "is_staff", "is_verified", "is_active",
+    "is_admin",
+    "admin",
+    "role",
+    "permissions",
+    "is_superuser",
+    "is_staff",
+    "is_verified",
+    "is_active",
 ]
 
 BILLING_FIELDS = [
-    "balance", "credits", "price", "plan", "subscription_tier",
+    "balance",
+    "credits",
+    "price",
+    "plan",
+    "subscription_tier",
 ]
 
 IDENTITY_FIELDS = [
-    "user_id", "org_id", "tenant_id", "owner_id", "created_by",
+    "user_id",
+    "org_id",
+    "tenant_id",
+    "owner_id",
+    "created_by",
 ]
 
 INTERNAL_FIELDS = [
-    "internal", "debug", "_private", "metadata",
+    "internal",
+    "debug",
+    "_private",
+    "metadata",
 ]
 
 # Test values for injected fields
@@ -101,16 +118,18 @@ class MassAssignmentCheck(ServiceIteratingCheck):
         # Collect API endpoints to test
         endpoints = self._gather_endpoints(service, context)
         if not endpoints:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"No testable API endpoints found: {service.host}",
-                description="No POST/PUT/PATCH endpoints discovered for mass assignment testing",
-                severity="info",
-                evidence="No OpenAPI spec or API paths with writable methods detected",
-                host=service.host,
-                discriminator="no-endpoints",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"No testable API endpoints found: {service.host}",
+                    description="No POST/PUT/PATCH endpoints discovered for mass assignment testing",
+                    severity="info",
+                    evidence="No OpenAPI spec or API paths with writable methods detected",
+                    host=service.host,
+                    discriminator="no-endpoints",
+                    target=service,
+                )
+            )
             result.outputs["mass_assignment_info"] = {"tested": 0, "vulnerable": []}
             return result
 
@@ -150,8 +169,13 @@ class MassAssignmentCheck(ServiceIteratingCheck):
 
                         if reflected:
                             risk_cat = FIELD_RISK.get(field_name, "unknown")
-                            severity = "critical" if risk_cat == "privilege" else \
-                                       "high" if risk_cat in ("billing", "identity") else "medium"
+                            severity = (
+                                "critical"
+                                if risk_cat == "privilege"
+                                else "high"
+                                if risk_cat in ("billing", "identity")
+                                else "medium"
+                            )
 
                             vuln_info = {
                                 "path": path,
@@ -163,21 +187,23 @@ class MassAssignmentCheck(ServiceIteratingCheck):
                             }
                             vulnerable_endpoints.append(vuln_info)
 
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Mass assignment: '{field_name}' accepted and reflected at {method} {path}",
-                                description=f"The {risk_cat} field '{field_name}' was accepted in a {method} request "
-                                            f"and reflected in the response, indicating the endpoint does not "
-                                            f"filter request body fields",
-                                severity=severity,
-                                evidence=f"{method} {path} with extra field '{field_name}' -> "
-                                         f"HTTP {resp.status_code}, field present in response",
-                                host=service.host,
-                                discriminator=f"mass-assign-{path.replace('/', '-').strip('-')}-{field_name}",
-                                target=service,
-                                target_url=service.with_path(path),
-                                references=["CWE-915", "OWASP API8:2023"],
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Mass assignment: '{field_name}' accepted and reflected at {method} {path}",
+                                    description=f"The {risk_cat} field '{field_name}' was accepted in a {method} request "
+                                    f"and reflected in the response, indicating the endpoint does not "
+                                    f"filter request body fields",
+                                    severity=severity,
+                                    evidence=f"{method} {path} with extra field '{field_name}' -> "
+                                    f"HTTP {resp.status_code}, field present in response",
+                                    host=service.host,
+                                    discriminator=f"mass-assign-{path.replace('/', '-').strip('-')}-{field_name}",
+                                    target=service,
+                                    target_url=service.with_path(path),
+                                    references=["CWE-915", "OWASP API8:2023"],
+                                )
+                            )
 
                         elif accepted and not validation_error:
                             # Accepted but not reflected — possible blind mass assignment
@@ -191,55 +217,61 @@ class MassAssignmentCheck(ServiceIteratingCheck):
                             }
                             vulnerable_endpoints.append(vuln_info)
 
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Extra fields accepted at {method} {path}",
-                                description=f"Endpoint accepted request with extra field '{field_name}' "
-                                            f"(HTTP {resp.status_code}) but did not reflect it — "
-                                            f"potential blind mass assignment",
-                                severity="medium",
-                                evidence=f"{method} {path} with '{field_name}' -> HTTP {resp.status_code} "
-                                         f"(field not in response but request succeeded)",
-                                host=service.host,
-                                discriminator=f"blind-mass-assign-{path.replace('/', '-').strip('-')}-{field_name}",
-                                target=service,
-                                target_url=service.with_path(path),
-                                references=["CWE-915"],
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Extra fields accepted at {method} {path}",
+                                    description=f"Endpoint accepted request with extra field '{field_name}' "
+                                    f"(HTTP {resp.status_code}) but did not reflect it — "
+                                    f"potential blind mass assignment",
+                                    severity="medium",
+                                    evidence=f"{method} {path} with '{field_name}' -> HTTP {resp.status_code} "
+                                    f"(field not in response but request succeeded)",
+                                    host=service.host,
+                                    discriminator=f"blind-mass-assign-{path.replace('/', '-').strip('-')}-{field_name}",
+                                    target=service,
+                                    target_url=service.with_path(path),
+                                    references=["CWE-915"],
+                                )
+                            )
 
                         elif validation_error:
                             # Check if the validation error reveals schema info
                             if resp.body and self._reveals_schema(resp.body, field_name):
-                                result.findings.append(build_finding(
-                                    check_name=self.name,
-                                    title=f"Validation error reveals schema at {method} {path}",
-                                    description=f"422/400 response reveals accepted field names when "
-                                                f"extra field '{field_name}' was submitted",
-                                    severity="low",
-                                    evidence=f"{method} {path} -> HTTP {resp.status_code}, "
-                                             f"response lists valid fields",
-                                    host=service.host,
-                                    discriminator=f"schema-leak-{path.replace('/', '-').strip('-')}",
-                                    target=service,
-                                    target_url=service.with_path(path),
-                                    references=["CWE-209"],
-                                ))
+                                result.findings.append(
+                                    build_finding(
+                                        check_name=self.name,
+                                        title=f"Validation error reveals schema at {method} {path}",
+                                        description=f"422/400 response reveals accepted field names when "
+                                        f"extra field '{field_name}' was submitted",
+                                        severity="low",
+                                        evidence=f"{method} {path} -> HTTP {resp.status_code}, "
+                                        f"response lists valid fields",
+                                        host=service.host,
+                                        discriminator=f"schema-leak-{path.replace('/', '-').strip('-')}",
+                                        target=service,
+                                        target_url=service.with_path(path),
+                                        references=["CWE-209"],
+                                    )
+                                )
 
         except Exception as e:
             result.errors.append(f"Mass assignment check error: {e}")
 
         if tested_count > 0 and not vulnerable_endpoints:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Mass assignment not detected: {service.host}",
-                description=f"Tested {tested_count} field injections across {min(len(endpoints), 5)} "
-                            f"endpoints — extra fields were rejected",
-                severity="info",
-                evidence=f"{tested_count} injection attempts, all extra fields rejected",
-                host=service.host,
-                discriminator="not-vulnerable",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Mass assignment not detected: {service.host}",
+                    description=f"Tested {tested_count} field injections across {min(len(endpoints), 5)} "
+                    f"endpoints — extra fields were rejected",
+                    severity="info",
+                    evidence=f"{tested_count} injection attempts, all extra fields rejected",
+                    host=service.host,
+                    discriminator="not-vulnerable",
+                    target=service,
+                )
+            )
 
         result.outputs["mass_assignment_info"] = {
             "tested": tested_count,
@@ -264,13 +296,15 @@ class MassAssignmentCheck(ServiceIteratingCheck):
                         continue
 
                     base_body, schema_fields = self._extract_schema_body(operation)
-                    endpoints.append({
-                        "path": path,
-                        "method": method.upper(),
-                        "base_body": base_body,
-                        "schema_fields": schema_fields,
-                        "source": "openapi",
-                    })
+                    endpoints.append(
+                        {
+                            "path": path,
+                            "method": method.upper(),
+                            "base_body": base_body,
+                            "schema_fields": schema_fields,
+                            "source": "openapi",
+                        }
+                    )
 
         # 2. From discovered API paths (probe common ones)
         if not endpoints:
@@ -278,25 +312,34 @@ class MassAssignmentCheck(ServiceIteratingCheck):
             if isinstance(api_endpoints, list):
                 for ep in api_endpoints:
                     if isinstance(ep, dict) and ep.get("path"):
-                        endpoints.append({
-                            "path": ep["path"],
-                            "method": "POST",
-                            "base_body": {},
-                            "schema_fields": set(),
-                            "source": "discovered",
-                        })
+                        endpoints.append(
+                            {
+                                "path": ep["path"],
+                                "method": "POST",
+                                "base_body": {},
+                                "schema_fields": set(),
+                                "source": "discovered",
+                            }
+                        )
 
         # 3. Fallback: common API paths
         if not endpoints:
-            for path in ["/api/users", "/api/profile", "/api/account",
-                         "/api/settings", "/api/v1/users"]:
-                endpoints.append({
-                    "path": path,
-                    "method": "POST",
-                    "base_body": {"name": "test", "email": "test@example.com"},
-                    "schema_fields": set(),
-                    "source": "fallback",
-                })
+            for path in [
+                "/api/users",
+                "/api/profile",
+                "/api/account",
+                "/api/settings",
+                "/api/v1/users",
+            ]:
+                endpoints.append(
+                    {
+                        "path": path,
+                        "method": "POST",
+                        "base_body": {"name": "test", "email": "test@example.com"},
+                        "schema_fields": set(),
+                        "source": "fallback",
+                    }
+                )
 
         return endpoints
 
@@ -383,8 +426,15 @@ class MassAssignmentCheck(ServiceIteratingCheck):
             data = json.loads(body)
             body_str = json.dumps(data).lower()
             # Look for common patterns in validation errors
-            schema_hints = ["allowed", "valid", "expected", "properties",
-                            "accepted", "fields", "schema"]
+            schema_hints = [
+                "allowed",
+                "valid",
+                "expected",
+                "properties",
+                "accepted",
+                "fields",
+                "schema",
+            ]
             return any(hint in body_str for hint in schema_hints)
         except (json.JSONDecodeError, ValueError):
             return False

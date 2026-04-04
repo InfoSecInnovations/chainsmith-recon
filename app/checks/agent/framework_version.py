@@ -20,10 +20,9 @@ import json
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Known vulnerable version ranges per framework
 VULNERABLE_VERSIONS = {
@@ -113,10 +112,9 @@ class AgentFrameworkVersionCheck(ServiceIteratingCheck):
         result = CheckResult(success=True)
 
         agent_endpoints = context.get("agent_endpoints", [])
-        frameworks = context.get("agent_frameworks", [])
+        context.get("agent_frameworks", [])
         service_endpoints = [
-            ep for ep in agent_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in agent_endpoints if ep.get("service", {}).get("host") == service.host
         ]
         if not service_endpoints:
             return result
@@ -178,7 +176,11 @@ class AgentFrameworkVersionCheck(ServiceIteratingCheck):
                         discriminator=f"vuln-{framework}-{version}",
                         target=service,
                         target_url=service.url,
-                        raw_data={"framework": framework, "version": version, "vulnerability": vuln},
+                        raw_data={
+                            "framework": framework,
+                            "version": version,
+                            "vulnerability": vuln,
+                        },
                         references=self.references,
                     )
                 )

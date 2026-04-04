@@ -9,7 +9,7 @@ Configurable via environment variables:
     CHAT_URL            URL to chatbot service (default: http://localhost:8081)
     FOUNDED_YEAR        Year established (default: 1952)
     TAGLINE             Slogan (default: Your Regional Banking Partner)
-    
+
 Planted findings (controlled via is_finding_active):
     header_vllm_version         X-Powered-By: vLLM/0.4.1
     cors_misconfigured          Wildcard CORS headers
@@ -30,18 +30,17 @@ Usage in docker-compose.yml:
 import os
 import traceback
 
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from app.scenario_services.common.config import (
-    VERBOSE_ERRORS,
     SERVICE_NAME,
-    is_finding_active,
-    get_or_create_session,
-    get_brand_name,
+    VERBOSE_ERRORS,
     get_brand_domain,
+    get_brand_name,
+    get_or_create_session,
+    is_finding_active,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -67,6 +66,7 @@ app = FastAPI(
 # ERROR HANDLING
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.exception_handler(Exception)
 async def verbose_exception_handler(request: Request, exc: Exception):
     """
@@ -87,6 +87,7 @@ async def verbose_exception_handler(request: Request, exc: Exception):
 # ═══════════════════════════════════════════════════════════════════════════════
 # MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
@@ -113,11 +114,12 @@ async def add_security_headers(request: Request, call_next):
 # HTML TEMPLATES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def _page_template(title: str, content: str) -> str:
     """Generate a complete HTML page with consistent styling."""
     brand = get_brand_name()
-    domain = get_brand_domain()
-    
+    get_brand_domain()
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -166,19 +168,20 @@ def _page_template(title: str, content: str) -> str:
 # ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.get("/", response_class=HTMLResponse)
 async def home():
     """Main landing page."""
     brand = get_brand_name()
-    domain = get_brand_domain()
+    get_brand_domain()
     years = 2024 - int(FOUNDED_YEAR)
-    
+
     content = f"""
         <h2>Welcome to {brand}</h2>
-        <p>For over {years} years, {brand} has been serving our community with 
-        personalized banking solutions. From checking accounts to home loans, 
+        <p>For over {years} years, {brand} has been serving our community with
+        personalized banking solutions. From checking accounts to home loans,
         we're here to help you achieve your financial goals.</p>
-        <p><strong>Now featuring:</strong> Our new AI-powered customer assistant! 
+        <p><strong>Now featuring:</strong> Our new AI-powered customer assistant!
         Visit <a href="{CHAT_URL}">our chat service</a> to try it out.</p>
     """
     return _page_template("Home", content)
@@ -188,10 +191,10 @@ async def home():
 async def about():
     """About page."""
     brand = get_brand_name()
-    
+
     content = f"""
         <h2>About {brand}</h2>
-        <p>Founded in {FOUNDED_YEAR} in Montgomery, Alabama, {brand} has grown from a single 
+        <p>Founded in {FOUNDED_YEAR} in Montgomery, Alabama, {brand} has grown from a single
         branch to a regional banking leader with 47 locations across the Southeast.</p>
         <p>Our mission: Banking with a personal touch.</p>
     """
@@ -219,12 +222,12 @@ async def services():
 async def locations():
     """Locations page."""
     brand = get_brand_name()
-    
+
     content = f"""
         <h2>Branch Locations</h2>
-        <p>Find a {brand} branch near you. We have 47 locations across Alabama, 
+        <p>Find a {brand} branch near you. We have 47 locations across Alabama,
         Georgia, Tennessee, and Mississippi.</p>
-        <p>Use our AI assistant at <a href="{CHAT_URL}">our chat service</a> 
+        <p>Use our AI assistant at <a href="{CHAT_URL}">our chat service</a>
         to find the nearest branch!</p>
     """
     return _page_template("Locations", content)
@@ -235,7 +238,7 @@ async def careers():
     """Careers page - red herring for recon."""
     brand = get_brand_name()
     domain = get_brand_domain()
-    
+
     content = f"""
         <h2>Join Our Team</h2>
         <p>{brand} is always looking for talented individuals to join our growing team.</p>
@@ -254,9 +257,9 @@ async def careers():
 @app.get("/contact", response_class=HTMLResponse)
 async def contact():
     """Contact page."""
-    brand = get_brand_name()
+    get_brand_name()
     domain = get_brand_domain()
-    
+
     content = f"""
         <h2>Contact Us</h2>
         <p><strong>Customer Service:</strong> 1-800-555-BANK</p>
@@ -301,7 +304,7 @@ async def health():
     """Health check endpoint for Docker/orchestration."""
     session = get_or_create_session()
     brand = get_brand_name()
-    
+
     return {
         "status": "healthy",
         "service": SERVICE_NAME or "banking-www",

@@ -6,7 +6,7 @@ Engagement and tracking tables: engagements, finding_status_history,
 scan_comparisons (Phase 3).
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Column,
@@ -34,8 +34,8 @@ class Engagement(Base):
     target_domain = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     client_name = Column(String, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     status = Column(String, default="active")  # active, completed, archived
     metadata_ = Column("metadata", JSON, nullable=True)
 
@@ -48,7 +48,7 @@ class Scan(Base):
     session_id = Column(String, nullable=False)
     target_domain = Column(String, nullable=False)
     status = Column(String, nullable=False)  # running, complete, error, cancelled
-    started_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    started_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     completed_at = Column(DateTime, nullable=True)
     duration_ms = Column(Integer, nullable=True)
     checks_total = Column(Integer, nullable=True)
@@ -80,7 +80,7 @@ class Finding(Base):
     references = Column(JSON, nullable=True)
     verification_status = Column(String, default="pending")
     confidence = Column(Float, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     fingerprint = Column(String, nullable=True)
     metadata_ = Column("metadata", JSON, nullable=True)
 
@@ -102,12 +102,10 @@ class Chain(Base):
     severity = Column(String, nullable=False)
     source = Column(String, nullable=False)  # rule-based, llm, both
     finding_ids = Column(JSON, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     metadata_ = Column("metadata", JSON, nullable=True)
 
-    __table_args__ = (
-        Index("idx_chains_scan_id", "scan_id"),
-    )
+    __table_args__ = (Index("idx_chains_scan_id", "scan_id"),)
 
 
 class CheckLog(Base):
@@ -121,11 +119,9 @@ class CheckLog(Base):
     findings_count = Column(Integer, default=0)
     duration_ms = Column(Integer, nullable=True)
     error_message = Column(Text, nullable=True)
-    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
-    __table_args__ = (
-        Index("idx_check_log_scan_id", "scan_id"),
-    )
+    __table_args__ = (Index("idx_check_log_scan_id", "scan_id"),)
 
 
 class FindingStatusHistory(Base):
@@ -137,7 +133,7 @@ class FindingStatusHistory(Base):
     status = Column(String, nullable=False)  # new, recurring, resolved, regressed
     first_seen_scan = Column(String, nullable=True)
     last_seen_scan = Column(String, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         Index("idx_fsh_fingerprint", "fingerprint"),
@@ -152,12 +148,10 @@ class FindingOverride(Base):
     fingerprint = Column(String, nullable=False, unique=True)
     status = Column(String, nullable=False)  # accepted, false_positive
     reason = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
-    __table_args__ = (
-        Index("idx_finding_overrides_fingerprint", "fingerprint"),
-    )
+    __table_args__ = (Index("idx_finding_overrides_fingerprint", "fingerprint"),)
 
 
 class SwarmApiKey(Base):
@@ -166,7 +160,7 @@ class SwarmApiKey(Base):
     id = Column(String, primary_key=True)
     name = Column(String, nullable=False)
     key_hash = Column(String, nullable=False, unique=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     last_used_at = Column(DateTime, nullable=True)
 
 
@@ -180,8 +174,6 @@ class ScanComparison(Base):
     resolved = Column(Integer, nullable=True)
     recurring = Column(Integer, nullable=True)
     regressed = Column(Integer, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
-    __table_args__ = (
-        UniqueConstraint("scan_a_id", "scan_b_id", name="uq_scan_comparison"),
-    )
+    __table_args__ = (UniqueConstraint("scan_a_id", "scan_b_id", name="uq_scan_comparison"),)

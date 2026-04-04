@@ -12,11 +12,11 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import signal
 import socket
 import time
-from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -27,8 +27,8 @@ from app.lib.targets import host_matches_pattern
 
 logger = logging.getLogger(__name__)
 
-POLL_INTERVAL = 2.0       # seconds between task polls when idle
-HEARTBEAT_INTERVAL = 30   # seconds between heartbeats
+POLL_INTERVAL = 2.0  # seconds between task polls when idle
+HEARTBEAT_INTERVAL = 30  # seconds between heartbeats
 
 
 class SwarmAgent:
@@ -51,10 +51,10 @@ class SwarmAgent:
         self.capabilities = capabilities or []
         self.max_concurrent = max_concurrent
 
-        self.agent_id: Optional[str] = None
+        self.agent_id: str | None = None
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._running = False
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
         # Pre-load all check classes keyed by name
         self._checks_by_name = {c.name: c for c in get_real_checks()}
@@ -83,11 +83,14 @@ class SwarmAgent:
 
     async def register(self):
         """Register with the coordinator."""
-        resp = await self._post("/api/swarm/register", json={
-            "name": self.name,
-            "capabilities": self.capabilities,
-            "max_concurrent": self.max_concurrent,
-        })
+        resp = await self._post(
+            "/api/swarm/register",
+            json={
+                "name": self.name,
+                "capabilities": self.capabilities,
+                "max_concurrent": self.max_concurrent,
+            },
+        )
         resp.raise_for_status()
         data = resp.json()
         self.agent_id = data["agent_id"]
@@ -119,11 +122,9 @@ class SwarmAgent:
         # Handle graceful shutdown
         loop = asyncio.get_event_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
-            try:
-                loop.add_signal_handler(sig, lambda: asyncio.create_task(self._shutdown()))
-            except NotImplementedError:
+            with contextlib.suppress(NotImplementedError):
                 # Windows doesn't support add_signal_handler
-                pass
+                loop.add_signal_handler(sig, lambda: asyncio.create_task(self._shutdown()))
 
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
@@ -187,9 +188,12 @@ class SwarmAgent:
         async with self._semaphore:
             # Acknowledge start
             try:
-                await self._post(f"/api/swarm/tasks/{task_id}/start", json={
-                    "agent_id": self.agent_id,
-                })
+                await self._post(
+                    f"/api/swarm/tasks/{task_id}/start",
+                    json={
+                        "agent_id": self.agent_id,
+                    },
+                )
             except Exception:
                 logger.error("Failed to acknowledge task %s start", task_id, exc_info=True)
                 return
@@ -197,26 +201,34 @@ class SwarmAgent:
             # Execute
             try:
                 result = await self._execute_task(task_data)
-                await self._post(f"/api/swarm/tasks/{task_id}/result", json={
-                    "agent_id": self.agent_id,
-                    "success": result["success"],
-                    "findings": result["findings"],
-                    "outputs": result["outputs"],
-                    "services": result["services"],
-                    "errors": result["errors"],
-                    "duration_ms": result["duration_ms"],
-                })
+                await self._post(
+                    f"/api/swarm/tasks/{task_id}/result",
+                    json={
+                        "agent_id": self.agent_id,
+                        "success": result["success"],
+                        "findings": result["findings"],
+                        "outputs": result["outputs"],
+                        "services": result["services"],
+                        "errors": result["errors"],
+                        "duration_ms": result["duration_ms"],
+                    },
+                )
                 logger.info(
                     "Task %s (%s) complete: %d findings",
-                    task_id, check_name, len(result["findings"]),
+                    task_id,
+                    check_name,
+                    len(result["findings"]),
                 )
             except Exception as e:
                 logger.error("Task %s (%s) failed: %s", task_id, check_name, e, exc_info=True)
                 try:
-                    await self._post(f"/api/swarm/tasks/{task_id}/fail", json={
-                        "agent_id": self.agent_id,
-                        "error": str(e),
-                    })
+                    await self._post(
+                        f"/api/swarm/tasks/{task_id}/fail",
+                        json={
+                            "agent_id": self.agent_id,
+                            "error": str(e),
+                        },
+                    )
                 except Exception:
                     logger.error("Failed to report task failure", exc_info=True)
 
@@ -238,12 +250,13 @@ class SwarmAgent:
         upstream = task_data.get("upstream_context", {})
 
         context = dict(upstream)
-        context["base_domain"] = target.get("url", "").replace("https://", "").replace("http://", "").rstrip("/")
+        context["base_domain"] = (
+            target.get("url", "").replace("https://", "").replace("http://", "").rstrip("/")
+        )
         context["scope_domains"] = target.get("domains", [])
         if "services" in upstream:
             context["services"] = [
-                Service.from_dict(s) if isinstance(s, dict) else s
-                for s in upstream["services"]
+                Service.from_dict(s) if isinstance(s, dict) else s for s in upstream["services"]
             ]
         if "services" not in context:
             context["services"] = []
@@ -274,6 +287,7 @@ class SwarmAgent:
     @staticmethod
     def _make_scope_validator(domains: list[str], ports: list[int]):
         """Build a scope validator from task-payload domains and ports."""
+
         def validator(url: str) -> bool:
             try:
                 parsed = urlparse(url)
@@ -284,6 +298,7 @@ class SwarmAgent:
                 return host_ok and port_ok
             except Exception:
                 return False
+
         return validator
 
     @staticmethod
@@ -293,8 +308,7 @@ class SwarmAgent:
         for key, value in outputs.items():
             if isinstance(value, list):
                 serialized[key] = [
-                    item.to_dict() if hasattr(item, "to_dict") else item
-                    for item in value
+                    item.to_dict() if hasattr(item, "to_dict") else item for item in value
                 ]
             elif hasattr(value, "to_dict"):
                 serialized[key] = value.to_dict()

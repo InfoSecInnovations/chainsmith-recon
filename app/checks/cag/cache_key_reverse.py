@@ -15,14 +15,12 @@ References:
 """
 
 import asyncio
-import json
 import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Query variation pairs to test which components are in the cache key
 KEY_COMPONENT_TESTS = [
@@ -101,8 +99,7 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -150,9 +147,7 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _get_baseline_timing(
-        self, client: AsyncHttpClient, url: str
-    ) -> dict | None:
+    async def _get_baseline_timing(self, client: AsyncHttpClient, url: str) -> dict | None:
         """Get baseline timing for cached vs uncached requests."""
         test_query = f"baseline_key_test_{int(time.time())}"
 
@@ -170,7 +165,7 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
 
         # Cached request (same query)
         start2 = time.time()
-        resp2 = await client.post(
+        await client.post(
             url,
             json={"input": test_query, "query": test_query},
             headers={"Content-Type": "application/json"},
@@ -186,8 +181,7 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
         }
 
     async def _test_key_component(
-        self, client: AsyncHttpClient, url: str, test: dict,
-        cache_hit_threshold: float
+        self, client: AsyncHttpClient, url: str, test: dict, cache_hit_threshold: float
     ) -> dict | None:
         """Test if a specific component is part of the cache key."""
         base_query = test["base"]
@@ -232,8 +226,7 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
             return None
 
     async def _test_system_prompt_key(
-        self, client: AsyncHttpClient, url: str, test: dict,
-        cache_hit_threshold: float
+        self, client: AsyncHttpClient, url: str, test: dict, cache_hit_threshold: float
     ) -> dict | None:
         """Test if system prompt is part of the cache key."""
         query = test["query"]
@@ -291,8 +284,7 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
             return None
 
     def _generate_findings(
-        self, result: CheckResult, key_results: list[dict],
-        service: Service, url: str
+        self, result: CheckResult, key_results: list[dict], service: Service, url: str
     ) -> None:
         """Generate findings from key analysis results."""
         if not key_results:
@@ -302,58 +294,64 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
         sys_tests = [r for r in key_results if r["test_id"] == "system_prompt"]
         for r in sys_tests:
             if r.get("cache_hit_on_variant"):
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="Cache key excludes system prompt: different system messages share cache",
-                    description=(
-                        "The cache key does not include the system prompt. Different system "
-                        "messages produce cache hits for the same user query, meaning users "
-                        "with different safety configurations share cache entries."
-                    ),
-                    severity="high",
-                    evidence=self._build_evidence(r),
-                    host=service.host,
-                    discriminator="key-excludes-system-prompt",
-                    target=service,
-                    target_url=url,
-                    raw_data=r,
-                    references=self.references,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="Cache key excludes system prompt: different system messages share cache",
+                        description=(
+                            "The cache key does not include the system prompt. Different system "
+                            "messages produce cache hits for the same user query, meaning users "
+                            "with different safety configurations share cache entries."
+                        ),
+                        severity="high",
+                        evidence=self._build_evidence(r),
+                        host=service.host,
+                        discriminator="key-excludes-system-prompt",
+                        target=service,
+                        target_url=url,
+                        raw_data=r,
+                        references=self.references,
+                    )
+                )
 
         # Check for medium-severity: case-insensitive, whitespace-insensitive
         for r in key_results:
             if r["test_id"] in ("capitalization", "whitespace", "punctuation"):
                 if r.get("cache_hit_on_variant"):
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Cache key is {r['description'].lower()}-insensitive",
-                        description=(
-                            f"Cache key ignores {r['description'].lower()} differences. "
-                            f"This widens the collision surface for cache poisoning attacks."
-                        ),
-                        severity="medium",
-                        evidence=self._build_evidence(r),
-                        host=service.host,
-                        discriminator=f"key-ignores-{r['test_id']}",
-                        target=service,
-                        target_url=url,
-                        raw_data=r,
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Cache key is {r['description'].lower()}-insensitive",
+                            description=(
+                                f"Cache key ignores {r['description'].lower()} differences. "
+                                f"This widens the collision surface for cache poisoning attacks."
+                            ),
+                            severity="medium",
+                            evidence=self._build_evidence(r),
+                            host=service.host,
+                            discriminator=f"key-ignores-{r['test_id']}",
+                            target=service,
+                            target_url=url,
+                            raw_data=r,
+                        )
+                    )
 
         # Summary finding if all components are in key
         all_in_key = all(r.get("component_in_key", False) for r in key_results)
         if all_in_key:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Cache key includes most query components (detailed key)",
-                description="All tested query components are part of the cache key, reducing collision risk.",
-                severity="low",
-                evidence=f"Tested {len(key_results)} key components, all included in cache key",
-                host=service.host,
-                discriminator="key-detailed",
-                target=service,
-                target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Cache key includes most query components (detailed key)",
+                    description="All tested query components are part of the cache key, reducing collision risk.",
+                    severity="low",
+                    evidence=f"Tested {len(key_results)} key components, all included in cache key",
+                    host=service.host,
+                    discriminator="key-detailed",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
     def _build_evidence(self, test_result: dict) -> str:
         """Build evidence string."""

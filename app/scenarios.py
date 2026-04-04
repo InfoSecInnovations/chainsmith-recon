@@ -47,16 +47,16 @@ and global simulation directories.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from app.checks.simulator.simulated_check import SimulatedCheck, load_simulated_check
 
-
 # ── Default search paths ──────────────────────────────────────────
+
 
 def _default_scenarios_dirs() -> list[Path]:
     """Return ordered list of directories to search for scenario bundles."""
@@ -75,8 +75,8 @@ def _default_global_simulations_dir() -> Path:
     return Path(__file__).parent / "checks" / "simulator" / "simulations"
 
 
-
 # ── Schema dataclasses ────────────────────────────────────────────
+
 
 @dataclass
 class ScenarioTarget:
@@ -95,10 +95,10 @@ class Scenario:
     simulations: list[str] = field(default_factory=list)
     expected_findings: list[str] = field(default_factory=list)
     expected_chains: list[str] = field(default_factory=list)
-    source_path: Optional[Path] = None   # scenario.json path
+    source_path: Path | None = None  # scenario.json path
 
     @property
-    def directory(self) -> Optional[Path]:
+    def directory(self) -> Path | None:
         """The scenario bundle directory (parent of scenario.json)."""
         return self.source_path.parent if self.source_path else None
 
@@ -122,6 +122,7 @@ class Scenario:
 
 
 # ── Loader ────────────────────────────────────────────────────────
+
 
 class ScenarioLoadError(ValueError):
     pass
@@ -200,6 +201,7 @@ def find_scenario_file(name: str, search_dirs: list[Path] | None = None) -> Path
 
 # ── Manager ───────────────────────────────────────────────────────
 
+
 class ScenarioManager:
     """
     Manages the active scenario and resolves simulation configs.
@@ -226,11 +228,11 @@ class ScenarioManager:
     ):
         self._scenarios_dirs = scenarios_dirs or _default_scenarios_dirs()
         self._global_simulations_dir = global_simulations_dir or _default_global_simulations_dir()
-        self._active: Optional[Scenario] = None
+        self._active: Scenario | None = None
         self._simulations: list[SimulatedCheck] = []
 
     @property
-    def active(self) -> Optional[Scenario]:
+    def active(self) -> Scenario | None:
         return self._active
 
     @property
@@ -319,18 +321,16 @@ class ScenarioManager:
                                 "version": scenario.version,
                                 "simulation_count": len(scenario.simulations),
                                 "source_path": str(sub),
-                                }
+                            }
                     except ScenarioLoadError:
                         pass
-
-
 
         return list(seen.values())
 
 
 # ── Module-level singleton ────────────────────────────────────────
 
-_manager: Optional[ScenarioManager] = None
+_manager: ScenarioManager | None = None
 
 
 def get_scenario_manager() -> ScenarioManager:
@@ -339,8 +339,6 @@ def get_scenario_manager() -> ScenarioManager:
     if _manager is None:
         _manager = ScenarioManager()
         if default := os.environ.get("CHAINSMITH_SCENARIO"):
-            try:
+            with contextlib.suppress(ScenarioLoadError):
                 _manager.load(default)
-            except ScenarioLoadError:
-                pass
     return _manager

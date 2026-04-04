@@ -17,7 +17,6 @@ Examples:
 
 import hashlib
 import re
-from typing import Optional
 
 from app.checks.base import Finding, Service
 
@@ -37,7 +36,7 @@ def _slugify(value: str) -> str:
 def make_finding_id(
     check_id: str,
     host: str,
-    discriminator: Optional[str] = None,
+    discriminator: str | None = None,
 ) -> str:
     """
     Generate a stable, human-readable finding ID.
@@ -60,8 +59,8 @@ def make_finding_id(
 def make_finding_id_hashed(
     check_id: str,
     host: str,
-    discriminator: Optional[str] = None,
-    extra: Optional[str] = None,
+    discriminator: str | None = None,
+    extra: str | None = None,
 ) -> str:
     """
     Generate a stable ID with a short hash suffix for high-cardinality findings.
@@ -84,11 +83,11 @@ def build_finding(
     severity: str,
     evidence: str,
     host: str,
-    discriminator: Optional[str] = None,
-    target: Optional[Service] = None,
-    target_url: Optional[str] = None,
-    raw_data: Optional[dict] = None,
-    references: Optional[list[str]] = None,
+    discriminator: str | None = None,
+    target: Service | None = None,
+    target_url: str | None = None,
+    raw_data: dict | None = None,
+    references: list[str] | None = None,
 ) -> Finding:
     """
     Construct a Finding with a stable ID.

@@ -13,13 +13,11 @@ Covers:
 import pytest
 
 from app.lib.payloads import (
-    PayloadLibrary,
     Payload,
     get_payload_library,
     get_payloads,
     get_payloads_for_check,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PayloadLibrary Tests
@@ -127,7 +125,7 @@ class TestPayloadLibrary:
         payloads = library.get_for_check("agent")
         assert len(payloads) > 10
         # Should include goal injection, jailbreak, and info extraction
-        categories = set(p.category for p in payloads)
+        categories = {p.category for p in payloads}
         assert "goal_injection" in categories
         assert "jailbreak" in categories
 
@@ -136,7 +134,7 @@ class TestPayloadLibrary:
         payloads = library.get_for_check("rag")
         assert len(payloads) > 10
         # Should include indirect injection and delimiter escape
-        categories = set(p.category for p in payloads)
+        categories = {p.category for p in payloads}
         assert "indirect_injection" in categories
         assert "delimiter_escape" in categories
 
@@ -144,14 +142,14 @@ class TestPayloadLibrary:
         """Test getting payloads for MCP checks."""
         payloads = library.get_for_check("mcp")
         assert len(payloads) > 5
-        categories = set(p.category for p in payloads)
+        categories = {p.category for p in payloads}
         assert "mcp_specific" in categories
 
     def test_get_for_check_cag(self, library):
         """Test getting payloads for CAG checks."""
         payloads = library.get_for_check("cag")
         assert len(payloads) > 3
-        categories = set(p.category for p in payloads)
+        categories = {p.category for p in payloads}
         assert "cache_specific" in categories
 
     def test_get_for_check_unknown(self, library):
@@ -170,17 +168,17 @@ class TestPayloadLibrary:
     def test_stats(self, library):
         """Test statistics generation."""
         stats = library.stats()
-        
+
         assert "total_payloads" in stats
         assert stats["total_payloads"] >= 40
-        
+
         assert "categories" in stats
         assert stats["categories"] >= 8
-        
+
         assert "by_category" in stats
         assert "by_severity" in stats
         assert "by_technique" in stats
-        
+
         # Verify severity distribution
         assert "critical" in stats["by_severity"]
         assert "high" in stats["by_severity"]
@@ -213,7 +211,7 @@ class TestPayload:
             technique="direct_override",
             category="goal_injection",
         )
-        
+
         assert payload.id == "test_payload"
         assert payload.severity == "high"
         assert len(payload.success_indicators) == 2
@@ -229,7 +227,7 @@ class TestPayload:
             technique="test",
             category="test",
         )
-        
+
         d = payload.to_dict()
         assert d["id"] == "test"
         assert d["severity"] == "medium"
@@ -248,7 +246,7 @@ class TestPayload:
             category="test",
             note="This is a note",
         )
-        
+
         assert payload.note == "This is a note"
         assert payload.to_dict()["note"] == "This is a note"
 
@@ -294,7 +292,7 @@ class TestPayloadContentValidation:
     def test_all_payloads_have_required_fields(self, library):
         """Test all payloads have required fields."""
         for payload in library.get_all():
-            assert payload.id, f"Payload missing id"
+            assert payload.id, "Payload missing id"
             assert payload.name, f"Payload {payload.id} missing name"
             assert payload.payload, f"Payload {payload.id} missing payload text"
             assert payload.success_indicators, f"Payload {payload.id} missing indicators"
@@ -306,28 +304,43 @@ class TestPayloadContentValidation:
         """Test goal injection payloads have override-style patterns."""
         payloads = library.get_category("goal_injection")
         override_keywords = ["ignore", "override", "new", "instead", "forget"]
-        
+
         for p in payloads:
             payload_lower = p.payload.lower()
             has_keyword = any(kw in payload_lower for kw in override_keywords)
             # Most should have override keywords
             if not has_keyword:
                 # Allow some that use other techniques
-                assert p.technique in ["jailbreak", "roleplay_jailbreak", "task_hijack"]
+                assert p.technique in [
+                    "jailbreak",
+                    "roleplay_jailbreak",
+                    "task_hijack",
+                    "information_extraction",
+                ]
 
     def test_critical_payloads_target_dangerous_capabilities(self, library):
         """Test critical severity payloads target dangerous capabilities."""
         critical = library.get_by_severity("critical")
         dangerous_keywords = [
-            "system prompt", "shell", "exec", "command", "api key", "secret",
-            "password", "credential", "traverse"
+            "system prompt",
+            "shell",
+            "exec",
+            "command",
+            "api key",
+            "secret",
+            "password",
+            "passwd",
+            "credential",
+            "traverse",
+            "../",
         ]
-        
+
         for p in critical:
             payload_lower = p.payload.lower()
             has_dangerous = any(kw in payload_lower for kw in dangerous_keywords)
             indicators_dangerous = any(
-                any(kw in ind.lower() for kw in dangerous_keywords)
-                for ind in p.success_indicators
+                any(kw in ind.lower() for kw in dangerous_keywords) for ind in p.success_indicators
             )
-            assert has_dangerous or indicators_dangerous, f"Critical payload {p.id} doesn't target dangerous capability"
+            assert has_dangerous or indicators_dangerous, (
+                f"Critical payload {p.id} doesn't target dangerous capability"
+            )

@@ -21,8 +21,9 @@ from app.lib.findings import build_finding
 logger = logging.getLogger(__name__)
 
 try:
-    import dns.resolver
     import dns.exception
+    import dns.resolver
+
     HAS_DNSPYTHON = True
 except ImportError:
     HAS_DNSPYTHON = False
@@ -94,9 +95,7 @@ class DnsRecordCheck(BaseCheck):
         result = CheckResult(success=True)
 
         if not HAS_DNSPYTHON:
-            result.errors.append(
-                "dnspython not installed. Install with: pip install dnspython"
-            )
+            result.errors.append("dnspython not installed. Install with: pip install dnspython")
             result.success = False
             return result
 
@@ -120,9 +119,7 @@ class DnsRecordCheck(BaseCheck):
                 records[rtype] = rdata_list
 
                 for rdata_str in rdata_list:
-                    self._process_record(
-                        result, base_domain, rtype, rdata_str, extra_hosts
-                    )
+                    self._process_record(result, base_domain, rtype, rdata_str, extra_hosts)
 
             except dns.resolver.NoAnswer:
                 logger.debug(f"No {rtype} records for {base_domain}")
@@ -158,27 +155,31 @@ class DnsRecordCheck(BaseCheck):
                 priority = parts[0]
                 mx_host = parts[1].rstrip(".")
                 extra_hosts.append(mx_host)
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"MX record: {mx_host} (priority {priority})",
-                    description=f"Mail exchange server for {base_domain}",
-                    severity="info",
-                    evidence=f"MX {priority} {mx_host}",
-                    host=base_domain,
-                    discriminator=f"mx-{mx_host}",
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"MX record: {mx_host} (priority {priority})",
+                        description=f"Mail exchange server for {base_domain}",
+                        severity="info",
+                        evidence=f"MX {priority} {mx_host}",
+                        host=base_domain,
+                        discriminator=f"mx-{mx_host}",
+                    )
+                )
 
         elif rtype == "NS":
             ns_host = rdata.rstrip(".")
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"NS record: {ns_host}",
-                description=f"Nameserver for {base_domain}",
-                severity="info",
-                evidence=f"NS {ns_host}",
-                host=base_domain,
-                discriminator=f"ns-{ns_host}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"NS record: {ns_host}",
+                    description=f"Nameserver for {base_domain}",
+                    severity="info",
+                    evidence=f"NS {ns_host}",
+                    host=base_domain,
+                    discriminator=f"ns-{ns_host}",
+                )
+            )
 
         elif rtype == "TXT":
             self._process_txt_record(result, base_domain, rdata)
@@ -186,41 +187,45 @@ class DnsRecordCheck(BaseCheck):
         elif rtype == "CNAME":
             cname_host = rdata.rstrip(".")
             extra_hosts.append(cname_host)
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"CNAME record: {base_domain} -> {cname_host}",
-                description=f"Canonical name alias reveals target infrastructure",
-                severity="info",
-                evidence=f"CNAME {cname_host}",
-                host=base_domain,
-                discriminator=f"cname-{cname_host}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"CNAME record: {base_domain} -> {cname_host}",
+                    description="Canonical name alias reveals target infrastructure",
+                    severity="info",
+                    evidence=f"CNAME {cname_host}",
+                    host=base_domain,
+                    discriminator=f"cname-{cname_host}",
+                )
+            )
 
         elif rtype == "SOA":
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"SOA record for {base_domain}",
-                description=f"Start of Authority record reveals primary NS and admin contact",
-                severity="info",
-                evidence=f"SOA {rdata}",
-                host=base_domain,
-                discriminator="soa",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"SOA record for {base_domain}",
+                    description="Start of Authority record reveals primary NS and admin contact",
+                    severity="info",
+                    evidence=f"SOA {rdata}",
+                    host=base_domain,
+                    discriminator="soa",
+                )
+            )
 
         elif rtype == "AAAA":
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"IPv6 address: {base_domain} -> {rdata}",
-                description=f"AAAA record for {base_domain}",
-                severity="info",
-                evidence=f"AAAA {rdata}",
-                host=base_domain,
-                discriminator=f"aaaa-{rdata}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"IPv6 address: {base_domain} -> {rdata}",
+                    description=f"AAAA record for {base_domain}",
+                    severity="info",
+                    evidence=f"AAAA {rdata}",
+                    host=base_domain,
+                    discriminator=f"aaaa-{rdata}",
+                )
+            )
 
-    def _process_txt_record(
-        self, result: CheckResult, base_domain: str, rdata: str
-    ) -> None:
+    def _process_txt_record(self, result: CheckResult, base_domain: str, rdata: str) -> None:
         """Analyze a TXT record for verification tokens and SPF data."""
         # Strip surrounding quotes from TXT rdata
         txt_value = rdata.strip('"')
@@ -228,18 +233,20 @@ class DnsRecordCheck(BaseCheck):
         # Check for verification tokens
         for pattern, label in VERIFICATION_PATTERNS:
             if re.search(pattern, txt_value, re.IGNORECASE):
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"TXT record: {label}",
-                    description=(
-                        f"Verification token found in TXT record. "
-                        f"Reveals third-party service integration."
-                    ),
-                    severity="low",
-                    evidence=f"TXT {txt_value[:200]}",
-                    host=base_domain,
-                    discriminator=f"txt-{label[:30]}",
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"TXT record: {label}",
+                        description=(
+                            "Verification token found in TXT record. "
+                            "Reveals third-party service integration."
+                        ),
+                        severity="low",
+                        evidence=f"TXT {txt_value[:200]}",
+                        host=base_domain,
+                        discriminator=f"txt-{label[:30]}",
+                    )
+                )
                 return  # One finding per TXT record
 
         # Check for SPF records
@@ -250,37 +257,43 @@ class DnsRecordCheck(BaseCheck):
                     providers_found.append(provider_name)
 
             if providers_found:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"SPF reveals providers: {', '.join(providers_found)}",
-                    description=(
-                        f"SPF record includes mail providers, revealing "
-                        f"third-party service relationships."
-                    ),
-                    severity="low",
-                    evidence=f"TXT {txt_value[:200]}",
-                    host=base_domain,
-                    discriminator="txt-spf",
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"SPF reveals providers: {', '.join(providers_found)}",
+                        description=(
+                            "SPF record includes mail providers, revealing "
+                            "third-party service relationships."
+                        ),
+                        severity="low",
+                        evidence=f"TXT {txt_value[:200]}",
+                        host=base_domain,
+                        discriminator="txt-spf",
+                    )
+                )
             else:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"SPF record for {base_domain}",
-                    description="SPF record found",
-                    severity="info",
-                    evidence=f"TXT {txt_value[:200]}",
-                    host=base_domain,
-                    discriminator="txt-spf",
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"SPF record for {base_domain}",
+                        description="SPF record found",
+                        severity="info",
+                        evidence=f"TXT {txt_value[:200]}",
+                        host=base_domain,
+                        discriminator="txt-spf",
+                    )
+                )
             return
 
         # Generic TXT record
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"TXT record for {base_domain}",
-            description="TXT record found",
-            severity="info",
-            evidence=f"TXT {txt_value[:200]}",
-            host=base_domain,
-            discriminator=f"txt-{txt_value[:20]}",
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"TXT record for {base_domain}",
+                description="TXT record found",
+                severity="info",
+                evidence=f"TXT {txt_value[:200]}",
+                host=base_domain,
+                discriminator=f"txt-{txt_value[:20]}",
+            )
+        )

@@ -6,11 +6,11 @@ Test for overly permissive CORS configurations.
 
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.lib.evidence import fmt_cors_evidence
+from app.lib.findings import build_finding
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import extract_headers_dict
-from app.lib.findings import build_finding
-from app.lib.evidence import fmt_cors_evidence
 
 
 class CorsCheck(ServiceIteratingCheck):
@@ -31,7 +31,7 @@ class CorsCheck(ServiceIteratingCheck):
 
     TEST_ORIGINS = [
         "https://evil.attacker.com",
-        "null",   # null origin sandbox bypass
+        "null",  # null origin sandbox bypass
     ]
 
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
@@ -60,46 +60,54 @@ class CorsCheck(ServiceIteratingCheck):
 
                     if acao == "*":
                         severity = "high" if acac == "true" else "medium"
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="CORS wildcard origin",
-                            description="Server allows any origin — may allow cross-origin data theft",
-                            severity=severity,
-                            evidence=fmt_cors_evidence(origin, acao) + f" | credentials: {acac or 'not set'}",
-                            host=service.host,
-                            discriminator="wildcard-origin",
-                            target=service,
-                            references=["CWE-942"],
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="CORS wildcard origin",
+                                description="Server allows any origin — may allow cross-origin data theft",
+                                severity=severity,
+                                evidence=fmt_cors_evidence(origin, acao)
+                                + f" | credentials: {acac or 'not set'}",
+                                host=service.host,
+                                discriminator="wildcard-origin",
+                                target=service,
+                                references=["CWE-942"],
+                            )
+                        )
                         break
 
                     elif acao == origin and origin != "null":
                         severity = "high" if acac == "true" else "medium"
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="CORS reflects arbitrary origin",
-                            description=f"Server reflects attacker-controlled origin: {origin}",
-                            severity=severity,
-                            evidence=fmt_cors_evidence(origin, acao) + f" | credentials: {acac or 'not set'}",
-                            host=service.host,
-                            discriminator="reflected-origin",
-                            target=service,
-                            references=["CWE-942"],
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="CORS reflects arbitrary origin",
+                                description=f"Server reflects attacker-controlled origin: {origin}",
+                                severity=severity,
+                                evidence=fmt_cors_evidence(origin, acao)
+                                + f" | credentials: {acac or 'not set'}",
+                                host=service.host,
+                                discriminator="reflected-origin",
+                                target=service,
+                                references=["CWE-942"],
+                            )
+                        )
                         break
 
                     elif acao == "null":
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="CORS allows null origin",
-                            description="Server accepts 'null' origin — sandbox iframe bypass possible",
-                            severity="medium",
-                            evidence=fmt_cors_evidence("null", "null"),
-                            host=service.host,
-                            discriminator="null-origin",
-                            target=service,
-                            references=["CWE-942"],
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="CORS allows null origin",
+                                description="Server accepts 'null' origin — sandbox iframe bypass possible",
+                                severity="medium",
+                                evidence=fmt_cors_evidence("null", "null"),
+                                host=service.host,
+                                discriminator="null-origin",
+                                target=service,
+                                references=["CWE-942"],
+                            )
+                        )
                         break
 
         except Exception as e:

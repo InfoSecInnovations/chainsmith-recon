@@ -23,12 +23,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
 
 from app.lib.findings import validate_severity
 
 try:
     import yaml as _yaml
+
     _YAML_AVAILABLE = True
 except ImportError:
     _YAML_AVAILABLE = False
@@ -98,11 +98,12 @@ def _write_yaml(path: Path, data: dict) -> None:
 @dataclass
 class SeverityOverrideConfig:
     """Parsed pre-run severity override configuration."""
+
     check_level: dict[str, str] = field(default_factory=dict)
     check_title_level: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
-_cached_config: Optional[SeverityOverrideConfig] = None
+_cached_config: SeverityOverrideConfig | None = None
 
 
 def load_severity_overrides() -> SeverityOverrideConfig:
@@ -126,7 +127,8 @@ def load_severity_overrides() -> SeverityOverrideConfig:
             except ValueError:
                 logger.warning(
                     "Ignoring invalid severity '%s' for check '%s' in severity_overrides.yaml",
-                    sev, check_name,
+                    sev,
+                    check_name,
                 )
 
     raw_title = data.get("check_title_level", {})
@@ -142,7 +144,9 @@ def load_severity_overrides() -> SeverityOverrideConfig:
                 except ValueError:
                     logger.warning(
                         "Ignoring invalid severity '%s' for check '%s' title '%s'",
-                        sev, check_name, title,
+                        sev,
+                        check_name,
+                        title,
                     )
 
     _cached_config = config
@@ -248,7 +252,9 @@ def apply_pre_run_override(finding_dict: dict) -> dict:
     title = finding_dict.get("title", "")
     original = finding_dict.get("severity", "info")
 
-    new_severity = _resolve_override(check_name, title, config.check_level, config.check_title_level)
+    new_severity = _resolve_override(
+        check_name, title, config.check_level, config.check_title_level
+    )
 
     if new_severity and new_severity != original:
         finding_dict["severity"] = new_severity
@@ -258,7 +264,10 @@ def apply_pre_run_override(finding_dict: dict) -> dict:
         finding_dict["raw_data"] = raw
         logger.debug(
             "Pre-run override: %s / %s: %s -> %s",
-            check_name, title, original, new_severity,
+            check_name,
+            title,
+            original,
+            new_severity,
         )
 
     return finding_dict
@@ -272,9 +281,10 @@ def apply_pre_run_override(finding_dict: dict) -> dict:
 @dataclass
 class ScanOverrideRule:
     """A single scan-level severity override rule."""
-    scope: dict[str, str]   # {check_name, title} — any subset
+
+    scope: dict[str, str]  # {check_name, title} — any subset
     severity: str
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 def load_scan_overrides(scan_id: str) -> list[ScanOverrideRule]:
@@ -291,11 +301,13 @@ def load_scan_overrides(scan_id: str) -> list[ScanOverrideRule]:
         except ValueError:
             logger.warning("Ignoring invalid severity '%s' in scan override %s", sev, scan_id)
             continue
-        rules.append(ScanOverrideRule(
-            scope=scope,
-            severity=sev,
-            reason=entry.get("reason"),
-        ))
+        rules.append(
+            ScanOverrideRule(
+                scope=scope,
+                severity=sev,
+                reason=entry.get("reason"),
+            )
+        )
     return rules
 
 
@@ -321,7 +333,7 @@ def get_scan_overrides_raw(scan_id: str) -> dict:
     return _read_yaml(_scan_override_path(scan_id))
 
 
-def add_scan_override(scan_id: str, scope: dict, severity: str, reason: Optional[str] = None) -> dict:
+def add_scan_override(scan_id: str, scope: dict, severity: str, reason: str | None = None) -> dict:
     """
     Add or update a scan-specific severity override.
 
@@ -410,14 +422,16 @@ def preview_scan_override(
     affected = []
     for f in findings:
         if _scope_matches(f, scope):
-            affected.append({
-                "id": f.get("id"),
-                "title": f.get("title"),
-                "check_name": f.get("check_name"),
-                "host": f.get("host"),
-                "current_severity": f.get("severity", "info"),
-                "new_severity": new_severity,
-            })
+            affected.append(
+                {
+                    "id": f.get("id"),
+                    "title": f.get("title"),
+                    "check_name": f.get("check_name"),
+                    "host": f.get("host"),
+                    "current_severity": f.get("severity", "info"),
+                    "new_severity": new_severity,
+                }
+            )
     return affected
 
 
@@ -431,7 +445,7 @@ def _resolve_override(
     title: str,
     check_level: dict[str, str],
     title_level: dict[str, dict[str, str]],
-) -> Optional[str]:
+) -> str | None:
     """
     Resolve which severity override applies (if any).
 
@@ -453,7 +467,7 @@ def _match_scan_rule(
     check_name: str,
     title: str,
     sorted_rules: list[ScanOverrideRule],
-) -> Optional[ScanOverrideRule]:
+) -> ScanOverrideRule | None:
     """Find the most specific matching scan override rule."""
     for rule in sorted_rules:
         if _scope_matches_values(check_name, title, rule.scope):

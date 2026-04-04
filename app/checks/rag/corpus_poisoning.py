@@ -14,19 +14,25 @@ References:
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 """
 
-import json
+import contextlib
 import uuid
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Ingestion endpoint paths to probe
 INGESTION_PATHS = [
-    "/documents", "/ingest", "/upload", "/index", "/add",
-    "/api/documents", "/api/ingest", "/v1/documents", "/api/v1/ingest",
+    "/documents",
+    "/ingest",
+    "/upload",
+    "/index",
+    "/add",
+    "/api/documents",
+    "/api/ingest",
+    "/v1/documents",
+    "/api/v1/ingest",
     "/api/v1/documents",
 ]
 
@@ -70,7 +76,7 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
 
-        rag_endpoints = context.get("rag_endpoints", [])
+        context.get("rag_endpoints", [])
         collections = context.get("vector_store_collections", [])
         collection_names = []
         if isinstance(collections, list):
@@ -102,26 +108,20 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
                     url = f"{base_url}{path}"
 
                     # Try JSON format
-                    json_result = await self._try_ingest_json(
-                        client, url, canary_id, path
-                    )
+                    json_result = await self._try_ingest_json(client, url, canary_id, path)
                     if json_result:
                         ingestion_found.append(json_result)
                         continue
 
                     # Try multipart upload
-                    multi_result = await self._try_ingest_multipart(
-                        client, url, canary_id, path
-                    )
+                    multi_result = await self._try_ingest_multipart(client, url, canary_id, path)
                     if multi_result:
                         ingestion_found.append(multi_result)
 
                 # Attempt cleanup for any successfully ingested documents
                 for ing in ingestion_found:
                     if ing.get("writable"):
-                        await self._attempt_cleanup(
-                            client, base_url, canary_id, ing
-                        )
+                        await self._attempt_cleanup(client, base_url, canary_id, ing)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -133,61 +133,69 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
         if writable:
             no_auth = [i for i in writable if not i.get("auth_required")]
             if no_auth:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Corpus poisoning: ingestion endpoint accepts unauthenticated writes",
-                    description=(
-                        f"Document ingestion at {no_auth[0]['path']} accepts writes without "
-                        f"authentication. Persistent indirect injection possible."
-                    ),
-                    severity="critical",
-                    evidence=self._build_evidence(no_auth[0]),
-                    host=service.host,
-                    discriminator="corpus-poison-noauth",
-                    target=service,
-                    raw_data={"endpoints": no_auth, "canary_id": canary_id},
-                    references=self.references,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="Corpus poisoning: ingestion endpoint accepts unauthenticated writes",
+                        description=(
+                            f"Document ingestion at {no_auth[0]['path']} accepts writes without "
+                            f"authentication. Persistent indirect injection possible."
+                        ),
+                        severity="critical",
+                        evidence=self._build_evidence(no_auth[0]),
+                        host=service.host,
+                        discriminator="corpus-poison-noauth",
+                        target=service,
+                        raw_data={"endpoints": no_auth, "canary_id": canary_id},
+                        references=self.references,
+                    )
+                )
             else:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="Document ingestion endpoint accessible with write access",
-                    description=(
-                        f"Ingestion at {writable[0]['path']} accepts document uploads. "
-                        f"Write access to knowledge base confirmed."
-                    ),
-                    severity="high",
-                    evidence=self._build_evidence(writable[0]),
-                    host=service.host,
-                    discriminator="corpus-poison-writable",
-                    target=service,
-                    raw_data={"endpoints": writable, "canary_id": canary_id},
-                    references=self.references,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="Document ingestion endpoint accessible with write access",
+                        description=(
+                            f"Ingestion at {writable[0]['path']} accepts document uploads. "
+                            f"Write access to knowledge base confirmed."
+                        ),
+                        severity="high",
+                        evidence=self._build_evidence(writable[0]),
+                        host=service.host,
+                        discriminator="corpus-poison-writable",
+                        target=service,
+                        raw_data={"endpoints": writable, "canary_id": canary_id},
+                        references=self.references,
+                    )
+                )
 
         if accessible and not writable:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Document ingestion endpoint found but writes rejected",
-                description="Ingestion endpoint exists but requires proper auth or rejected test document.",
-                severity="medium",
-                evidence=f"Path: {accessible[0]['path']}, Status: {accessible[0].get('status')}",
-                host=service.host,
-                discriminator="corpus-ingest-found",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Document ingestion endpoint found but writes rejected",
+                    description="Ingestion endpoint exists but requires proper auth or rejected test document.",
+                    severity="medium",
+                    evidence=f"Path: {accessible[0]['path']}, Status: {accessible[0].get('status')}",
+                    host=service.host,
+                    discriminator="corpus-ingest-found",
+                    target=service,
+                )
+            )
 
         if not ingestion_found:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="No writable ingestion endpoints found",
-                description="No document ingestion endpoints detected.",
-                severity="info",
-                evidence=f"Probed {len(all_paths)} paths",
-                host=service.host,
-                discriminator="no-ingestion",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="No writable ingestion endpoints found",
+                    description="No document ingestion endpoints detected.",
+                    severity="info",
+                    evidence=f"Probed {len(all_paths)} paths",
+                    host=service.host,
+                    discriminator="no-ingestion",
+                    target=service,
+                )
+            )
 
         if ingestion_found:
             result.outputs["ingestion_endpoints"] = ingestion_found
@@ -195,7 +203,11 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
         return result
 
     async def _try_ingest_json(
-        self, client: AsyncHttpClient, url: str, canary_id: str, path: str,
+        self,
+        client: AsyncHttpClient,
+        url: str,
+        canary_id: str,
+        path: str,
     ) -> dict | None:
         """Try JSON API ingestion format."""
         canary_content = (
@@ -211,7 +223,8 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
 
         for payload in payloads:
             resp = await client.post(
-                url, json=payload,
+                url,
+                json=payload,
                 headers={"Content-Type": "application/json"},
             )
             if resp.error:
@@ -248,7 +261,11 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
         return None
 
     async def _try_ingest_multipart(
-        self, client: AsyncHttpClient, url: str, canary_id: str, path: str,
+        self,
+        client: AsyncHttpClient,
+        url: str,
+        canary_id: str,
+        path: str,
     ) -> dict | None:
         """Try multipart file upload."""
         # Simple boundary-based multipart manually built
@@ -256,7 +273,7 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
         boundary = f"chainsmith-{canary_id[:8]}"
         body = (
             f"--{boundary}\r\n"
-            f"Content-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="test.txt"\r\n'
             f"Content-Type: text/plain\r\n\r\n"
             f"{content}\r\n"
             f"--{boundary}--\r\n"
@@ -291,7 +308,11 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
         return None
 
     async def _attempt_cleanup(
-        self, client: AsyncHttpClient, base_url: str, canary_id: str, ing: dict,
+        self,
+        client: AsyncHttpClient,
+        base_url: str,
+        canary_id: str,
+        ing: dict,
     ):
         """Attempt to delete the canary document after testing."""
         cleanup_paths = [
@@ -301,10 +322,8 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
             f"/api/v1/documents/{canary_id}",
         ]
         for path in cleanup_paths:
-            try:
+            with contextlib.suppress(Exception):
                 await client.delete(f"{base_url}{path}")
-            except Exception:
-                pass
 
     def _build_evidence(self, endpoint: dict) -> str:
         lines = [

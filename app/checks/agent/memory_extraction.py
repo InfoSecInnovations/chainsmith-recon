@@ -17,17 +17,24 @@ import json
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Memory/state endpoints to probe
 MEMORY_PATHS = [
-    "/agent/memory", "/memory", "/history", "/state",
-    "/threads", "/context", "/conversation",
-    "/v1/memory", "/api/memory", "/agent/history",
-    "/agent/state", "/agent/context",
+    "/agent/memory",
+    "/memory",
+    "/history",
+    "/state",
+    "/threads",
+    "/context",
+    "/conversation",
+    "/v1/memory",
+    "/api/memory",
+    "/agent/history",
+    "/agent/state",
+    "/agent/context",
 ]
 
 # PII patterns to detect in memory content
@@ -35,7 +42,9 @@ PII_PATTERNS = [
     re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", re.IGNORECASE),  # email
     re.compile(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b"),  # phone
     re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),  # SSN
-    re.compile(r"(?:api[_-]?key|token|secret|password|credential)[\"':\s=]+\S+", re.IGNORECASE),  # secrets
+    re.compile(
+        r"(?:api[_-]?key|token|secret|password|credential)[\"':\s=]+\S+", re.IGNORECASE
+    ),  # secrets
 ]
 
 # Conversational probes for memory extraction
@@ -87,8 +96,7 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
 
         agent_endpoints = context.get("agent_endpoints", [])
         service_endpoints = [
-            ep for ep in agent_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in agent_endpoints if ep.get("service", {}).get("host") == service.host
         ]
         if not service_endpoints:
             return result
@@ -184,11 +192,9 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
 
                 # 3. Conversational probes via execution endpoints
                 exec_endpoints = [
-                    ep for ep in service_endpoints
-                    if any(
-                        kw in ep.get("path", "").lower()
-                        for kw in ["invoke", "run", "chat"]
-                    )
+                    ep
+                    for ep in service_endpoints
+                    if any(kw in ep.get("path", "").lower() for kw in ["invoke", "run", "chat"])
                 ]
                 for ep in exec_endpoints[:1]:  # Probe one endpoint
                     url = ep.get("url", service.url)
@@ -283,14 +289,29 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
 
         # Check for credentials
         body_lower = body.lower()
-        cred_keywords = ["api_key", "api-key", "apikey", "token", "secret",
-                         "password", "credential", "bearer", "authorization"]
+        cred_keywords = [
+            "api_key",
+            "api-key",
+            "apikey",
+            "token",
+            "secret",
+            "password",
+            "credential",
+            "bearer",
+            "authorization",
+        ]
         if any(kw in body_lower for kw in cred_keywords):
             analysis["has_credentials"] = True
 
         # Check for system prompt fragments
-        prompt_keywords = ["system prompt", "you are", "your role is",
-                          "instructions:", "system:", "system message"]
+        prompt_keywords = [
+            "system prompt",
+            "you are",
+            "your role is",
+            "instructions:",
+            "system:",
+            "system message",
+        ]
         if any(kw in body_lower for kw in prompt_keywords):
             analysis["has_system_prompt"] = True
 
@@ -308,10 +329,15 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
         indicators = []
 
         memory_phrases = [
-            "i remember", "from our previous", "you mentioned",
-            "earlier you said", "in a past conversation",
-            "previous interaction", "stored in memory",
-            "my memory contains", "i recall",
+            "i remember",
+            "from our previous",
+            "you mentioned",
+            "earlier you said",
+            "in a past conversation",
+            "previous interaction",
+            "stored in memory",
+            "my memory contains",
+            "i recall",
         ]
         for phrase in memory_phrases:
             if phrase in body_lower:

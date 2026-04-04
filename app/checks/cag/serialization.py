@@ -16,28 +16,40 @@ References:
   CWE-502: Deserialization of Untrusted Data
 """
 
-import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Redis detection paths
 REDIS_PATHS = [
-    "/redis", "/cache/redis", "/_redis", "/redis/info",
+    "/redis",
+    "/cache/redis",
+    "/_redis",
+    "/redis/info",
 ]
 
 # Serialization indicator patterns in error messages
 PICKLE_INDICATORS = [
-    "pickle", "unpickle", "cpickle", "marshal", "deserializ",
-    "\\x80\\x", "gASV", "pickletools",
+    "pickle",
+    "unpickle",
+    "cpickle",
+    "marshal",
+    "deserializ",
+    "\\x80\\x",
+    "gASV",
+    "pickletools",
 ]
 
 TYPE_CONFUSION_INDICATORS = [
-    "__class__", "__type__", "__module__", "$type",
-    "java.io", "ObjectInputStream", "readObject",
+    "__class__",
+    "__type__",
+    "__module__",
+    "$type",
+    "java.io",
+    "ObjectInputStream",
+    "readObject",
 ]
 
 # Path traversal test keys
@@ -82,8 +94,7 @@ class SerializationCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -103,70 +114,72 @@ class SerializationCheck(ServiceIteratingCheck):
                     if redis_result.get("no_auth"):
                         severity = "critical" if "redis_cache" in cache_infra else "high"
 
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=self._build_redis_title(redis_result),
-                        description=self._build_redis_description(redis_result),
-                        severity=severity,
-                        evidence=self._build_evidence(redis_result),
-                        host=service.host,
-                        discriminator="serial-redis",
-                        target=service,
-                        raw_data=redis_result,
-                        references=self.references,
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=self._build_redis_title(redis_result),
+                            description=self._build_redis_description(redis_result),
+                            severity=severity,
+                            evidence=self._build_evidence(redis_result),
+                            host=service.host,
+                            discriminator="serial-redis",
+                            target=service,
+                            raw_data=redis_result,
+                            references=self.references,
+                        )
+                    )
 
                 # Test 2: Pickle/serialization indicators in error responses
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
 
-                    serial_info = await self._check_serialization_format(
-                        client, url, service
-                    )
+                    serial_info = await self._check_serialization_format(client, url, service)
                     if serial_info:
                         serial_results.append(serial_info)
 
                         severity = self._determine_serialization_severity(serial_info)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=self._build_serial_title(serial_info),
-                            description=self._build_serial_description(serial_info),
-                            severity=severity,
-                            evidence=self._build_evidence(serial_info),
-                            host=service.host,
-                            discriminator=f"serial-format-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=serial_info,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=self._build_serial_title(serial_info),
+                                description=self._build_serial_description(serial_info),
+                                severity=severity,
+                                evidence=self._build_evidence(serial_info),
+                                host=service.host,
+                                discriminator=f"serial-format-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=serial_info,
+                                references=self.references,
+                            )
+                        )
 
                 # Test 3: Path traversal in cache keys
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
 
-                    traversal_result = await self._check_path_traversal(
-                        client, url, service
-                    )
+                    traversal_result = await self._check_path_traversal(client, url, service)
                     if traversal_result and traversal_result.get("traversal_detected"):
                         serial_results.append(traversal_result)
 
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Path traversal in cache key mapping",
-                            description=(
-                                "Cache key-to-filename mapping is vulnerable to path traversal. "
-                                "An attacker can read or write arbitrary files via crafted cache keys."
-                            ),
-                            severity="high",
-                            evidence=self._build_evidence(traversal_result),
-                            host=service.host,
-                            discriminator="serial-path-traversal",
-                            target=service,
-                            target_url=url,
-                            raw_data=traversal_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Path traversal in cache key mapping",
+                                description=(
+                                    "Cache key-to-filename mapping is vulnerable to path traversal. "
+                                    "An attacker can read or write arbitrary files via crafted cache keys."
+                                ),
+                                severity="high",
+                                evidence=self._build_evidence(traversal_result),
+                                host=service.host,
+                                discriminator="serial-path-traversal",
+                                target=service,
+                                target_url=url,
+                                raw_data=traversal_result,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -176,9 +189,7 @@ class SerializationCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _check_redis_access(
-        self, client: AsyncHttpClient, service: Service
-    ) -> dict | None:
+    async def _check_redis_access(self, client: AsyncHttpClient, service: Service) -> dict | None:
         """Check for direct Redis access."""
         for path in REDIS_PATHS:
             url = service.with_path(path)
@@ -219,9 +230,9 @@ class SerializationCheck(ServiceIteratingCheck):
         """Check for serialization format indicators in error responses."""
         # Send malformed data to trigger serialization errors
         malformed_payloads = [
-            b'\x80\x04\x95',  # Pickle protocol 4 header
+            b"\x80\x04\x95",  # Pickle protocol 4 header
             b'{"__class__": "os.system", "args": ["id"]}',
-            b'not-valid-json-or-pickle',
+            b"not-valid-json-or-pickle",
         ]
 
         indicators_found = []
@@ -285,12 +296,14 @@ class SerializationCheck(ServiceIteratingCheck):
                     body = resp.body or ""
                     # Check for file content indicators
                     if "root:" in body or "[extensions]" in body or "passwd" in body.lower():
-                        traversal_indicators.append({
-                            "key": key,
-                            "path": cache_path,
-                            "status_code": resp.status_code,
-                            "response_preview": body[:200],
-                        })
+                        traversal_indicators.append(
+                            {
+                                "key": key,
+                                "path": cache_path,
+                                "status_code": resp.status_code,
+                                "response_preview": body[:200],
+                            }
+                        )
 
             except Exception:
                 continue

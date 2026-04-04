@@ -13,10 +13,9 @@ References:
 
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Cross-agent injection payloads
 CROSS_INJECTION_PAYLOADS = [
@@ -101,12 +100,10 @@ class AgentCrossInjectionCheck(ServiceIteratingCheck):
 
         agent_endpoints = context.get("agent_endpoints", [])
         exec_endpoints = [
-            ep for ep in agent_endpoints
+            ep
+            for ep in agent_endpoints
             if ep.get("service", {}).get("host") == service.host
-            and any(
-                kw in ep.get("path", "").lower()
-                for kw in ["invoke", "run", "execute", "chat"]
-            )
+            and any(kw in ep.get("path", "").lower() for kw in ["invoke", "run", "execute", "chat"])
         ]
         if not exec_endpoints:
             return result
@@ -126,7 +123,8 @@ class AgentCrossInjectionCheck(ServiceIteratingCheck):
                     # Step 1: Send injection prompt to entry-point agent
                     body = self._build_request_body(payload["prompt"], ep)
                     resp = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
                     if resp.error or resp.status_code >= 400:
@@ -140,8 +138,7 @@ class AgentCrossInjectionCheck(ServiceIteratingCheck):
                     # Check for success indicators
                     resp_lower = resp_text.lower()
                     indicators_matched = [
-                        ind for ind in payload["success_indicators"]
-                        if ind.lower() in resp_lower
+                        ind for ind in payload["success_indicators"] if ind.lower() in resp_lower
                     ]
 
                     test_result = {
@@ -189,8 +186,8 @@ class AgentCrossInjectionCheck(ServiceIteratingCheck):
                                 check_name=self.name,
                                 title=f"Injection payload preserved: {payload['id']}",
                                 description=(
-                                    f"Agent included injection text in response. "
-                                    f"Delivery vector confirmed for cross-agent attack."
+                                    "Agent included injection text in response. "
+                                    "Delivery vector confirmed for cross-agent attack."
                                 ),
                                 severity="high" if is_multi_agent else "medium",
                                 evidence=(

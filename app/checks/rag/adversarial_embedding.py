@@ -14,10 +14,9 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Adversarial query techniques (keyword-based, no GPU)
 ADVERSARIAL_TECHNIQUES = [
@@ -85,7 +84,8 @@ class RAGAdversarialEmbeddingCheck(ServiceIteratingCheck):
 
         rag_endpoints = context.get("rag_endpoints", [])
         service_endpoints = [
-            ep for ep in rag_endpoints
+            ep
+            for ep in rag_endpoints
             if ep.get("service", {}).get("host") == service.host
             and ep.get("endpoint_type") == "rag_query"
         ]
@@ -93,7 +93,7 @@ class RAGAdversarialEmbeddingCheck(ServiceIteratingCheck):
             return result
 
         # Leverage embedding model info if available
-        embedding_model = context.get("embedding_model", {})
+        context.get("embedding_model", {})
 
         cfg = HttpConfig(timeout_seconds=12.0, verify_ssl=False)
         adversarial_results: list[dict] = []
@@ -104,43 +104,45 @@ class RAGAdversarialEmbeddingCheck(ServiceIteratingCheck):
                 url = ep.get("url", service.url)
 
                 for technique in ADVERSARIAL_TECHNIQUES:
-                    tech_result = await self._test_technique(
-                        client, url, ep, technique
-                    )
+                    tech_result = await self._test_technique(client, url, ep, technique)
                     adversarial_results.append(tech_result)
 
                     if tech_result.get("retrieval_steered"):
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Adversarial embedding: {technique['description']}",
-                            description=(
-                                f"Adversarial query retrieved documents from "
-                                f"unexpected categories compared to baseline. "
-                                f"Technique: {technique['id']}."
-                            ),
-                            severity="high" if tech_result.get("strong_mismatch") else "medium",
-                            evidence=self._build_evidence(tech_result),
-                            host=service.host,
-                            discriminator=f"adv-{technique['id']}",
-                            target=service,
-                            raw_data=tech_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Adversarial embedding: {technique['description']}",
+                                description=(
+                                    f"Adversarial query retrieved documents from "
+                                    f"unexpected categories compared to baseline. "
+                                    f"Technique: {technique['id']}."
+                                ),
+                                severity="high" if tech_result.get("strong_mismatch") else "medium",
+                                evidence=self._build_evidence(tech_result),
+                                host=service.host,
+                                discriminator=f"adv-{technique['id']}",
+                                target=service,
+                                raw_data=tech_result,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
         if not any(r.get("retrieval_steered") for r in adversarial_results):
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Adversarial queries did not force unexpected retrieval",
-                description="Adversarial embedding techniques were not effective.",
-                severity="info",
-                evidence=f"Tested {len(ADVERSARIAL_TECHNIQUES)} techniques",
-                host=service.host,
-                discriminator="adv-not-effective",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Adversarial queries did not force unexpected retrieval",
+                    description="Adversarial embedding techniques were not effective.",
+                    severity="info",
+                    evidence=f"Tested {len(ADVERSARIAL_TECHNIQUES)} techniques",
+                    host=service.host,
+                    discriminator="adv-not-effective",
+                    target=service,
+                )
+            )
 
         if adversarial_results:
             result.outputs["adversarial_embedding_results"] = adversarial_results
@@ -171,7 +173,8 @@ class RAGAdversarialEmbeddingCheck(ServiceIteratingCheck):
             "k": 5,
         }
         baseline_resp = await client.post(
-            url, json=baseline_body,
+            url,
+            json=baseline_body,
             headers={"Content-Type": "application/json"},
         )
         if baseline_resp.error or baseline_resp.status_code >= 400:
@@ -190,7 +193,8 @@ class RAGAdversarialEmbeddingCheck(ServiceIteratingCheck):
                 "k": 5,
             }
             adv_resp = await client.post(
-                url, json=adv_body,
+                url,
+                json=adv_body,
                 headers={"Content-Type": "application/json"},
             )
             if adv_resp.error or adv_resp.status_code >= 400:
@@ -228,10 +232,10 @@ class RAGAdversarialEmbeddingCheck(ServiceIteratingCheck):
                         for item in items[:10]:
                             if isinstance(item, dict):
                                 doc_id = (
-                                    item.get("id", "") or
-                                    item.get("source", "") or
-                                    item.get("title", "") or
-                                    str(item.get("metadata", {}).get("source", ""))
+                                    item.get("id", "")
+                                    or item.get("source", "")
+                                    or item.get("title", "")
+                                    or str(item.get("metadata", {}).get("source", ""))
                                 )
                                 if doc_id:
                                     ids.append(str(doc_id))

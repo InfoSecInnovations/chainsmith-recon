@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from app.db.engine import init_db, close_db, get_session
+from app.db.engine import close_db, get_session, init_db
 from app.db.models import Finding
 from app.db.repositories import (
     ChainRepository,
@@ -22,13 +22,12 @@ from app.db.repositories import (
     TrendRepository,
 )
 from app.reports import (
-    generate_technical_report,
+    generate_compliance_report,
     generate_delta_report,
     generate_executive_report,
-    generate_compliance_report,
+    generate_technical_report,
     generate_trend_report,
 )
-
 
 # --- Fixtures ----------------------------------------------------------------
 
@@ -71,52 +70,127 @@ def override_repo():
     return FindingOverrideRepository()
 
 
-async def _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo,
-                                  scan_id="report-scan", target="example.com"):
+async def _create_populated_scan(
+    scan_repo, finding_repo, chain_repo, check_log_repo, scan_id="report-scan", target="example.com"
+):
     """Create a scan with findings, chains, and log entries."""
     await scan_repo.create_scan(
-        scan_id=scan_id, session_id=f"s-{scan_id}", target_domain=target,
+        scan_id=scan_id,
+        session_id=f"s-{scan_id}",
+        target_domain=target,
     )
-    await finding_repo.bulk_create(scan_id, [
-        {"title": "XSS in Search", "severity": "high", "check_name": "xss_reflected",
-         "host": "example.com", "suite": "web", "target_url": "http://example.com/search",
-         "evidence": "<script>alert(1)</script>", "description": "Reflected XSS via q param",
-         "references": ["https://owasp.org/xss"]},
-        {"title": "SQL Injection", "severity": "critical", "check_name": "sqli",
-         "host": "example.com", "suite": "web", "target_url": "http://example.com/api/users",
-         "evidence": "Error-based SQLi confirmed", "description": "SQL injection in user endpoint"},
-        {"title": "Missing CSP", "severity": "medium", "check_name": "header_analysis",
-         "host": "example.com", "suite": "web", "description": "No CSP header found"},
-        {"title": "Server Info Leak", "severity": "info", "check_name": "server_header",
-         "host": "example.com", "suite": "network", "evidence": "Server: Apache/2.4.41"},
-    ])
-    await chain_repo.bulk_create(scan_id, [
-        {"title": "XSS to Session Hijack", "severity": "critical",
-         "source": "rule-based", "description": "XSS enables session theft",
-         "finding_ids": ["f1", "f2"]},
-    ])
-    await check_log_repo.bulk_create(scan_id, [
-        {"check": "xss_reflected", "suite": "web", "event": "started"},
-        {"check": "xss_reflected", "suite": "web", "event": "completed", "findings": 1, "duration_ms": 500},
-        {"check": "sqli", "suite": "web", "event": "started"},
-        {"check": "sqli", "suite": "web", "event": "completed", "findings": 1, "duration_ms": 800},
-        {"check": "header_analysis", "suite": "web", "event": "started"},
-        {"check": "header_analysis", "suite": "web", "event": "completed", "findings": 1, "duration_ms": 200},
-        {"check": "server_header", "suite": "network", "event": "started"},
-        {"check": "server_header", "suite": "network", "event": "completed", "findings": 1, "duration_ms": 100},
-        {"check": "port_scan", "suite": "network", "event": "started"},
-        {"check": "port_scan", "suite": "network", "event": "failed", "error_message": "Timeout"},
-    ])
-    await scan_repo.complete_scan(scan_id, status="complete", findings_count=4,
-                                   checks_total=5, checks_completed=4,
-                                   duration_ms=2000)
+    await finding_repo.bulk_create(
+        scan_id,
+        [
+            {
+                "title": "XSS in Search",
+                "severity": "high",
+                "check_name": "xss_reflected",
+                "host": "example.com",
+                "suite": "web",
+                "target_url": "http://example.com/search",
+                "evidence": "<script>alert(1)</script>",
+                "description": "Reflected XSS via q param",
+                "references": ["https://owasp.org/xss"],
+            },
+            {
+                "title": "SQL Injection",
+                "severity": "critical",
+                "check_name": "sqli",
+                "host": "example.com",
+                "suite": "web",
+                "target_url": "http://example.com/api/users",
+                "evidence": "Error-based SQLi confirmed",
+                "description": "SQL injection in user endpoint",
+            },
+            {
+                "title": "Missing CSP",
+                "severity": "medium",
+                "check_name": "header_analysis",
+                "host": "example.com",
+                "suite": "web",
+                "description": "No CSP header found",
+            },
+            {
+                "title": "Server Info Leak",
+                "severity": "info",
+                "check_name": "server_header",
+                "host": "example.com",
+                "suite": "network",
+                "evidence": "Server: Apache/2.4.41",
+            },
+        ],
+    )
+    await chain_repo.bulk_create(
+        scan_id,
+        [
+            {
+                "title": "XSS to Session Hijack",
+                "severity": "critical",
+                "source": "rule-based",
+                "description": "XSS enables session theft",
+                "finding_ids": ["f1", "f2"],
+            },
+        ],
+    )
+    await check_log_repo.bulk_create(
+        scan_id,
+        [
+            {"check": "xss_reflected", "suite": "web", "event": "started"},
+            {
+                "check": "xss_reflected",
+                "suite": "web",
+                "event": "completed",
+                "findings": 1,
+                "duration_ms": 500,
+            },
+            {"check": "sqli", "suite": "web", "event": "started"},
+            {
+                "check": "sqli",
+                "suite": "web",
+                "event": "completed",
+                "findings": 1,
+                "duration_ms": 800,
+            },
+            {"check": "header_analysis", "suite": "web", "event": "started"},
+            {
+                "check": "header_analysis",
+                "suite": "web",
+                "event": "completed",
+                "findings": 1,
+                "duration_ms": 200,
+            },
+            {"check": "server_header", "suite": "network", "event": "started"},
+            {
+                "check": "server_header",
+                "suite": "network",
+                "event": "completed",
+                "findings": 1,
+                "duration_ms": 100,
+            },
+            {"check": "port_scan", "suite": "network", "event": "started"},
+            {
+                "check": "port_scan",
+                "suite": "network",
+                "event": "failed",
+                "error_message": "Timeout",
+            },
+        ],
+    )
+    await scan_repo.complete_scan(
+        scan_id,
+        status="complete",
+        findings_count=4,
+        checks_total=5,
+        checks_completed=4,
+        duration_ms=2000,
+    )
 
 
 # --- Technical Report Tests ---------------------------------------------------
 
 
 class TestTechnicalReportMarkdown:
-
     @pytest.mark.asyncio
     async def test_basic_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -186,7 +260,6 @@ class TestTechnicalReportMarkdown:
 
 
 class TestTechnicalReportJSON:
-
     @pytest.mark.asyncio
     async def test_json_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -207,15 +280,21 @@ class TestTechnicalReportJSON:
 
 
 class TestTechnicalReportOverrides:
-
     @pytest.mark.asyncio
     async def test_overridden_findings_annotated(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo, override_repo,
+        self,
+        db,
+        scan_repo,
+        finding_repo,
+        chain_repo,
+        check_log_repo,
+        override_repo,
     ):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
 
         # Get a fingerprint and override it
         from sqlalchemy import select
+
         async with get_session() as session:
             result = await session.execute(
                 select(Finding.fingerprint).where(Finding.title == "Missing CSP")
@@ -231,7 +310,6 @@ class TestTechnicalReportOverrides:
 
 
 class TestTechnicalReportErrors:
-
     @pytest.mark.asyncio
     async def test_scan_not_found(self, db):
         with pytest.raises(ValueError, match="not found"):
@@ -241,7 +319,9 @@ class TestTechnicalReportErrors:
     async def test_empty_scan(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         """Report generates even with no findings."""
         await scan_repo.create_scan(
-            scan_id="empty-scan", session_id="s1", target_domain="empty.com",
+            scan_id="empty-scan",
+            session_id="s1",
+            target_domain="empty.com",
         )
         await scan_repo.complete_scan("empty-scan", status="complete", findings_count=0)
 
@@ -254,27 +334,51 @@ class TestTechnicalReportErrors:
 
 
 class TestDeltaReportMarkdown:
-
     @pytest.fixture
     async def two_scans(self, db, scan_repo, finding_repo, comparison_repo):
         """Two scans with known overlap for comparison."""
         await scan_repo.create_scan(
-            scan_id="delta-a", session_id="s1", target_domain="example.com",
+            scan_id="delta-a",
+            session_id="s1",
+            target_domain="example.com",
         )
-        await finding_repo.bulk_create("delta-a", [
-            {"title": "XSS", "severity": "high", "check_name": "xss", "host": "example.com"},
-            {"title": "SQLi", "severity": "critical", "check_name": "sqli", "host": "example.com"},
-            {"title": "Open Port", "severity": "info", "check_name": "port_scan", "host": "example.com"},
-        ])
+        await finding_repo.bulk_create(
+            "delta-a",
+            [
+                {"title": "XSS", "severity": "high", "check_name": "xss", "host": "example.com"},
+                {
+                    "title": "SQLi",
+                    "severity": "critical",
+                    "check_name": "sqli",
+                    "host": "example.com",
+                },
+                {
+                    "title": "Open Port",
+                    "severity": "info",
+                    "check_name": "port_scan",
+                    "host": "example.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("delta-a", status="complete", findings_count=3)
 
         await scan_repo.create_scan(
-            scan_id="delta-b", session_id="s2", target_domain="example.com",
+            scan_id="delta-b",
+            session_id="s2",
+            target_domain="example.com",
         )
-        await finding_repo.bulk_create("delta-b", [
-            {"title": "XSS", "severity": "high", "check_name": "xss", "host": "example.com"},
-            {"title": "CSRF", "severity": "medium", "check_name": "csrf", "host": "example.com"},
-        ])
+        await finding_repo.bulk_create(
+            "delta-b",
+            [
+                {"title": "XSS", "severity": "high", "check_name": "xss", "host": "example.com"},
+                {
+                    "title": "CSRF",
+                    "severity": "medium",
+                    "check_name": "csrf",
+                    "host": "example.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("delta-b", status="complete", findings_count=2)
 
     @pytest.mark.asyncio
@@ -337,24 +441,33 @@ class TestDeltaReportMarkdown:
 
 
 class TestDeltaReportJSON:
-
     @pytest.fixture
     async def two_scans(self, db, scan_repo, finding_repo):
         await scan_repo.create_scan(
-            scan_id="dj-a", session_id="s1", target_domain="json.com",
+            scan_id="dj-a",
+            session_id="s1",
+            target_domain="json.com",
         )
-        await finding_repo.bulk_create("dj-a", [
-            {"title": "F1", "severity": "high", "check_name": "c1", "host": "json.com"},
-        ])
+        await finding_repo.bulk_create(
+            "dj-a",
+            [
+                {"title": "F1", "severity": "high", "check_name": "c1", "host": "json.com"},
+            ],
+        )
         await scan_repo.complete_scan("dj-a", status="complete", findings_count=1)
 
         await scan_repo.create_scan(
-            scan_id="dj-b", session_id="s2", target_domain="json.com",
+            scan_id="dj-b",
+            session_id="s2",
+            target_domain="json.com",
         )
-        await finding_repo.bulk_create("dj-b", [
-            {"title": "F1", "severity": "high", "check_name": "c1", "host": "json.com"},
-            {"title": "F2", "severity": "low", "check_name": "c2", "host": "json.com"},
-        ])
+        await finding_repo.bulk_create(
+            "dj-b",
+            [
+                {"title": "F1", "severity": "high", "check_name": "c1", "host": "json.com"},
+                {"title": "F2", "severity": "low", "check_name": "c2", "host": "json.com"},
+            ],
+        )
         await scan_repo.complete_scan("dj-b", status="complete", findings_count=2)
 
     @pytest.mark.asyncio
@@ -371,7 +484,6 @@ class TestDeltaReportJSON:
 
 
 class TestDeltaReportErrors:
-
     @pytest.mark.asyncio
     async def test_scan_a_not_found(self, db):
         with pytest.raises(ValueError, match="not found"):
@@ -380,7 +492,9 @@ class TestDeltaReportErrors:
     @pytest.mark.asyncio
     async def test_scan_b_not_found(self, db, scan_repo):
         await scan_repo.create_scan(
-            scan_id="exists", session_id="s1", target_domain="x.com",
+            scan_id="exists",
+            session_id="s1",
+            target_domain="x.com",
         )
         with pytest.raises(ValueError, match="not found"):
             await generate_delta_report("exists", "nonexistent", "md")
@@ -390,7 +504,6 @@ class TestDeltaReportErrors:
 
 
 class TestTechnicalReportHTML:
-
     @pytest.mark.asyncio
     async def test_html_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -408,7 +521,9 @@ class TestTechnicalReportHTML:
         assert "Chainsmith Recon" in content  # footer
 
     @pytest.mark.asyncio
-    async def test_html_severity_badges(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def test_html_severity_badges(
+        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "html")
         content = result["content"]
@@ -433,20 +548,25 @@ class TestTechnicalReportHTML:
 
 
 class TestDeltaReportHTML:
-
     @pytest.fixture
     async def two_scans(self, db, scan_repo, finding_repo):
         await scan_repo.create_scan(scan_id="dh-a", session_id="s1", target_domain="html.com")
-        await finding_repo.bulk_create("dh-a", [
-            {"title": "F1", "severity": "high", "check_name": "c1", "host": "html.com"},
-        ])
+        await finding_repo.bulk_create(
+            "dh-a",
+            [
+                {"title": "F1", "severity": "high", "check_name": "c1", "host": "html.com"},
+            ],
+        )
         await scan_repo.complete_scan("dh-a", status="complete", findings_count=1)
 
         await scan_repo.create_scan(scan_id="dh-b", session_id="s2", target_domain="html.com")
-        await finding_repo.bulk_create("dh-b", [
-            {"title": "F1", "severity": "high", "check_name": "c1", "host": "html.com"},
-            {"title": "F2", "severity": "medium", "check_name": "c2", "host": "html.com"},
-        ])
+        await finding_repo.bulk_create(
+            "dh-b",
+            [
+                {"title": "F1", "severity": "high", "check_name": "c1", "host": "html.com"},
+                {"title": "F2", "severity": "medium", "check_name": "c2", "host": "html.com"},
+            ],
+        )
         await scan_repo.complete_scan("dh-b", status="complete", findings_count=2)
 
     @pytest.mark.asyncio
@@ -476,7 +596,6 @@ def engagement_repo():
 
 
 class TestExecutiveReportMarkdown:
-
     @pytest.mark.asyncio
     async def test_basic_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -516,20 +635,36 @@ class TestExecutiveReportMarkdown:
         assert "| High | 1 |" in content
 
     @pytest.mark.asyncio
-    async def test_with_previous_scan(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def test_with_previous_scan(
+        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+    ):
         """When a previous scan exists, show risk trend."""
         # First scan (previous)
         await _create_populated_scan(
-            scan_repo, finding_repo, chain_repo, check_log_repo,
-            scan_id="exec-prev", target="trend.com",
+            scan_repo,
+            finding_repo,
+            chain_repo,
+            check_log_repo,
+            scan_id="exec-prev",
+            target="trend.com",
         )
         # Second scan (current) - fewer findings
         await scan_repo.create_scan(
-            scan_id="exec-curr", session_id="s2", target_domain="trend.com",
+            scan_id="exec-curr",
+            session_id="s2",
+            target_domain="trend.com",
         )
-        await finding_repo.bulk_create("exec-curr", [
-            {"title": "Low Finding", "severity": "low", "check_name": "c1", "host": "trend.com"},
-        ])
+        await finding_repo.bulk_create(
+            "exec-curr",
+            [
+                {
+                    "title": "Low Finding",
+                    "severity": "low",
+                    "check_name": "c1",
+                    "host": "trend.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("exec-curr", status="complete", findings_count=1)
 
         result = await generate_executive_report("exec-curr", "md")
@@ -539,7 +674,6 @@ class TestExecutiveReportMarkdown:
 
 
 class TestExecutiveReportJSON:
-
     @pytest.mark.asyncio
     async def test_json_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -556,7 +690,6 @@ class TestExecutiveReportJSON:
 
 
 class TestExecutiveReportHTML:
-
     @pytest.mark.asyncio
     async def test_html_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -579,7 +712,6 @@ class TestExecutiveReportHTML:
 
 
 class TestExecutiveReportErrors:
-
     @pytest.mark.asyncio
     async def test_scan_not_found(self, db):
         with pytest.raises(ValueError, match="not found"):
@@ -590,7 +722,6 @@ class TestExecutiveReportErrors:
 
 
 class TestComplianceReportMarkdown:
-
     @pytest.mark.asyncio
     async def test_basic_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -615,7 +746,9 @@ class TestComplianceReportMarkdown:
         assert "**Failed:** 1" in content
 
     @pytest.mark.asyncio
-    async def test_checks_performed_table(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def test_checks_performed_table(
+        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "md")
         content = result["content"]
@@ -631,10 +764,14 @@ class TestComplianceReportMarkdown:
         assert "**Total Findings:** 4" in content
 
     @pytest.mark.asyncio
-    async def test_with_engagement(self, db, scan_repo, finding_repo, chain_repo, check_log_repo, engagement_repo):
+    async def test_with_engagement(
+        self, db, scan_repo, finding_repo, chain_repo, check_log_repo, engagement_repo
+    ):
         eng = await engagement_repo.create_engagement(
-            name="Q1 Pentest", target_domain="example.com",
-            description="Test engagement", client_name="Acme Corp",
+            name="Q1 Pentest",
+            target_domain="example.com",
+            description="Test engagement",
+            client_name="Acme Corp",
         )
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
 
@@ -646,11 +783,18 @@ class TestComplianceReportMarkdown:
 
     @pytest.mark.asyncio
     async def test_override_audit_trail(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo, override_repo,
+        self,
+        db,
+        scan_repo,
+        finding_repo,
+        chain_repo,
+        check_log_repo,
+        override_repo,
     ):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
 
         from sqlalchemy import select
+
         async with get_session() as session:
             result = await session.execute(
                 select(Finding.fingerprint).where(Finding.title == "Missing CSP")
@@ -668,7 +812,6 @@ class TestComplianceReportMarkdown:
 
 
 class TestComplianceReportJSON:
-
     @pytest.mark.asyncio
     async def test_json_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -683,7 +826,6 @@ class TestComplianceReportJSON:
 
 
 class TestComplianceReportHTML:
-
     @pytest.mark.asyncio
     async def test_html_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -699,7 +841,6 @@ class TestComplianceReportHTML:
 
 
 class TestComplianceReportErrors:
-
     @pytest.mark.asyncio
     async def test_scan_not_found(self, db):
         with pytest.raises(ValueError, match="not found"):
@@ -715,21 +856,41 @@ def trend_repo():
 
 
 class TestTrendReportMarkdown:
-
     @pytest.fixture
     async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         """Create two completed scans for the same target."""
         await _create_populated_scan(
-            scan_repo, finding_repo, chain_repo, check_log_repo,
-            scan_id="trend-1", target="trend.com",
+            scan_repo,
+            finding_repo,
+            chain_repo,
+            check_log_repo,
+            scan_id="trend-1",
+            target="trend.com",
         )
         await scan_repo.create_scan(
-            scan_id="trend-2", session_id="s2", target_domain="trend.com",
+            scan_id="trend-2",
+            session_id="s2",
+            target_domain="trend.com",
         )
-        await finding_repo.bulk_create("trend-2", [
-            {"title": "XSS", "severity": "high", "check_name": "xss", "host": "trend.com", "suite": "web"},
-            {"title": "SQLi", "severity": "critical", "check_name": "sqli", "host": "trend.com", "suite": "web"},
-        ])
+        await finding_repo.bulk_create(
+            "trend-2",
+            [
+                {
+                    "title": "XSS",
+                    "severity": "high",
+                    "check_name": "xss",
+                    "host": "trend.com",
+                    "suite": "web",
+                },
+                {
+                    "title": "SQLi",
+                    "severity": "critical",
+                    "check_name": "sqli",
+                    "host": "trend.com",
+                    "suite": "web",
+                },
+            ],
+        )
         await scan_repo.complete_scan("trend-2", status="complete", findings_count=2)
 
     @pytest.mark.asyncio
@@ -771,12 +932,15 @@ class TestTrendReportMarkdown:
 
 
 class TestTrendReportJSON:
-
     @pytest.fixture
     async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(
-            scan_repo, finding_repo, chain_repo, check_log_repo,
-            scan_id="tj-1", target="json-trend.com",
+            scan_repo,
+            finding_repo,
+            chain_repo,
+            check_log_repo,
+            scan_id="tj-1",
+            target="json-trend.com",
         )
 
     @pytest.mark.asyncio
@@ -790,12 +954,15 @@ class TestTrendReportJSON:
 
 
 class TestTrendReportHTML:
-
     @pytest.fixture
     async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(
-            scan_repo, finding_repo, chain_repo, check_log_repo,
-            scan_id="th-1", target="html-trend.com",
+            scan_repo,
+            finding_repo,
+            chain_repo,
+            check_log_repo,
+            scan_id="th-1",
+            target="html-trend.com",
         )
 
     @pytest.mark.asyncio
@@ -816,19 +983,32 @@ class TestTrendReportHTML:
 
 
 class TestTrendReportEngagement:
-
     @pytest.fixture
-    async def engagement_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo, engagement_repo):
+    async def engagement_scans(
+        self, db, scan_repo, finding_repo, chain_repo, check_log_repo, engagement_repo
+    ):
         eng = await engagement_repo.create_engagement(
-            name="Trend Engagement", target_domain="eng-trend.com",
+            name="Trend Engagement",
+            target_domain="eng-trend.com",
         )
         await scan_repo.create_scan(
-            scan_id="te-1", session_id="s1", target_domain="eng-trend.com",
+            scan_id="te-1",
+            session_id="s1",
+            target_domain="eng-trend.com",
             engagement_id=eng["id"],
         )
-        await finding_repo.bulk_create("te-1", [
-            {"title": "F1", "severity": "high", "check_name": "c1", "host": "eng-trend.com", "suite": "web"},
-        ])
+        await finding_repo.bulk_create(
+            "te-1",
+            [
+                {
+                    "title": "F1",
+                    "severity": "high",
+                    "check_name": "c1",
+                    "host": "eng-trend.com",
+                    "suite": "web",
+                },
+            ],
+        )
         await scan_repo.complete_scan("te-1", status="complete", findings_count=1)
         return eng["id"]
 
@@ -842,7 +1022,6 @@ class TestTrendReportEngagement:
 
 
 class TestTrendReportErrors:
-
     @pytest.mark.asyncio
     async def test_no_scope(self, db):
         with pytest.raises(ValueError, match="Either engagement_id or target"):
@@ -861,7 +1040,6 @@ PDF_MAGIC = b"%PDF"
 
 
 class TestTechnicalReportPDF:
-
     @pytest.mark.asyncio
     async def test_pdf_output(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -881,20 +1059,43 @@ class TestTechnicalReportPDF:
 
 
 class TestDeltaReportPDF:
-
     @pytest.fixture
     async def two_scans(self, db, scan_repo, finding_repo):
         await scan_repo.create_scan(scan_id="dp-a", session_id="s1", target_domain="pdf.com")
-        await finding_repo.bulk_create("dp-a", [
-            {"title": "F1", "severity": "high", "check_name": "c1", "host": "pdf.com", "suite": "web"},
-        ])
+        await finding_repo.bulk_create(
+            "dp-a",
+            [
+                {
+                    "title": "F1",
+                    "severity": "high",
+                    "check_name": "c1",
+                    "host": "pdf.com",
+                    "suite": "web",
+                },
+            ],
+        )
         await scan_repo.complete_scan("dp-a", status="complete", findings_count=1)
 
         await scan_repo.create_scan(scan_id="dp-b", session_id="s2", target_domain="pdf.com")
-        await finding_repo.bulk_create("dp-b", [
-            {"title": "F1", "severity": "high", "check_name": "c1", "host": "pdf.com", "suite": "web"},
-            {"title": "F2", "severity": "critical", "check_name": "c2", "host": "pdf.com", "suite": "web"},
-        ])
+        await finding_repo.bulk_create(
+            "dp-b",
+            [
+                {
+                    "title": "F1",
+                    "severity": "high",
+                    "check_name": "c1",
+                    "host": "pdf.com",
+                    "suite": "web",
+                },
+                {
+                    "title": "F2",
+                    "severity": "critical",
+                    "check_name": "c2",
+                    "host": "pdf.com",
+                    "suite": "web",
+                },
+            ],
+        )
         await scan_repo.complete_scan("dp-b", status="complete", findings_count=2)
 
     @pytest.mark.asyncio
@@ -908,7 +1109,6 @@ class TestDeltaReportPDF:
 
 
 class TestExecutiveReportPDF:
-
     @pytest.mark.asyncio
     async def test_pdf_output(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -922,7 +1122,6 @@ class TestExecutiveReportPDF:
 
 
 class TestComplianceReportPDF:
-
     @pytest.mark.asyncio
     async def test_pdf_output(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -936,12 +1135,15 @@ class TestComplianceReportPDF:
 
 
 class TestTrendReportPDF:
-
     @pytest.fixture
     async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(
-            scan_repo, finding_repo, chain_repo, check_log_repo,
-            scan_id="tp-1", target="pdf-trend.com",
+            scan_repo,
+            finding_repo,
+            chain_repo,
+            check_log_repo,
+            scan_id="tp-1",
+            target="pdf-trend.com",
         )
 
     @pytest.mark.asyncio

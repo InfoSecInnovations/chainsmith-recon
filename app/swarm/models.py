@@ -6,18 +6,16 @@ Dataclasses for internal state, Pydantic models for API payloads.
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Optional
+from datetime import UTC, datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-
 # ── Enums ────────────────────────────────────────────────────────
 
-class TaskStatus(str, Enum):
+
+class TaskStatus(StrEnum):
     QUEUED = "queued"
     ASSIGNED = "assigned"
     IN_PROGRESS = "in_progress"
@@ -25,7 +23,7 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
 
 
-class AgentStatus(str, Enum):
+class AgentStatus(StrEnum):
     ONLINE = "online"
     STALE = "stale"
     OFFLINE = "offline"
@@ -33,24 +31,26 @@ class AgentStatus(str, Enum):
 
 # ── Internal dataclasses ─────────────────────────────────────────
 
+
 @dataclass
 class SwarmTask:
     """A single check assigned (or assignable) to an agent."""
+
     task_id: str
     check_name: str
     suite: str
     phase_number: int
-    target: dict                            # {url, domains, ports}
+    target: dict  # {url, domains, ports}
     upstream_context: dict = field(default_factory=dict)
-    rate_limit: float = 10.0                # requests per second
+    rate_limit: float = 10.0  # requests per second
     timeout_seconds: int = 300
     status: TaskStatus = TaskStatus.QUEUED
-    assigned_agent: Optional[str] = None
-    result: Optional[dict] = None
-    error: Optional[str] = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    assigned_agent: str | None = None
+    result: dict | None = None
+    error: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
     @property
     def is_terminal(self) -> bool:
@@ -60,13 +60,14 @@ class SwarmTask:
 @dataclass
 class AgentInfo:
     """A connected swarm agent."""
+
     agent_id: str
     name: str
     api_key_name: str
     capabilities: list[str] = field(default_factory=list)  # suite names
     max_concurrent: int = 3
-    registered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_heartbeat: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    registered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_heartbeat: datetime = field(default_factory=lambda: datetime.now(UTC))
     status: AgentStatus = AgentStatus.ONLINE
     current_tasks: list[str] = field(default_factory=list)  # task_ids
 
@@ -85,9 +86,12 @@ class AgentInfo:
 
 # ── Pydantic API models ─────────────────────────────────────────
 
+
 class RegisterRequest(BaseModel):
     name: str = Field(default="", description="Human-readable agent name")
-    capabilities: list[str] = Field(default_factory=list, description="Suite names this agent can run")
+    capabilities: list[str] = Field(
+        default_factory=list, description="Suite names this agent can run"
+    )
     max_concurrent: int = Field(default=3, ge=1, le=50)
 
 
@@ -108,6 +112,7 @@ class TaskTarget(BaseModel):
 
 class TaskPayload(BaseModel):
     """Sent to agent when it polls for work."""
+
     task_id: str
     check_name: str
     suite: str
@@ -118,7 +123,7 @@ class TaskPayload(BaseModel):
     timeout_seconds: int = 300
 
     @classmethod
-    def from_swarm_task(cls, task: SwarmTask) -> "TaskPayload":
+    def from_swarm_task(cls, task: SwarmTask) -> TaskPayload:
         return cls(
             task_id=task.task_id,
             check_name=task.check_name,
@@ -136,6 +141,7 @@ class TaskStartRequest(BaseModel):
 
 class TaskResultPayload(BaseModel):
     """Submitted by agent when a check completes."""
+
     agent_id: str
     success: bool = True
     findings: list[dict] = Field(default_factory=list)
@@ -160,7 +166,7 @@ class CoordinatorStatus(BaseModel):
     tasks_complete: int = 0
     tasks_failed: int = 0
     findings_count: int = 0
-    current_phase: Optional[str] = None
+    current_phase: str | None = None
 
 
 class KeyCreateRequest(BaseModel):
@@ -171,4 +177,4 @@ class KeyInfo(BaseModel):
     key_id: str
     name: str
     created_at: str
-    last_used_at: Optional[str] = None
+    last_used_at: str | None = None

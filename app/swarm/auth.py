@@ -11,11 +11,10 @@ import hashlib
 import logging
 import secrets
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from fastapi import Depends, HTTPException, Request
-from sqlalchemy import select, delete
+from fastapi import HTTPException, Request
+from sqlalchemy import delete, select
 
 from app.db.engine import get_session
 from app.db.models import SwarmApiKey
@@ -49,7 +48,7 @@ async def create_api_key(name: str) -> tuple[str, str]:
             id=key_id,
             name=name,
             key_hash=key_hash,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         session.add(row)
         await session.commit()
@@ -58,7 +57,7 @@ async def create_api_key(name: str) -> tuple[str, str]:
     return key_id, raw_key
 
 
-async def validate_api_key(raw_key: str) -> Optional[str]:
+async def validate_api_key(raw_key: str) -> str | None:
     """
     Validate a raw API key against stored hashes.
 
@@ -68,14 +67,12 @@ async def validate_api_key(raw_key: str) -> Optional[str]:
     key_hash = hash_api_key(raw_key)
 
     async with get_session() as session:
-        result = await session.execute(
-            select(SwarmApiKey).where(SwarmApiKey.key_hash == key_hash)
-        )
+        result = await session.execute(select(SwarmApiKey).where(SwarmApiKey.key_hash == key_hash))
         row = result.scalar_one_or_none()
         if row is None:
             return None
 
-        row.last_used_at = datetime.now(timezone.utc)
+        row.last_used_at = datetime.now(UTC)
         await session.commit()
         return row.id
 
@@ -83,9 +80,7 @@ async def validate_api_key(raw_key: str) -> Optional[str]:
 async def revoke_api_key(key_id: str) -> bool:
     """Revoke (delete) a swarm API key. Returns True if a key was deleted."""
     async with get_session() as session:
-        result = await session.execute(
-            delete(SwarmApiKey).where(SwarmApiKey.id == key_id)
-        )
+        result = await session.execute(delete(SwarmApiKey).where(SwarmApiKey.id == key_id))
         await session.commit()
         deleted = result.rowcount > 0
 
@@ -97,9 +92,7 @@ async def revoke_api_key(key_id: str) -> bool:
 async def list_api_keys() -> list[dict]:
     """List all swarm API keys (metadata only, never the hash)."""
     async with get_session() as session:
-        result = await session.execute(
-            select(SwarmApiKey).order_by(SwarmApiKey.created_at.desc())
-        )
+        result = await session.execute(select(SwarmApiKey).order_by(SwarmApiKey.created_at.desc()))
         rows = result.scalars().all()
         return [
             {
@@ -113,6 +106,7 @@ async def list_api_keys() -> list[dict]:
 
 
 # ── FastAPI dependency ───────────────────────────────────────────
+
 
 async def require_swarm_auth(request: Request) -> str:
     """

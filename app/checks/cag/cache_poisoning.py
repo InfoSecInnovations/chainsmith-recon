@@ -16,14 +16,14 @@ References:
 """
 
 import asyncio
-import json
+import contextlib
 import time
 import uuid
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class CachePoisoningCheck(ServiceIteratingCheck):
@@ -59,8 +59,7 @@ class CachePoisoningCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -80,38 +79,42 @@ class CachePoisoningCheck(ServiceIteratingCheck):
                         poisoning_results.append(exact_result)
 
                         severity = self._determine_severity(exact_result)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=self._build_title(exact_result),
-                            description=self._build_description(exact_result),
-                            severity=severity,
-                            evidence=self._build_evidence(exact_result),
-                            host=service.host,
-                            discriminator="poison-exact",
-                            target=service,
-                            target_url=url,
-                            raw_data=exact_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=self._build_title(exact_result),
+                                description=self._build_description(exact_result),
+                                severity=severity,
+                                evidence=self._build_evidence(exact_result),
+                                host=service.host,
+                                discriminator="poison-exact",
+                                target=service,
+                                target_url=url,
+                                raw_data=exact_result,
+                                references=self.references,
+                            )
+                        )
 
                     # Test 2: Semantic poisoning (if semantic cache)
                     semantic_result = await self._test_semantic_poisoning(client, url)
                     if semantic_result and semantic_result.get("poisoning_detected"):
                         poisoning_results.append(semantic_result)
 
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Semantic cache amplifies poisoning: {semantic_result.get('variations_poisoned', 0)} query variations affected",
-                            description=self._build_description(semantic_result),
-                            severity="critical",
-                            evidence=self._build_evidence(semantic_result),
-                            host=service.host,
-                            discriminator="poison-semantic",
-                            target=service,
-                            target_url=url,
-                            raw_data=semantic_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Semantic cache amplifies poisoning: {semantic_result.get('variations_poisoned', 0)} query variations affected",
+                                description=self._build_description(semantic_result),
+                                severity="critical",
+                                evidence=self._build_evidence(semantic_result),
+                                host=service.host,
+                                discriminator="poison-semantic",
+                                target=service,
+                                target_url=url,
+                                raw_data=semantic_result,
+                                references=self.references,
+                            )
+                        )
 
                     # Attempt cleanup
                     await self._attempt_cleanup(client, service, context)
@@ -255,10 +258,12 @@ class CachePoisoningCheck(ServiceIteratingCheck):
                 if is_poisoned:
                     variations_poisoned += 1
 
-                variation_results.append({
-                    "query": variation,
-                    "poisoned": is_poisoned,
-                })
+                variation_results.append(
+                    {
+                        "query": variation,
+                        "poisoned": is_poisoned,
+                    }
+                )
 
             return {
                 "test_id": "semantic_poisoning",
@@ -285,18 +290,14 @@ class CachePoisoningCheck(ServiceIteratingCheck):
         for ev in eviction if isinstance(eviction, list) else []:
             if ev.get("accessible"):
                 url = ev.get("url", "")
-                try:
+                with contextlib.suppress(Exception):
                     await client.post(url, json={}, headers={"Content-Type": "application/json"})
-                except Exception:
-                    pass
 
         # Also try common clear paths
         for path in ["/cache/clear", "/cache/invalidate"]:
             url = service.with_path(path)
-            try:
+            with contextlib.suppress(Exception):
                 await client.post(url, json={}, headers={"Content-Type": "application/json"})
-            except Exception:
-                pass
 
     def _determine_severity(self, poison_result: dict) -> str:
         """Determine finding severity."""
@@ -320,7 +321,9 @@ class CachePoisoningCheck(ServiceIteratingCheck):
             return "Cache poisoning possible: injected content cached and responses match cross-session"
         if poison_result.get("likely_cached"):
             return "Cache accepts arbitrary content but cross-session delivery not confirmed"
-        return "Cache poisoning not possible: injected content not cached or not served cross-session"
+        return (
+            "Cache poisoning not possible: injected content not cached or not served cross-session"
+        )
 
     def _build_description(self, poison_result: dict) -> str:
         """Build finding description."""

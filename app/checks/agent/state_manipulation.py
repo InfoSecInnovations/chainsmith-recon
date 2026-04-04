@@ -12,10 +12,9 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # State modification payloads
 STATE_MODIFICATIONS = [
@@ -85,8 +84,7 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
 
         agent_endpoints = context.get("agent_endpoints", [])
         service_endpoints = [
-            ep for ep in agent_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in agent_endpoints if ep.get("service", {}).get("host") == service.host
         ]
         if not service_endpoints:
             return result
@@ -102,9 +100,7 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
 
                 if state_readable:
                     for mod in STATE_MODIFICATIONS:
-                        res = await self._test_state_write(
-                            client, state_url, mod
-                        )
+                        res = await self._test_state_write(client, state_url, mod)
                         manipulation_results.append(res)
 
                         if res["writable"]:
@@ -155,9 +151,10 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
                             json={"state": {"injected": "CHAINSMITH_THREAD_TEST"}},
                             headers={"Content-Type": "application/json"},
                         )
-                        writable = (
-                            not write_resp.error
-                            and write_resp.status_code in (200, 201, 204)
+                        writable = not write_resp.error and write_resp.status_code in (
+                            200,
+                            201,
+                            204,
                         )
 
                         thread_result = {
@@ -195,9 +192,7 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
                             )
 
                 # 3. Check if state endpoint is read-only (info finding)
-                if state_readable and not any(
-                    r.get("writable") for r in manipulation_results
-                ):
+                if state_readable and not any(r.get("writable") for r in manipulation_results):
                     result.findings.append(
                         build_finding(
                             check_name=self.name,
@@ -221,18 +216,21 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
         return result
 
     async def _test_state_read(
-        self, client: AsyncHttpClient, url: str,
+        self,
+        client: AsyncHttpClient,
+        url: str,
     ) -> bool | None:
         """Test if /state is readable. Returns True, False, or None (404)."""
         resp = await client.get(url)
         if resp.status_code == 404:
             return None
-        if resp.error or resp.status_code >= 400:
-            return False
-        return True
+        return not (resp.error or resp.status_code >= 400)
 
     async def _test_state_write(
-        self, client: AsyncHttpClient, url: str, modification: dict,
+        self,
+        client: AsyncHttpClient,
+        url: str,
+        modification: dict,
     ) -> dict:
         """Test if state can be modified."""
         resp = await client.post(
@@ -254,7 +252,9 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
         }
 
     async def _get_thread_ids(
-        self, client: AsyncHttpClient, service: Service,
+        self,
+        client: AsyncHttpClient,
+        service: Service,
     ) -> list[str]:
         """Get thread IDs from /threads endpoint."""
         url = service.with_path("/threads")

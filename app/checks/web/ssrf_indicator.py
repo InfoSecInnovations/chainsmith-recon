@@ -12,26 +12,55 @@ exploitation (no callback, no internal IP probing).
 import logging
 import re
 from typing import Any
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
 
 # Parameter names that commonly accept URLs
 URL_PARAM_NAMES = [
-    "url", "uri", "link", "src", "source", "href",
-    "image", "img", "image_url", "img_url",
-    "document", "doc", "doc_url", "document_url",
-    "fetch", "load", "download",
-    "proxy", "forward", "target",
-    "redirect", "redirect_url", "redirect_uri", "return_url", "return_to",
-    "callback", "callback_url", "webhook", "webhook_url",
-    "file", "file_url", "path", "resource",
-    "endpoint", "api_url", "base_url",
-    "feed", "feed_url", "rss",
+    "url",
+    "uri",
+    "link",
+    "src",
+    "source",
+    "href",
+    "image",
+    "img",
+    "image_url",
+    "img_url",
+    "document",
+    "doc",
+    "doc_url",
+    "document_url",
+    "fetch",
+    "load",
+    "download",
+    "proxy",
+    "forward",
+    "target",
+    "redirect",
+    "redirect_url",
+    "redirect_uri",
+    "return_url",
+    "return_to",
+    "callback",
+    "callback_url",
+    "webhook",
+    "webhook_url",
+    "file",
+    "file_url",
+    "path",
+    "resource",
+    "endpoint",
+    "api_url",
+    "base_url",
+    "feed",
+    "feed_url",
+    "rss",
 ]
 
 # OpenAPI parameter formats/patterns that suggest URL input
@@ -39,11 +68,23 @@ OPENAPI_URL_INDICATORS = {"uri", "url", "iri", "iri-reference", "uri-reference"}
 
 # Paths commonly associated with SSRF-vulnerable functionality
 SSRF_PRONE_PATHS = [
-    "/api/fetch", "/api/proxy", "/api/scrape", "/api/crawl",
-    "/api/summarize", "/api/analyze", "/api/extract",
-    "/api/import", "/api/webhook", "/api/callback",
-    "/api/preview", "/api/embed", "/api/render",
-    "/proxy", "/fetch", "/load", "/download",
+    "/api/fetch",
+    "/api/proxy",
+    "/api/scrape",
+    "/api/crawl",
+    "/api/summarize",
+    "/api/analyze",
+    "/api/extract",
+    "/api/import",
+    "/api/webhook",
+    "/api/callback",
+    "/api/preview",
+    "/api/embed",
+    "/api/render",
+    "/proxy",
+    "/fetch",
+    "/load",
+    "/download",
 ]
 
 
@@ -60,7 +101,9 @@ class SSRFIndicatorCheck(ServiceIteratingCheck):
     timeout_seconds = 60.0
     delay_between_targets = 0.2
 
-    reason = "AI services frequently accept URLs for document processing, creating classic SSRF vectors"
+    reason = (
+        "AI services frequently accept URLs for document processing, creating classic SSRF vectors"
+    )
     references = ["OWASP WSTG-INPV-19", "CWE-918"]
     techniques = ["SSRF candidate identification", "parameter analysis"]
 
@@ -92,12 +135,14 @@ class SSRFIndicatorCheck(ServiceIteratingCheck):
                         body = (resp.body or "").lower()
                         if self._body_suggests_url_param(body, resp.status_code):
                             param_hint = self._extract_param_hint(body)
-                            candidates.append({
-                                "path": path,
-                                "param": param_hint or "unknown",
-                                "source": "probe",
-                                "evidence": f"GET {path} -> HTTP {resp.status_code}",
-                            })
+                            candidates.append(
+                                {
+                                    "path": path,
+                                    "param": param_hint or "unknown",
+                                    "source": "probe",
+                                    "evidence": f"GET {path} -> HTTP {resp.status_code}",
+                                }
+                            )
         except Exception as e:
             result.errors.append(f"SSRF probe error: {e}")
 
@@ -126,18 +171,20 @@ class SSRFIndicatorCheck(ServiceIteratingCheck):
                 severity = "low"
                 title = f"URL parameter detected: {service.host}{path} (potential SSRF)"
 
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=title,
-                description=f"Endpoint at {path} accepts URL-like parameter '{param}', which may be vulnerable to SSRF",
-                severity=severity,
-                evidence=candidate.get("evidence", f"Parameter '{param}' at {path}"),
-                host=service.host,
-                discriminator=f"ssrf-{path.replace('/', '-').strip('-')}-{param}",
-                target=service,
-                target_url=service.with_path(path),
-                references=["CWE-918", "OWASP WSTG-INPV-19"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=title,
+                    description=f"Endpoint at {path} accepts URL-like parameter '{param}', which may be vulnerable to SSRF",
+                    severity=severity,
+                    evidence=candidate.get("evidence", f"Parameter '{param}' at {path}"),
+                    host=service.host,
+                    discriminator=f"ssrf-{path.replace('/', '-').strip('-')}-{param}",
+                    target=service,
+                    target_url=service.with_path(path),
+                    references=["CWE-918", "OWASP WSTG-INPV-19"],
+                )
+            )
 
         result.outputs["ssrf_candidates"] = candidates
         return result
@@ -163,22 +210,28 @@ class SSRFIndicatorCheck(ServiceIteratingCheck):
                     if not isinstance(param, dict):
                         continue
                     name = param.get("name", "").lower()
-                    fmt = param.get("schema", {}).get("format", "").lower() if isinstance(param.get("schema"), dict) else ""
+                    fmt = (
+                        param.get("schema", {}).get("format", "").lower()
+                        if isinstance(param.get("schema"), dict)
+                        else ""
+                    )
 
                     if name in URL_PARAM_NAMES or fmt in OPENAPI_URL_INDICATORS:
-                        candidates.append({
-                            "path": path,
-                            "param": param.get("name", name),
-                            "source": "openapi",
-                            "method": method.upper(),
-                            "evidence": f"OpenAPI spec: {method.upper()} {path} parameter '{param.get('name', name)}' (format: {fmt or 'string'})",
-                        })
+                        candidates.append(
+                            {
+                                "path": path,
+                                "param": param.get("name", name),
+                                "source": "openapi",
+                                "method": method.upper(),
+                                "evidence": f"OpenAPI spec: {method.upper()} {path} parameter '{param.get('name', name)}' (format: {fmt or 'string'})",
+                            }
+                        )
 
                 # Check request body schema for URL fields
                 req_body = operation.get("requestBody", {})
                 if isinstance(req_body, dict):
                     content = req_body.get("content", {})
-                    for media_type, media_obj in content.items():
+                    for _media_type, media_obj in content.items():
                         if not isinstance(media_obj, dict):
                             continue
                         schema = media_obj.get("schema", {})
@@ -190,13 +243,15 @@ class SSRFIndicatorCheck(ServiceIteratingCheck):
                                 name_lower = prop_name.lower()
                                 fmt = prop_schema.get("format", "").lower()
                                 if name_lower in URL_PARAM_NAMES or fmt in OPENAPI_URL_INDICATORS:
-                                    candidates.append({
-                                        "path": path,
-                                        "param": prop_name,
-                                        "source": "openapi",
-                                        "method": method.upper(),
-                                        "evidence": f"OpenAPI spec: {method.upper()} {path} body field '{prop_name}' (format: {fmt or 'string'})",
-                                    })
+                                    candidates.append(
+                                        {
+                                            "path": path,
+                                            "param": prop_name,
+                                            "source": "openapi",
+                                            "method": method.upper(),
+                                            "evidence": f"OpenAPI spec: {method.upper()} {path} body field '{prop_name}' (format: {fmt or 'string'})",
+                                        }
+                                    )
 
         return candidates
 
@@ -220,12 +275,14 @@ class SSRFIndicatorCheck(ServiceIteratingCheck):
                     params = parse_qs(parsed.query)
                     for param_name in params:
                         if param_name.lower() in URL_PARAM_NAMES:
-                            candidates.append({
-                                "path": parsed.path,
-                                "param": param_name,
-                                "source": "discovered",
-                                "evidence": f"URL parameter '{param_name}' found in discovered path: {path}",
-                            })
+                            candidates.append(
+                                {
+                                    "path": parsed.path,
+                                    "param": param_name,
+                                    "source": "discovered",
+                                    "evidence": f"URL parameter '{param_name}' found in discovered path: {path}",
+                                }
+                            )
 
         return candidates
 

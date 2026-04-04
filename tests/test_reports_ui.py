@@ -10,20 +10,19 @@ Covers:
 
 import pytest
 
-from app.db.engine import init_db, close_db, get_session
+from app.db.engine import close_db, init_db
 from app.db.repositories import (
     EngagementRepository,
     FindingRepository,
     ScanRepository,
 )
 from app.reports import (
-    generate_technical_report,
+    generate_compliance_report,
     generate_delta_report,
     generate_executive_report,
-    generate_compliance_report,
+    generate_technical_report,
     generate_trend_report,
 )
-
 
 # --- Fixtures ----------------------------------------------------------------
 
@@ -55,26 +54,29 @@ async def seeded_db(db):
         settings={"parallel": False},
         engagement_id=eng_id,
     )
-    await finding_repo.bulk_create("scan-001", [
-        {
-            "id": "f-001",
-            "title": "XSS in Login",
-            "severity": "high",
-            "check_name": "xss_check",
-            "suite": "web",
-            "host": "example.com",
-            "target_url": "http://example.com/login",
-            "evidence": "<script>alert(1)</script>",
-        },
-        {
-            "id": "f-002",
-            "title": "Open Port 22",
-            "severity": "info",
-            "check_name": "port_scan",
-            "suite": "network",
-            "host": "example.com",
-        },
-    ])
+    await finding_repo.bulk_create(
+        "scan-001",
+        [
+            {
+                "id": "f-001",
+                "title": "XSS in Login",
+                "severity": "high",
+                "check_name": "xss_check",
+                "suite": "web",
+                "host": "example.com",
+                "target_url": "http://example.com/login",
+                "evidence": "<script>alert(1)</script>",
+            },
+            {
+                "id": "f-002",
+                "title": "Open Port 22",
+                "severity": "info",
+                "check_name": "port_scan",
+                "suite": "network",
+                "host": "example.com",
+            },
+        ],
+    )
     await scan_repo.complete_scan("scan-001", findings_count=2)
 
     # Scan 2
@@ -84,18 +86,21 @@ async def seeded_db(db):
         target_domain="example.com",
         settings={"parallel": True},
     )
-    await finding_repo.bulk_create("scan-002", [
-        {
-            "id": "f-003",
-            "title": "XSS in Login",
-            "severity": "high",
-            "check_name": "xss_check",
-            "suite": "web",
-            "host": "example.com",
-            "target_url": "http://example.com/login",
-            "evidence": "<script>alert(1)</script>",
-        },
-    ])
+    await finding_repo.bulk_create(
+        "scan-002",
+        [
+            {
+                "id": "f-003",
+                "title": "XSS in Login",
+                "severity": "high",
+                "check_name": "xss_check",
+                "suite": "web",
+                "host": "example.com",
+                "target_url": "http://example.com/login",
+                "evidence": "<script>alert(1)</script>",
+            },
+        ],
+    )
     await scan_repo.complete_scan("scan-002", findings_count=1)
 
     return {
@@ -113,12 +118,14 @@ class TestReportsPageStatic:
     def test_reports_html_exists(self):
         """reports.html exists in static directory."""
         from pathlib import Path
+
         reports_path = Path(__file__).parent.parent / "static" / "reports.html"
         assert reports_path.exists(), "static/reports.html must exist"
 
     def test_reports_html_has_report_types(self):
         """reports.html contains all 5 report type selectors."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "static" / "reports.html").read_text()
         for report_type in ["technical", "delta", "executive", "compliance", "trend"]:
             assert f'data-type="{report_type}"' in content, f"Missing report type: {report_type}"
@@ -126,6 +133,7 @@ class TestReportsPageStatic:
     def test_reports_html_has_format_buttons(self):
         """reports.html contains format selector buttons."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "static" / "reports.html").read_text()
         for fmt in ["html", "md", "json", "pdf"]:
             assert f'data-format="{fmt}"' in content, f"Missing format button: {fmt}"
@@ -133,36 +141,42 @@ class TestReportsPageStatic:
     def test_reports_html_has_generate_button(self):
         """reports.html contains a generate button."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "static" / "reports.html").read_text()
         assert 'id="btn-generate"' in content
 
     def test_reports_nav_link_in_index(self):
         """index.html has Reports nav link."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "static" / "index.html").read_text()
         assert 'href="reports.html"' in content
 
     def test_reports_nav_link_in_scan(self):
         """scan.html has Reports nav link."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "static" / "scan.html").read_text()
         assert 'href="reports.html"' in content
 
     def test_reports_nav_link_in_findings(self):
         """findings.html has Reports nav link."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "static" / "findings.html").read_text()
         assert 'href="reports.html"' in content
 
     def test_reports_nav_link_in_trend(self):
         """trend.html has Reports nav link."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "static" / "trend.html").read_text()
         assert 'href="reports.html"' in content
 
     def test_reports_nav_link_active_on_reports(self):
         """reports.html marks its own nav link as active."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "static" / "reports.html").read_text()
         assert 'reports.html" class="nav-item active"' in content
 
@@ -176,6 +190,7 @@ class TestApiJsReportMethods:
     def test_api_js_has_report_methods(self):
         """api.js contains all 5 report generation methods."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "static" / "js" / "api.js").read_text()
         for method in [
             "generateTechnicalReport",
@@ -189,6 +204,7 @@ class TestApiJsReportMethods:
     def test_api_js_report_endpoints(self):
         """api.js calls correct report endpoints."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "static" / "js" / "api.js").read_text()
         for endpoint in [
             "/api/v1/reports/technical",
@@ -209,6 +225,7 @@ class TestReportsRoute:
     def test_reports_route_exists(self):
         """app/main.py has /reports.html route."""
         from pathlib import Path
+
         content = (Path(__file__).parent.parent / "app" / "main.py").read_text()
         assert '"/reports.html"' in content
 
@@ -242,6 +259,7 @@ class TestReportGenerationFromUI:
         content = result["content"]
         if isinstance(content, str):
             import json
+
             content = json.loads(content)
         assert "findings" in content or "scan" in content
 

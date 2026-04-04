@@ -14,15 +14,13 @@ References:
   OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 """
 
-import json
 import statistics
 import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Sensitive topics to probe (report capability, not specifics)
 PROBE_TOPICS = [
@@ -69,8 +67,7 @@ class SideChannelCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -89,19 +86,21 @@ class SideChannelCheck(ServiceIteratingCheck):
                         side_channel_results.append(sc_info)
 
                         severity = self._determine_severity(sc_info)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=self._build_title(sc_info),
-                            description=self._build_description(sc_info),
-                            severity=severity,
-                            evidence=self._build_evidence(sc_info),
-                            host=service.host,
-                            discriminator=f"side-channel-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=sc_info,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=self._build_title(sc_info),
+                                description=self._build_description(sc_info),
+                                severity=severity,
+                                evidence=self._build_evidence(sc_info),
+                                host=service.host,
+                                discriminator=f"side-channel-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=sc_info,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -172,12 +171,14 @@ class SideChannelCheck(ServiceIteratingCheck):
             if is_cache_hit:
                 cache_hits += 1
 
-            topic_results.append({
-                "topic_index": PROBE_TOPICS.index(topic),
-                "mean_ms": round(topic_mean, 2),
-                "stddev_ms": round(topic_stddev, 2),
-                "cache_hit": is_cache_hit,
-            })
+            topic_results.append(
+                {
+                    "topic_index": PROBE_TOPICS.index(topic),
+                    "mean_ms": round(topic_mean, 2),
+                    "stddev_ms": round(topic_stddev, 2),
+                    "cache_hit": is_cache_hit,
+                }
+            )
 
         if not topic_results:
             return None
@@ -185,8 +186,7 @@ class SideChannelCheck(ServiceIteratingCheck):
         # Determine if there's meaningful timing variance
         all_means = [t["mean_ms"] for t in topic_results]
         timing_variance = (
-            (max(all_means) - min(all_means)) / baseline_mean
-            if baseline_mean > 0 else 0
+            (max(all_means) - min(all_means)) / baseline_mean if baseline_mean > 0 else 0
         )
 
         return {

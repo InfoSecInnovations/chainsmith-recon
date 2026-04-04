@@ -14,7 +14,7 @@ Feeds: service version identification, vulnerability correlation
 import asyncio
 import logging
 import socket
-from typing import Any, Optional
+from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.findings import build_finding
@@ -209,11 +209,9 @@ class BannerGrabCheck(BaseCheck):
         result.outputs["banner_data"] = banner_data
         return result
 
-    async def _grab_banner(
-        self, host: str, port: int
-    ) -> Optional[dict[str, Any]]:
+    async def _grab_banner(self, host: str, port: int) -> dict[str, Any] | None:
         """Connect to host:port and grab the banner."""
-        loop = asyncio.get_event_loop()
+        asyncio.get_event_loop()
 
         info: dict[str, Any] = {
             "service": "unknown",
@@ -230,9 +228,7 @@ class BannerGrabCheck(BaseCheck):
         if not banner_bytes:
             for sig in BANNER_SIGNATURES:
                 if sig.get("probe") and port in sig.get("default_ports", []):
-                    banner_bytes = await self._tcp_read(
-                        host, port, probe=sig["probe"]
-                    )
+                    banner_bytes = await self._tcp_read(host, port, probe=sig["probe"])
                     if banner_bytes:
                         break
 
@@ -240,9 +236,7 @@ class BannerGrabCheck(BaseCheck):
             # Try generic probes for common services by port
             for sig in BANNER_SIGNATURES:
                 if port in sig.get("default_ports", []) and sig.get("probe"):
-                    banner_bytes = await self._tcp_read(
-                        host, port, probe=sig["probe"]
-                    )
+                    banner_bytes = await self._tcp_read(host, port, probe=sig["probe"])
                     if banner_bytes:
                         break
 
@@ -277,30 +271,22 @@ class BannerGrabCheck(BaseCheck):
 
         return info
 
-    async def _tcp_read(
-        self, host: str, port: int, probe: Optional[bytes] = None
-    ) -> Optional[bytes]:
+    async def _tcp_read(self, host: str, port: int, probe: bytes | None = None) -> bytes | None:
         """Raw TCP connect, optionally send probe, read response."""
         loop = asyncio.get_event_loop()
         try:
             return await asyncio.wait_for(
-                loop.run_in_executor(
-                    None, self._sync_tcp_read, host, port, probe
-                ),
+                loop.run_in_executor(None, self._sync_tcp_read, host, port, probe),
                 timeout=self.CONNECT_TIMEOUT + self.BANNER_READ_TIMEOUT,
             )
-        except (asyncio.TimeoutError, Exception) as exc:
+        except (TimeoutError, Exception) as exc:
             logger.debug(f"TCP read failed {host}:{port}: {exc}")
             return None
 
-    def _sync_tcp_read(
-        self, host: str, port: int, probe: Optional[bytes]
-    ) -> Optional[bytes]:
+    def _sync_tcp_read(self, host: str, port: int, probe: bytes | None) -> bytes | None:
         """Synchronous TCP connect + read."""
         try:
-            with socket.create_connection(
-                (host, port), timeout=self.CONNECT_TIMEOUT
-            ) as sock:
+            with socket.create_connection((host, port), timeout=self.CONNECT_TIMEOUT) as sock:
                 sock.settimeout(self.BANNER_READ_TIMEOUT)
 
                 if probe:
@@ -309,16 +295,14 @@ class BannerGrabCheck(BaseCheck):
                 try:
                     data = sock.recv(self.MAX_BANNER_BYTES)
                     return data if data else None
-                except socket.timeout:
+                except TimeoutError:
                     return None
 
-        except (socket.error, OSError) as exc:
+        except OSError as exc:
             logger.debug(f"TCP connect failed {host}:{port}: {exc}")
             return None
 
-    def _identify_service(
-        self, banner_text: str, banner_bytes: bytes, port: int
-    ) -> dict[str, Any]:
+    def _identify_service(self, banner_text: str, banner_bytes: bytes, port: int) -> dict[str, Any]:
         """Identify service and version from banner content."""
         result: dict[str, Any] = {"service": "unknown", "version": None}
         banner_lower = banner_text.lower()
@@ -406,19 +390,21 @@ class BannerGrabCheck(BaseCheck):
         version_str = f" {version}" if version else ""
 
         # Info finding: service identified
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"{service_name}{version_str} detected: {endpoint}",
-            description=(
-                f"{service_name}{version_str} service identified on {endpoint} "
-                f"via banner grabbing."
-            ),
-            severity="info",
-            evidence=f"Banner: {banner}",
-            host=svc.host,
-            discriminator=f"banner-{svc.port}",
-            raw_data=banner_info,
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"{service_name}{version_str} detected: {endpoint}",
+                description=(
+                    f"{service_name}{version_str} service identified on {endpoint} "
+                    f"via banner grabbing."
+                ),
+                severity="info",
+                evidence=f"Banner: {banner}",
+                host=svc.host,
+                discriminator=f"banner-{svc.port}",
+                raw_data=banner_info,
+            )
+        )
 
         # Critical: Database/cache with no authentication
         if auth_required is False:
@@ -430,58 +416,63 @@ class BannerGrabCheck(BaseCheck):
                     break
 
             if severity in ("critical", "high"):
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=(
-                        f"{service_name} accepting commands without "
-                        f"authentication: {endpoint}"
-                    ),
-                    description=(
-                        f"{service_name} on {endpoint} does not require "
-                        f"authentication. An attacker with network access can "
-                        f"read, modify, or delete data. This is a critical "
-                        f"security misconfiguration."
-                    ),
-                    severity=severity,
-                    evidence=(
-                        f"Service: {service_name}{version_str} | "
-                        f"Auth required: False | Banner: {banner}"
-                    ),
-                    host=svc.host,
-                    discriminator=f"noauth-{svc.port}",
-                    references=[
-                        "CWE-306 — Missing Authentication for Critical Function",
-                    ],
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=(
+                            f"{service_name} accepting commands without authentication: {endpoint}"
+                        ),
+                        description=(
+                            f"{service_name} on {endpoint} does not require "
+                            f"authentication. An attacker with network access can "
+                            f"read, modify, or delete data. This is a critical "
+                            f"security misconfiguration."
+                        ),
+                        severity=severity,
+                        evidence=(
+                            f"Service: {service_name}{version_str} | "
+                            f"Auth required: False | Banner: {banner}"
+                        ),
+                        host=svc.host,
+                        discriminator=f"noauth-{svc.port}",
+                        references=[
+                            "CWE-306 — Missing Authentication for Critical Function",
+                        ],
+                    )
+                )
 
         # Version disclosure finding (if version detected on non-standard ports)
         if version and service_name != "unknown":
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Service version disclosed: {service_name}{version_str} on {endpoint}",
-                description=(
-                    f"{service_name} on {endpoint} discloses its version "
-                    f"({version}) in the connection banner. Version information "
-                    f"aids attackers in identifying known vulnerabilities."
-                ),
-                severity="low",
-                evidence=f"Version: {version} | Banner: {banner}",
-                host=svc.host,
-                discriminator=f"version-{svc.port}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Service version disclosed: {service_name}{version_str} on {endpoint}",
+                    description=(
+                        f"{service_name} on {endpoint} discloses its version "
+                        f"({version}) in the connection banner. Version information "
+                        f"aids attackers in identifying known vulnerabilities."
+                    ),
+                    severity="low",
+                    evidence=f"Version: {version} | Banner: {banner}",
+                    host=svc.host,
+                    discriminator=f"version-{svc.port}",
+                )
+            )
 
         # Unknown service with banner — worth investigating
         if service_name == "unknown" and banner:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Unidentified service with banner: {endpoint}",
-                description=(
-                    f"An unidentified service on {endpoint} returned a banner "
-                    f"that does not match known service signatures. Manual "
-                    f"investigation is recommended."
-                ),
-                severity="medium",
-                evidence=f"Banner (first 200 chars): {banner}",
-                host=svc.host,
-                discriminator=f"unknown-{svc.port}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Unidentified service with banner: {endpoint}",
+                    description=(
+                        f"An unidentified service on {endpoint} returned a banner "
+                        f"that does not match known service signatures. Manual "
+                        f"investigation is recommended."
+                    ),
+                    severity="medium",
+                    evidence=f"Banner (first 200 chars): {banner}",
+                    host=svc.host,
+                    discriminator=f"unknown-{svc.port}",
+                )
+            )

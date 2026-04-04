@@ -7,13 +7,13 @@ profiling and understanding the target's protocol capabilities.
 """
 
 import logging
-import ssl
 import socket
+import ssl
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,9 @@ class HTTP2DetectionCheck(ServiceIteratingCheck):
     timeout_seconds = 30.0
     delay_between_targets = 0.2
 
-    reason = "Protocol detection profiles infrastructure maturity and identifies QUIC/HTTP3 endpoints"
+    reason = (
+        "Protocol detection profiles infrastructure maturity and identifies QUIC/HTTP3 endpoints"
+    )
     references = ["RFC 7540", "RFC 9114"]
     techniques = ["protocol detection", "infrastructure profiling"]
 
@@ -85,52 +87,60 @@ class HTTP2DetectionCheck(ServiceIteratingCheck):
 
         # Generate findings
         if h2_supported and h3_available:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"HTTP/2 and HTTP/3 supported: {service.host}",
-                description="Both HTTP/2 and HTTP/3 (QUIC) are available, indicating modern infrastructure",
-                severity="info",
-                evidence=f"ALPN: h2 | Alt-Svc: {alt_svc_value[:200]}",
-                host=service.host,
-                discriminator="h2-h3",
-                target=service,
-                references=["RFC 7540", "RFC 9114"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"HTTP/2 and HTTP/3 supported: {service.host}",
+                    description="Both HTTP/2 and HTTP/3 (QUIC) are available, indicating modern infrastructure",
+                    severity="info",
+                    evidence=f"ALPN: h2 | Alt-Svc: {alt_svc_value[:200]}",
+                    host=service.host,
+                    discriminator="h2-h3",
+                    target=service,
+                    references=["RFC 7540", "RFC 9114"],
+                )
+            )
         elif h2_supported:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"HTTP/2 supported: {service.host}:{service.port}",
-                description="HTTP/2 is supported via TLS ALPN negotiation",
-                severity="info",
-                evidence=f"TLS ALPN negotiated protocol: h2",
-                host=service.host,
-                discriminator="h2-only",
-                target=service,
-                references=["RFC 7540"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"HTTP/2 supported: {service.host}:{service.port}",
+                    description="HTTP/2 is supported via TLS ALPN negotiation",
+                    severity="info",
+                    evidence="TLS ALPN negotiated protocol: h2",
+                    host=service.host,
+                    discriminator="h2-only",
+                    target=service,
+                    references=["RFC 7540"],
+                )
+            )
         elif h3_available:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"HTTP/3 (QUIC) available: {service.host}",
-                description=f"HTTP/3 advertised via Alt-Svc header",
-                severity="info",
-                evidence=f"Alt-Svc: {alt_svc_value[:200]}",
-                host=service.host,
-                discriminator="h3-only",
-                target=service,
-                references=["RFC 9114"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"HTTP/3 (QUIC) available: {service.host}",
+                    description="HTTP/3 advertised via Alt-Svc header",
+                    severity="info",
+                    evidence=f"Alt-Svc: {alt_svc_value[:200]}",
+                    host=service.host,
+                    discriminator="h3-only",
+                    target=service,
+                    references=["RFC 9114"],
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"HTTP/1.1 only: {service.host}:{service.port}",
-                description="No HTTP/2 or HTTP/3 support detected — legacy HTTP/1.1 only",
-                severity="info",
-                evidence="No ALPN h2 negotiation, no Alt-Svc header with h3",
-                host=service.host,
-                discriminator="h1-only",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"HTTP/1.1 only: {service.host}:{service.port}",
+                    description="No HTTP/2 or HTTP/3 support detected — legacy HTTP/1.1 only",
+                    severity="info",
+                    evidence="No ALPN h2 negotiation, no Alt-Svc header with h3",
+                    host=service.host,
+                    discriminator="h1-only",
+                    target=service,
+                )
+            )
 
         result.outputs["http_protocols"] = {
             "h2": h2_supported,
@@ -151,5 +161,5 @@ class HTTP2DetectionCheck(ServiceIteratingCheck):
             with socket.create_connection((host, port), timeout=5) as sock:
                 with ctx.wrap_socket(sock, server_hostname=host) as tls_sock:
                     return tls_sock.selected_alpn_protocol()
-        except (socket.timeout, socket.error, ssl.SSLError, OSError):
+        except (TimeoutError, ssl.SSLError, OSError):
             return None

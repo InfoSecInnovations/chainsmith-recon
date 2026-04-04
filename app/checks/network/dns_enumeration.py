@@ -22,13 +22,31 @@ from typing import Any
 from app.checks.base import BaseCheck, CheckResult
 from app.lib.findings import build_finding
 
-
 # Common subdomain wordlist for active enumeration
 DEFAULT_WORDLIST = [
-    "www", "api", "chat", "app", "admin", "portal", "auth",
-    "login", "docs", "dev", "staging", "test", "internal",
-    "backend", "frontend", "cdn", "static", "media",
-    "mail", "smtp", "ftp", "vpn", "remote",
+    "www",
+    "api",
+    "chat",
+    "app",
+    "admin",
+    "portal",
+    "auth",
+    "login",
+    "docs",
+    "dev",
+    "staging",
+    "test",
+    "internal",
+    "backend",
+    "frontend",
+    "cdn",
+    "static",
+    "media",
+    "mail",
+    "smtp",
+    "ftp",
+    "vpn",
+    "remote",
 ]
 
 
@@ -48,11 +66,11 @@ class DnsEnumerationCheck(BaseCheck):
     name = "dns_enumeration"
     description = "Enumerate subdomains via DNS resolution against a target domain"
 
-    conditions = []   # Entry point — no upstream dependencies
+    conditions = []  # Entry point — no upstream dependencies
     produces = ["target_hosts", "dns_records"]
 
     timeout_seconds = 30.0
-    requests_per_second = 20.0   # DNS is cheap; be reasonably fast
+    requests_per_second = 20.0  # DNS is cheap; be reasonably fast
 
     reason = (
         "DNS enumeration reveals subdomains and services in the target's "
@@ -107,16 +125,18 @@ class DnsEnumerationCheck(BaseCheck):
                 resolved_hosts.append(hostname)
                 dns_records[hostname] = ip
 
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Host discovered: {hostname}",
-                    description=f"DNS resolved {hostname} to {ip}",
-                    severity="info",
-                    evidence=f"Host: {hostname} | IP: {ip}",
-                    host=hostname,
-                    target=None,
-                    target_url=None,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Host discovered: {hostname}",
+                        description=f"DNS resolved {hostname} to {ip}",
+                        severity="info",
+                        evidence=f"Host: {hostname} | IP: {ip}",
+                        host=hostname,
+                        target=None,
+                        target_url=None,
+                    )
+                )
 
             await asyncio.sleep(0.05)  # brief pause between batches
 
@@ -136,8 +156,7 @@ class DnsEnumerationCheck(BaseCheck):
         loop = asyncio.get_event_loop()
         try:
             infos = await loop.run_in_executor(
-                None,
-                lambda: socket.getaddrinfo(hostname, None, socket.AF_INET)
+                None, lambda: socket.getaddrinfo(hostname, None, socket.AF_INET)
             )
             if infos:
                 ip = infos[0][4][0]

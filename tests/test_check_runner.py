@@ -17,11 +17,8 @@ Covers:
 import asyncio
 from typing import Any
 
-import pytest
-
-from app.checks.base import BaseCheck, CheckCondition, CheckResult, CheckStatus, Finding, Service
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Finding, Service
 from app.checks.runner import CheckRunner
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test Helpers - Concrete Check Implementations
@@ -363,7 +360,7 @@ class TestRunLoop:
         # the loop terminates even with no checks
         runner = CheckRunner()
 
-        result = await runner.run()
+        await runner.run()
 
         assert runner.is_running is False
 

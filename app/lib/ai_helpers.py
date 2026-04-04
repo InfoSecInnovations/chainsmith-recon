@@ -9,8 +9,8 @@ Shared helpers for AI suite checks:
 
 from typing import Any
 
-
 # ── API dialects ──────────────────────────────────────────────────
+
 
 def format_chat_request(message: str, api_format: str, max_tokens: int = 50) -> dict:
     """
@@ -71,6 +71,7 @@ def extract_response_text(body: Any, api_format: str) -> str:
 
 
 # ── Evidence formatters ───────────────────────────────────────────
+
 
 def format_chat_request_with_system(
     message: str,

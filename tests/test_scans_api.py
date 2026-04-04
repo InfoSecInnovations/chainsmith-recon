@@ -6,19 +6,16 @@ existing /api/findings and /api/chains endpoints.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from sqlalchemy import func, select
 
-from sqlalchemy import select, func
-
-from app.db.engine import init_db, close_db, get_session
-from app.db.models import Scan, Finding, Chain, CheckLog
+from app.db.engine import close_db, get_session, init_db
+from app.db.models import Chain, CheckLog, Finding
 from app.db.repositories import (
-    ScanRepository,
-    FindingRepository,
     ChainRepository,
     CheckLogRepository,
+    FindingRepository,
+    ScanRepository,
 )
-
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -48,53 +45,66 @@ async def seeded_db(db):
         settings={"parallel": False},
         scenario_name="web_check",
     )
-    await finding_repo.bulk_create("scan-aaa", [
-        {
-            "id": "f-001",
-            "title": "XSS in Search",
-            "severity": "high",
-            "check_name": "xss_check",
-            "suite": "web",
-            "host": "example.com",
-            "target_url": "http://example.com/search",
-            "evidence": "alert(1)",
-        },
-        {
-            "id": "f-002",
-            "title": "Missing CSP",
-            "severity": "medium",
-            "check_name": "header_check",
-            "suite": "web",
-            "host": "example.com",
-        },
-        {
-            "id": "f-003",
-            "title": "SSH Open",
-            "severity": "info",
-            "check_name": "port_scan",
-            "suite": "network",
-            "host": "api.example.com",
-        },
-    ])
-    await chain_repo.bulk_create("scan-aaa", [
-        {
-            "id": "c-001",
-            "title": "XSS to Session Hijack",
-            "severity": "high",
-            "source": "rule-based",
-            "finding_ids": ["f-001", "f-002"],
-        },
-    ])
-    await log_repo.bulk_create("scan-aaa", [
-        {"check": "xss_check", "event": "started", "suite": "web"},
-        {"check": "xss_check", "event": "completed", "findings": 1, "suite": "web"},
-        {"check": "header_check", "event": "started", "suite": "web"},
-        {"check": "header_check", "event": "completed", "findings": 1, "suite": "web"},
-    ])
+    await finding_repo.bulk_create(
+        "scan-aaa",
+        [
+            {
+                "id": "f-001",
+                "title": "XSS in Search",
+                "severity": "high",
+                "check_name": "xss_check",
+                "suite": "web",
+                "host": "example.com",
+                "target_url": "http://example.com/search",
+                "evidence": "alert(1)",
+            },
+            {
+                "id": "f-002",
+                "title": "Missing CSP",
+                "severity": "medium",
+                "check_name": "header_check",
+                "suite": "web",
+                "host": "example.com",
+            },
+            {
+                "id": "f-003",
+                "title": "SSH Open",
+                "severity": "info",
+                "check_name": "port_scan",
+                "suite": "network",
+                "host": "api.example.com",
+            },
+        ],
+    )
+    await chain_repo.bulk_create(
+        "scan-aaa",
+        [
+            {
+                "id": "c-001",
+                "title": "XSS to Session Hijack",
+                "severity": "high",
+                "source": "rule-based",
+                "finding_ids": ["f-001", "f-002"],
+            },
+        ],
+    )
+    await log_repo.bulk_create(
+        "scan-aaa",
+        [
+            {"check": "xss_check", "event": "started", "suite": "web"},
+            {"check": "xss_check", "event": "completed", "findings": 1, "suite": "web"},
+            {"check": "header_check", "event": "started", "suite": "web"},
+            {"check": "header_check", "event": "completed", "findings": 1, "suite": "web"},
+        ],
+    )
     await scan_repo.complete_scan(
-        "scan-aaa", status="complete",
-        checks_total=2, checks_completed=2, checks_failed=0,
-        findings_count=3, duration_ms=5000,
+        "scan-aaa",
+        status="complete",
+        checks_total=2,
+        checks_completed=2,
+        checks_failed=0,
+        findings_count=3,
+        duration_ms=5000,
     )
 
     # Scan 2: completed, different target
@@ -103,18 +113,24 @@ async def seeded_db(db):
         session_id="sess-2",
         target_domain="other.com",
     )
-    await finding_repo.bulk_create("scan-bbb", [
-        {
-            "id": "f-010",
-            "title": "SQLi in Login",
-            "severity": "critical",
-            "check_name": "sqli_check",
-            "host": "other.com",
-        },
-    ])
+    await finding_repo.bulk_create(
+        "scan-bbb",
+        [
+            {
+                "id": "f-010",
+                "title": "SQLi in Login",
+                "severity": "critical",
+                "check_name": "sqli_check",
+                "host": "other.com",
+            },
+        ],
+    )
     await scan_repo.complete_scan(
-        "scan-bbb", status="complete",
-        checks_total=1, checks_completed=1, findings_count=1,
+        "scan-bbb",
+        status="complete",
+        checks_total=1,
+        checks_completed=1,
+        findings_count=1,
     )
 
     return {"scan_a": "scan-aaa", "scan_b": "scan-bbb"}
@@ -277,10 +293,25 @@ class TestFindingRepositoryReads:
         findings = await repo.get_findings("scan-aaa", severity="high")
         f = findings[0]
         expected_keys = {
-            "id", "scan_id", "title", "description", "severity",
-            "check_name", "suite", "target_url", "host", "evidence",
-            "raw_data", "references", "verification_status", "confidence",
-            "fingerprint", "created_at",
+            "id",
+            "scan_id",
+            "title",
+            "description",
+            "severity",
+            "original_severity",
+            "severity_override_reason",
+            "override_source",
+            "check_name",
+            "suite",
+            "target_url",
+            "host",
+            "evidence",
+            "raw_data",
+            "references",
+            "verification_status",
+            "confidence",
+            "fingerprint",
+            "created_at",
         }
         assert expected_keys == set(f.keys())
 
@@ -310,8 +341,14 @@ class TestChainRepositoryReads:
         repo = ChainRepository()
         chains = await repo.get_chains("scan-aaa")
         expected_keys = {
-            "id", "scan_id", "title", "description", "severity",
-            "source", "finding_ids", "created_at",
+            "id",
+            "scan_id",
+            "title",
+            "description",
+            "severity",
+            "source",
+            "finding_ids",
+            "created_at",
         }
         assert expected_keys == set(chains[0].keys())
 
@@ -342,8 +379,13 @@ class TestCheckLogRepositoryReads:
         repo = CheckLogRepository()
         log = await repo.get_log("scan-aaa")
         expected_keys = {
-            "check", "suite", "event", "findings",
-            "duration_ms", "error_message", "timestamp",
+            "check",
+            "suite",
+            "event",
+            "findings",
+            "duration_ms",
+            "error_message",
+            "timestamp",
         }
         assert expected_keys == set(log[0].keys())
 
@@ -359,11 +401,23 @@ class TestScanDictShape:
         repo = ScanRepository()
         scan = await repo.get_scan("scan-aaa")
         expected_keys = {
-            "id", "engagement_id", "session_id", "target_domain", "status",
-            "started_at", "completed_at", "duration_ms",
-            "checks_total", "checks_completed", "checks_failed",
-            "findings_count", "scope", "settings",
-            "profile_name", "scenario_name", "error_message",
+            "id",
+            "engagement_id",
+            "session_id",
+            "target_domain",
+            "status",
+            "started_at",
+            "completed_at",
+            "duration_ms",
+            "checks_total",
+            "checks_completed",
+            "checks_failed",
+            "findings_count",
+            "scope",
+            "settings",
+            "profile_name",
+            "scenario_name",
+            "error_message",
         }
         assert expected_keys == set(scan.keys())
 

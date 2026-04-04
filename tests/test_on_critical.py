@@ -9,18 +9,19 @@ Tests:
 - Intrusive check gating
 """
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from unittest.mock import patch
 
-from app.preferences import (
-    Preferences, CheckPreferences, resolve_on_critical,
-    VALID_ON_CRITICAL_VALUES,
-)
+import pytest
+
 from app.check_launcher import CheckLauncher
-from app.checks.base import CheckResult, Finding, Service, CheckCondition
-
+from app.checks.base import CheckCondition, CheckResult, Finding, Service
+from app.preferences import (
+    VALID_ON_CRITICAL_VALUES,
+    CheckPreferences,
+    Preferences,
+    resolve_on_critical,
+)
 
 # ─── Fixtures ────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ from app.checks.base import CheckResult, Finding, Service, CheckCondition
 @dataclass
 class FakeCheck:
     """Minimal check object for testing launcher behavior."""
+
     name: str
     conditions: list = field(default_factory=list)
     produces: list = field(default_factory=list)
@@ -36,7 +38,7 @@ class FakeCheck:
 
     async def run(self, context: dict) -> CheckResult:
         result = CheckResult(success=True)
-        result.findings = [f for f in self._findings]
+        result.findings = list(self._findings)
         result.outputs = dict(self._outputs)
         return result
 
@@ -126,6 +128,7 @@ class TestCheckPreferencesFields:
 
     def test_aggressive_profile_enables_intrusive(self):
         from app.preferences import BUILTIN_PROFILES
+
         aggressive = BUILTIN_PROFILES["aggressive"]
         resolved = aggressive.resolve()
         assert resolved.checks.intrusive_web is True
@@ -149,16 +152,20 @@ class TestLauncherAnnotate:
         ai_check = FakeCheck(
             name="llm_endpoint",
             conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[make_finding(
-                title="Prompt leak", severity="medium",
-                host="target.com", check_name="llm_endpoint",
-            )],
+            _findings=[
+                make_finding(
+                    title="Prompt leak",
+                    severity="medium",
+                    host="target.com",
+                    check_name="llm_endpoint",
+                )
+            ],
         )
 
         context = {}
         launcher = CheckLauncher([web_check, ai_check], context)
 
-        with patch.object(launcher, '_resolve_on_critical', return_value='annotate'):
+        with patch.object(launcher, "_resolve_on_critical", return_value="annotate"):
             findings = await launcher.run_all()
 
         assert len(findings) == 2
@@ -179,16 +186,20 @@ class TestLauncherAnnotate:
         check2 = FakeCheck(
             name="robots_txt",
             conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[make_finding(
-                title="Sensitive paths", severity="low",
-                host="target.com", check_name="robots_txt",
-            )],
+            _findings=[
+                make_finding(
+                    title="Sensitive paths",
+                    severity="low",
+                    host="target.com",
+                    check_name="robots_txt",
+                )
+            ],
         )
 
         context = {}
         launcher = CheckLauncher([check1, check2], context)
 
-        with patch.object(launcher, '_resolve_on_critical', return_value='annotate'):
+        with patch.object(launcher, "_resolve_on_critical", return_value="annotate"):
             findings = await launcher.run_all()
 
         # robots_txt is also "web" suite — should NOT be annotated
@@ -212,16 +223,20 @@ class TestLauncherSkipDownstream:
         ai_check = FakeCheck(
             name="llm_endpoint",
             conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[make_finding(
-                title="Should not appear", severity="high",
-                host="target.com", check_name="llm_endpoint",
-            )],
+            _findings=[
+                make_finding(
+                    title="Should not appear",
+                    severity="high",
+                    host="target.com",
+                    check_name="llm_endpoint",
+                )
+            ],
         )
 
         context = {}
         launcher = CheckLauncher([web_check, ai_check], context)
 
-        with patch.object(launcher, '_resolve_on_critical', return_value='skip_downstream'):
+        with patch.object(launcher, "_resolve_on_critical", return_value="skip_downstream"):
             findings = await launcher.run_all()
 
         # Only the web finding should be present
@@ -241,16 +256,20 @@ class TestLauncherSkipDownstream:
         check2 = FakeCheck(
             name="path_probe",
             conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[make_finding(
-                title="Path found", severity="info",
-                host="target.com", check_name="path_probe",
-            )],
+            _findings=[
+                make_finding(
+                    title="Path found",
+                    severity="info",
+                    host="target.com",
+                    check_name="path_probe",
+                )
+            ],
         )
 
         context = {}
         launcher = CheckLauncher([check1, check2], context)
 
-        with patch.object(launcher, '_resolve_on_critical', return_value='skip_downstream'):
+        with patch.object(launcher, "_resolve_on_critical", return_value="skip_downstream"):
             findings = await launcher.run_all()
 
         # Both are web suite — path_probe should NOT be skipped
@@ -273,16 +292,20 @@ class TestLauncherStop:
         ai_check = FakeCheck(
             name="llm_endpoint",
             conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[make_finding(
-                title="Should not run", severity="medium",
-                host="target.com", check_name="llm_endpoint",
-            )],
+            _findings=[
+                make_finding(
+                    title="Should not run",
+                    severity="medium",
+                    host="target.com",
+                    check_name="llm_endpoint",
+                )
+            ],
         )
 
         context = {}
         launcher = CheckLauncher([web_check, ai_check], context)
 
-        with patch.object(launcher, '_resolve_on_critical', return_value='stop'):
+        with patch.object(launcher, "_resolve_on_critical", return_value="stop"):
             findings = await launcher.run_all()
 
         assert launcher.scan_stopped is True
@@ -300,25 +323,33 @@ class TestLauncherNoCriticals:
         check1 = FakeCheck(
             name="header_analysis",
             produces=["header_findings"],
-            _findings=[make_finding(
-                title="Low finding", severity="low",
-                host="target.com", check_name="header_analysis",
-            )],
+            _findings=[
+                make_finding(
+                    title="Low finding",
+                    severity="low",
+                    host="target.com",
+                    check_name="header_analysis",
+                )
+            ],
             _outputs={"header_findings": True},
         )
         check2 = FakeCheck(
             name="llm_endpoint",
             conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[make_finding(
-                title="AI finding", severity="medium",
-                host="target.com", check_name="llm_endpoint",
-            )],
+            _findings=[
+                make_finding(
+                    title="AI finding",
+                    severity="medium",
+                    host="target.com",
+                    check_name="llm_endpoint",
+                )
+            ],
         )
 
         context = {}
         launcher = CheckLauncher([check1, check2], context)
 
-        with patch.object(launcher, '_resolve_on_critical', return_value='skip_downstream'):
+        with patch.object(launcher, "_resolve_on_critical", return_value="skip_downstream"):
             findings = await launcher.run_all()
 
         assert len(findings) == 2
@@ -341,7 +372,7 @@ class TestLauncherCriticalHosts:
         context = {}
         launcher = CheckLauncher([web_check], context)
 
-        with patch.object(launcher, '_resolve_on_critical', return_value='annotate'):
+        with patch.object(launcher, "_resolve_on_critical", return_value="annotate"):
             await launcher.run_all()
 
         assert "host1.com" in context["critical_hosts"]
@@ -370,12 +401,14 @@ class TestIntrusiveGating:
 
     def test_intrusive_web_in_aggressive_profile(self):
         from app.preferences import BUILTIN_PROFILES
+
         aggressive = BUILTIN_PROFILES["aggressive"]
         resolved = aggressive.resolve()
         assert resolved.checks.intrusive_web is True
 
     def test_intrusive_web_not_in_stealth_profile(self):
         from app.preferences import BUILTIN_PROFILES
+
         stealth = BUILTIN_PROFILES["stealth"]
         resolved = stealth.resolve()
         assert resolved.checks.intrusive_web is False

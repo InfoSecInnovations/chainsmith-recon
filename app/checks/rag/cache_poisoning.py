@@ -16,13 +16,21 @@ References:
 import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
-
-CACHE_HEADERS = ["cache-control", "age", "x-cache", "x-cache-hit", "etag",
-                 "last-modified", "x-cached", "cf-cache-status", "x-varnish"]
+CACHE_HEADERS = [
+    "cache-control",
+    "age",
+    "x-cache",
+    "x-cache-hit",
+    "etag",
+    "last-modified",
+    "x-cached",
+    "cf-cache-status",
+    "x-varnish",
+]
 
 TEST_QUERIES = [
     "What is the most common topic in this knowledge base?",
@@ -60,7 +68,8 @@ class RAGCachePoisoningCheck(ServiceIteratingCheck):
 
         rag_endpoints = context.get("rag_endpoints", [])
         service_endpoints = [
-            ep for ep in rag_endpoints
+            ep
+            for ep in rag_endpoints
             if ep.get("service", {}).get("host") == service.host
             and ep.get("endpoint_type") == "rag_query"
         ]
@@ -90,7 +99,8 @@ class RAGCachePoisoningCheck(ServiceIteratingCheck):
                     # First request
                     t1_start = time.monotonic()
                     resp1 = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
                     t1 = time.monotonic() - t1_start
@@ -107,7 +117,8 @@ class RAGCachePoisoningCheck(ServiceIteratingCheck):
                     # Second request (identical, different "session")
                     t2_start = time.monotonic()
                     resp2 = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={
                             "Content-Type": "application/json",
                             "Cache-Control": "no-cache",
@@ -134,7 +145,10 @@ class RAGCachePoisoningCheck(ServiceIteratingCheck):
                     # Timing: second request significantly faster suggests cache
                     if t1 > 0.5 and t2 < t1 * 0.5:
                         cache_behavior["timing_suggests_cache"] = True
-                        cache_behavior["timing"] = {"first_ms": int(t1 * 1000), "second_ms": int(t2 * 1000)}
+                        cache_behavior["timing"] = {
+                            "first_ms": int(t1 * 1000),
+                            "second_ms": int(t2 * 1000),
+                        }
 
                     if cache_behavior["identical_responses"] or cache_behavior["cache_headers"]:
                         cache_behavior["caching_detected"] = True
@@ -150,60 +164,68 @@ class RAGCachePoisoningCheck(ServiceIteratingCheck):
             has_injection = bool(vuln_endpoints)
 
             if has_injection and cache_behavior["identical_responses"]:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="RAG cache poisoning: injected response served to subsequent queries",
-                    description=(
-                        "RAG caches responses and indirect injection was detected on "
-                        "this endpoint. Cached poisoned responses affect all users."
-                    ),
-                    severity="high",
-                    evidence=self._build_evidence(cache_behavior),
-                    host=service.host,
-                    discriminator="cache-poisoned",
-                    target=service,
-                    raw_data=cache_behavior,
-                    references=self.references,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="RAG cache poisoning: injected response served to subsequent queries",
+                        description=(
+                            "RAG caches responses and indirect injection was detected on "
+                            "this endpoint. Cached poisoned responses affect all users."
+                        ),
+                        severity="high",
+                        evidence=self._build_evidence(cache_behavior),
+                        host=service.host,
+                        discriminator="cache-poisoned",
+                        target=service,
+                        raw_data=cache_behavior,
+                        references=self.references,
+                    )
+                )
             elif cache_behavior["identical_responses"]:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="RAG caching detected: identical responses to repeated queries",
-                    description=(
-                        f"Identical responses returned for repeated queries. "
-                        f"Cache headers: {cache_behavior['cache_headers'] or 'none'}."
-                    ),
-                    severity="medium",
-                    evidence=self._build_evidence(cache_behavior),
-                    host=service.host,
-                    discriminator="cache-detected",
-                    target=service,
-                    raw_data=cache_behavior,
-                    references=self.references,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="RAG caching detected: identical responses to repeated queries",
+                        description=(
+                            f"Identical responses returned for repeated queries. "
+                            f"Cache headers: {cache_behavior['cache_headers'] or 'none'}."
+                        ),
+                        severity="medium",
+                        evidence=self._build_evidence(cache_behavior),
+                        host=service.host,
+                        discriminator="cache-detected",
+                        target=service,
+                        raw_data=cache_behavior,
+                        references=self.references,
+                    )
+                )
             else:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="RAG caching detected but responses vary",
-                    description="Cache headers present but responses differ — may use session keys.",
-                    severity="low",
-                    evidence=self._build_evidence(cache_behavior),
-                    host=service.host,
-                    discriminator="cache-varied",
-                    target=service,
-                    raw_data=cache_behavior,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="RAG caching detected but responses vary",
+                        description="Cache headers present but responses differ — may use session keys.",
+                        severity="low",
+                        evidence=self._build_evidence(cache_behavior),
+                        host=service.host,
+                        discriminator="cache-varied",
+                        target=service,
+                        raw_data=cache_behavior,
+                    )
+                )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="No RAG-level caching detected",
-                description="No caching indicators found in RAG responses.",
-                severity="info",
-                evidence="No cache headers or response duplication detected",
-                host=service.host,
-                discriminator="no-cache",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="No RAG-level caching detected",
+                    description="No caching indicators found in RAG responses.",
+                    severity="info",
+                    evidence="No cache headers or response duplication detected",
+                    host=service.host,
+                    discriminator="no-cache",
+                    target=service,
+                )
+            )
 
         result.outputs["rag_cache_behavior"] = cache_behavior
         return result
@@ -215,5 +237,7 @@ class RAGCachePoisoningCheck(ServiceIteratingCheck):
         lines.append(f"Identical responses: {behavior['identical_responses']}")
         lines.append(f"Timing suggests cache: {behavior['timing_suggests_cache']}")
         if "timing" in behavior:
-            lines.append(f"Timing: {behavior['timing']['first_ms']}ms -> {behavior['timing']['second_ms']}ms")
+            lines.append(
+                f"Timing: {behavior['timing']['first_ms']}ms -> {behavior['timing']['second_ms']}ms"
+            )
         return "\n".join(lines)

@@ -9,12 +9,11 @@ References:
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 """
 
-import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class RAGCrossCollectionCheck(ServiceIteratingCheck):
@@ -64,7 +63,8 @@ class RAGCrossCollectionCheck(ServiceIteratingCheck):
             return result
 
         query_eps = [
-            ep for ep in rag_endpoints
+            ep
+            for ep in rag_endpoints
             if ep.get("service", {}).get("host") == service.host
             and ep.get("endpoint_type") == "rag_query"
         ]
@@ -110,35 +110,39 @@ class RAGCrossCollectionCheck(ServiceIteratingCheck):
         # Generate findings
         leaks = [r for r in cross_results if r.get("isolation_violated")]
         if leaks:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=(
-                    f"Cross-collection retrieval: query to '{leaks[0]['source_collection']}' "
-                    f"returned documents from '{leaks[0]['target_collection']}'"
-                ),
-                description=(
-                    f"Collection isolation not enforced. Queries retrieve from "
-                    f"all collections regardless of target."
-                ),
-                severity="critical" if len(leaks) > 1 else "high",
-                evidence=self._build_evidence(leaks),
-                host=service.host,
-                discriminator="cross-collection-leak",
-                target=service,
-                raw_data={"leaks": leaks},
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=(
+                        f"Cross-collection retrieval: query to '{leaks[0]['source_collection']}' "
+                        f"returned documents from '{leaks[0]['target_collection']}'"
+                    ),
+                    description=(
+                        "Collection isolation not enforced. Queries retrieve from "
+                        "all collections regardless of target."
+                    ),
+                    severity="critical" if len(leaks) > 1 else "high",
+                    evidence=self._build_evidence(leaks),
+                    host=service.host,
+                    discriminator="cross-collection-leak",
+                    target=service,
+                    raw_data={"leaks": leaks},
+                    references=self.references,
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Collection isolation enforced",
-                description="Queries to one collection did not return documents from another.",
-                severity="info",
-                evidence=f"Tested {len(all_collections)} collections",
-                host=service.host,
-                discriminator="isolation-ok",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Collection isolation enforced",
+                    description="Queries to one collection did not return documents from another.",
+                    severity="info",
+                    evidence=f"Tested {len(all_collections)} collections",
+                    host=service.host,
+                    discriminator="isolation-ok",
+                    target=service,
+                )
+            )
 
         if cross_results:
             result.outputs["cross_collection_results"] = cross_results
@@ -178,7 +182,8 @@ class RAGCrossCollectionCheck(ServiceIteratingCheck):
             return None
 
         resp = await client.post(
-            url, json=body,
+            url,
+            json=body,
             headers={"Content-Type": "application/json"},
         )
         if resp.error or resp.status_code >= 400:
@@ -214,7 +219,8 @@ class RAGCrossCollectionCheck(ServiceIteratingCheck):
             "k": 5,
         }
         resp = await client.post(
-            url, json=body,
+            url,
+            json=body,
             headers={"Content-Type": "application/json"},
         )
         if resp.error or resp.status_code >= 400:
@@ -234,7 +240,6 @@ class RAGCrossCollectionCheck(ServiceIteratingCheck):
         lines = []
         for leak in leaks:
             lines.append(
-                f"{leak['source_collection']} -> {leak['target_collection']} "
-                f"(via {leak['method']})"
+                f"{leak['source_collection']} -> {leak['target_collection']} (via {leak['method']})"
             )
         return "\n".join(lines)

@@ -16,14 +16,12 @@ References:
 """
 
 import asyncio
-import json
 import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Query variations with decreasing similarity to baseline
 SIMILARITY_PROBES = [
@@ -69,8 +67,7 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -78,9 +75,9 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
 
         # Check if semantic cache is known
         cache_infra = context.get("cache_infrastructure", [])
-        has_semantic = any(
-            t in cache_infra for t in ["semantic_cache", "gptcache"]
-        ) if cache_infra else False
+        has_semantic = (
+            any(t in cache_infra for t in ["semantic_cache", "gptcache"]) if cache_infra else False
+        )
 
         cfg = HttpConfig(timeout_seconds=15.0, verify_ssl=False)
         threshold_results = []
@@ -89,27 +86,27 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
             async with AsyncHttpClient(cfg) as client:
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
-                    threshold_info = await self._probe_threshold(
-                        client, url, service, has_semantic
-                    )
+                    threshold_info = await self._probe_threshold(client, url, service, has_semantic)
 
                     if threshold_info:
                         threshold_results.append(threshold_info)
 
                         severity = self._determine_severity(threshold_info)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=self._build_title(threshold_info),
-                            description=self._build_description(threshold_info),
-                            severity=severity,
-                            evidence=self._build_evidence(threshold_info),
-                            host=service.host,
-                            discriminator=f"threshold-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=threshold_info,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=self._build_title(threshold_info),
+                                description=self._build_description(threshold_info),
+                                severity=severity,
+                                evidence=self._build_evidence(threshold_info),
+                                host=service.host,
+                                discriminator=f"threshold-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=threshold_info,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -120,8 +117,7 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
         return result
 
     async def _probe_threshold(
-        self, client: AsyncHttpClient, url: str,
-        service: Service, has_semantic: bool
+        self, client: AsyncHttpClient, url: str, service: Service, has_semantic: bool
     ) -> dict | None:
         """Probe the semantic similarity threshold."""
         baseline_query = SIMILARITY_PROBES[0]["query"]
@@ -177,14 +173,16 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
             is_cache_hit = elapsed < cache_hit_threshold_ms
             content_matches = (resp.body or "") == baseline_body
 
-            probe_results.append({
-                "label": probe["label"],
-                "query": probe["query"],
-                "similarity": probe["similarity"],
-                "elapsed_ms": round(elapsed, 2),
-                "cache_hit": is_cache_hit,
-                "content_matches": content_matches,
-            })
+            probe_results.append(
+                {
+                    "label": probe["label"],
+                    "query": probe["query"],
+                    "similarity": probe["similarity"],
+                    "elapsed_ms": round(elapsed, 2),
+                    "cache_hit": is_cache_hit,
+                    "content_matches": content_matches,
+                }
+            )
 
         if not probe_results:
             return None
@@ -276,9 +274,6 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
 
         for p in threshold_info.get("probe_results", []):
             hit_str = "HIT" if p["cache_hit"] else "MISS"
-            lines.append(
-                f"  [{hit_str}] {p['label']} (sim={p['similarity']}): "
-                f"{p['elapsed_ms']}ms"
-            )
+            lines.append(f"  [{hit_str}] {p['label']} (sim={p['similarity']}): {p['elapsed_ms']}ms")
 
         return "\n".join(lines)

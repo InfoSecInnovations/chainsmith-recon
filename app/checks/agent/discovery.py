@@ -32,17 +32,22 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Framework detection signatures
 FRAMEWORK_SIGNATURES = {
     "langserve": {
         "headers": ["x-langserve-version", "x-langsmith-trace"],
         "paths": ["/invoke", "/stream", "/batch", "/input_schema", "/output_schema"],
-        "body_patterns": ["langserve", "langchain", "input_schema", "output_schema", "configurable"],
+        "body_patterns": [
+            "langserve",
+            "langchain",
+            "input_schema",
+            "output_schema",
+            "configurable",
+        ],
         "error_patterns": ["langserve", "langchain.chains", "langchain.agents"],
     },
     "langgraph": {
@@ -113,7 +118,7 @@ AGENT_PATHS = [
 class AgentDiscoveryCheck(ServiceIteratingCheck):
     """
     Discover AI agent orchestration endpoints and identify frameworks.
-    
+
     Probes common agent paths and fingerprints responses to identify
     the underlying agent framework (LangChain, LangGraph, etc.).
     """
@@ -150,9 +155,9 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
 
                     # Try GET first (schema endpoints, discovery)
                     get_resp = await client.get(url)
-                    
+
                     endpoint_info = self._analyze_response(get_resp, path, "GET", service)
-                    
+
                     if not endpoint_info:
                         # Try POST with minimal payload
                         post_resp = await client.post(
@@ -161,29 +166,31 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
                             headers={"Content-Type": "application/json"},
                         )
                         endpoint_info = self._analyze_response(post_resp, path, "POST", service)
-                    
+
                     if endpoint_info:
                         agent_endpoints.append(endpoint_info)
-                        
+
                         if endpoint_info.get("framework"):
                             detected_frameworks.add(endpoint_info["framework"])
-                        
+
                         # Determine severity based on capabilities
                         severity = self._determine_severity(endpoint_info)
-                        
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Agent endpoint: {path}",
-                            description=self._build_description(endpoint_info),
-                            severity=severity,
-                            evidence=self._build_evidence(endpoint_info),
-                            host=service.host,
-                            discriminator=f"agent-{path.strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=endpoint_info,
-                            references=self.references,
-                        ))
+
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Agent endpoint: {path}",
+                                description=self._build_description(endpoint_info),
+                                severity=severity,
+                                evidence=self._build_evidence(endpoint_info),
+                                host=service.host,
+                                discriminator=f"agent-{path.strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=endpoint_info,
+                                references=self.references,
+                            )
+                        )
 
                 # Probe for additional capabilities if we found agent endpoints
                 if agent_endpoints:
@@ -206,18 +213,18 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
         """Analyze response for agent framework indicators."""
         if resp.error or resp.status_code in (404, 405, 502, 503):
             return None
-        
+
         # Skip generic error pages
         if resp.status_code == 200 and len(resp.body) < 10:
             return None
-        
+
         indicators = []
         framework = None
         framework_confidence = 0
-        
+
         # Check headers for framework signatures
         resp_headers_lower = {k.lower(): v for k, v in resp.headers.items()}
-        
+
         for fw_name, sigs in FRAMEWORK_SIGNATURES.items():
             header_matches = sum(1 for h in sigs["headers"] if h in resp_headers_lower)
             if header_matches > 0:
@@ -225,7 +232,7 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
                 if header_matches > framework_confidence:
                     framework = fw_name
                     framework_confidence = header_matches + 2  # Headers are strong signal
-        
+
         # Check path patterns
         path_lower = path.lower()
         for fw_name, sigs in FRAMEWORK_SIGNATURES.items():
@@ -235,11 +242,11 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
                     if framework_confidence < 1:
                         framework = fw_name
                         framework_confidence = 1
-        
+
         # Check body patterns
         body = resp.body or ""
         body_lower = body.lower()
-        
+
         for fw_name, sigs in FRAMEWORK_SIGNATURES.items():
             body_matches = sum(1 for p in sigs["body_patterns"] if p in body_lower)
             if body_matches > 0:
@@ -247,7 +254,7 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
                 if body_matches > framework_confidence:
                     framework = fw_name
                     framework_confidence = body_matches
-        
+
         # Check error patterns (often reveal framework)
         for fw_name, sigs in FRAMEWORK_SIGNATURES.items():
             for pattern in sigs["error_patterns"]:
@@ -255,9 +262,11 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
                     indicators.append(f"error:{pattern}")
                     framework = fw_name
                     framework_confidence = max(framework_confidence, 3)
-        
+
         # Check for JSON schema response (LangServe pattern)
-        if resp.status_code == 200 and "application/json" in resp_headers_lower.get("content-type", ""):
+        if resp.status_code == 200 and "application/json" in resp_headers_lower.get(
+            "content-type", ""
+        ):
             try:
                 data = json.loads(body)
                 if isinstance(data, dict):
@@ -272,7 +281,7 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
                         indicators.append("tools-available")
             except json.JSONDecodeError:
                 pass
-        
+
         # Need at least one indicator to consider this an agent endpoint
         if not indicators:
             # Check for generic agent-like responses
@@ -281,7 +290,7 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
                 indicators.append("agent-keywords")
             else:
                 return None
-        
+
         return {
             "url": service.with_path(path),
             "path": path,
@@ -305,7 +314,7 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
             "state": False,
             "threads": False,
         }
-        
+
         # Check for memory endpoint
         for mem_path in ["/agent/memory", "/memory", "/history"]:
             url = service.with_path(mem_path)
@@ -313,7 +322,7 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
             if resp.status_code not in (404, 405):
                 capabilities["memory"] = True
                 break
-        
+
         # Check for tools endpoint
         for tools_path in ["/agent/tools", "/tools", "/input_schema"]:
             url = service.with_path(tools_path)
@@ -321,13 +330,13 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
             if resp.status_code == 200:
                 capabilities["tools"] = True
                 break
-        
+
         # Check for streaming support
         for endpoint in endpoints:
             if "stream" in endpoint.get("path", "").lower():
                 capabilities["streaming"] = True
                 break
-        
+
         # Check for state/thread support (LangGraph)
         for state_path in ["/state", "/threads"]:
             url = service.with_path(state_path)
@@ -337,7 +346,7 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
                     capabilities["state"] = True
                 else:
                     capabilities["threads"] = True
-        
+
         return capabilities
 
     def _determine_severity(self, endpoint_info: dict) -> str:
@@ -350,28 +359,28 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
                 return "high"
             # Schema/discovery endpoints are medium
             return "medium"
-        
+
         # Authenticated endpoints are lower severity
         return "info"
 
     def _build_description(self, endpoint_info: dict) -> str:
         """Build human-readable description."""
         parts = [f"Agent endpoint discovered at {endpoint_info['path']}."]
-        
+
         if endpoint_info.get("framework"):
             parts.append(f"Framework: {endpoint_info['framework']}.")
-        
+
         if endpoint_info.get("auth_required"):
             parts.append("Authentication required.")
         else:
             parts.append("No authentication required - potential unauthorized access.")
-        
+
         if endpoint_info.get("capabilities"):
             caps = endpoint_info["capabilities"]
             active = [k for k, v in caps.items() if v]
             if active:
                 parts.append(f"Capabilities: {', '.join(active)}.")
-        
+
         return " ".join(parts)
 
     def _build_evidence(self, endpoint_info: dict) -> str:
@@ -381,11 +390,13 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
             f"Method: {endpoint_info['method']}",
             f"Status: {endpoint_info['status_code']}",
         ]
-        
+
         if endpoint_info.get("framework"):
-            lines.append(f"Framework: {endpoint_info['framework']} (confidence: {endpoint_info.get('framework_confidence', 0)})")
-        
+            lines.append(
+                f"Framework: {endpoint_info['framework']} (confidence: {endpoint_info.get('framework_confidence', 0)})"
+            )
+
         if endpoint_info.get("indicators"):
             lines.append(f"Indicators: {', '.join(endpoint_info['indicators'][:5])}")
-        
+
         return "\n".join(lines)

@@ -6,10 +6,10 @@ Find and analyze exposed API documentation.
 
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.parsing import safe_json, extract_headers_dict, extract_paths_from_openapi
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.parsing import extract_headers_dict, extract_paths_from_openapi, safe_json
 
 
 class OpenAPICheck(ServiceIteratingCheck):
@@ -29,10 +29,19 @@ class OpenAPICheck(ServiceIteratingCheck):
     techniques = ["API enumeration", "documentation discovery"]
 
     OPENAPI_PATHS = [
-        "/openapi.json", "/swagger.json", "/api/openapi.json",
-        "/api/swagger.json", "/v1/openapi.json", "/docs/openapi.json",
-        "/api-docs", "/swagger", "/docs", "/redoc",
-        "/api/docs", "/api/v1/docs", "/swagger-ui.html",
+        "/openapi.json",
+        "/swagger.json",
+        "/api/openapi.json",
+        "/api/swagger.json",
+        "/v1/openapi.json",
+        "/docs/openapi.json",
+        "/api-docs",
+        "/swagger",
+        "/docs",
+        "/redoc",
+        "/api/docs",
+        "/api/v1/docs",
+        "/swagger-ui.html",
     ]
 
     SENSITIVE_PATH_KEYWORDS = ["admin", "internal", "debug", "config", "user", "auth"]
@@ -64,7 +73,8 @@ class OpenAPICheck(ServiceIteratingCheck):
                                 ) or list(spec.get("securityDefinitions", {}).keys())
 
                                 sensitive = [
-                                    e for e in endpoints
+                                    e
+                                    for e in endpoints
                                     if any(kw in e.lower() for kw in self.SENSITIVE_PATH_KEYWORDS)
                                 ]
 
@@ -73,24 +83,26 @@ class OpenAPICheck(ServiceIteratingCheck):
                                 if len(endpoints) > 5:
                                     endpoint_preview += "..."
 
-                                result.findings.append(build_finding(
-                                    check_name=self.name,
-                                    title=f"OpenAPI documentation exposed ({len(endpoints)} endpoints)",
-                                    description="API documentation reveals endpoint structure and attack surface",
-                                    severity=severity,
-                                    evidence=f"Spec at {path} | Endpoints include: {endpoint_preview}",
-                                    host=service.host,
-                                    discriminator="spec-exposed",
-                                    target=service,
-                                    target_url=url,
-                                    raw_data={
-                                        "endpoints": endpoints,
-                                        "sensitive_endpoints": sensitive,
-                                        "security_schemes": security_schemes,
-                                        "spec_path": path,
-                                    },
-                                    references=["OWASP API1:2023"],
-                                ))
+                                result.findings.append(
+                                    build_finding(
+                                        check_name=self.name,
+                                        title=f"OpenAPI documentation exposed ({len(endpoints)} endpoints)",
+                                        description="API documentation reveals endpoint structure and attack surface",
+                                        severity=severity,
+                                        evidence=f"Spec at {path} | Endpoints include: {endpoint_preview}",
+                                        host=service.host,
+                                        discriminator="spec-exposed",
+                                        target=service,
+                                        target_url=url,
+                                        raw_data={
+                                            "endpoints": endpoints,
+                                            "sensitive_endpoints": sensitive,
+                                            "security_schemes": security_schemes,
+                                            "spec_path": path,
+                                        },
+                                        references=["OWASP API1:2023"],
+                                    )
+                                )
 
                                 result.outputs[f"openapi_{service.port}"] = {
                                     "url": url,
@@ -102,17 +114,19 @@ class OpenAPICheck(ServiceIteratingCheck):
                     elif "html" in content_type:
                         body_lower = resp.body.lower()
                         if any(kw in body_lower for kw in ["swagger", "openapi", "redoc"]):
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"API documentation UI at {path}",
-                                description="Interactive API documentation is accessible",
-                                severity="low",
-                                evidence=f"Swagger/OpenAPI UI found at {path}",
-                                host=service.host,
-                                discriminator=f"ui-{path.strip('/').replace('/', '-')}",
-                                target=service,
-                                target_url=url,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"API documentation UI at {path}",
+                                    description="Interactive API documentation is accessible",
+                                    severity="low",
+                                    evidence=f"Swagger/OpenAPI UI found at {path}",
+                                    host=service.host,
+                                    discriminator=f"ui-{path.strip('/').replace('/', '-')}",
+                                    target=service,
+                                    target_url=url,
+                                )
+                            )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")

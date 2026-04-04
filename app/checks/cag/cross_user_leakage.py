@@ -17,14 +17,13 @@ References:
   MITRE ATLAS - AML.T0048 Data Poisoning
 """
 
-import json
 import time
 import uuid
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class CrossUserLeakageCheck(ServiceIteratingCheck):
@@ -60,8 +59,7 @@ class CrossUserLeakageCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -79,87 +77,97 @@ class CrossUserLeakageCheck(ServiceIteratingCheck):
                     auth_result = await self._test_auth_vs_noauth(client, url)
                     if auth_result and auth_result.get("leakage_detected"):
                         isolation_results.append(auth_result)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Cross-user cache leakage: auth response served without auth",
-                            description=self._build_description(auth_result),
-                            severity="critical",
-                            evidence=self._build_evidence(auth_result),
-                            host=service.host,
-                            discriminator="leakage-auth-noauth",
-                            target=service,
-                            target_url=url,
-                            raw_data=auth_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Cross-user cache leakage: auth response served without auth",
+                                description=self._build_description(auth_result),
+                                severity="critical",
+                                evidence=self._build_evidence(auth_result),
+                                host=service.host,
+                                discriminator="leakage-auth-noauth",
+                                target=service,
+                                target_url=url,
+                                raw_data=auth_result,
+                                references=self.references,
+                            )
+                        )
 
                     # Test 2: Different auth tokens
                     token_result = await self._test_different_tokens(client, url)
                     if token_result and token_result.get("leakage_detected"):
                         isolation_results.append(token_result)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Cross-user cache leakage: different tokens share cache",
-                            description=self._build_description(token_result),
-                            severity="critical",
-                            evidence=self._build_evidence(token_result),
-                            host=service.host,
-                            discriminator="leakage-token-mismatch",
-                            target=service,
-                            target_url=url,
-                            raw_data=token_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Cross-user cache leakage: different tokens share cache",
+                                description=self._build_description(token_result),
+                                severity="critical",
+                                evidence=self._build_evidence(token_result),
+                                host=service.host,
+                                discriminator="leakage-token-mismatch",
+                                target=service,
+                                target_url=url,
+                                raw_data=token_result,
+                                references=self.references,
+                            )
+                        )
 
                     # Test 3: Different user contexts
                     user_result = await self._test_user_isolation(client, url)
                     if user_result and user_result.get("leakage_detected"):
                         isolation_results.append(user_result)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Cross-user cache leakage: user identity not in cache key",
-                            description=self._build_description(user_result),
-                            severity="critical",
-                            evidence=self._build_evidence(user_result),
-                            host=service.host,
-                            discriminator="leakage-user-identity",
-                            target=service,
-                            target_url=url,
-                            raw_data=user_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Cross-user cache leakage: user identity not in cache key",
+                                description=self._build_description(user_result),
+                                severity="critical",
+                                evidence=self._build_evidence(user_result),
+                                host=service.host,
+                                discriminator="leakage-user-identity",
+                                target=service,
+                                target_url=url,
+                                raw_data=user_result,
+                                references=self.references,
+                            )
+                        )
 
                     # Test 4: API key variation
                     apikey_result = await self._test_api_key_isolation(client, url)
                     if apikey_result and apikey_result.get("leakage_detected"):
                         isolation_results.append(apikey_result)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Cache key excludes API key: different keys share cache",
-                            description=self._build_description(apikey_result),
-                            severity="high",
-                            evidence=self._build_evidence(apikey_result),
-                            host=service.host,
-                            discriminator="leakage-api-key",
-                            target=service,
-                            target_url=url,
-                            raw_data=apikey_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Cache key excludes API key: different keys share cache",
+                                description=self._build_description(apikey_result),
+                                severity="high",
+                                evidence=self._build_evidence(apikey_result),
+                                host=service.host,
+                                discriminator="leakage-api-key",
+                                target=service,
+                                target_url=url,
+                                raw_data=apikey_result,
+                                references=self.references,
+                            )
+                        )
 
                     # If no leakage found, report info
                     if not isolation_results:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Cache properly isolates responses per user",
-                            description="No cross-user cache leakage detected across auth contexts.",
-                            severity="info",
-                            evidence="All isolation tests passed",
-                            host=service.host,
-                            discriminator="leakage-none",
-                            target=service,
-                            target_url=url,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Cache properly isolates responses per user",
+                                description="No cross-user cache leakage detected across auth contexts.",
+                                severity="info",
+                                evidence="All isolation tests passed",
+                                host=service.host,
+                                discriminator="leakage-none",
+                                target=service,
+                                target_url=url,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")

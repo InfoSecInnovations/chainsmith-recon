@@ -7,10 +7,10 @@ identify auth bypass vulnerabilities.
 
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import format_chat_request
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class AuthBypassCheck(BaseCheck):
@@ -69,7 +69,10 @@ class AuthBypassCheck(BaseCheck):
         return result
 
     async def _test_auth(
-        self, url: str, service: Service, api_format: str,
+        self,
+        url: str,
+        service: Service,
+        api_format: str,
     ) -> CheckResult:
         result = CheckResult(success=True)
         host = service.host
@@ -107,64 +110,84 @@ class AuthBypassCheck(BaseCheck):
 
         # No auth at all works
         if "no_auth" in accepted:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="AI endpoint requires no authentication",
-                description="Chat endpoint responds to requests without any auth headers",
-                severity="critical",
-                evidence=f"No auth required. Accepted: {', '.join(accepted)}",
-                host=host, discriminator="no-auth-required",
-                target=service, target_url=url,
-                raw_data=auth_info,
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="AI endpoint requires no authentication",
+                    description="Chat endpoint responds to requests without any auth headers",
+                    severity="critical",
+                    evidence=f"No auth required. Accepted: {', '.join(accepted)}",
+                    host=host,
+                    discriminator="no-auth-required",
+                    target=service,
+                    target_url=url,
+                    raw_data=auth_info,
+                    references=self.references,
+                )
+            )
         elif "empty_bearer" in accepted:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Auth bypass: empty Bearer token accepted",
-                description="Endpoint responds to requests with an empty Bearer token",
-                severity="high",
-                evidence=f"Empty bearer accepted. All accepted: {', '.join(accepted)}",
-                host=host, discriminator="empty-bearer-bypass",
-                target=service, target_url=url,
-                raw_data=auth_info,
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Auth bypass: empty Bearer token accepted",
+                    description="Endpoint responds to requests with an empty Bearer token",
+                    severity="high",
+                    evidence=f"Empty bearer accepted. All accepted: {', '.join(accepted)}",
+                    host=host,
+                    discriminator="empty-bearer-bypass",
+                    target=service,
+                    target_url=url,
+                    raw_data=auth_info,
+                    references=self.references,
+                )
+            )
         elif any(label.startswith("default_") for label in accepted):
             default_accepted = [a for a in accepted if a.startswith("default_")]
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Default API key accepted: {', '.join(default_accepted)}",
-                description="Endpoint accepts well-known default or test API keys",
-                severity="critical",
-                evidence=f"Default keys accepted: {', '.join(default_accepted)}",
-                host=host, discriminator="default-key-accepted",
-                target=service, target_url=url,
-                raw_data=auth_info,
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Default API key accepted: {', '.join(default_accepted)}",
+                    description="Endpoint accepts well-known default or test API keys",
+                    severity="critical",
+                    evidence=f"Default keys accepted: {', '.join(default_accepted)}",
+                    host=host,
+                    discriminator="default-key-accepted",
+                    target=service,
+                    target_url=url,
+                    raw_data=auth_info,
+                    references=self.references,
+                )
+            )
         elif "basic_test" in accepted:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Auth bypass: Basic test:test credentials accepted",
-                description="Endpoint accepts Basic auth with test:test credentials",
-                severity="high",
-                evidence="Basic dGVzdDp0ZXN0 (test:test) accepted",
-                host=host, discriminator="basic-test-bypass",
-                target=service, target_url=url,
-                raw_data=auth_info,
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Auth bypass: Basic test:test credentials accepted",
+                    description="Endpoint accepts Basic auth with test:test credentials",
+                    severity="high",
+                    evidence="Basic dGVzdDp0ZXN0 (test:test) accepted",
+                    host=host,
+                    discriminator="basic-test-bypass",
+                    target=service,
+                    target_url=url,
+                    raw_data=auth_info,
+                    references=self.references,
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Authentication enforced",
-                description=f"All {len(self.AUTH_TESTS)} bypass attempts rejected",
-                severity="info",
-                evidence=f"Rejected: {len(rejected)}/{len(self.AUTH_TESTS)} attempts",
-                host=host, discriminator="auth-enforced",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Authentication enforced",
+                    description=f"All {len(self.AUTH_TESTS)} bypass attempts rejected",
+                    severity="info",
+                    evidence=f"Rejected: {len(rejected)}/{len(self.AUTH_TESTS)} attempts",
+                    host=host,
+                    discriminator="auth-enforced",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
         result.outputs[f"auth_status_{service.port}"] = auth_info
         return result

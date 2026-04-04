@@ -25,23 +25,22 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.checks.base import Service
-from app.checks.rag.vector_store_access import RAGVectorStoreAccessCheck
+from app.checks.rag.adversarial_embedding import RAGAdversarialEmbeddingCheck
 from app.checks.rag.auth_bypass import RAGAuthBypassCheck
+from app.checks.rag.cache_poisoning import RAGCachePoisoningCheck
+from app.checks.rag.chunk_boundary import RAGChunkBoundaryCheck
 from app.checks.rag.collection_enumeration import RAGCollectionEnumerationCheck
-from app.checks.rag.embedding_fingerprint import RAGEmbeddingFingerprintCheck
+from app.checks.rag.corpus_poisoning import RAGCorpusPoisoningCheck
+from app.checks.rag.cross_collection import RAGCrossCollectionCheck
 from app.checks.rag.document_exfiltration import RAGDocumentExfiltrationCheck
+from app.checks.rag.embedding_fingerprint import RAGEmbeddingFingerprintCheck
+from app.checks.rag.fusion_reranker import RAGFusionRerankerCheck
+from app.checks.rag.metadata_injection import RAGMetadataInjectionCheck
+from app.checks.rag.multimodal_injection import RAGMultimodalInjectionCheck
 from app.checks.rag.retrieval_manipulation import RAGRetrievalManipulationCheck
 from app.checks.rag.source_attribution import RAGSourceAttributionCheck
-from app.checks.rag.cache_poisoning import RAGCachePoisoningCheck
-from app.checks.rag.corpus_poisoning import RAGCorpusPoisoningCheck
-from app.checks.rag.metadata_injection import RAGMetadataInjectionCheck
-from app.checks.rag.chunk_boundary import RAGChunkBoundaryCheck
-from app.checks.rag.multimodal_injection import RAGMultimodalInjectionCheck
-from app.checks.rag.fusion_reranker import RAGFusionRerankerCheck
-from app.checks.rag.cross_collection import RAGCrossCollectionCheck
-from app.checks.rag.adversarial_embedding import RAGAdversarialEmbeddingCheck
+from app.checks.rag.vector_store_access import RAGVectorStoreAccessCheck
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
@@ -96,7 +95,11 @@ def accessible_store_context(rag_context):
             "store_type": "chroma",
             "accessible_ops": [
                 {"operation": "list_collections", "path": "/api/v1/collections", "status": 200},
-                {"operation": "dump_documents", "path": "/api/v1/collections/docs/get", "status": 200},
+                {
+                    "operation": "dump_documents",
+                    "path": "/api/v1/collections/docs/get",
+                    "status": 200,
+                },
             ],
             "collections": ["docs", "hr_policies", "faq"],
             "doc_count": 150,
@@ -115,8 +118,18 @@ def kb_structure_context(accessible_store_context):
             "collection_count": 3,
             "total_documents": 150,
             "collections": [
-                {"name": "docs", "doc_count": 80, "dimensions": 1536, "metadata_fields": ["source", "author"]},
-                {"name": "hr_policies", "doc_count": 50, "dimensions": 1536, "metadata_fields": ["source"]},
+                {
+                    "name": "docs",
+                    "doc_count": 80,
+                    "dimensions": 1536,
+                    "metadata_fields": ["source", "author"],
+                },
+                {
+                    "name": "hr_policies",
+                    "doc_count": 50,
+                    "dimensions": 1536,
+                    "metadata_fields": ["source"],
+                },
                 {"name": "faq", "doc_count": 20, "dimensions": 1536, "metadata_fields": []},
             ],
         },
@@ -186,17 +199,25 @@ class TestVectorStoreAccess:
 
         async def mock_get(url, **kw):
             if "/api/v1/collections" in url and "/get" not in url and "/count" not in url:
-                return make_response(body=json.dumps([
-                    {"name": "docs", "id": "abc123"},
-                    {"name": "faq", "id": "def456"},
-                ]))
+                return make_response(
+                    body=json.dumps(
+                        [
+                            {"name": "docs", "id": "abc123"},
+                            {"name": "faq", "id": "def456"},
+                        ]
+                    )
+                )
             if "/count" in url:
                 return make_response(body="42")
             if "/get" in url:
-                return make_response(body=json.dumps({
-                    "ids": ["1", "2"],
-                    "documents": ["doc1", "doc2"],
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "ids": ["1", "2"],
+                            "documents": ["doc1", "doc2"],
+                        }
+                    )
+                )
             return make_response(status_code=404)
 
         async def mock_post(url, **kw):
@@ -328,9 +349,13 @@ class TestCollectionEnumeration:
             if "/count" in url:
                 return make_response(body="42")
             if "/get" in url:
-                return make_response(body=json.dumps({
-                    "metadatas": [{"source": "upload", "author": "admin"}],
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "metadatas": [{"source": "upload", "author": "admin"}],
+                        }
+                    )
+                )
             return make_response(status_code=404)
 
         client = _mock_client(get_fn=mock_get)
@@ -351,7 +376,11 @@ class TestCollectionEnumeration:
             result = await check.check_service(sample_service, accessible_store_context)
 
         # hr_policies should be flagged as sensitive
-        sensitive_findings = [f for f in result.findings if "sensitive" in f.description.lower() or "hr" in f.description.lower()]
+        [
+            f
+            for f in result.findings
+            if "sensitive" in f.description.lower() or "hr" in f.description.lower()
+        ]
         # The collections list includes "hr_policies" which should trigger
         assert len(result.findings) >= 1
 
@@ -366,18 +395,24 @@ class TestEmbeddingFingerprint:
     async def test_detects_via_embedding_endpoint(self, sample_service, rag_context):
         check = RAGEmbeddingFingerprintCheck()
         # Add an embedding endpoint
-        rag_context["rag_endpoints"].append({
-            "url": "http://rag.example.com:8080/v1/embeddings",
-            "path": "/v1/embeddings",
-            "service": sample_service.to_dict(),
-            "endpoint_type": "rag_query",
-        })
+        rag_context["rag_endpoints"].append(
+            {
+                "url": "http://rag.example.com:8080/v1/embeddings",
+                "path": "/v1/embeddings",
+                "service": sample_service.to_dict(),
+                "endpoint_type": "rag_query",
+            }
+        )
 
         async def mock_post(url, **kw):
             if "/embeddings" in url or "/embed" in url:
-                return make_response(body=json.dumps({
-                    "data": [{"embedding": [0.1] * 1536}],
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "data": [{"embedding": [0.1] * 1536}],
+                        }
+                    )
+                )
             return make_response(status_code=404)
 
         client = _mock_client(post_fn=mock_post)
@@ -443,9 +478,15 @@ class TestDocumentExfiltration:
             body = kw.get("json", {})
             query = body.get("query", "")
             if "password" in query.lower() or "credential" in query.lower():
-                return make_response(body=json.dumps({
-                    "results": [{"content": "DB password: secretpass123\nAPI_KEY=sk-abc123"}],
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "results": [
+                                {"content": "DB password: secretpass123\nAPI_KEY=sk-abc123"}
+                            ],
+                        }
+                    )
+                )
             return make_response(body=json.dumps({"results": [{"content": "General info"}]}))
 
         client = _mock_client(post_fn=mock_post)
@@ -463,9 +504,13 @@ class TestDocumentExfiltration:
         check = RAGDocumentExfiltrationCheck()
 
         async def mock_post(url, **kw):
-            return make_response(body=json.dumps({
-                "results": [{"content": "Employee: john@company.com, SSN: 123-45-6789"}],
-            }))
+            return make_response(
+                body=json.dumps(
+                    {
+                        "results": [{"content": "Employee: john@company.com, SSN: 123-45-6789"}],
+                    }
+                )
+            )
 
         client = _mock_client(post_fn=mock_post)
 
@@ -530,7 +575,9 @@ class TestRetrievalManipulation:
 
         async def mock_post(url, **kw):
             # Always return same number regardless of k
-            return make_response(body=json.dumps({"results": [{"content": "doc1"}, {"content": "doc2"}]}))
+            return make_response(
+                body=json.dumps({"results": [{"content": "doc1"}, {"content": "doc2"}]})
+            )
 
         client = _mock_client(post_fn=mock_post)
 
@@ -553,12 +600,19 @@ class TestSourceAttribution:
         check = RAGSourceAttributionCheck()
 
         async def mock_post(url, **kw):
-            return make_response(body=json.dumps({
-                "answer": "The policy states...",
-                "sources": [
-                    {"url": "https://internal.example.com/policy.pdf", "title": "Company Policy"},
-                ],
-            }))
+            return make_response(
+                body=json.dumps(
+                    {
+                        "answer": "The policy states...",
+                        "sources": [
+                            {
+                                "url": "https://internal.example.com/policy.pdf",
+                                "title": "Company Policy",
+                            },
+                        ],
+                    }
+                )
+            )
 
         client = _mock_client(post_fn=mock_post)
 
@@ -682,7 +736,9 @@ class TestCorpusPoisoning:
         assert "ingestion_endpoints" in result.outputs
         critical = [f for f in result.findings if f.severity == "critical"]
         assert len(critical) >= 1
-        assert "unauthenticated" in critical[0].title.lower() or "corpus" in critical[0].title.lower()
+        assert (
+            "unauthenticated" in critical[0].title.lower() or "corpus" in critical[0].title.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_auth_required(self, sample_service, rag_context):
@@ -728,10 +784,20 @@ class TestMetadataInjection:
         check = RAGMetadataInjectionCheck()
 
         async def mock_post(url, **kw):
-            return make_response(body=json.dumps({
-                "answer": "The document says...",
-                "sources": [{"source": "policy.pdf", "author": "admin", "metadata": {"title": "Policy"}}],
-            }))
+            return make_response(
+                body=json.dumps(
+                    {
+                        "answer": "The document says...",
+                        "sources": [
+                            {
+                                "source": "policy.pdf",
+                                "author": "admin",
+                                "metadata": {"title": "Policy"},
+                            }
+                        ],
+                    }
+                )
+            )
 
         client = _mock_client(post_fn=mock_post)
 
@@ -856,7 +922,11 @@ class TestMultimodalInjection:
 
         assert result.success
         # Should detect file upload capability
-        upload_findings = [f for f in result.findings if "upload" in f.title.lower() or "multimodal" in f.title.lower()]
+        upload_findings = [
+            f
+            for f in result.findings
+            if "upload" in f.title.lower() or "multimodal" in f.title.lower()
+        ]
         assert len(upload_findings) >= 1
 
     @pytest.mark.asyncio
@@ -932,10 +1002,14 @@ class TestCrossCollection:
         async def mock_post(url, **kw):
             # Query to docs collection returns content mentioning hr_policies
             if "docs" in url:
-                return make_response(body=json.dumps({
-                    "ids": [["hr1"]],
-                    "documents": [["hr_policies content leaked"]],
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "ids": [["hr1"]],
+                            "documents": [["hr_policies content leaked"]],
+                        }
+                    )
+                )
             return make_response(status_code=404)
 
         client = _mock_client(post_fn=mock_post)
@@ -954,10 +1028,14 @@ class TestCrossCollection:
 
         async def mock_post(url, **kw):
             if "docs" in url:
-                return make_response(body=json.dumps({
-                    "ids": [["d1"]],
-                    "documents": [["Only docs content here"]],
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "ids": [["d1"]],
+                            "documents": [["Only docs content here"]],
+                        }
+                    )
+                )
             return make_response(status_code=404)
 
         client = _mock_client(post_fn=mock_post)
@@ -988,17 +1066,29 @@ class TestAdversarialEmbedding:
             body = kw.get("json", {})
             query = body.get("query", "")
             if "weather" in query.lower():
-                return make_response(body=json.dumps({
-                    "results": [{"id": "public-1"}, {"id": "public-2"}],
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "results": [{"id": "public-1"}, {"id": "public-2"}],
+                        }
+                    )
+                )
             elif "password" in query.lower() or "secret" in query.lower():
-                return make_response(body=json.dumps({
-                    "results": [{"id": "private-1"}, {"id": "sensitive-2"}],
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "results": [{"id": "private-1"}, {"id": "sensitive-2"}],
+                        }
+                    )
+                )
             else:
-                return make_response(body=json.dumps({
-                    "results": [{"id": f"doc-{call_count}"}],
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "results": [{"id": f"doc-{call_count}"}],
+                        }
+                    )
+                )
 
         client = _mock_client(post_fn=mock_post)
 
@@ -1015,9 +1105,13 @@ class TestAdversarialEmbedding:
 
         async def mock_post(url, **kw):
             # Same results regardless of query
-            return make_response(body=json.dumps({
-                "results": [{"id": "doc-1"}, {"id": "doc-2"}],
-            }))
+            return make_response(
+                body=json.dumps(
+                    {
+                        "results": [{"id": "doc-1"}, {"id": "doc-2"}],
+                    }
+                )
+            )
 
         client = _mock_client(post_fn=mock_post)
 
@@ -1037,6 +1131,7 @@ class TestAdversarialEmbedding:
 class TestCheckResolverRegistration:
     def test_all_rag_checks_registered(self):
         from app.check_resolver import get_real_checks
+
         checks = get_real_checks()
         check_names = [c.name for c in checks]
 
@@ -1065,12 +1160,14 @@ class TestCheckResolverRegistration:
 
     def test_rag_check_count(self):
         from app.check_resolver import get_real_checks
+
         checks = get_real_checks()
         rag_checks = [c for c in checks if c.name.startswith("rag_")]
         assert len(rag_checks) == 17, f"Expected 17 RAG checks, got {len(rag_checks)}"
 
     def test_rag_suite_filtering(self):
         from app.check_resolver import resolve_checks
+
         checks = resolve_checks(suites=["rag"])
         assert len(checks) == 17
         assert all(c.name.startswith("rag_") for c in checks)

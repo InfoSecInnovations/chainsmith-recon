@@ -10,13 +10,12 @@ Checks for:
 """
 
 import logging
-import re
 from typing import Any
-from urllib.parse import urlparse, urlencode, urljoin
+from urllib.parse import urljoin, urlparse
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig, HttpResponse
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +50,9 @@ class RedirectChainCheck(ServiceIteratingCheck):
     timeout_seconds = 60.0
     delay_between_targets = 0.3
 
-    reason = "Missing HTTPS redirects expose traffic to interception; open redirects enable phishing"
+    reason = (
+        "Missing HTTPS redirects expose traffic to interception; open redirects enable phishing"
+    )
     references = ["OWASP WSTG-CLNT-04", "CWE-601"]
     techniques = ["redirect chain analysis", "open redirect testing"]
 
@@ -79,17 +80,19 @@ class RedirectChainCheck(ServiceIteratingCheck):
                     redirect_info["chain_length"] = len(chain)
 
                     if len(chain) > 3:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Long redirect chain: {len(chain)} hops",
-                            description=f"Redirect chain from {service.url} traverses {len(chain)} hops before reaching final destination",
-                            severity="low",
-                            evidence=f"Chain: {' -> '.join(step['url'] for step in chain[:6])}{'...' if len(chain) > 6 else ''}",
-                            host=service.host,
-                            discriminator="long-chain",
-                            target=service,
-                            raw_data={"chain": [s["url"] for s in chain]},
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Long redirect chain: {len(chain)} hops",
+                                description=f"Redirect chain from {service.url} traverses {len(chain)} hops before reaching final destination",
+                                severity="low",
+                                evidence=f"Chain: {' -> '.join(step['url'] for step in chain[:6])}{'...' if len(chain) > 6 else ''}",
+                                host=service.host,
+                                discriminator="long-chain",
+                                target=service,
+                                raw_data={"chain": [s["url"] for s in chain]},
+                            )
+                        )
 
                     # Check for cross-domain redirects
                     domains = set()
@@ -99,16 +102,18 @@ class RedirectChainCheck(ServiceIteratingCheck):
                             domains.add(parsed.hostname)
                     external = domains - {service.host}
                     if external:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Cross-domain redirect to: {', '.join(sorted(external))}",
-                            description="Redirect chain passes through external domain(s)",
-                            severity="info",
-                            evidence=f"Domains in chain: {', '.join(sorted(domains))}",
-                            host=service.host,
-                            discriminator="cross-domain",
-                            target=service,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Cross-domain redirect to: {', '.join(sorted(external))}",
+                                description="Redirect chain passes through external domain(s)",
+                                severity="info",
+                                evidence=f"Domains in chain: {', '.join(sorted(domains))}",
+                                host=service.host,
+                                discriminator="cross-domain",
+                                target=service,
+                            )
+                        )
 
                 # 3. Test for open redirects
                 await self._check_open_redirect(client, service, result, redirect_info)
@@ -138,31 +143,35 @@ class RedirectChainCheck(ServiceIteratingCheck):
             location = resp.headers.get("location", "")
             if location.startswith("https://"):
                 info["https_redirect"] = True
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"HTTP to HTTPS redirect present: {service.host}",
-                    description="HTTP requests are redirected to HTTPS (good)",
-                    severity="info",
-                    evidence=f"HTTP {resp.status_code} -> {location}",
-                    host=service.host,
-                    discriminator="https-redirect-ok",
-                    target=service,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"HTTP to HTTPS redirect present: {service.host}",
+                        description="HTTP requests are redirected to HTTPS (good)",
+                        severity="info",
+                        evidence=f"HTTP {resp.status_code} -> {location}",
+                        host=service.host,
+                        discriminator="https-redirect-ok",
+                        target=service,
+                    )
+                )
                 return
 
         # HTTP service serves content without redirecting to HTTPS
         info["https_redirect"] = False
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"No HTTP to HTTPS redirect: {service.host}",
-            description="HTTP requests are not redirected to HTTPS, content is served over plain HTTP",
-            severity="medium",
-            evidence=f"GET {service.url} -> HTTP {resp.status_code} (no redirect to HTTPS)",
-            host=service.host,
-            discriminator="no-https-redirect",
-            target=service,
-            references=["CWE-319"],
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"No HTTP to HTTPS redirect: {service.host}",
+                description="HTTP requests are not redirected to HTTPS, content is served over plain HTTP",
+                severity="medium",
+                evidence=f"GET {service.url} -> HTTP {resp.status_code} (no redirect to HTTPS)",
+                host=service.host,
+                discriminator="no-https-redirect",
+                target=service,
+                references=["CWE-319"],
+            )
+        )
 
     async def _follow_chain(self, client: AsyncHttpClient, url: str) -> list[dict]:
         """Follow redirect chain and return list of {url, status_code} hops."""
@@ -215,18 +224,20 @@ class RedirectChainCheck(ServiceIteratingCheck):
                 location = resp.headers.get("location", "")
                 if OPEN_REDIRECT_TARGET in location:
                     open_redirects.append(path)
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Open redirect: {service.host}{path_template.split('?')[0]}",
-                        description=f"Endpoint accepts arbitrary redirect destination via URL parameter",
-                        severity="medium",
-                        evidence=f"GET {url} -> HTTP {resp.status_code} Location: {location}",
-                        host=service.host,
-                        discriminator=f"open-redirect-{path_template.split('?')[0].replace('/', '-').strip('-')}",
-                        target=service,
-                        target_url=url,
-                        references=["CWE-601", "OWASP WSTG-CLNT-04"],
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Open redirect: {service.host}{path_template.split('?')[0]}",
+                            description="Endpoint accepts arbitrary redirect destination via URL parameter",
+                            severity="medium",
+                            evidence=f"GET {url} -> HTTP {resp.status_code} Location: {location}",
+                            host=service.host,
+                            discriminator=f"open-redirect-{path_template.split('?')[0].replace('/', '-').strip('-')}",
+                            target=service,
+                            target_url=url,
+                            references=["CWE-601", "OWASP WSTG-CLNT-04"],
+                        )
+                    )
 
         if open_redirects:
             info["open_redirects"] = open_redirects

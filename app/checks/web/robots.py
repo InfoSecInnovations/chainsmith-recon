@@ -7,10 +7,9 @@ Fetch and analyze robots.txt for sensitive path disclosure.
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-from app.lib.evidence import fmt_status_evidence
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class RobotsTxtCheck(ServiceIteratingCheck):
@@ -31,10 +30,27 @@ class RobotsTxtCheck(ServiceIteratingCheck):
     techniques = ["passive reconnaissance", "path discovery"]
 
     INTERESTING_PATTERNS = [
-        r"admin", r"internal", r"api", r"debug", r"config",
-        r"backup", r"private", r"secret", r"model", r"ml",
-        r"ai", r"data", r"v2", r"v3", r"stage", r"dev",
-        r"\.git", r"\.env", r"\.bak", r"inference", r"prompt",
+        r"admin",
+        r"internal",
+        r"api",
+        r"debug",
+        r"config",
+        r"backup",
+        r"private",
+        r"secret",
+        r"model",
+        r"ml",
+        r"ai",
+        r"data",
+        r"v2",
+        r"v3",
+        r"stage",
+        r"dev",
+        r"\.git",
+        r"\.env",
+        r"\.bak",
+        r"inference",
+        r"prompt",
     ]
 
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
@@ -73,31 +89,35 @@ class RobotsTxtCheck(ServiceIteratingCheck):
                     sitemaps.append(sitemap)
 
             if interesting:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Sensitive paths in robots.txt ({len(interesting)})",
-                    description="robots.txt reveals potentially sensitive paths",
-                    severity="low",
-                    evidence=f"Interesting Disallow paths: {', '.join(interesting[:10])}",
-                    host=service.host,
-                    discriminator="sensitive-paths",
-                    target=service,
-                    target_url=robots_url,
-                    raw_data={"disallowed": disallowed, "interesting": interesting},
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Sensitive paths in robots.txt ({len(interesting)})",
+                        description="robots.txt reveals potentially sensitive paths",
+                        severity="low",
+                        evidence=f"Interesting Disallow paths: {', '.join(interesting[:10])}",
+                        host=service.host,
+                        discriminator="sensitive-paths",
+                        target=service,
+                        target_url=robots_url,
+                        raw_data={"disallowed": disallowed, "interesting": interesting},
+                    )
+                )
 
             if sitemaps:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Sitemaps disclosed ({len(sitemaps)})",
-                    description="robots.txt reveals sitemap locations",
-                    severity="info",
-                    evidence=f"Sitemaps: {', '.join(sitemaps[:5])}",
-                    host=service.host,
-                    discriminator="sitemaps-disclosed",
-                    target=service,
-                    target_url=robots_url,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Sitemaps disclosed ({len(sitemaps)})",
+                        description="robots.txt reveals sitemap locations",
+                        severity="info",
+                        evidence=f"Sitemaps: {', '.join(sitemaps[:5])}",
+                        host=service.host,
+                        discriminator="sitemaps-disclosed",
+                        target=service,
+                        target_url=robots_url,
+                    )
+                )
 
             result.outputs[f"robots_{service.port}"] = {
                 "disallowed": disallowed,

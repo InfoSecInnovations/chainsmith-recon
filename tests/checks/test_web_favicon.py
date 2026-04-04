@@ -12,18 +12,17 @@ All HTTP calls are mocked to avoid actual network traffic.
 """
 
 import json
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.checks.base import Service
-from app.checks.web.favicon import FaviconCheck, FAVICON_HASHES
-from app.checks.web.http2_detection import HTTP2DetectionCheck
+from app.checks.web.favicon import FaviconCheck
 from app.checks.web.hsts_preload import HSTSPreloadCheck
-from app.checks.web.sri_check import SRICheck
+from app.checks.web.http2_detection import HTTP2DetectionCheck
 from app.checks.web.mass_assignment import MassAssignmentCheck
+from app.checks.web.sri_check import SRICheck
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
@@ -32,16 +31,31 @@ from app.lib.http import HttpResponse
 
 @pytest.fixture
 def service():
-    return Service(url="http://target.com:80", host="target.com", port=80, scheme="http", service_type="http")
+    return Service(
+        url="http://target.com:80", host="target.com", port=80, scheme="http", service_type="http"
+    )
 
 
 @pytest.fixture
 def https_service():
-    return Service(url="https://target.com:443", host="target.com", port=443, scheme="https", service_type="http")
+    return Service(
+        url="https://target.com:443",
+        host="target.com",
+        port=443,
+        scheme="https",
+        service_type="http",
+    )
 
 
 def resp(status_code=200, body="", headers=None, error=None, url="http://target.com:80"):
-    return HttpResponse(url=url, status_code=status_code, headers=headers or {}, body=body, elapsed_ms=50.0, error=error)
+    return HttpResponse(
+        url=url,
+        status_code=status_code,
+        headers=headers or {},
+        body=body,
+        elapsed_ms=50.0,
+        error=error,
+    )
 
 
 def mock_client_multi(response_map=None, default=None):
@@ -89,13 +103,16 @@ class TestFaviconCheck:
     async def test_known_favicon_detected(self, service):
         """Known favicon hash is matched to framework."""
         import hashlib
+
         # Create a body whose MD5 matches a known hash
         # We'll inject a test hash into the lookup
         test_body = "fake-favicon-content-for-jenkins"
         test_hash = hashlib.md5(test_body.encode("latin-1")).hexdigest()
 
-        with patch.dict("app.checks.web.favicon.FAVICON_HASHES",
-                        {test_hash: ("TestFramework", "Test framework detected")}):
+        with patch.dict(
+            "app.checks.web.favicon.FAVICON_HASHES",
+            {test_hash: ("TestFramework", "Test framework detected")},
+        ):
             client = mock_client_multi(
                 response_map={
                     ("GET", "favicon.ico"): resp(200, body=test_body),
@@ -110,7 +127,10 @@ class TestFaviconCheck:
         framework_findings = [f for f in result.findings if "TestFramework" in f.title]
         assert len(framework_findings) == 1
         assert framework_findings[0].severity == "info"
-        assert result.outputs["favicon_info"]["identified"]["TestFramework"] == "Test framework detected"
+        assert (
+            result.outputs["favicon_info"]["identified"]["TestFramework"]
+            == "Test framework detected"
+        )
 
     @pytest.mark.asyncio
     async def test_no_favicon(self, service):
@@ -145,13 +165,15 @@ class TestFaviconCheck:
     async def test_favicon_from_html_link(self, service):
         """Favicon URL extracted from HTML <link> tag."""
         import hashlib
+
         test_body = "custom-icon-content"
         test_hash = hashlib.md5(test_body.encode("latin-1")).hexdigest()
 
         html_page = '<html><head><link rel="icon" href="/static/my-icon.png"></head></html>'
 
-        with patch.dict("app.checks.web.favicon.FAVICON_HASHES",
-                        {test_hash: ("CustomApp", "Custom app")}):
+        with patch.dict(
+            "app.checks.web.favicon.FAVICON_HASHES", {test_hash: ("CustomApp", "Custom app")}
+        ):
             # Order matters: more specific patterns first
             client = mock_client_multi(
                 response_map={
@@ -195,8 +217,10 @@ class TestHTTP2DetectionCheck:
         client = mock_client_multi(
             default=resp(200, headers={}),
         )
-        with patch("app.checks.web.http2_detection.AsyncHttpClient", return_value=client), \
-             patch.object(HTTP2DetectionCheck, "_check_alpn", return_value="h2"):
+        with (
+            patch("app.checks.web.http2_detection.AsyncHttpClient", return_value=client),
+            patch.object(HTTP2DetectionCheck, "_check_alpn", return_value="h2"),
+        ):
             check = HTTP2DetectionCheck()
             result = await check.check_service(https_service, {})
 
@@ -210,8 +234,10 @@ class TestHTTP2DetectionCheck:
         client = mock_client_multi(
             default=resp(200, headers={"alt-svc": 'h3=":443"; ma=86400'}),
         )
-        with patch("app.checks.web.http2_detection.AsyncHttpClient", return_value=client), \
-             patch.object(HTTP2DetectionCheck, "_check_alpn", return_value=None):
+        with (
+            patch("app.checks.web.http2_detection.AsyncHttpClient", return_value=client),
+            patch.object(HTTP2DetectionCheck, "_check_alpn", return_value=None),
+        ):
             check = HTTP2DetectionCheck()
             result = await check.check_service(https_service, {})
 
@@ -225,8 +251,10 @@ class TestHTTP2DetectionCheck:
         client = mock_client_multi(
             default=resp(200, headers={"alt-svc": 'h3=":443"'}),
         )
-        with patch("app.checks.web.http2_detection.AsyncHttpClient", return_value=client), \
-             patch.object(HTTP2DetectionCheck, "_check_alpn", return_value="h2"):
+        with (
+            patch("app.checks.web.http2_detection.AsyncHttpClient", return_value=client),
+            patch.object(HTTP2DetectionCheck, "_check_alpn", return_value="h2"),
+        ):
             check = HTTP2DetectionCheck()
             result = await check.check_service(https_service, {})
 
@@ -263,8 +291,10 @@ class TestHTTP2DetectionCheck:
     async def test_alpn_failure_graceful(self, https_service):
         """ALPN check failure doesn't crash the check."""
         client = mock_client_multi(default=resp(200, headers={}))
-        with patch("app.checks.web.http2_detection.AsyncHttpClient", return_value=client), \
-             patch.object(HTTP2DetectionCheck, "_check_alpn", side_effect=Exception("TLS error")):
+        with (
+            patch("app.checks.web.http2_detection.AsyncHttpClient", return_value=client),
+            patch.object(HTTP2DetectionCheck, "_check_alpn", side_effect=Exception("TLS error")),
+        ):
             check = HTTP2DetectionCheck()
             result = await check.check_service(https_service, {})
 
@@ -291,7 +321,9 @@ class TestHSTSPreloadCheck:
         client = mock_client_multi(
             response_map={
                 ("GET", "hstspreload.org"): resp(200, body=api_response),
-                ("GET", "target.com"): resp(200, headers={"strict-transport-security": hsts_header}),
+                ("GET", "target.com"): resp(
+                    200, headers={"strict-transport-security": hsts_header}
+                ),
             },
         )
         with patch("app.checks.web.hsts_preload.AsyncHttpClient", return_value=client):
@@ -311,7 +343,9 @@ class TestHSTSPreloadCheck:
         client = mock_client_multi(
             response_map={
                 ("GET", "hstspreload.org"): resp(200, body=api_response),
-                ("GET", "target.com"): resp(200, headers={"strict-transport-security": hsts_header}),
+                ("GET", "target.com"): resp(
+                    200, headers={"strict-transport-security": hsts_header}
+                ),
             },
         )
         with patch("app.checks.web.hsts_preload.AsyncHttpClient", return_value=client):
@@ -332,7 +366,9 @@ class TestHSTSPreloadCheck:
         client = mock_client_multi(
             response_map={
                 ("GET", "hstspreload.org"): resp(200, body=api_response),
-                ("GET", "target.com"): resp(200, headers={"strict-transport-security": hsts_header}),
+                ("GET", "target.com"): resp(
+                    200, headers={"strict-transport-security": hsts_header}
+                ),
             },
         )
         with patch("app.checks.web.hsts_preload.AsyncHttpClient", return_value=client):
@@ -357,7 +393,9 @@ class TestHSTSPreloadCheck:
         api_response = json.dumps({"status": "preloaded"})
         context = {
             "header_info": {
-                "headers": {"strict-transport-security": "max-age=63072000; includeSubDomains; preload"},
+                "headers": {
+                    "strict-transport-security": "max-age=63072000; includeSubDomains; preload"
+                },
             },
         }
 
@@ -379,7 +417,9 @@ class TestHSTSPreloadCheck:
         client = mock_client_multi(
             response_map={
                 ("GET", "hstspreload.org"): resp(200, body=api_response),
-                ("GET", "target.com"): resp(200, headers={"strict-transport-security": hsts_header}),
+                ("GET", "target.com"): resp(
+                    200, headers={"strict-transport-security": hsts_header}
+                ),
             },
         )
         with patch("app.checks.web.hsts_preload.AsyncHttpClient", return_value=client):
@@ -397,7 +437,9 @@ class TestHSTSPreloadCheck:
         client = mock_client_multi(
             response_map={
                 ("GET", "hstspreload.org"): resp(500, error="Server Error"),
-                ("GET", "target.com"): resp(200, headers={"strict-transport-security": hsts_header}),
+                ("GET", "target.com"): resp(
+                    200, headers={"strict-transport-security": hsts_header}
+                ),
             },
         )
         with patch("app.checks.web.hsts_preload.AsyncHttpClient", return_value=client):
@@ -465,8 +507,9 @@ class TestSRICheck:
         """External resources without SRI are flagged."""
         client = mock_client_multi(
             response_map={
-                ("GET", "target.com:80/"): resp(200, body=HTML_WITH_EXTERNAL_NO_SRI,
-                                                headers={"content-type": "text/html"}),
+                ("GET", "target.com:80/"): resp(
+                    200, body=HTML_WITH_EXTERNAL_NO_SRI, headers={"content-type": "text/html"}
+                ),
             },
             default=resp(404),
         )
@@ -487,8 +530,9 @@ class TestSRICheck:
         """All external resources have SRI — good finding."""
         client = mock_client_multi(
             response_map={
-                ("GET", "target.com:80/"): resp(200, body=HTML_WITH_SRI,
-                                                headers={"content-type": "text/html"}),
+                ("GET", "target.com:80/"): resp(
+                    200, body=HTML_WITH_SRI, headers={"content-type": "text/html"}
+                ),
             },
             default=resp(404),
         )
@@ -505,8 +549,9 @@ class TestSRICheck:
         """No external resources — info finding."""
         client = mock_client_multi(
             response_map={
-                ("GET", "target.com:80/"): resp(200, body=HTML_NO_EXTERNAL,
-                                                headers={"content-type": "text/html"}),
+                ("GET", "target.com:80/"): resp(
+                    200, body=HTML_NO_EXTERNAL, headers={"content-type": "text/html"}
+                ),
             },
             default=resp(404),
         )
@@ -522,8 +567,9 @@ class TestSRICheck:
         """Mix of SRI and non-SRI external resources."""
         client = mock_client_multi(
             response_map={
-                ("GET", "target.com:80/"): resp(200, body=HTML_MIXED_SRI,
-                                                headers={"content-type": "text/html"}),
+                ("GET", "target.com:80/"): resp(
+                    200, body=HTML_MIXED_SRI, headers={"content-type": "text/html"}
+                ),
             },
             default=resp(404),
         )
@@ -539,8 +585,9 @@ class TestSRICheck:
         """Medium severity when 3+ external resources lack SRI."""
         client = mock_client_multi(
             response_map={
-                ("GET", "target.com:80/"): resp(200, body=HTML_WITH_EXTERNAL_NO_SRI,
-                                                headers={"content-type": "text/html"}),
+                ("GET", "target.com:80/"): resp(
+                    200, body=HTML_WITH_EXTERNAL_NO_SRI, headers={"content-type": "text/html"}
+                ),
             },
             default=resp(404),
         )
@@ -557,7 +604,9 @@ class TestSRICheck:
         html = '<html><head><script src="//cdn.example.com/lib.js"></script></head></html>'
         client = mock_client_multi(
             response_map={
-                ("GET", "target.com:80/"): resp(200, body=html, headers={"content-type": "text/html"}),
+                ("GET", "target.com:80/"): resp(
+                    200, body=html, headers={"content-type": "text/html"}
+                ),
             },
             default=resp(404),
         )
@@ -572,8 +621,9 @@ class TestSRICheck:
         """Non-HTML responses are not analyzed."""
         client = mock_client_multi(
             response_map={
-                ("GET", "target.com:80/"): resp(200, body='{"api": true}',
-                                                headers={"content-type": "application/json"}),
+                ("GET", "target.com:80/"): resp(
+                    200, body='{"api": true}', headers={"content-type": "application/json"}
+                ),
             },
             default=resp(404),
         )
@@ -769,12 +819,18 @@ class TestMassAssignmentCheck:
     @pytest.mark.asyncio
     async def test_validation_error_reveals_schema(self, service):
         """Validation error that reveals accepted fields = low finding."""
-        error_body = json.dumps({
-            "detail": [
-                {"loc": ["body", "is_admin"], "msg": "extra fields not allowed",
-                 "type": "value_error.extra", "ctx": {"expected": ["name", "email"]}}
-            ]
-        })
+        error_body = json.dumps(
+            {
+                "detail": [
+                    {
+                        "loc": ["body", "is_admin"],
+                        "msg": "extra fields not allowed",
+                        "type": "value_error.extra",
+                        "ctx": {"expected": ["name", "email"]},
+                    }
+                ]
+            }
+        )
         client = mock_client_multi(
             default=resp(422, body=error_body),
         )
@@ -790,8 +846,10 @@ class TestMassAssignmentCheck:
         """No testable endpoints found = info finding."""
         # Override _gather_endpoints to return empty
         client = mock_client_multi(default=resp(404, error="Not Found"))
-        with patch("app.checks.web.mass_assignment.AsyncHttpClient", return_value=client), \
-             patch.object(MassAssignmentCheck, "_gather_endpoints", return_value=[]):
+        with (
+            patch("app.checks.web.mass_assignment.AsyncHttpClient", return_value=client),
+            patch.object(MassAssignmentCheck, "_gather_endpoints", return_value=[]),
+        ):
             check = MassAssignmentCheck()
             result = await check.check_service(service, {})
 
@@ -800,10 +858,12 @@ class TestMassAssignmentCheck:
     @pytest.mark.asyncio
     async def test_nested_field_reflection(self, service):
         """Field reflected in nested response object is still detected."""
-        response_body = json.dumps({
-            "data": {"user": {"name": "test", "is_admin": True}},
-            "status": "ok",
-        })
+        response_body = json.dumps(
+            {
+                "data": {"user": {"name": "test", "is_admin": True}},
+                "status": "ok",
+            }
+        )
         client = mock_client_multi(
             default=resp(200, body=response_body),
         )
@@ -811,7 +871,9 @@ class TestMassAssignmentCheck:
             check = MassAssignmentCheck()
             result = await check.check_service(service, {})
 
-        critical = [f for f in result.findings if f.severity == "critical" and "is_admin" in f.title]
+        critical = [
+            f for f in result.findings if f.severity == "critical" and "is_admin" in f.title
+        ]
         assert len(critical) >= 1
 
     @pytest.mark.asyncio

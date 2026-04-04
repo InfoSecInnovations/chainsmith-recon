@@ -6,14 +6,13 @@ If no server is reachable, auto-starts uvicorn as a background subprocess.
 """
 
 import atexit
-import os
+import contextlib
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 import httpx
-
 
 PID_DIR = Path.home() / ".chainsmith"
 PID_FILE = PID_DIR / "server.pid"
@@ -59,11 +58,16 @@ class ServerManager:
 
         self._process = subprocess.Popen(
             [
-                sys.executable, "-m", "uvicorn",
+                sys.executable,
+                "-m",
+                "uvicorn",
                 "app.main:app",
-                "--host", host,
-                "--port", str(port),
-                "--log-level", "warning",
+                "--host",
+                host,
+                "--port",
+                str(port),
+                "--log-level",
+                "warning",
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -91,7 +95,5 @@ class ServerManager:
         )
 
     def _cleanup_pid(self):
-        try:
+        with contextlib.suppress(OSError):
             PID_FILE.unlink(missing_ok=True)
-        except OSError:
-            pass

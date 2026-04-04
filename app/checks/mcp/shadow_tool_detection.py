@@ -17,21 +17,42 @@ References:
   MITRE ATLAS - AML.T0051 LLM Plugin Compromise
 """
 
-import json
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Common MCP tool names prone to collision in multi-server setups
 COMMON_TOOL_NAMES = {
-    "read_file", "write_file", "search", "fetch", "browse", "execute",
-    "get_weather", "send_email", "query", "list_files", "create_file",
-    "delete_file", "http_request", "run_command", "get_url",
-    "read", "write", "get", "set", "list", "create", "delete",
-    "update", "find", "open", "close", "send", "receive",
+    "read_file",
+    "write_file",
+    "search",
+    "fetch",
+    "browse",
+    "execute",
+    "get_weather",
+    "send_email",
+    "query",
+    "list_files",
+    "create_file",
+    "delete_file",
+    "http_request",
+    "run_command",
+    "get_url",
+    "read",
+    "write",
+    "get",
+    "set",
+    "list",
+    "create",
+    "delete",
+    "update",
+    "find",
+    "open",
+    "close",
+    "send",
+    "receive",
 }
 
 
@@ -114,35 +135,39 @@ class ShadowToolDetectionCheck(BaseCheck):
         }
 
         if namespaced and not flat:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Tools are namespaced (shadow tool resistant)",
-                description=(
-                    f"All {len(tool_names)} tools use namespaced naming "
-                    f"(e.g., '{namespaced[0]}'). This makes shadow tool attacks "
-                    "significantly harder in multi-server configurations."
-                ),
-                severity="info",
-                evidence=f"Namespaced tools: {', '.join(namespaced[:5])}",
-                host=host,
-                discriminator="namespace-safe",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Tools are namespaced (shadow tool resistant)",
+                    description=(
+                        f"All {len(tool_names)} tools use namespaced naming "
+                        f"(e.g., '{namespaced[0]}'). This makes shadow tool attacks "
+                        "significantly harder in multi-server configurations."
+                    ),
+                    severity="info",
+                    evidence=f"Namespaced tools: {', '.join(namespaced[:5])}",
+                    host=host,
+                    discriminator="namespace-safe",
+                )
+            )
         elif flat:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"MCP tools use flat naming (no namespace prefix) — vulnerable to shadow tool attacks",
-                description=(
-                    f"{len(flat)} of {len(tool_names)} tools use flat (unprefixed) names. "
-                    "In multi-server MCP configurations, an attacker-controlled server "
-                    "could register tools with the same names, causing the client to "
-                    "invoke the attacker's version instead."
-                ),
-                severity="medium",
-                evidence=f"Flat tool names: {', '.join(flat[:10])}",
-                host=host,
-                discriminator="namespace-flat",
-                raw_data={"flat_names": flat, "namespaced_names": namespaced},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="MCP tools use flat naming (no namespace prefix) — vulnerable to shadow tool attacks",
+                    description=(
+                        f"{len(flat)} of {len(tool_names)} tools use flat (unprefixed) names. "
+                        "In multi-server MCP configurations, an attacker-controlled server "
+                        "could register tools with the same names, causing the client to "
+                        "invoke the attacker's version instead."
+                    ),
+                    severity="medium",
+                    evidence=f"Flat tool names: {', '.join(flat[:10])}",
+                    host=host,
+                    discriminator="namespace-flat",
+                    raw_data={"flat_names": flat, "namespaced_names": namespaced},
+                )
+            )
 
     def _detect_name_collisions(
         self, tools: list[dict], host: str, result: CheckResult, shadow_risk: dict
@@ -154,25 +179,31 @@ class ShadowToolDetectionCheck(BaseCheck):
         shadow_risk["collision_candidates"] = sorted(collisions)
 
         if collisions:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Collision-risk tool names detected: {len(collisions)} match common MCP names",
-                description=(
-                    f"The following tool names match commonly-used MCP tool names: "
-                    f"{', '.join(sorted(collisions))}. "
-                    "In multi-server configurations, another server registering "
-                    "the same names would create a shadow tool collision."
-                ),
-                severity="low",
-                evidence=f"Collision candidates: {', '.join(sorted(collisions))}",
-                host=host,
-                discriminator="name-collision",
-                raw_data={"collisions": sorted(collisions)},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Collision-risk tool names detected: {len(collisions)} match common MCP names",
+                    description=(
+                        f"The following tool names match commonly-used MCP tool names: "
+                        f"{', '.join(sorted(collisions))}. "
+                        "In multi-server configurations, another server registering "
+                        "the same names would create a shadow tool collision."
+                    ),
+                    severity="low",
+                    evidence=f"Collision candidates: {', '.join(sorted(collisions))}",
+                    host=host,
+                    discriminator="name-collision",
+                    raw_data={"collisions": sorted(collisions)},
+                )
+            )
 
     async def _test_protocol_attacks(
-        self, mcp_servers: list[dict], tools: list[dict],
-        host: str, result: CheckResult, shadow_risk: dict
+        self,
+        mcp_servers: list[dict],
+        tools: list[dict],
+        host: str,
+        result: CheckResult,
+        shadow_risk: dict,
     ) -> None:
         """Test protocol-level shadow tool vectors."""
         cfg = HttpConfig(timeout_seconds=10.0, verify_ssl=False)
@@ -200,8 +231,13 @@ class ShadowToolDetectionCheck(BaseCheck):
                 result.errors.append(f"Shadow tool protocol test: {e}")
 
     async def _test_list_changed_notification(
-        self, client, server_url: str, base_path: str,
-        host: str, result: CheckResult, shadow_risk: dict
+        self,
+        client,
+        server_url: str,
+        base_path: str,
+        host: str,
+        result: CheckResult,
+        shadow_risk: dict,
     ) -> None:
         """Test if server accepts tools/list_changed notification from client."""
         url = server_url  # Send to MCP endpoint directly
@@ -223,24 +259,31 @@ class ShadowToolDetectionCheck(BaseCheck):
         }
 
         if accepted:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Server accepts client notifications/tools/list_changed",
-                description=(
-                    "The MCP server accepted a tools/list_changed notification "
-                    "from the client. This may allow a client to influence the "
-                    "server's tool registration state."
-                ),
-                severity="high",
-                evidence=f"URL: {url}\nMethod: notifications/tools/list_changed\nStatus: {resp.status_code}",
-                host=host,
-                discriminator="list-changed-accepted",
-                raw_data={"status": resp.status_code},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Server accepts client notifications/tools/list_changed",
+                    description=(
+                        "The MCP server accepted a tools/list_changed notification "
+                        "from the client. This may allow a client to influence the "
+                        "server's tool registration state."
+                    ),
+                    severity="high",
+                    evidence=f"URL: {url}\nMethod: notifications/tools/list_changed\nStatus: {resp.status_code}",
+                    host=host,
+                    discriminator="list-changed-accepted",
+                    raw_data={"status": resp.status_code},
+                )
+            )
 
     async def _test_reinitialize(
-        self, client, server_url: str, base_path: str,
-        host: str, result: CheckResult, shadow_risk: dict
+        self,
+        client,
+        server_url: str,
+        base_path: str,
+        host: str,
+        result: CheckResult,
+        shadow_risk: dict,
     ) -> None:
         """Test if sending a second initialize changes behavior."""
         url = server_url
@@ -285,20 +328,22 @@ class ShadowToolDetectionCheck(BaseCheck):
                 "accepted": True,
                 "status": resp2.status_code,
             }
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="MCP server accepts tool re-registration: duplicate initialize accepted",
-                description=(
-                    "The MCP server accepted a second initialize request with different "
-                    "clientInfo. This indicates the server may not enforce single-session "
-                    "semantics, potentially allowing tool replacement."
-                ),
-                severity="low",
-                evidence=f"First init: status {resp1.status_code}\nSecond init: status {resp2.status_code}",
-                host=host,
-                discriminator="reinitialize-accepted",
-                raw_data={
-                    "first_status": resp1.status_code,
-                    "second_status": resp2.status_code,
-                },
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="MCP server accepts tool re-registration: duplicate initialize accepted",
+                    description=(
+                        "The MCP server accepted a second initialize request with different "
+                        "clientInfo. This indicates the server may not enforce single-session "
+                        "semantics, potentially allowing tool replacement."
+                    ),
+                    severity="low",
+                    evidence=f"First init: status {resp1.status_code}\nSecond init: status {resp2.status_code}",
+                    host=host,
+                    discriminator="reinitialize-accepted",
+                    raw_data={
+                        "first_status": resp1.status_code,
+                        "second_status": resp2.status_code,
+                    },
+                )
+            )

@@ -26,13 +26,11 @@ References:
 """
 
 import json
-import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # CAG/caching infrastructure signatures
 CAG_SIGNATURES = {
@@ -111,7 +109,7 @@ CACHE_HEADERS = [
 class CAGDiscoveryCheck(ServiceIteratingCheck):
     """
     Discover CAG pipeline endpoints and caching infrastructure.
-    
+
     Probes common cache paths, analyzes response headers for cache
     indicators, and performs timing analysis to detect caching behavior.
     """
@@ -148,20 +146,22 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
                 for infra_info in infra_results:
                     cache_infra.add(infra_info["cache_type"])
                     cag_endpoints.append(infra_info)
-                    
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Cache infrastructure: {infra_info['cache_type']}",
-                        description=self._build_infra_description(infra_info),
-                        severity="medium" if not infra_info.get("auth_required") else "info",
-                        evidence=self._build_evidence(infra_info),
-                        host=service.host,
-                        discriminator=f"cache-{infra_info['cache_type']}",
-                        target=service,
-                        target_url=infra_info.get("url"),
-                        raw_data=infra_info,
-                        references=self.references,
-                    ))
+
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Cache infrastructure: {infra_info['cache_type']}",
+                            description=self._build_infra_description(infra_info),
+                            severity="medium" if not infra_info.get("auth_required") else "info",
+                            evidence=self._build_evidence(infra_info),
+                            host=service.host,
+                            discriminator=f"cache-{infra_info['cache_type']}",
+                            target=service,
+                            target_url=infra_info.get("url"),
+                            raw_data=infra_info,
+                            references=self.references,
+                        )
+                    )
 
                 # Check CAG-specific endpoints
                 for path in CAG_PATHS:
@@ -172,45 +172,49 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
 
                     if endpoint_info:
                         cag_endpoints.append(endpoint_info)
-                        
+
                         severity = self._determine_severity(endpoint_info)
-                        
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"CAG endpoint: {path}",
-                            description=self._build_endpoint_description(endpoint_info),
-                            severity=severity,
-                            evidence=self._build_evidence(endpoint_info),
-                            host=service.host,
-                            discriminator=f"cag-{path.strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=endpoint_info,
-                            references=self.references,
-                        ))
+
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"CAG endpoint: {path}",
+                                description=self._build_endpoint_description(endpoint_info),
+                                severity=severity,
+                                evidence=self._build_evidence(endpoint_info),
+                                host=service.host,
+                                discriminator=f"cag-{path.strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=endpoint_info,
+                                references=self.references,
+                            )
+                        )
 
                 # Check existing AI endpoints for cache headers
                 ai_endpoints = context.get("chat_endpoints", []) + context.get("rag_endpoints", [])
                 for ep in ai_endpoints:
                     if ep.get("service", {}).get("host") != service.host:
                         continue
-                    
+
                     cache_info = await self._check_endpoint_caching(client, ep)
                     if cache_info:
                         cag_endpoints.append(cache_info)
-                        
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Caching detected on: {cache_info['path']}",
-                            description=self._build_cache_description(cache_info),
-                            severity="low",
-                            evidence=self._build_evidence(cache_info),
-                            host=service.host,
-                            discriminator=f"cached-{cache_info['path'].strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=cache_info.get("url"),
-                            raw_data=cache_info,
-                        ))
+
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Caching detected on: {cache_info['path']}",
+                                description=self._build_cache_description(cache_info),
+                                severity="low",
+                                evidence=self._build_evidence(cache_info),
+                                host=service.host,
+                                discriminator=f"cached-{cache_info['path'].strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=cache_info.get("url"),
+                                raw_data=cache_info,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -245,19 +249,21 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
                 body_match = any(p in body_lower for p in sigs.get("body_patterns", []))
 
                 if headers_match or body_match or resp.status_code == 200:
-                    detected.append({
-                        "cache_type": cache_type,
-                        "url": url,
-                        "path": path,
-                        "status_code": resp.status_code,
-                        "auth_required": resp.status_code == 401,
-                        "indicators": {
-                            "headers_match": headers_match,
-                            "body_match": body_match,
-                        },
-                        "service": service.to_dict(),
-                        "endpoint_type": "cache_infrastructure",
-                    })
+                    detected.append(
+                        {
+                            "cache_type": cache_type,
+                            "url": url,
+                            "path": path,
+                            "status_code": resp.status_code,
+                            "auth_required": resp.status_code == 401,
+                            "indicators": {
+                                "headers_match": headers_match,
+                                "body_match": body_match,
+                            },
+                            "service": service.to_dict(),
+                            "endpoint_type": "cache_infrastructure",
+                        }
+                    )
                     break
 
         return detected
@@ -268,7 +274,7 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
             return None
 
         indicators = []
-        
+
         # Check for cache-related headers
         resp_headers_lower = {k.lower(): v for k, v in resp.headers.items()}
         for header in CACHE_HEADERS:
@@ -278,10 +284,18 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
         # Check body for cache patterns
         body = resp.body or ""
         body_lower = body.lower()
-        
+
         cache_keywords = [
-            "cache", "cached", "precomputed", "context_id", "session_id",
-            "cache_hit", "cache_miss", "ttl", "expiry", "warm"
+            "cache",
+            "cached",
+            "precomputed",
+            "context_id",
+            "session_id",
+            "cache_hit",
+            "cache_miss",
+            "ttl",
+            "expiry",
+            "warm",
         ]
         for kw in cache_keywords:
             if kw in body_lower:
@@ -292,8 +306,16 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
             try:
                 data = json.loads(body)
                 if isinstance(data, dict):
-                    cache_fields = ["cache_status", "cached", "cache_hit", "context_id",
-                                    "session_id", "ttl", "cache_age", "precomputed"]
+                    cache_fields = [
+                        "cache_status",
+                        "cached",
+                        "cache_hit",
+                        "context_id",
+                        "session_id",
+                        "ttl",
+                        "cache_age",
+                        "precomputed",
+                    ]
                     for field in cache_fields:
                         if field in data:
                             indicators.append(f"field:{field}")
@@ -325,14 +347,14 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
             json={"input": "cache test query", "query": "cache test"},
             headers={"Content-Type": "application/json"},
         )
-        
+
         if resp1.error or resp1.status_code >= 400:
             return None
 
         # Check response headers for cache indicators
         resp_headers_lower = {k.lower(): v for k, v in resp1.headers.items()}
         cache_indicators = []
-        
+
         for header in CACHE_HEADERS:
             if header in resp_headers_lower:
                 cache_indicators.append(f"header:{header}={resp_headers_lower[header]}")
@@ -365,48 +387,50 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
         """Determine finding severity."""
         if endpoint_info.get("auth_required"):
             return "info"
-        
+
         # Cache management endpoints without auth are medium severity
         path = endpoint_info.get("path", "").lower()
         if any(kw in path for kw in ["clear", "warm", "precompute", "store"]):
             return "medium"
-        
+
         return "low"
 
     def _build_infra_description(self, infra_info: dict) -> str:
         """Build description for cache infrastructure finding."""
-        parts = [f"Cache infrastructure '{infra_info['cache_type']}' detected at {infra_info['path']}."]
-        
+        parts = [
+            f"Cache infrastructure '{infra_info['cache_type']}' detected at {infra_info['path']}."
+        ]
+
         if infra_info.get("auth_required"):
             parts.append("Authentication required.")
         else:
             parts.append("No authentication required - potential cache poisoning vector.")
-        
+
         return " ".join(parts)
 
     def _build_endpoint_description(self, endpoint_info: dict) -> str:
         """Build description for CAG endpoint finding."""
         parts = [f"CAG endpoint discovered at {endpoint_info['path']}."]
-        
+
         if endpoint_info.get("auth_required"):
             parts.append("Authentication required.")
         else:
             parts.append("No authentication required.")
-        
+
         indicator_count = len(endpoint_info.get("indicators", []))
         if indicator_count > 0:
             parts.append(f"Detected {indicator_count} cache indicators.")
-        
+
         return " ".join(parts)
 
     def _build_cache_description(self, cache_info: dict) -> str:
         """Build description for cached endpoint finding."""
         parts = [f"Caching behavior detected on AI endpoint {cache_info['path']}."]
-        
+
         indicators = cache_info.get("cache_indicators", [])
         if indicators:
             parts.append(f"Indicators: {', '.join(indicators[:3])}.")
-        
+
         return " ".join(parts)
 
     def _build_evidence(self, info: dict) -> str:
@@ -415,15 +439,15 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
             f"Path: {info.get('path', 'unknown')}",
             f"Status: {info.get('status_code', 'unknown')}",
         ]
-        
+
         if info.get("cache_type"):
             lines.append(f"Cache type: {info['cache_type']}")
-        
+
         indicators = info.get("indicators") or info.get("cache_indicators", [])
         if indicators:
             if isinstance(indicators, dict):
                 lines.append(f"Indicators: {indicators}")
             else:
                 lines.append(f"Indicators: {', '.join(indicators[:5])}")
-        
+
         return "\n".join(lines)

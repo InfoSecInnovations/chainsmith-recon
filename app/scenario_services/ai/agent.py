@@ -29,19 +29,15 @@ Usage in docker-compose.yml:
 
 import hashlib
 import os
-from datetime import datetime
-from typing import Optional
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from app.scenario_services.common.config import (
-    SERVICE_NAME,
-    is_finding_active,
-    get_or_create_session,
     get_brand_name,
+    get_or_create_session,
+    is_finding_active,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -67,10 +63,11 @@ app = FastAPI(
 # MODELS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class AgentRequest(BaseModel):
     goal: str
-    context: Optional[dict] = {}
-    session_id: Optional[str] = None
+    context: dict | None = {}
+    session_id: str | None = None
 
 
 class MemoryEntry(BaseModel):
@@ -127,6 +124,7 @@ AGENT_TOOLS = [
 # MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     """Add headers based on active findings."""
@@ -146,6 +144,7 @@ async def add_headers(request: Request, call_next):
 # ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.get("/")
 async def root():
     """Service info endpoint."""
@@ -161,7 +160,7 @@ async def health():
     """Health check endpoint."""
     session = get_or_create_session()
     brand = get_brand_name().lower().replace(" ", "-")
-    
+
     return {
         "status": "healthy",
         "service": f"{brand}-agent",
@@ -173,13 +172,13 @@ async def health():
 async def list_tools():
     """
     List available agent tools.
-    
+
     Finding: tool_chain_exposed
     When active, returns full tool metadata including sensitive flags.
     """
     if is_finding_active("tool_chain_exposed"):
         return {"tools": AGENT_TOOLS, "count": len(AGENT_TOOLS)}
-    
+
     # Hide sensitive metadata
     safe_tools = [{"name": t["name"]} for t in AGENT_TOOLS]
     return {"tools": safe_tools, "count": len(safe_tools)}
@@ -202,24 +201,24 @@ async def execute_agent(request: AgentRequest):
 async def list_sessions():
     """
     List active sessions.
-    
+
     Finding: no_session_isolation
     When active, returns list of all sessions.
     """
     if is_finding_active("no_session_isolation"):
         return {"sessions": list(MEMORY_STORE.keys()), "count": len(MEMORY_STORE)}
-    
+
     return {"sessions": [], "message": "Session listing requires authentication"}
 
 
 @app.get("/memory")
-async def get_memory(session_id: Optional[str] = None):
+async def get_memory(session_id: str | None = None):
     """
     Get memory/history.
-    
+
     Finding: memory_endpoint_exposed
     When active, endpoint is accessible.
-    
+
     Finding: no_session_isolation
     When active, allows accessing any session's memory.
     """
@@ -237,7 +236,7 @@ async def get_memory(session_id: Optional[str] = None):
     # Return all sessions if no isolation
     if is_finding_active("no_session_isolation"):
         all_entries = []
-        for sid, entries in MEMORY_STORE.items():
+        for _sid, entries in MEMORY_STORE.items():
             all_entries.extend([e.model_dump() for e in entries])
         return {
             "entries": all_entries,
@@ -251,7 +250,7 @@ async def get_memory(session_id: Optional[str] = None):
 async def get_config():
     """
     Get agent configuration.
-    
+
     Finding: agent_config_leak
     When active, returns detailed configuration.
     """

@@ -7,10 +7,10 @@ Test for information disclosure in AI error responses.
 import re
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.evidence import fmt_error_evidence
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class AIErrorLeakageCheck(BaseCheck):
@@ -69,7 +69,8 @@ class AIErrorLeakageCheck(BaseCheck):
                 for payload in self.ERROR_PAYLOADS:
                     await self._rate_limit()
                     resp = await client.post(
-                        url, json=payload,
+                        url,
+                        json=payload,
                         headers={"Content-Type": "application/json"},
                     )
 
@@ -78,17 +79,27 @@ class AIErrorLeakageCheck(BaseCheck):
 
                     body = resp.body.lower()
 
-                    if any(ind in body for ind in ["traceback", "at line", 'file "', "exception in", "error at"]):
+                    if any(
+                        ind in body
+                        for ind in ["traceback", "at line", 'file "', "exception in", "error at"]
+                    ):
                         leaked["stack_traces"] = True
 
-                    leaked["paths"].extend(re.findall(r'/[a-zA-Z0-9_/.-]+\.py', body))
+                    leaked["paths"].extend(re.findall(r"/[a-zA-Z0-9_/.-]+\.py", body))
 
                     if any(kw in body for kw in ["tools", "available_tools", "function"]):
-                        leaked["tools"].extend([
-                            t for t in re.findall(r'["\']([a-z_]+)["\']', body) if "_" in t
-                        ])
+                        leaked["tools"].extend(
+                            [t for t in re.findall(r'["\']([a-z_]+)["\']', body) if "_" in t]
+                        )
 
-                    for pattern in ["model", "temperature", "max_tokens", "api_key", "endpoint", "base_url"]:
+                    for pattern in [
+                        "model",
+                        "temperature",
+                        "max_tokens",
+                        "api_key",
+                        "endpoint",
+                        "base_url",
+                    ]:
                         if pattern in body:
                             leaked["config"].append(pattern)
 
@@ -103,50 +114,66 @@ class AIErrorLeakageCheck(BaseCheck):
         host = service.host
 
         if leaked["stack_traces"]:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Stack trace in error response",
-                description="Error responses contain stack traces revealing internal code paths",
-                severity="medium",
-                evidence="Stack trace indicators found in error responses",
-                host=host, discriminator="stack-trace",
-                target=service, target_url=url,
-                references=["CWE-209"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Stack trace in error response",
+                    description="Error responses contain stack traces revealing internal code paths",
+                    severity="medium",
+                    evidence="Stack trace indicators found in error responses",
+                    host=host,
+                    discriminator="stack-trace",
+                    target=service,
+                    target_url=url,
+                    references=["CWE-209"],
+                )
+            )
 
         if leaked["paths"]:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Internal paths leaked ({len(leaked['paths'])})",
-                description="Error messages reveal internal file paths",
-                severity="low",
-                evidence=fmt_error_evidence(url, ", ".join(leaked["paths"][:5])),
-                host=host, discriminator="internal-paths",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Internal paths leaked ({len(leaked['paths'])})",
+                    description="Error messages reveal internal file paths",
+                    severity="low",
+                    evidence=fmt_error_evidence(url, ", ".join(leaked["paths"][:5])),
+                    host=host,
+                    discriminator="internal-paths",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
         if leaked["tools"]:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Tools leaked in errors ({len(leaked['tools'])})",
-                description="Error messages reveal available tool/function names",
-                severity="medium",
-                evidence=f"Tools: {', '.join(leaked['tools'][:5])}",
-                host=host, discriminator="tools-leaked",
-                target=service, target_url=url,
-                raw_data={"tools": leaked["tools"]},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Tools leaked in errors ({len(leaked['tools'])})",
+                    description="Error messages reveal available tool/function names",
+                    severity="medium",
+                    evidence=f"Tools: {', '.join(leaked['tools'][:5])}",
+                    host=host,
+                    discriminator="tools-leaked",
+                    target=service,
+                    target_url=url,
+                    raw_data={"tools": leaked["tools"]},
+                )
+            )
 
         if leaked["config"]:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Configuration leaked in errors",
-                description="Error messages reveal configuration parameters",
-                severity="low",
-                evidence=f"Config hints: {', '.join(leaked['config'])}",
-                host=host, discriminator="config-leaked",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Configuration leaked in errors",
+                    description="Error messages reveal configuration parameters",
+                    severity="low",
+                    evidence=f"Config hints: {', '.join(leaked['config'])}",
+                    host=host,
+                    discriminator="config-leaked",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
         result.outputs["error_leaks"] = leaked
         return result

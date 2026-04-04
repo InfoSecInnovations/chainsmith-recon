@@ -2,20 +2,31 @@
 tests/test_preferences.py - Tests for preferences and profile system
 """
 
-import json
-import pytest
 from pathlib import Path
 
+import pytest
+
 from app.preferences import (
-    Preferences, Profile, ProfileStore, BUILTIN_PROFILES,
-    load_profile_store, save_profile_store, load_preferences, save_preferences,
-    _calculate_overrides, _deep_merge,
-    get_value, set_value, reset_value, _validate_and_convert,
-    get_profile_store, get_preferences, set_preference, reset_preference,
-    reset_all_preferences, get_check_override,
-    list_profiles, get_profile, get_active_profile_name,
-    create_profile, update_profile, delete_profile,
-    activate_profile, reset_profile, resolve_profile,
+    BUILTIN_PROFILES,
+    Preferences,
+    Profile,
+    ProfileStore,
+    _calculate_overrides,
+    _deep_merge,
+    activate_profile,
+    create_profile,
+    delete_profile,
+    get_active_profile_name,
+    get_preferences,
+    get_profile,
+    get_value,
+    load_preferences,
+    load_profile_store,
+    reset_value,
+    resolve_profile,
+    save_profile_store,
+    set_preference,
+    set_value,
 )
 
 
@@ -29,6 +40,7 @@ def temp_prefs_env(tmp_path: Path, monkeypatch):
     prefs_path = tmp_path / "preferences.yaml"
     monkeypatch.setenv("CHAINSMITH_PREFERENCES_PATH", str(prefs_path))
     import app.preferences as prefs_module
+
     prefs_module._profile_store = None
     yield prefs_path
     prefs_module._profile_store = None
@@ -56,7 +68,10 @@ def sample_profile() -> Profile:
     return Profile(
         name="test-profile",
         description="A test profile",
-        overrides={"network": {"timeout_seconds": 45.0}, "rate_limiting": {"requests_per_second": 2.0}},
+        overrides={
+            "network": {"timeout_seconds": 45.0},
+            "rate_limiting": {"requests_per_second": 2.0},
+        },
         built_in=False,
     )
 
@@ -184,7 +199,7 @@ class TestFileIO:
         store = ProfileStore()
         store.create_profile("saved-profile")
         save_profile_store(store, temp_prefs_path)
-        
+
         loaded = load_profile_store(temp_prefs_path)
         assert "saved-profile" in loaded.profiles
 
@@ -196,7 +211,7 @@ class TestFileIO:
         store = ProfileStore()
         store.activate_profile("aggressive")
         save_profile_store(store, temp_prefs_path)
-        
+
         prefs = load_preferences(temp_prefs_path)
         assert prefs.network.timeout_seconds == 120.0
 

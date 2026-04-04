@@ -6,7 +6,6 @@ Handles database connection setup, session factory, and schema creation.
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -19,8 +18,8 @@ from app.db.models import Base
 
 logger = logging.getLogger(__name__)
 
-_engine: Optional[AsyncEngine] = None
-_session_factory: Optional[async_sessionmaker[AsyncSession]] = None
+_engine: AsyncEngine | None = None
+_session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
 def _build_url(backend: str, db_path: Path, postgresql_url: str) -> str:

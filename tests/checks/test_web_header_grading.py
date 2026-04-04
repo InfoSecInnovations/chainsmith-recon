@@ -15,12 +15,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.checks.base import Service
-from app.checks.web.headers import HeaderAnalysisCheck
-from app.checks.web.cookie_security import CookieSecurityCheck
 from app.checks.web.auth_detection import AuthDetectionCheck
+from app.checks.web.cookie_security import CookieSecurityCheck
+from app.checks.web.headers import HeaderAnalysisCheck
 from app.checks.web.waf_detection import WAFDetectionCheck
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
@@ -29,16 +28,31 @@ from app.lib.http import HttpResponse
 
 @pytest.fixture
 def service():
-    return Service(url="http://target.com:80", host="target.com", port=80, scheme="http", service_type="http")
+    return Service(
+        url="http://target.com:80", host="target.com", port=80, scheme="http", service_type="http"
+    )
 
 
 @pytest.fixture
 def https_service():
-    return Service(url="https://target.com:443", host="target.com", port=443, scheme="https", service_type="http")
+    return Service(
+        url="https://target.com:443",
+        host="target.com",
+        port=443,
+        scheme="https",
+        service_type="http",
+    )
 
 
 def resp(status_code=200, body="", headers=None, error=None):
-    return HttpResponse(url="http://target.com:80", status_code=status_code, headers=headers or {}, body=body, elapsed_ms=50.0, error=error)
+    return HttpResponse(
+        url="http://target.com:80",
+        status_code=status_code,
+        headers=headers or {},
+        body=body,
+        elapsed_ms=50.0,
+        error=error,
+    )
 
 
 def mock_client_multi(response_map=None, default=None):
@@ -92,9 +106,10 @@ class TestHeaderCSPGrading:
             "X-XSS-Protection": "1; mode=block",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         csp_findings = [f for f in result.findings if "csp" in f.id.lower()]
         assert len(csp_findings) == 1
@@ -112,9 +127,10 @@ class TestHeaderCSPGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "strict-origin",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         csp_findings = [f for f in result.findings if "csp" in f.id.lower()]
         assert len(csp_findings) == 1
@@ -131,9 +147,10 @@ class TestHeaderCSPGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         csp_findings = [f for f in result.findings if "csp" in f.id.lower()]
         assert len(csp_findings) == 1
@@ -150,9 +167,10 @@ class TestHeaderCSPGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         csp_findings = [f for f in result.findings if "csp" in f.id.lower()]
         assert len(csp_findings) == 1
@@ -169,9 +187,10 @@ class TestHeaderCSPGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         csp_findings = [f for f in result.findings if "csp" in (f.id or "").lower()]
         assert len(csp_findings) == 0
@@ -194,9 +213,10 @@ class TestHeaderHSTSGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         hsts_findings = [f for f in result.findings if "hsts" in (f.id or "").lower()]
         assert len(hsts_findings) == 1
@@ -214,9 +234,10 @@ class TestHeaderHSTSGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         hsts_findings = [f for f in result.findings if "hsts" in (f.id or "").lower()]
         assert len(hsts_findings) == 1
@@ -233,9 +254,10 @@ class TestHeaderHSTSGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         hsts_findings = [f for f in result.findings if "hsts" in (f.id or "").lower()]
         assert len(hsts_findings) == 0
@@ -258,9 +280,10 @@ class TestHeaderXFOGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         xfo_findings = [f for f in result.findings if "xfo" in (f.id or "").lower()]
         assert len(xfo_findings) == 1
@@ -278,9 +301,10 @@ class TestHeaderXFOGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         xfo_findings = [f for f in result.findings if "xfo" in (f.id or "").lower()]
         assert len(xfo_findings) == 0
@@ -303,9 +327,10 @@ class TestHeaderReferrerPolicyGrading:
             "X-Frame-Options": "DENY",
             "X-XSS-Protection": "1",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         rp_findings = [f for f in result.findings if "referrer" in (f.id or "").lower()]
         assert len(rp_findings) == 1
@@ -322,9 +347,10 @@ class TestHeaderReferrerPolicyGrading:
             "X-Frame-Options": "DENY",
             "X-XSS-Protection": "1",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         rp_findings = [f for f in result.findings if "referrer" in (f.id or "").lower()]
         assert len(rp_findings) == 0
@@ -348,9 +374,10 @@ class TestHeaderPermissionsPolicyGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         pp_findings = [f for f in result.findings if "permissions" in (f.id or "").lower()]
         assert len(pp_findings) == 1
@@ -369,9 +396,10 @@ class TestHeaderPermissionsPolicyGrading:
             "X-XSS-Protection": "1",
             "Referrer-Policy": "no-referrer",
         }
-        with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         pp_findings = [f for f in result.findings if "permissions" in (f.id or "").lower()]
         assert len(pp_findings) == 0
@@ -392,9 +420,10 @@ class TestCookieSecurityCheck:
     async def test_session_cookie_missing_secure(self, service):
         check = CookieSecurityCheck()
         headers = {"Set-Cookie": "sessionid=abc123; HttpOnly; SameSite=Strict; Path=/"}
-        with patch("app.checks.web.cookie_security.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.cookie_security.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         secure_findings = [f for f in result.findings if "no-secure" in (f.id or "")]
         assert len(secure_findings) == 1
@@ -404,9 +433,10 @@ class TestCookieSecurityCheck:
     async def test_session_cookie_missing_httponly(self, service):
         check = CookieSecurityCheck()
         headers = {"Set-Cookie": "JSESSIONID=xyz; Secure; SameSite=Strict; Path=/"}
-        with patch("app.checks.web.cookie_security.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.cookie_security.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         httponly_findings = [f for f in result.findings if "no-httponly" in (f.id or "")]
         assert len(httponly_findings) == 1
@@ -416,9 +446,10 @@ class TestCookieSecurityCheck:
     async def test_cookie_missing_samesite(self, service):
         check = CookieSecurityCheck()
         headers = {"Set-Cookie": "sid=abc; Secure; HttpOnly; Path=/"}
-        with patch("app.checks.web.cookie_security.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.cookie_security.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         samesite_findings = [f for f in result.findings if "no-samesite" in (f.id or "")]
         assert len(samesite_findings) == 1
@@ -427,9 +458,10 @@ class TestCookieSecurityCheck:
     async def test_cookie_samesite_none(self, service):
         check = CookieSecurityCheck()
         headers = {"Set-Cookie": "auth=tok; Secure; HttpOnly; SameSite=None; Path=/"}
-        with patch("app.checks.web.cookie_security.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.cookie_security.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         samesite_none = [f for f in result.findings if "samesite-none" in (f.id or "")]
         assert len(samesite_none) == 1
@@ -437,10 +469,13 @@ class TestCookieSecurityCheck:
     @pytest.mark.asyncio
     async def test_cookie_broad_domain(self, service):
         check = CookieSecurityCheck()
-        headers = {"Set-Cookie": "tracker=x; Domain=.example.com; Secure; HttpOnly; SameSite=Strict; Path=/"}
-        with patch("app.checks.web.cookie_security.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        headers = {
+            "Set-Cookie": "tracker=x; Domain=.example.com; Secure; HttpOnly; SameSite=Strict; Path=/"
+        }
+        with patch(
+            "app.checks.web.cookie_security.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         domain_findings = [f for f in result.findings if "broad-domain" in (f.id or "")]
         assert len(domain_findings) == 1
@@ -449,9 +484,10 @@ class TestCookieSecurityCheck:
     async def test_non_session_cookie_lower_severity(self, service):
         check = CookieSecurityCheck()
         headers = {"Set-Cookie": "theme=dark; Path=/"}
-        with patch("app.checks.web.cookie_security.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.cookie_security.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         secure_findings = [f for f in result.findings if "no-secure" in (f.id or "")]
         assert len(secure_findings) == 1
@@ -461,32 +497,42 @@ class TestCookieSecurityCheck:
     async def test_fully_secured_cookie_no_security_findings(self, service):
         check = CookieSecurityCheck()
         headers = {"Set-Cookie": "theme=dark; Secure; HttpOnly; SameSite=Strict; Path=/"}
-        with patch("app.checks.web.cookie_security.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.cookie_security.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         # No secure/httponly/samesite findings
-        issue_findings = [f for f in result.findings if any(
-            x in (f.id or "") for x in ["no-secure", "no-httponly", "no-samesite", "samesite-none"]
-        )]
+        issue_findings = [
+            f
+            for f in result.findings
+            if any(
+                x in (f.id or "")
+                for x in ["no-secure", "no-httponly", "no-samesite", "samesite-none"]
+            )
+        ]
         assert len(issue_findings) == 0
 
     @pytest.mark.asyncio
     async def test_no_cookies_no_findings(self, service):
         check = CookieSecurityCheck()
-        with patch("app.checks.web.cookie_security.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers={})
-        )):
+        with patch(
+            "app.checks.web.cookie_security.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers={})),
+        ):
             result = await check.check_service(service, {})
         assert len(result.findings) == 0
 
     @pytest.mark.asyncio
     async def test_long_lived_session_cookie(self, service):
         check = CookieSecurityCheck()
-        headers = {"Set-Cookie": "session=tok; Secure; HttpOnly; SameSite=Strict; Max-Age=99999999; Path=/"}
-        with patch("app.checks.web.cookie_security.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        headers = {
+            "Set-Cookie": "session=tok; Secure; HttpOnly; SameSite=Strict; Max-Age=99999999; Path=/"
+        }
+        with patch(
+            "app.checks.web.cookie_security.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         long_lived = [f for f in result.findings if "long-lived" in (f.id or "")]
         assert len(long_lived) == 1
@@ -507,10 +553,11 @@ class TestAuthDetectionCheck:
     async def test_detects_basic_auth(self, service):
         check = AuthDetectionCheck()
         # Use default=401 with WWW-Authenticate; the root check won't match specific paths
-        default_resp = resp(401, headers={"WWW-Authenticate": "Basic realm=\"app\""})
-        with patch("app.checks.web.auth_detection.AsyncHttpClient", return_value=mock_client_multi(
-            default=default_resp
-        )):
+        default_resp = resp(401, headers={"WWW-Authenticate": 'Basic realm="app"'})
+        with patch(
+            "app.checks.web.auth_detection.AsyncHttpClient",
+            return_value=mock_client_multi(default=default_resp),
+        ):
             result = await check.check_service(service, {})
         auth_findings = [f for f in result.findings if "basic" in f.title.lower()]
         assert len(auth_findings) >= 1
@@ -520,9 +567,10 @@ class TestAuthDetectionCheck:
     async def test_detects_bearer_auth(self, service):
         check = AuthDetectionCheck()
         default_resp = resp(401, headers={"WWW-Authenticate": "Bearer"})
-        with patch("app.checks.web.auth_detection.AsyncHttpClient", return_value=mock_client_multi(
-            default=default_resp
-        )):
+        with patch(
+            "app.checks.web.auth_detection.AsyncHttpClient",
+            return_value=mock_client_multi(default=default_resp),
+        ):
             result = await check.check_service(service, {})
         assert result.outputs.get("auth_mechanisms", {}).get("bearer")
 
@@ -532,7 +580,10 @@ class TestAuthDetectionCheck:
         responses = {
             ("GET", "target.com:80/"): resp(401, headers={"WWW-Authenticate": "Bearer"}),
         }
-        with patch("app.checks.web.auth_detection.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.auth_detection.AsyncHttpClient",
+            return_value=mock_client_multi(responses),
+        ):
             result = await check.check_service(service, {})
         bearer_findings = [f for f in result.findings if "bearer" in f.title.lower()]
         assert any(f.severity == "low" for f in bearer_findings)
@@ -544,9 +595,14 @@ class TestAuthDetectionCheck:
         responses = {
             ("GET", ".well-known/openid-configuration"): resp(200, body=oidc_body),
         }
-        with patch("app.checks.web.auth_detection.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.auth_detection.AsyncHttpClient",
+            return_value=mock_client_multi(responses),
+        ):
             result = await check.check_service(service, {})
-        oidc_findings = [f for f in result.findings if "oidc" in f.title.lower() or "oauth" in f.title.lower()]
+        oidc_findings = [
+            f for f in result.findings if "oidc" in f.title.lower() or "oauth" in f.title.lower()
+        ]
         assert len(oidc_findings) >= 1
         assert result.outputs.get("auth_mechanisms", {}).get("oidc")
 
@@ -558,7 +614,10 @@ class TestAuthDetectionCheck:
             ("GET", "/login"): resp(200, body=login_html),
             ("GET", "/signin"): resp(200, body=login_html),
         }
-        with patch("app.checks.web.auth_detection.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.auth_detection.AsyncHttpClient",
+            return_value=mock_client_multi(responses),
+        ):
             result = await check.check_service(service, {})
         login_findings = [f for f in result.findings if "login" in f.title.lower()]
         assert len(login_findings) >= 1
@@ -572,9 +631,14 @@ class TestAuthDetectionCheck:
         }
         responses = {
             ("GET", "target.com:80/"): resp(200),
-            ("GET", "/api/v1/data"): resp(200, headers={"Content-Type": "application/json"}, body='{"ok":true}'),
+            ("GET", "/api/v1/data"): resp(
+                200, headers={"Content-Type": "application/json"}, body='{"ok":true}'
+            ),
         }
-        with patch("app.checks.web.auth_detection.AsyncHttpClient", return_value=mock_client_multi(responses)):
+        with patch(
+            "app.checks.web.auth_detection.AsyncHttpClient",
+            return_value=mock_client_multi(responses),
+        ):
             result = await check.check_service(service, context)
         noauth = [f for f in result.findings if "no authentication" in f.title.lower()]
         assert len(noauth) >= 1
@@ -583,7 +647,9 @@ class TestAuthDetectionCheck:
     @pytest.mark.asyncio
     async def test_no_auth_paths_no_extra_findings(self, service):
         check = AuthDetectionCheck()
-        with patch("app.checks.web.auth_detection.AsyncHttpClient", return_value=mock_client_multi()):
+        with patch(
+            "app.checks.web.auth_detection.AsyncHttpClient", return_value=mock_client_multi()
+        ):
             result = await check.check_service(service, {})
         assert result.success is True
         assert "auth_mechanisms" in result.outputs
@@ -604,9 +670,10 @@ class TestWAFDetectionCheck:
     async def test_detects_cloudflare_header(self, service):
         check = WAFDetectionCheck()
         headers = {"cf-ray": "abc123-IAD", "Server": "cloudflare"}
-        with patch("app.checks.web.waf_detection.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.waf_detection.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         cf_findings = [f for f in result.findings if "cloudflare" in f.title.lower()]
         assert len(cf_findings) >= 1
@@ -616,9 +683,10 @@ class TestWAFDetectionCheck:
     async def test_detects_aws_waf(self, service):
         check = WAFDetectionCheck()
         headers = {"x-amzn-waf-action": "block"}
-        with patch("app.checks.web.waf_detection.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.waf_detection.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         aws_findings = [f for f in result.findings if "aws" in f.title.lower()]
         assert len(aws_findings) >= 1
@@ -630,11 +698,16 @@ class TestWAFDetectionCheck:
     async def test_detects_imperva_cookie(self, service):
         check = WAFDetectionCheck()
         headers = {"Set-Cookie": "incap_ses_12345=abc; path=/"}
-        with patch("app.checks.web.waf_detection.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.waf_detection.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
-        imperva = [f for f in result.findings if "imperva" in f.title.lower() or "incapsula" in f.title.lower()]
+        imperva = [
+            f
+            for f in result.findings
+            if "imperva" in f.title.lower() or "incapsula" in f.title.lower()
+        ]
         assert len(imperva) >= 1
 
     @pytest.mark.asyncio
@@ -642,9 +715,10 @@ class TestWAFDetectionCheck:
         check = WAFDetectionCheck()
         block_body = "<html>Attention Required! | Cloudflare</html>"
         # Default returns block page so both root and probe path trigger it
-        with patch("app.checks.web.waf_detection.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(403, body=block_body)
-        )):
+        with patch(
+            "app.checks.web.waf_detection.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(403, body=block_body)),
+        ):
             result = await check.check_service(service, {})
         cf_findings = [f for f in result.findings if "cloudflare" in f.title.lower()]
         assert len(cf_findings) >= 1
@@ -653,9 +727,10 @@ class TestWAFDetectionCheck:
     async def test_detects_azure_front_door(self, service):
         check = WAFDetectionCheck()
         headers = {"x-azure-ref": "abc123"}
-        with patch("app.checks.web.waf_detection.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.waf_detection.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         azure_findings = [f for f in result.findings if "azure" in f.title.lower()]
         assert len(azure_findings) >= 1
@@ -664,9 +739,10 @@ class TestWAFDetectionCheck:
     async def test_no_waf_no_findings(self, service):
         check = WAFDetectionCheck()
         headers = {"Server": "nginx/1.24", "Content-Type": "text/html"}
-        with patch("app.checks.web.waf_detection.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.waf_detection.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         # Should be no WAF findings (just empty outputs)
         assert len(result.findings) == 0
@@ -678,9 +754,10 @@ class TestWAFDetectionCheck:
         check = WAFDetectionCheck()
         # Sucuri is classified as WAF, so should trigger accuracy warning
         headers = {"x-sucuri-id": "12345", "Server": "Sucuri/Cloudproxy"}
-        with patch("app.checks.web.waf_detection.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(200, headers=headers)
-        )):
+        with patch(
+            "app.checks.web.waf_detection.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
             result = await check.check_service(service, {})
         warn = [f for f in result.findings if "accuracy" in f.title.lower()]
         assert len(warn) >= 1
@@ -689,9 +766,10 @@ class TestWAFDetectionCheck:
     @pytest.mark.asyncio
     async def test_http_error_handled(self, service):
         check = WAFDetectionCheck()
-        with patch("app.checks.web.waf_detection.AsyncHttpClient", return_value=mock_client_multi(
-            default=resp(error="Connection refused")
-        )):
+        with patch(
+            "app.checks.web.waf_detection.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(error="Connection refused")),
+        ):
             result = await check.check_service(service, {})
         assert result.success is True
         assert len(result.findings) == 0

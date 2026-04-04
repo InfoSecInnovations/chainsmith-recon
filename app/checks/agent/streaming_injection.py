@@ -12,11 +12,10 @@ References:
 
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.payloads import get_payloads_for_check
-
 
 # Streaming endpoint paths
 STREAMING_PATHS = ["/stream", "/agent/stream", "/v1/stream"]
@@ -80,13 +79,13 @@ class AgentStreamingInjectionCheck(ServiceIteratingCheck):
 
         agent_endpoints = context.get("agent_endpoints", [])
         service_endpoints = [
-            ep for ep in agent_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in agent_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         # Find streaming endpoints
         stream_endpoints = [
-            ep for ep in service_endpoints
+            ep
+            for ep in service_endpoints
             if any(kw in ep.get("path", "").lower() for kw in ["stream"])
         ]
 
@@ -105,11 +104,13 @@ class AgentStreamingInjectionCheck(ServiceIteratingCheck):
                             headers={"Content-Type": "application/json"},
                         )
                         if not resp.error and resp.status_code not in (404, 405):
-                            stream_endpoints.append({
-                                "url": url,
-                                "path": path,
-                                "framework": "",
-                            })
+                            stream_endpoints.append(
+                                {
+                                    "url": url,
+                                    "path": path,
+                                    "framework": "",
+                                }
+                            )
 
                 if not stream_endpoints:
                     return result
@@ -120,11 +121,11 @@ class AgentStreamingInjectionCheck(ServiceIteratingCheck):
                 # Find non-streaming endpoint for comparison
                 non_stream_ep = next(
                     (
-                        ep for ep in service_endpoints
+                        ep
+                        for ep in service_endpoints
                         if "stream" not in ep.get("path", "").lower()
                         and any(
-                            kw in ep.get("path", "").lower()
-                            for kw in ["invoke", "run", "chat"]
+                            kw in ep.get("path", "").lower() for kw in ["invoke", "run", "chat"]
                         )
                     ),
                     None,
@@ -152,17 +153,13 @@ class AgentStreamingInjectionCheck(ServiceIteratingCheck):
                             continue
 
                         stream_body = stream_resp.body or ""
-                        stream_analysis = self._analyze_injection(
-                            stream_body, payload
-                        )
+                        stream_analysis = self._analyze_injection(stream_body, payload)
 
                         # Compare with non-streaming if available
                         non_stream_analysis = None
                         if non_stream_ep:
                             ns_url = non_stream_ep.get("url", service.url)
-                            ns_body = self._build_request_body(
-                                payload["payload"], non_stream_ep
-                            )
+                            ns_body = self._build_request_body(payload["payload"], non_stream_ep)
                             ns_resp = await client.post(
                                 ns_url,
                                 json=ns_body,
@@ -185,9 +182,7 @@ class AgentStreamingInjectionCheck(ServiceIteratingCheck):
                             "stream_succeeded": stream_analysis["succeeded"],
                             "stream_matched": stream_analysis["matched"],
                             "non_stream_succeeded": (
-                                non_stream_analysis["succeeded"]
-                                if non_stream_analysis
-                                else None
+                                non_stream_analysis["succeeded"] if non_stream_analysis else None
                             ),
                             "is_bypass": is_bypass,
                         }
@@ -268,10 +263,7 @@ class AgentStreamingInjectionCheck(ServiceIteratingCheck):
     def _analyze_injection(self, body: str, payload: dict) -> dict:
         """Analyze response for injection success."""
         body_lower = body.lower()
-        matched = [
-            ind for ind in payload["success_indicators"]
-            if ind.lower() in body_lower
-        ]
+        matched = [ind for ind in payload["success_indicators"] if ind.lower() in body_lower]
         return {
             "succeeded": len(matched) >= 1,
             "matched": matched,

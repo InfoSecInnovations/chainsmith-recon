@@ -28,16 +28,15 @@ import os
 import traceback
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from app.scenario_services.common.config import (
-    VERBOSE_ERRORS,
     SERVICE_NAME,
-    is_finding_active,
-    get_or_create_session,
+    VERBOSE_ERRORS,
     get_brand_name,
+    get_or_create_session,
+    is_finding_active,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -62,6 +61,7 @@ app = FastAPI(
 # ═══════════════════════════════════════════════════════════════════════════════
 # MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.middleware("http")
 async def add_response_headers(request: Request, call_next):
@@ -95,6 +95,7 @@ async def add_response_headers(request: Request, call_next):
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.get("/", response_class=HTMLResponse)
 async def home():

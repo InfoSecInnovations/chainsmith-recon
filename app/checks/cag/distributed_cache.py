@@ -13,14 +13,12 @@ References:
   OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 """
 
-import json
 import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Headers that reveal cache node identity
 NODE_HEADERS = [
@@ -71,8 +69,7 @@ class DistributedCacheCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -91,19 +88,21 @@ class DistributedCacheCheck(ServiceIteratingCheck):
                         dist_results.append(topo_info)
 
                         severity = self._determine_severity(topo_info)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=self._build_title(topo_info),
-                            description=self._build_description(topo_info),
-                            severity=severity,
-                            evidence=self._build_evidence(topo_info),
-                            host=service.host,
-                            discriminator=f"dist-cache-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=topo_info,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=self._build_title(topo_info),
+                                description=self._build_description(topo_info),
+                                severity=severity,
+                                evidence=self._build_evidence(topo_info),
+                                host=service.host,
+                                discriminator=f"dist-cache-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=topo_info,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -140,12 +139,14 @@ class DistributedCacheCheck(ServiceIteratingCheck):
                 node_id = self._extract_node_id(resp.headers)
                 response_bodies.append(resp.body or "")
 
-                node_observations.append({
-                    "request_index": i,
-                    "node_id": node_id,
-                    "elapsed_ms": round(elapsed, 2),
-                    "status_code": resp.status_code,
-                })
+                node_observations.append(
+                    {
+                        "request_index": i,
+                        "node_id": node_id,
+                        "elapsed_ms": round(elapsed, 2),
+                        "status_code": resp.status_code,
+                    }
+                )
 
             except Exception:
                 continue
@@ -154,10 +155,7 @@ class DistributedCacheCheck(ServiceIteratingCheck):
             return None
 
         # Analyze topology
-        unique_nodes = set(
-            obs["node_id"] for obs in node_observations
-            if obs["node_id"]
-        )
+        unique_nodes = {obs["node_id"] for obs in node_observations if obs["node_id"]}
 
         # Check response consistency
         unique_responses = set(response_bodies)

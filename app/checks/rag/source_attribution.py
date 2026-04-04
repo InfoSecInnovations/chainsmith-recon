@@ -13,10 +13,9 @@ import json
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Queries designed to elicit cited responses
 CITATION_QUERIES = [
@@ -70,7 +69,8 @@ class RAGSourceAttributionCheck(ServiceIteratingCheck):
 
         rag_endpoints = context.get("rag_endpoints", [])
         service_endpoints = [
-            ep for ep in rag_endpoints
+            ep
+            for ep in rag_endpoints
             if ep.get("service", {}).get("host") == service.host
             and ep.get("endpoint_type") == "rag_query"
         ]
@@ -102,7 +102,8 @@ class RAGSourceAttributionCheck(ServiceIteratingCheck):
                         "k": 5,
                     }
                     resp = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
                     if resp.error or resp.status_code >= 400:
@@ -115,14 +116,18 @@ class RAGSourceAttributionCheck(ServiceIteratingCheck):
                     try:
                         data = json.loads(resp_text)
                         if isinstance(data, dict):
-                            for key in ["sources", "citations", "references",
-                                        "source_documents", "metadata"]:
+                            for key in [
+                                "sources",
+                                "citations",
+                                "references",
+                                "source_documents",
+                                "metadata",
+                            ]:
                                 if key in data:
                                     citation_info["structured_sources"] = True
                                     if isinstance(data[key], list):
                                         all_structured.extend(
-                                            s for s in data[key]
-                                            if isinstance(s, dict)
+                                            s for s in data[key] if isinstance(s, dict)
                                         )
                     except json.JSONDecodeError:
                         pass
@@ -140,66 +145,77 @@ class RAGSourceAttributionCheck(ServiceIteratingCheck):
             suspicious = [u for u in urls if any(p.search(u) for p in SUSPICIOUS_URL_PATTERNS)]
 
             if suspicious:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="Citation URLs not validated: suspicious URLs in sources",
-                    description=(
-                        f"Found {len(suspicious)} suspicious URL(s) in citations. "
-                        f"Arbitrary URLs may appear in source citations."
-                    ),
-                    severity="medium",
-                    evidence=f"Suspicious URLs: {', '.join(suspicious[:3])}",
-                    host=service.host,
-                    discriminator="citation-urls-suspicious",
-                    target=service,
-                    raw_data=citation_info,
-                    references=self.references,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="Citation URLs not validated: suspicious URLs in sources",
+                        description=(
+                            f"Found {len(suspicious)} suspicious URL(s) in citations. "
+                            f"Arbitrary URLs may appear in source citations."
+                        ),
+                        severity="medium",
+                        evidence=f"Suspicious URLs: {', '.join(suspicious[:3])}",
+                        host=service.host,
+                        discriminator="citation-urls-suspicious",
+                        target=service,
+                        raw_data=citation_info,
+                        references=self.references,
+                    )
+                )
 
             if citation_info["structured_sources"]:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="Source attribution present with structured citations",
-                    description=(
-                        f"RAG returns structured source data. "
-                        f"Citation types: {', '.join(citation_info['citation_types'])}."
-                    ),
-                    severity="low",
-                    evidence=self._build_evidence(citation_info),
-                    host=service.host,
-                    discriminator="citation-structured",
-                    target=service,
-                    raw_data=citation_info,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="Source attribution present with structured citations",
+                        description=(
+                            f"RAG returns structured source data. "
+                            f"Citation types: {', '.join(citation_info['citation_types'])}."
+                        ),
+                        severity="low",
+                        evidence=self._build_evidence(citation_info),
+                        host=service.host,
+                        discriminator="citation-structured",
+                        target=service,
+                        raw_data=citation_info,
+                    )
+                )
             else:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="Source attribution present but document origin not verified",
-                    description="Citations found in text but no structured source verification.",
-                    severity="low",
-                    evidence=self._build_evidence(citation_info),
-                    host=service.host,
-                    discriminator="citation-unstructured",
-                    target=service,
-                    raw_data=citation_info,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="Source attribution present but document origin not verified",
+                        description="Citations found in text but no structured source verification.",
+                        severity="low",
+                        evidence=self._build_evidence(citation_info),
+                        host=service.host,
+                        discriminator="citation-unstructured",
+                        target=service,
+                        raw_data=citation_info,
+                    )
+                )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="No source attribution in RAG responses",
-                description="RAG responses do not include source citations.",
-                severity="info",
-                evidence="No citation patterns detected across queries",
-                host=service.host,
-                discriminator="no-citations",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="No source attribution in RAG responses",
+                    description="RAG responses do not include source citations.",
+                    severity="info",
+                    evidence="No citation patterns detected across queries",
+                    host=service.host,
+                    discriminator="no-citations",
+                    target=service,
+                )
+            )
 
         result.outputs["citation_reliability"] = citation_info
         return result
 
     def _analyze_citations(
-        self, combined_text: str, structured: list[dict], info: dict,
+        self,
+        combined_text: str,
+        structured: list[dict],
+        info: dict,
     ) -> dict:
         """Analyze combined response text for citation patterns."""
         for pattern in CITATION_PATTERNS:

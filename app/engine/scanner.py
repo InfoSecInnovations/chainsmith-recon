@@ -10,9 +10,9 @@ import time
 from typing import TYPE_CHECKING
 
 from app.check_launcher import CheckLauncher
-from app.check_resolver import resolve_checks, get_real_checks
+from app.check_resolver import get_real_checks, resolve_checks
 from app.config import get_config
-from app.db.persist import on_scan_start, on_scan_complete
+from app.db.persist import on_scan_complete, on_scan_start
 from app.scenarios import get_scenario_manager
 
 if TYPE_CHECKING:
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # ─── Check Registry (for API compatibility) ───────────────────
 
+
 def get_all_checks() -> list:
     """Get all available real checks. Used by API endpoints."""
     return get_real_checks()
@@ -31,6 +32,7 @@ def get_all_checks() -> list:
 def get_check_info(check) -> dict:
     """Extract metadata from a check instance."""
     from app.check_resolver import infer_suite
+
     return {
         "name": check.name,
         "description": getattr(check, "description", ""),
@@ -54,6 +56,7 @@ for _check in get_all_checks():
 
 
 # ─── Scan Execution ───────────────────────────────────────────
+
 
 async def run_scan(
     state: "AppState",
@@ -88,13 +91,13 @@ async def run_scan(
             check_names=check_names if check_names else None,
             suites=suites if suites else None,
         )
-        
+
         if not checks:
             logger.warning("No checks to run!")
             state.status = "complete"
             state.phase = "done"
             return
-        
+
         # Build initial context
         context = {
             "scope_domains": [state.target],
@@ -104,29 +107,33 @@ async def run_scan(
         }
         if port_profile:
             context["port_profile"] = port_profile
-        
+
         # Initialize state tracking
         state.checks_total = len(checks)
         for check in checks:
             state.check_statuses[check.name] = "pending"
-        
+
         # Define progress callbacks
         def on_start(name: str):
             state.current_check = name
             state.check_statuses[name] = "running"
-            state.check_log.append({
-                "check": name,
-                "event": "started",
-            })
+            state.check_log.append(
+                {
+                    "check": name,
+                    "event": "started",
+                }
+            )
 
         def on_complete(name: str, success: bool, findings_count: int):
             state.checks_completed += 1
             state.check_statuses[name] = "completed" if success else "failed"
-            state.check_log.append({
-                "check": name,
-                "event": "completed" if success else "failed",
-                "findings": findings_count,
-            })
+            state.check_log.append(
+                {
+                    "check": name,
+                    "event": "completed" if success else "failed",
+                    "findings": findings_count,
+                }
+            )
 
         # Choose execution backend: swarm or local
         cfg = get_config()
@@ -153,14 +160,18 @@ async def run_scan(
                 on_check_start=on_start,
                 on_check_complete=on_complete,
             )
-        
+
         # Store findings in state
         state.findings = findings
         state.status = "complete"
         state.phase = "done"
         state.current_check = None
-        
+
         logger.info(f"Scan complete. {len(findings)} findings.")
+
+        # Run scan advisor if enabled (only for local CheckLauncher, not swarm)
+        local_launcher = state.runner if not cfg.swarm.enabled else None
+        _run_scan_advisor(state, local_launcher)
 
         # Persist results to database
         await on_scan_complete(state, scan_id, scan_start_time)
@@ -173,7 +184,52 @@ async def run_scan(
         await on_scan_complete(state, scan_id, scan_start_time)
 
 
+# ─── Scan Advisor ─────────────────────────────────────────────
+
+
+def _run_scan_advisor(state: "AppState", launcher=None) -> None:
+    """
+    Run post-scan advisor analysis if enabled.
+
+    Only runs when a local CheckLauncher was used (not swarm mode yet)
+    and the advisor is enabled in config.
+    """
+    try:
+        cfg = get_config()
+        if not cfg.scan_advisor.enabled:
+            return
+
+        if launcher is None:
+            logger.info("Scan advisor: skipped (no local launcher — swarm mode?)")
+            return
+
+        from app.scan_advisor import (
+            ScanAdvisorConfig as AdvisorConfig,
+        )
+        from app.scan_advisor import (
+            build_advisor_from_launcher,
+        )
+
+        advisor_cfg = AdvisorConfig(
+            enabled=cfg.scan_advisor.enabled,
+            mode=cfg.scan_advisor.mode,
+            auto_seed_urls=cfg.scan_advisor.auto_seed_urls,
+            require_approval=cfg.scan_advisor.require_approval,
+        )
+
+        all_checks = get_real_checks()
+        advisor = build_advisor_from_launcher(launcher, all_checks, advisor_cfg)
+        recommendations = advisor.analyze()
+
+        state.advisor_recommendations = [r.to_dict() for r in recommendations]
+        logger.info(f"Scan advisor: {len(recommendations)} recommendations stored")
+
+    except Exception as e:
+        logger.warning(f"Scan advisor failed (non-fatal): {e}")
+
+
 # ─── Verification (placeholder) ───────────────────────────────
+
 
 async def run_verification(state: "AppState"):
     """

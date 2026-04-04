@@ -31,13 +31,13 @@ Usage:
 
 from app.checks.base import (
     BaseCheck,
-    ServiceIteratingCheck,
-    CheckResult,
     CheckCondition,
+    CheckResult,
     CheckStatus,
     Finding,
     Service,
-    Severity
+    ServiceIteratingCheck,
+    Severity,
 )
 from app.checks.runner import CheckRunner
 

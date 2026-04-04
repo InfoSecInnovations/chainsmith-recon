@@ -12,10 +12,9 @@ References:
 import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Prompts designed to trigger loops
 LOOP_PROMPTS = [
@@ -95,12 +94,10 @@ class AgentLoopDetectionCheck(ServiceIteratingCheck):
 
         agent_endpoints = context.get("agent_endpoints", [])
         exec_endpoints = [
-            ep for ep in agent_endpoints
+            ep
+            for ep in agent_endpoints
             if ep.get("service", {}).get("host") == service.host
-            and any(
-                kw in ep.get("path", "").lower()
-                for kw in ["invoke", "run", "execute", "chat"]
-            )
+            and any(kw in ep.get("path", "").lower() for kw in ["invoke", "run", "execute", "chat"])
         ]
         if not exec_endpoints:
             return result
@@ -110,9 +107,7 @@ class AgentLoopDetectionCheck(ServiceIteratingCheck):
         loop_results = []
 
         # First get baseline response time
-        baseline_time = await self._get_baseline_time(
-            exec_endpoints[0], service, cfg
-        )
+        baseline_time = await self._get_baseline_time(exec_endpoints[0], service, cfg)
 
         try:
             async with AsyncHttpClient(cfg) as client:
@@ -145,7 +140,7 @@ class AgentLoopDetectionCheck(ServiceIteratingCheck):
                                     description=(
                                         f"Agent took {elapsed:.1f}s to respond (baseline: "
                                         f"{baseline_time:.1f}s). Possible infinite loop "
-                                        f"triggered by: \"{probe['prompt'][:60]}...\""
+                                        f'triggered by: "{probe["prompt"][:60]}..."'
                                     ),
                                     severity="high",
                                     evidence=self._build_evidence(analysis, probe, elapsed),
@@ -202,9 +197,7 @@ class AgentLoopDetectionCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _get_baseline_time(
-        self, endpoint: dict, service: Service, cfg: HttpConfig
-    ) -> float:
+    async def _get_baseline_time(self, endpoint: dict, service: Service, cfg: HttpConfig) -> float:
         """Get baseline response time for a simple request."""
         try:
             async with AsyncHttpClient(cfg) as client:
@@ -238,14 +231,9 @@ class AgentLoopDetectionCheck(ServiceIteratingCheck):
         has_repetition = self._detect_repetition(body)
 
         # Check response length disproportionality
-        is_long_response = len(body) > 10000
+        is_disproportionate = len(body) > 10000
 
-        is_runaway = (
-            timed_out
-            or server_error
-            or is_very_slow
-            or (is_slow and is_disproportionate)
-        )
+        is_runaway = timed_out or server_error or is_very_slow or (is_slow and is_disproportionate)
 
         no_timeout = is_slow and not timed_out and not server_error
 
@@ -270,7 +258,7 @@ class AgentLoopDetectionCheck(ServiceIteratingCheck):
 
         # Split into chunks and check for repeated blocks
         chunk_size = 100
-        chunks = [body[i:i + chunk_size] for i in range(0, min(len(body), 2000), chunk_size)]
+        chunks = [body[i : i + chunk_size] for i in range(0, min(len(body), 2000), chunk_size)]
 
         if len(chunks) < 3:
             return False

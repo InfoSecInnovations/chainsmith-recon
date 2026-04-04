@@ -21,12 +21,11 @@ from app.scenarios import (
     ScenarioLoadError,
     ScenarioManager,
     ScenarioTarget,
+    _parse_scenario,
     find_scenario_file,
     get_scenario_manager,
     load_scenario_file,
-    _parse_scenario,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ScenarioTarget Tests
@@ -303,11 +302,15 @@ class TestScenarioManager:
         # Create scenario bundle
         scenario_bundle = tmp_path / "test-scenario"
         scenario_bundle.mkdir()
-        (scenario_bundle / "scenario.json").write_text(json.dumps({
-            "name": "test-scenario",
-            "description": "Test",
-            "simulations": [],
-        }))
+        (scenario_bundle / "scenario.json").write_text(
+            json.dumps(
+                {
+                    "name": "test-scenario",
+                    "description": "Test",
+                    "simulations": [],
+                }
+            )
+        )
 
         mgr = ScenarioManager(scenarios_dirs=[tmp_path])
         scenario = mgr.load("test-scenario")
@@ -350,10 +353,14 @@ class TestScenarioManager:
         """get_simulations returns empty list for scenario with no simulations."""
         bundle = tmp_path / "test"
         bundle.mkdir()
-        (bundle / "scenario.json").write_text(json.dumps({
-            "name": "test",
-            "simulations": [],
-        }))
+        (bundle / "scenario.json").write_text(
+            json.dumps(
+                {
+                    "name": "test",
+                    "simulations": [],
+                }
+            )
+        )
 
         mgr = ScenarioManager(scenarios_dirs=[tmp_path])
         mgr.load("test")
@@ -365,12 +372,16 @@ class TestScenarioManager:
         for name in ["scenario-a", "scenario-b"]:
             bundle = tmp_path / name
             bundle.mkdir()
-            (bundle / "scenario.json").write_text(json.dumps({
-                "name": name,
-                "description": f"Description for {name}",
-                "version": "1.0.0",
-                "simulations": ["a.yaml", "b.yaml"],
-            }))
+            (bundle / "scenario.json").write_text(
+                json.dumps(
+                    {
+                        "name": name,
+                        "description": f"Description for {name}",
+                        "version": "1.0.0",
+                        "simulations": ["a.yaml", "b.yaml"],
+                    }
+                )
+            )
 
         mgr = ScenarioManager(scenarios_dirs=[tmp_path])
         available = mgr.list_available()
@@ -433,11 +444,15 @@ class TestScenarioManagerSimulations:
         """Missing simulation files add warning to description."""
         bundle = tmp_path / "test"
         bundle.mkdir()
-        (bundle / "scenario.json").write_text(json.dumps({
-            "name": "test",
-            "description": "Original description",
-            "simulations": ["nonexistent/missing.yaml"],
-        }))
+        (bundle / "scenario.json").write_text(
+            json.dumps(
+                {
+                    "name": "test",
+                    "description": "Original description",
+                    "simulations": ["nonexistent/missing.yaml"],
+                }
+            )
+        )
 
         mgr = ScenarioManager(scenarios_dirs=[tmp_path])
         scenario = mgr.load("test")
@@ -475,20 +490,20 @@ output:
         # Create scenario bundle
         bundle = scenarios_dir / "test-scenario"
         bundle.mkdir(parents=True)
-        (bundle / "scenario.json").write_text(json.dumps({
-            "name": "test-scenario",
-            "simulations": ["network/dns.yaml"],
-        }))
+        (bundle / "scenario.json").write_text(
+            json.dumps(
+                {
+                    "name": "test-scenario",
+                    "simulations": ["network/dns.yaml"],
+                }
+            )
+        )
 
         # Create both scenario-specific and global simulations
         self._create_simulation_yaml(
-            bundle / "simulations" / "network" / "dns.yaml",
-            marker="scenario_specific"
+            bundle / "simulations" / "network" / "dns.yaml", marker="scenario_specific"
         )
-        self._create_simulation_yaml(
-            global_sims_dir / "network" / "dns.yaml",
-            marker="global"
-        )
+        self._create_simulation_yaml(global_sims_dir / "network" / "dns.yaml", marker="global")
 
         # Load scenario
         mgr = ScenarioManager(
@@ -511,15 +526,18 @@ output:
         # Create scenario bundle WITHOUT scenario-specific simulation
         bundle = scenarios_dir / "test-scenario"
         bundle.mkdir(parents=True)
-        (bundle / "scenario.json").write_text(json.dumps({
-            "name": "test-scenario",
-            "simulations": ["network/dns.yaml"],
-        }))
+        (bundle / "scenario.json").write_text(
+            json.dumps(
+                {
+                    "name": "test-scenario",
+                    "simulations": ["network/dns.yaml"],
+                }
+            )
+        )
 
         # Create only global simulation
         self._create_simulation_yaml(
-            global_sims_dir / "network" / "dns.yaml",
-            marker="global_fallback"
+            global_sims_dir / "network" / "dns.yaml", marker="global_fallback"
         )
 
         # Load scenario
@@ -543,24 +561,26 @@ output:
         # Create scenario bundle
         bundle = scenarios_dir / "test-scenario"
         bundle.mkdir(parents=True)
-        (bundle / "scenario.json").write_text(json.dumps({
-            "name": "test-scenario",
-            "simulations": [
-                "network/dns.yaml",      # scenario-specific
-                "web/headers.yaml",      # global fallback
-            ],
-        }))
+        (bundle / "scenario.json").write_text(
+            json.dumps(
+                {
+                    "name": "test-scenario",
+                    "simulations": [
+                        "network/dns.yaml",  # scenario-specific
+                        "web/headers.yaml",  # global fallback
+                    ],
+                }
+            )
+        )
 
         # Scenario-specific simulation
         self._create_simulation_yaml(
-            bundle / "simulations" / "network" / "dns.yaml",
-            marker="scenario_dns"
+            bundle / "simulations" / "network" / "dns.yaml", marker="scenario_dns"
         )
 
         # Global simulation (no scenario-specific for this one)
         self._create_simulation_yaml(
-            global_sims_dir / "web" / "headers.yaml",
-            marker="global_headers"
+            global_sims_dir / "web" / "headers.yaml", marker="global_headers"
         )
 
         # Load scenario
@@ -588,11 +608,15 @@ output:
         # Create scenario bundle referencing non-existent simulation
         bundle = scenarios_dir / "test-scenario"
         bundle.mkdir(parents=True)
-        (bundle / "scenario.json").write_text(json.dumps({
-            "name": "test-scenario",
-            "description": "Original",
-            "simulations": ["nowhere/missing.yaml"],
-        }))
+        (bundle / "scenario.json").write_text(
+            json.dumps(
+                {
+                    "name": "test-scenario",
+                    "description": "Original",
+                    "simulations": ["nowhere/missing.yaml"],
+                }
+            )
+        )
 
         # Load scenario
         mgr = ScenarioManager(
@@ -615,10 +639,14 @@ output:
         # Create scenario bundle
         bundle = scenarios_dir / "test-scenario"
         bundle.mkdir(parents=True)
-        (bundle / "scenario.json").write_text(json.dumps({
-            "name": "test-scenario",
-            "simulations": ["network/dns.yaml"],
-        }))
+        (bundle / "scenario.json").write_text(
+            json.dumps(
+                {
+                    "name": "test-scenario",
+                    "simulations": ["network/dns.yaml"],
+                }
+            )
+        )
 
         # Scenario-specific with different target
         scenario_sim = bundle / "simulations" / "network" / "dns.yaml"
@@ -678,6 +706,7 @@ class TestGetScenarioManager:
         """get_scenario_manager returns a ScenarioManager."""
         # Reset the singleton
         import app.scenarios
+
         app.scenarios._manager = None
 
         mgr = get_scenario_manager()
@@ -687,6 +716,7 @@ class TestGetScenarioManager:
     def test_returns_same_instance(self, clean_env, monkeypatch):
         """get_scenario_manager returns cached instance."""
         import app.scenarios
+
         app.scenarios._manager = None
 
         mgr1 = get_scenario_manager()
@@ -706,6 +736,7 @@ class TestGetScenarioManager:
         monkeypatch.setenv("CHAINSMITH_SCENARIOS_DIR", str(tmp_path))
 
         import app.scenarios
+
         app.scenarios._manager = None
 
         mgr = get_scenario_manager()
@@ -754,7 +785,7 @@ class TestRealScenarios:
         available = mgr.list_available()
 
         # Should find at least demo-domain and fakobanko
-        names = {s["name"] for s in available}
+        {s["name"] for s in available}
 
         # At least one should exist
         assert len(available) > 0

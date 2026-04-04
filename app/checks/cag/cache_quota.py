@@ -17,10 +17,9 @@ import time
 import uuid
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Max entries to test (keep low to avoid impacting production)
 MAX_TEST_ENTRIES = 50
@@ -57,8 +56,7 @@ class CacheQuotaCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -77,19 +75,21 @@ class CacheQuotaCheck(ServiceIteratingCheck):
                         quota_results.append(quota_info)
 
                         severity = self._determine_severity(quota_info)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=self._build_title(quota_info),
-                            description=self._build_description(quota_info),
-                            severity=severity,
-                            evidence=self._build_evidence(quota_info),
-                            host=service.host,
-                            discriminator=f"quota-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=quota_info,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=self._build_title(quota_info),
+                                description=self._build_description(quota_info),
+                                severity=severity,
+                                evidence=self._build_evidence(quota_info),
+                                host=service.host,
+                                discriminator=f"quota-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=quota_info,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -99,9 +99,7 @@ class CacheQuotaCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _test_quota(
-        self, client: AsyncHttpClient, url: str, service: Service
-    ) -> dict | None:
+    async def _test_quota(self, client: AsyncHttpClient, url: str, service: Service) -> dict | None:
         """Test cache capacity and eviction behavior."""
         test_id = uuid.uuid4().hex[:8]
         queries = []
@@ -195,8 +193,7 @@ class CacheQuotaCheck(ServiceIteratingCheck):
             "eviction_detected": evicted_count > 0,
             "unbounded": evicted_count == 0 and last_cached > 0,
             "estimated_capacity": (
-                MAX_TEST_ENTRIES if evicted_count == 0
-                else MAX_TEST_ENTRIES - evicted_count
+                MAX_TEST_ENTRIES if evicted_count == 0 else MAX_TEST_ENTRIES - evicted_count
             ),
         }
 
@@ -215,7 +212,9 @@ class CacheQuotaCheck(ServiceIteratingCheck):
             return f"Cache exhaustion possible: {n} early entries evicted (LRU eviction confirmed)"
         if quota_info.get("unbounded"):
             n = quota_info["total_entries_sent"]
-            return f"Unbounded cache: {n} queries accepted with no eviction (memory exhaustion risk)"
+            return (
+                f"Unbounded cache: {n} queries accepted with no eviction (memory exhaustion risk)"
+            )
         return f"Cache size limited: approximately {quota_info['estimated_capacity']} entries"
 
     def _build_description(self, quota_info: dict) -> str:

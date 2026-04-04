@@ -26,10 +26,9 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Vector store detection signatures
 VECTOR_STORE_SIGNATURES = {
@@ -125,7 +124,7 @@ RAG_RESPONSE_PATTERNS = [
 class RAGDiscoveryCheck(ServiceIteratingCheck):
     """
     Discover RAG pipeline endpoints and identify vector store backends.
-    
+
     Probes common RAG paths and fingerprints responses to identify
     the underlying vector store and retrieval infrastructure.
     """
@@ -162,20 +161,22 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
                 for store_info in store_results:
                     detected_stores.add(store_info["store_type"])
                     rag_endpoints.append(store_info)
-                    
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Vector store detected: {store_info['store_type']}",
-                        description=self._build_store_description(store_info),
-                        severity="medium" if not store_info.get("auth_required") else "info",
-                        evidence=self._build_evidence(store_info),
-                        host=service.host,
-                        discriminator=f"store-{store_info['store_type']}",
-                        target=service,
-                        target_url=store_info.get("url"),
-                        raw_data=store_info,
-                        references=self.references,
-                    ))
+
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Vector store detected: {store_info['store_type']}",
+                            description=self._build_store_description(store_info),
+                            severity="medium" if not store_info.get("auth_required") else "info",
+                            evidence=self._build_evidence(store_info),
+                            host=service.host,
+                            discriminator=f"store-{store_info['store_type']}",
+                            target=service,
+                            target_url=store_info.get("url"),
+                            raw_data=store_info,
+                            references=self.references,
+                        )
+                    )
 
                 # Then check RAG query endpoints
                 for path in RAG_PATHS:
@@ -196,22 +197,24 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
 
                     if endpoint_info:
                         rag_endpoints.append(endpoint_info)
-                        
+
                         severity = self._determine_severity(endpoint_info)
-                        
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"RAG endpoint: {path}",
-                            description=self._build_endpoint_description(endpoint_info),
-                            severity=severity,
-                            evidence=self._build_evidence(endpoint_info),
-                            host=service.host,
-                            discriminator=f"rag-{path.strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data=endpoint_info,
-                            references=self.references,
-                        ))
+
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"RAG endpoint: {path}",
+                                description=self._build_endpoint_description(endpoint_info),
+                                severity=severity,
+                                evidence=self._build_evidence(endpoint_info),
+                                host=service.host,
+                                discriminator=f"rag-{path.strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data=endpoint_info,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -223,9 +226,7 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _detect_vector_stores(
-        self, client: AsyncHttpClient, service: Service
-    ) -> list[dict]:
+    async def _detect_vector_stores(self, client: AsyncHttpClient, service: Service) -> list[dict]:
         """Detect vector store backends by probing their APIs."""
         detected = []
 
@@ -254,26 +255,26 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
                         break
 
                 if headers_match or body_match or resp.status_code == 200:
-                    detected.append({
-                        "store_type": store_name,
-                        "url": url,
-                        "path": path,
-                        "status_code": resp.status_code,
-                        "auth_required": resp.status_code == 401,
-                        "indicators": {
-                            "headers_match": headers_match,
-                            "body_match": body_match,
-                        },
-                        "service": service.to_dict(),
-                        "endpoint_type": "vector_store",
-                    })
+                    detected.append(
+                        {
+                            "store_type": store_name,
+                            "url": url,
+                            "path": path,
+                            "status_code": resp.status_code,
+                            "auth_required": resp.status_code == 401,
+                            "indicators": {
+                                "headers_match": headers_match,
+                                "body_match": body_match,
+                            },
+                            "service": service.to_dict(),
+                            "endpoint_type": "vector_store",
+                        }
+                    )
                     break  # Found this store, move to next
 
         return detected
 
-    def _analyze_rag_response(
-        self, resp, path: str, method: str, service: Service
-    ) -> dict | None:
+    def _analyze_rag_response(self, resp, path: str, method: str, service: Service) -> dict | None:
         """Analyze response for RAG pipeline indicators."""
         if resp.error or resp.status_code in (404, 405, 502, 503):
             return None
@@ -292,12 +293,19 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
             try:
                 data = json.loads(body)
                 if isinstance(data, dict):
-                    rag_fields = ["sources", "documents", "chunks", "context", 
-                                  "citations", "references", "source_documents"]
+                    rag_fields = [
+                        "sources",
+                        "documents",
+                        "chunks",
+                        "context",
+                        "citations",
+                        "references",
+                        "source_documents",
+                    ]
                     for field in rag_fields:
                         if field in data:
                             indicators.append(f"field:{field}")
-                    
+
                     # Check for nested results with scores
                     if "results" in data or "matches" in data or "hits" in data:
                         indicators.append("field:search_results")
@@ -335,37 +343,37 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
         """Determine finding severity."""
         if endpoint_info.get("auth_required"):
             return "info"
-        
+
         # Query endpoints without auth are medium severity
         if endpoint_info.get("endpoint_type") == "rag_query":
             return "medium"
-        
+
         return "low"
 
     def _build_store_description(self, store_info: dict) -> str:
         """Build description for vector store finding."""
         parts = [f"Vector store '{store_info['store_type']}' detected at {store_info['path']}."]
-        
+
         if store_info.get("auth_required"):
             parts.append("Authentication required.")
         else:
             parts.append("No authentication required - potential data exposure.")
-        
+
         return " ".join(parts)
 
     def _build_endpoint_description(self, endpoint_info: dict) -> str:
         """Build description for RAG endpoint finding."""
         parts = [f"RAG query endpoint discovered at {endpoint_info['path']}."]
-        
+
         if endpoint_info.get("auth_required"):
             parts.append("Authentication required.")
         else:
             parts.append("No authentication required - potential for indirect injection attacks.")
-        
+
         indicator_count = len(endpoint_info.get("indicators", []))
         if indicator_count > 0:
             parts.append(f"Detected {indicator_count} RAG indicators in response.")
-        
+
         return " ".join(parts)
 
     def _build_evidence(self, info: dict) -> str:
@@ -374,14 +382,14 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
             f"Path: {info.get('path', 'unknown')}",
             f"Status: {info.get('status_code', 'unknown')}",
         ]
-        
+
         if info.get("store_type"):
             lines.append(f"Vector store: {info['store_type']}")
-        
+
         if info.get("indicators"):
             if isinstance(info["indicators"], dict):
                 lines.append(f"Indicators: {info['indicators']}")
             else:
                 lines.append(f"Indicators: {', '.join(info['indicators'][:5])}")
-        
+
         return "\n".join(lines)

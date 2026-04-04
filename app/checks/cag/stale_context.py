@@ -15,13 +15,13 @@ References:
 """
 
 import asyncio
-import json
+import contextlib
 import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class StaleContextCheck(ServiceIteratingCheck):
@@ -34,7 +34,9 @@ class StaleContextCheck(ServiceIteratingCheck):
     """
 
     name = "cag_stale_context"
-    description = "Test if cached context outlives its validity window enabling privilege persistence"
+    description = (
+        "Test if cached context outlives its validity window enabling privilege persistence"
+    )
     intrusive = True
 
     conditions = [CheckCondition("cag_endpoints", "truthy")]
@@ -56,8 +58,7 @@ class StaleContextCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -75,35 +76,33 @@ class StaleContextCheck(ServiceIteratingCheck):
                     url = endpoint.get("url", service.url)
 
                     # Test 1: Role-based stale context
-                    role_result = await self._test_role_context(
-                        client, url, service, known_ttl
-                    )
+                    role_result = await self._test_role_context(client, url, service, known_ttl)
                     if role_result:
                         stale_results.append(role_result)
 
                     # Test 2: TTL-based staleness
-                    ttl_result = await self._test_ttl_staleness(
-                        client, url, service, known_ttl
-                    )
+                    ttl_result = await self._test_ttl_staleness(client, url, service, known_ttl)
                     if ttl_result:
                         stale_results.append(ttl_result)
 
                     # Generate findings
                     for sr in stale_results:
                         severity = self._determine_severity(sr)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=self._build_title(sr),
-                            description=self._build_description(sr),
-                            severity=severity,
-                            evidence=self._build_evidence(sr),
-                            host=service.host,
-                            discriminator=f"stale-{sr['test_id']}",
-                            target=service,
-                            target_url=url,
-                            raw_data=sr,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=self._build_title(sr),
+                                description=self._build_description(sr),
+                                severity=severity,
+                                evidence=self._build_evidence(sr),
+                                host=service.host,
+                                discriminator=f"stale-{sr['test_id']}",
+                                target=service,
+                                target_url=url,
+                                raw_data=sr,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -124,8 +123,7 @@ class StaleContextCheck(ServiceIteratingCheck):
         return None
 
     async def _test_role_context(
-        self, client: AsyncHttpClient, url: str,
-        service: Service, known_ttl: int | None
+        self, client: AsyncHttpClient, url: str, service: Service, known_ttl: int | None
     ) -> dict | None:
         """Test if role-based context persists in cache."""
         test_id = "role_context"
@@ -171,16 +169,10 @@ class StaleContextCheck(ServiceIteratingCheck):
 
             # Check for stale context influence
             admin_keywords = ["admin", "administrator", "elevated", "management", "configure"]
-            stale_indicators = [
-                kw for kw in admin_keywords
-                if kw in fresh_response.lower()
-            ]
+            stale_indicators = [kw for kw in admin_keywords if kw in fresh_response.lower()]
 
             # Also check if responses are suspiciously similar
-            responses_similar = (
-                admin_response == fresh_response
-                and len(admin_response) > 50
-            )
+            responses_similar = admin_response == fresh_response and len(admin_response) > 50
 
             stale_detected = len(stale_indicators) > 0 or responses_similar
 
@@ -198,8 +190,7 @@ class StaleContextCheck(ServiceIteratingCheck):
             return {"test_id": test_id, "stale_detected": False, "error": str(e)}
 
     async def _test_ttl_staleness(
-        self, client: AsyncHttpClient, url: str,
-        service: Service, known_ttl: int | None
+        self, client: AsyncHttpClient, url: str, service: Service, known_ttl: int | None
     ) -> dict | None:
         """Test if cached responses persist past expected TTL."""
         test_id = "ttl_staleness"
@@ -225,10 +216,8 @@ class StaleContextCheck(ServiceIteratingCheck):
             header_ttl = None
             cache_control = headers_lower.get("cache-control", "")
             if "max-age=" in cache_control:
-                try:
+                with contextlib.suppress(ValueError, IndexError):
                     header_ttl = int(cache_control.split("max-age=")[1].split(",")[0].strip())
-                except (ValueError, IndexError):
-                    pass
 
             # Confirm it's cached
             start2 = time.time()
@@ -339,6 +328,8 @@ class StaleContextCheck(ServiceIteratingCheck):
         if stale_result.get("stale_indicators"):
             lines.append(f"Stale indicators: {', '.join(stale_result['stale_indicators'])}")
         if stale_result.get("initial_ms"):
-            lines.append(f"Timing: {stale_result['initial_ms']}ms -> {stale_result.get('cached_ms')}ms -> {stale_result.get('post_ttl_ms')}ms")
+            lines.append(
+                f"Timing: {stale_result['initial_ms']}ms -> {stale_result.get('cached_ms')}ms -> {stale_result.get('post_ttl_ms')}ms"
+            )
 
         return "\n".join(lines)

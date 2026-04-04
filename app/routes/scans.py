@@ -17,11 +17,9 @@ Endpoints:
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
-
 from pydantic import BaseModel
 
 from app.api_models import ScanSeverityOverrideDeleteInput, ScanSeverityOverrideInput
@@ -51,16 +49,19 @@ _trend_repo = TrendRepository()
 @router.get("/api/v1/scans")
 @router.get("/api/scans")
 async def list_scans(
-    target: Optional[str] = Query(None, description="Filter by target domain"),
-    status: Optional[str] = Query(None, description="Filter by status"),
-    engagement_id: Optional[str] = Query(None, description="Filter by engagement"),
+    target: str | None = Query(None, description="Filter by target domain"),
+    status: str | None = Query(None, description="Filter by status"),
+    engagement_id: str | None = Query(None, description="Filter by engagement"),
     limit: int = Query(50, ge=1, le=200, description="Max results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
 ):
     """List historical scans with optional filters."""
     return await _scan_repo.list_scans(
-        target=target, status=status, engagement_id=engagement_id,
-        limit=limit, offset=offset,
+        target=target,
+        status=status,
+        engagement_id=engagement_id,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -78,17 +79,15 @@ async def get_scan(scan_id: str):
 @router.get("/api/scans/{scan_id}/findings")
 async def get_scan_findings(
     scan_id: str,
-    severity: Optional[str] = Query(None, description="Filter by severity"),
-    host: Optional[str] = Query(None, description="Filter by host"),
+    severity: str | None = Query(None, description="Filter by severity"),
+    host: str | None = Query(None, description="Filter by host"),
 ):
     """Get findings from a historical scan."""
     scan = await _scan_repo.get_scan(scan_id)
     if scan is None:
         raise HTTPException(404, f"Scan '{scan_id}' not found")
 
-    findings = await _finding_repo.get_findings(
-        scan_id, severity=severity, host=host
-    )
+    findings = await _finding_repo.get_findings(scan_id, severity=severity, host=host)
     return {"total": len(findings), "findings": findings}
 
 
@@ -164,9 +163,9 @@ async def compare_scans(scan_a_id: str, scan_b_id: str):
 @router.get("/api/targets/{domain}/trend")
 async def get_target_trend(
     domain: str,
-    since: Optional[str] = None,
-    until: Optional[str] = None,
-    last_n: Optional[int] = None,
+    since: str | None = None,
+    until: str | None = None,
+    last_n: int | None = None,
 ):
     """Get trend data for all completed scans of a target domain.
 
@@ -176,7 +175,10 @@ async def get_target_trend(
       - last_n: only return the most recent N scans
     """
     return await _trend_repo.get_target_trend(
-        domain, since=since, until=until, last_n=last_n,
+        domain,
+        since=since,
+        until=until,
+        last_n=last_n,
     )
 
 
@@ -194,13 +196,13 @@ async def get_finding_history(fingerprint: str):
 
 class FindingOverrideInput(BaseModel):
     status: str  # accepted, false_positive
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 @router.get("/api/v1/findings/overrides")
 @router.get("/api/findings/overrides")
 async def list_finding_overrides(
-    status: Optional[str] = Query(None, description="Filter by status (accepted, false_positive)"),
+    status: str | None = Query(None, description="Filter by status (accepted, false_positive)"),
 ):
     """List all finding overrides."""
     return await _override_repo.list_overrides(status=status)
@@ -211,9 +213,13 @@ async def list_finding_overrides(
 async def set_finding_override(fingerprint: str, body: FindingOverrideInput):
     """Set a manual override on a finding (accepted risk or false positive)."""
     if body.status not in ("accepted", "false_positive"):
-        raise HTTPException(400, f"Invalid status '{body.status}'. Must be 'accepted' or 'false_positive'.")
+        raise HTTPException(
+            400, f"Invalid status '{body.status}'. Must be 'accepted' or 'false_positive'."
+        )
     return await _override_repo.set_override(
-        fingerprint=fingerprint, status=body.status, reason=body.reason,
+        fingerprint=fingerprint,
+        status=body.status,
+        reason=body.reason,
     )
 
 
@@ -235,6 +241,7 @@ async def remove_finding_override(fingerprint: str):
 async def list_scan_severity_overrides(scan_id: str):
     """List all severity overrides for a scan."""
     from app.customizations import get_scan_overrides_raw
+
     return get_scan_overrides_raw(scan_id)
 
 
@@ -258,10 +265,11 @@ async def set_scan_severity_override(scan_id: str, body: ScanSeverityOverrideInp
         raise HTTPException(404, f"Scan '{scan_id}' not found")
 
     from app.customizations import add_scan_override
+
     try:
         result = add_scan_override(scan_id, scope, body.severity, body.reason)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
     return result
 
 
@@ -274,6 +282,7 @@ async def delete_scan_severity_override(scan_id: str, body: ScanSeverityOverride
         raise HTTPException(400, "Scope must include at least check_name or title")
 
     from app.customizations import remove_scan_override
+
     removed = remove_scan_override(scan_id, scope)
     if not removed:
         raise HTTPException(404, "No override found matching the given scope")
@@ -295,10 +304,11 @@ async def preview_scan_severity_override(scan_id: str, body: ScanSeverityOverrid
     findings = await _finding_repo.get_findings(scan_id)
 
     from app.customizations import preview_scan_override
+
     try:
         affected = preview_scan_override(findings, scope, body.severity)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
 
     return {"affected_count": len(affected), "findings": affected}
 
@@ -313,6 +323,7 @@ async def get_capabilities():
     pdf_available = False
     try:
         from xhtml2pdf import pisa  # noqa: F401
+
         pdf_available = True
     except ImportError:
         pass
@@ -347,31 +358,31 @@ def _binary_response(result: dict, fmt: str) -> Response | None:
 
 class TechnicalReportInput(BaseModel):
     scan_id: str
-    format: Optional[str] = "md"
+    format: str | None = "md"
 
 
 class DeltaReportInput(BaseModel):
     scan_a_id: str
     scan_b_id: str
-    format: Optional[str] = "md"
+    format: str | None = "md"
 
 
 class ExecutiveReportInput(BaseModel):
     scan_id: str
-    format: Optional[str] = "md"
-    engagement_id: Optional[str] = None
+    format: str | None = "md"
+    engagement_id: str | None = None
 
 
 class ComplianceReportInput(BaseModel):
     scan_id: str
-    format: Optional[str] = "md"
-    engagement_id: Optional[str] = None
+    format: str | None = "md"
+    engagement_id: str | None = None
 
 
 class TrendReportInput(BaseModel):
-    format: Optional[str] = "md"
-    engagement_id: Optional[str] = None
-    target: Optional[str] = None
+    format: str | None = "md"
+    engagement_id: str | None = None
+    target: str | None = None
 
 
 @router.post("/api/v1/reports/technical")
@@ -379,13 +390,14 @@ class TrendReportInput(BaseModel):
 async def generate_technical_report_endpoint(body: TechnicalReportInput):
     """Generate a technical report for a historical scan."""
     from app.reports import generate_technical_report
+
     if body.format not in VALID_FORMATS:
         raise HTTPException(400, f"Format must be one of: {', '.join(VALID_FORMATS)}")
     try:
         result = await generate_technical_report(body.scan_id, body.format)
         return _pdf_response(result) if body.format == "pdf" else result
     except ValueError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 @router.post("/api/v1/reports/delta")
@@ -393,13 +405,14 @@ async def generate_technical_report_endpoint(body: TechnicalReportInput):
 async def generate_delta_report_endpoint(body: DeltaReportInput):
     """Generate a delta (comparison) report between two scans."""
     from app.reports import generate_delta_report
+
     if body.format not in VALID_FORMATS:
         raise HTTPException(400, f"Format must be one of: {', '.join(VALID_FORMATS)}")
     try:
         result = await generate_delta_report(body.scan_a_id, body.scan_b_id, body.format)
         return _pdf_response(result) if body.format == "pdf" else result
     except ValueError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 @router.post("/api/v1/reports/executive")
@@ -407,13 +420,14 @@ async def generate_delta_report_endpoint(body: DeltaReportInput):
 async def generate_executive_report_endpoint(body: ExecutiveReportInput):
     """Generate an executive summary report for a scan."""
     from app.reports import generate_executive_report
+
     if body.format not in VALID_FORMATS:
         raise HTTPException(400, f"Format must be one of: {', '.join(VALID_FORMATS)}")
     try:
         result = await generate_executive_report(body.scan_id, body.format, body.engagement_id)
         return _pdf_response(result) if body.format == "pdf" else result
     except ValueError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 @router.post("/api/v1/reports/compliance")
@@ -421,13 +435,14 @@ async def generate_executive_report_endpoint(body: ExecutiveReportInput):
 async def generate_compliance_report_endpoint(body: ComplianceReportInput):
     """Generate a compliance report for a scan."""
     from app.reports import generate_compliance_report
+
     if body.format not in VALID_FORMATS:
         raise HTTPException(400, f"Format must be one of: {', '.join(VALID_FORMATS)}")
     try:
         result = await generate_compliance_report(body.scan_id, body.format, body.engagement_id)
         return _pdf_response(result) if body.format == "pdf" else result
     except ValueError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 @router.post("/api/v1/reports/trend")
@@ -435,13 +450,14 @@ async def generate_compliance_report_endpoint(body: ComplianceReportInput):
 async def generate_trend_report_endpoint(body: TrendReportInput):
     """Generate a trend report across multiple scans."""
     from app.reports import generate_trend_report
+
     if body.format not in VALID_FORMATS:
         raise HTTPException(400, f"Format must be one of: {', '.join(VALID_FORMATS)}")
     try:
         result = await generate_trend_report(body.format, body.engagement_id, body.target)
         return _pdf_response(result) if body.format == "pdf" else result
     except ValueError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
 
 
 # ─── Targeted Export ─────────────────────────────────────────────────────────
@@ -449,8 +465,8 @@ async def generate_trend_report_endpoint(body: TrendReportInput):
 
 class TargetedExportInput(BaseModel):
     fingerprints: list[str]
-    format: Optional[str] = "md"
-    title: Optional[str] = None
+    format: str | None = "md"
+    title: str | None = None
 
 
 @router.post("/api/v1/reports/targeted")
@@ -458,14 +474,17 @@ class TargetedExportInput(BaseModel):
 async def generate_targeted_export_endpoint(body: TargetedExportInput):
     """Generate a report from a curated set of findings identified by fingerprint."""
     from app.reports import generate_targeted_export
+
     if body.format not in VALID_FORMATS:
         raise HTTPException(400, f"Format must be one of: {', '.join(VALID_FORMATS)}")
     if not body.fingerprints:
         raise HTTPException(400, "At least one fingerprint is required")
     try:
         result = await generate_targeted_export(
-            body.fingerprints, body.format, body.title,
+            body.fingerprints,
+            body.format,
+            body.title,
         )
         return _pdf_response(result) if body.format == "pdf" else result
     except ValueError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e

@@ -13,26 +13,27 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_config
-from app.db import init_db, close_db
-from app.state import state
+from app.db import close_db, init_db
 from app.routes import (
-    scope_router,
-    scan_router,
-    scans_router,
+    advisor_router,
+    chains_router,
+    checks_router,
+    compliance_router,
+    customizations_router,
     engagements_router,
     findings_router,
-    checks_router,
-    chains_router,
-    scenarios_router,
     preferences_router,
-    compliance_router,
+    scan_router,
+    scans_router,
+    scenarios_router,
+    scope_router,
     swarm_router,
-    customizations_router,
 )
+from app.state import state
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 # ─── Lifecycle ────────────────────────────────────────────────
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -67,6 +69,7 @@ app = FastAPI(title="Chainsmith Recon", version="1.3.0", lifespan=lifespan)
 
 
 # ─── Static Files ─────────────────────────────────────────────
+
 
 def _get_static_dir() -> str:
     """Get static files directory, checking Docker path first."""
@@ -99,9 +102,11 @@ app.include_router(preferences_router)
 app.include_router(compliance_router)
 app.include_router(swarm_router)
 app.include_router(customizations_router)
+app.include_router(advisor_router)
 
 
 # ─── Static Page Routes ───────────────────────────────────────
+
 
 @app.get("/")
 async def root():
@@ -159,10 +164,8 @@ async def engagements_page():
 
 # ─── Health ───────────────────────────────────────────────────
 
+
 @app.get("/health")
 async def health():
     """Health check."""
-    return {
-        "status": "healthy",
-        "session_id": state.session_id
-    }
+    return {"status": "healthy", "session_id": state.session_id}

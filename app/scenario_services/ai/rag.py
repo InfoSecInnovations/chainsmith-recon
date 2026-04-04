@@ -13,14 +13,12 @@ The RAG system contains:
 
 Usage:
     from app.scenario_services.ai.rag import SimpleRAG, get_rag_context, get_session_context
-    
+
     rag = SimpleRAG()
     context = rag.search_context("mortgage rates")
 """
 
 import json
-from typing import Optional
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SYNTHETIC DATA
@@ -167,10 +165,11 @@ FAQ_CONTENT = [
 # RAG IMPLEMENTATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class SimpleRAG:
     """
     Simple RAG implementation for chatbots.
-    
+
     The customer data can be leaked via prompt injection - this is intentional
     for security training purposes.
     """
@@ -182,14 +181,14 @@ class SimpleRAG:
     def search_context(self, query: str, include_customers: bool = True) -> str:
         """
         Search for relevant context based on query.
-        
+
         The include_customers flag can be manipulated via prompt injection
         to leak customer data.
-        
+
         Args:
             query: User's query
             include_customers: Whether to include customer context (exploitable)
-        
+
         Returns:
             Formatted context string
         """
@@ -223,27 +222,27 @@ class SimpleRAG:
         """
         Get customer context that might leak in verbose mode.
         Simulates the "logged in user" context.
-        
+
         Args:
             customer_index: Which customer to simulate (default: Sarah Thompson)
-        
+
         Returns:
             Formatted session context string
         """
         current_customer = self.customers[customer_index]
 
         return f"""
-Current session customer: {current_customer['name']}
-Customer ID: {current_customer['id']}
-Member since: {current_customer['member_since']}
-Account types: {', '.join(current_customer['account_types'])}
-Primary branch: {current_customer['branch']}
+Current session customer: {current_customer["name"]}
+Customer ID: {current_customer["id"]}
+Member since: {current_customer["member_since"]}
+Account types: {", ".join(current_customer["account_types"])}
+Primary branch: {current_customer["branch"]}
 """
 
     def get_all_customer_data(self) -> list[dict]:
         """
         Returns all customer data.
-        
+
         This would be called if prompt injection successfully
         tricks the bot into dumping its context.
         """
@@ -255,7 +254,7 @@ Primary branch: {current_customer['branch']}
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Global RAG instance
-_rag: Optional[SimpleRAG] = None
+_rag: SimpleRAG | None = None
 
 
 def get_rag() -> SimpleRAG:

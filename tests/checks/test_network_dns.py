@@ -4,16 +4,13 @@ Tests for Phase 7a network checks: WildcardDnsCheck, DnsRecordCheck, GeoIpCheck
 All DNS/network calls are mocked to avoid real traffic.
 """
 
-import socket
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.checks.base import CheckResult
+from app.checks.network.dns_records import HAS_DNSPYTHON, DnsRecordCheck
+from app.checks.network.geoip import HOSTING_ASNS, RESIDENTIAL_ASNS, GeoIpCheck
 from app.checks.network.wildcard_dns import WildcardDnsCheck, _random_subdomain
-from app.checks.network.dns_records import DnsRecordCheck, HAS_DNSPYTHON
-from app.checks.network.geoip import GeoIpCheck, HOSTING_ASNS, RESIDENTIAL_ASNS
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # WildcardDnsCheck Tests
@@ -84,8 +81,10 @@ class TestWildcardDnsCheckRun:
         assert wc["detected"] is True
         assert wc["ip"] is None  # Not a single consistent IP
         assert len(wc["resolved_ips"]) == 2
-        assert "round-robin" in result.findings[0].description.lower() or \
-               "geo-DNS" in result.findings[0].description
+        assert (
+            "round-robin" in result.findings[0].description.lower()
+            or "geo-DNS" in result.findings[0].description
+        )
 
     @patch("app.checks.network.wildcard_dns.WildcardDnsCheck._resolve")
     async def test_partial_resolution(self, mock_resolve):
@@ -141,9 +140,11 @@ class TestDnsRecordCheckRun:
         # MX query returns a record
         mx_rdata = MagicMock()
         mx_rdata.to_text.return_value = "10 mail.example.com."
-        mock_resolver.resolve.side_effect = _make_resolve_side_effect({
-            "MX": [mx_rdata],
-        })
+        mock_resolver.resolve.side_effect = _make_resolve_side_effect(
+            {
+                "MX": [mx_rdata],
+            }
+        )
 
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
@@ -163,9 +164,11 @@ class TestDnsRecordCheckRun:
 
         txt_rdata = MagicMock()
         txt_rdata.to_text.return_value = '"v=spf1 include:_spf.google.com ~all"'
-        mock_resolver.resolve.side_effect = _make_resolve_side_effect({
-            "TXT": [txt_rdata],
-        })
+        mock_resolver.resolve.side_effect = _make_resolve_side_effect(
+            {
+                "TXT": [txt_rdata],
+            }
+        )
 
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
@@ -184,9 +187,11 @@ class TestDnsRecordCheckRun:
 
         txt_rdata = MagicMock()
         txt_rdata.to_text.return_value = '"google-site-verification=abc123def456"'
-        mock_resolver.resolve.side_effect = _make_resolve_side_effect({
-            "TXT": [txt_rdata],
-        })
+        mock_resolver.resolve.side_effect = _make_resolve_side_effect(
+            {
+                "TXT": [txt_rdata],
+            }
+        )
 
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
@@ -204,9 +209,11 @@ class TestDnsRecordCheckRun:
 
         ns_rdata = MagicMock()
         ns_rdata.to_text.return_value = "ns1.cloudflare.com."
-        mock_resolver.resolve.side_effect = _make_resolve_side_effect({
-            "NS": [ns_rdata],
-        })
+        mock_resolver.resolve.side_effect = _make_resolve_side_effect(
+            {
+                "NS": [ns_rdata],
+            }
+        )
 
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
@@ -224,9 +231,11 @@ class TestDnsRecordCheckRun:
 
         cname_rdata = MagicMock()
         cname_rdata.to_text.return_value = "cdn.cloudfront.net."
-        mock_resolver.resolve.side_effect = _make_resolve_side_effect({
-            "CNAME": [cname_rdata],
-        })
+        mock_resolver.resolve.side_effect = _make_resolve_side_effect(
+            {
+                "CNAME": [cname_rdata],
+            }
+        )
 
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
@@ -242,9 +251,11 @@ class TestDnsRecordCheckRun:
 
         aaaa_rdata = MagicMock()
         aaaa_rdata.to_text.return_value = "2001:db8::1"
-        mock_resolver.resolve.side_effect = _make_resolve_side_effect({
-            "AAAA": [aaaa_rdata],
-        })
+        mock_resolver.resolve.side_effect = _make_resolve_side_effect(
+            {
+                "AAAA": [aaaa_rdata],
+            }
+        )
 
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
@@ -260,10 +271,14 @@ class TestDnsRecordCheckRun:
         MockResolver.return_value = mock_resolver
 
         soa_rdata = MagicMock()
-        soa_rdata.to_text.return_value = "ns1.example.com. admin.example.com. 2024010101 3600 900 604800 86400"
-        mock_resolver.resolve.side_effect = _make_resolve_side_effect({
-            "SOA": [soa_rdata],
-        })
+        soa_rdata.to_text.return_value = (
+            "ns1.example.com. admin.example.com. 2024010101 3600 900 604800 86400"
+        )
+        mock_resolver.resolve.side_effect = _make_resolve_side_effect(
+            {
+                "SOA": [soa_rdata],
+            }
+        )
 
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
@@ -307,10 +322,12 @@ class TestDnsRecordCheckRun:
         ns_rdata = MagicMock()
         ns_rdata.to_text.return_value = "ns1.example.com."
 
-        mock_resolver.resolve.side_effect = _make_resolve_side_effect({
-            "MX": [mx_rdata],
-            "NS": [ns_rdata],
-        })
+        mock_resolver.resolve.side_effect = _make_resolve_side_effect(
+            {
+                "MX": [mx_rdata],
+                "NS": [ns_rdata],
+            }
+        )
 
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
@@ -402,9 +419,11 @@ class TestGeoIpCheckRun:
         MockReader.side_effect = [city_reader, asn_reader]
 
         check = GeoIpCheck()
-        result = await check.run({
-            "dns_records": {"api.example.com": "54.239.28.85"},
-        })
+        result = await check.run(
+            {
+                "dns_records": {"api.example.com": "54.239.28.85"},
+            }
+        )
 
         assert result.success is True
         data = result.outputs["geoip_data"]["54.239.28.85"]
@@ -445,9 +464,11 @@ class TestGeoIpCheckRun:
         MockReader.side_effect = [city_reader, asn_reader]
 
         check = GeoIpCheck()
-        result = await check.run({
-            "dns_records": {"dev.example.com": "73.100.50.25"},
-        })
+        result = await check.run(
+            {
+                "dns_records": {"dev.example.com": "73.100.50.25"},
+            }
+        )
 
         data = result.outputs["geoip_data"]["73.100.50.25"]
         assert data["classification"] == "residential"
@@ -483,9 +504,11 @@ class TestGeoIpCheckRun:
         MockReader.side_effect = [city_reader, asn_reader]
 
         check = GeoIpCheck()
-        result = await check.run({
-            "dns_records": {"ml.example.com": "185.1.2.3"},
-        })
+        result = await check.run(
+            {
+                "dns_records": {"ml.example.com": "185.1.2.3"},
+            }
+        )
 
         data = result.outputs["geoip_data"]["185.1.2.3"]
         assert data["classification"] == "other"
@@ -521,12 +544,14 @@ class TestGeoIpCheckRun:
         MockReader.side_effect = [city_reader, asn_reader]
 
         check = GeoIpCheck()
-        result = await check.run({
-            "dns_records": {
-                "api.example.com": "54.1.2.3",
-                "www.example.com": "54.1.2.3",
-            },
-        })
+        result = await check.run(
+            {
+                "dns_records": {
+                    "api.example.com": "54.1.2.3",
+                    "www.example.com": "54.1.2.3",
+                },
+            }
+        )
 
         # Should only look up the IP once (deduplicated)
         assert result.targets_checked == 1
@@ -547,9 +572,11 @@ class TestGeoIpCheckRun:
         MockReader.return_value = asn_reader
 
         check = GeoIpCheck()
-        result = await check.run({
-            "dns_records": {"cdn.example.com": "104.16.1.1"},
-        })
+        result = await check.run(
+            {
+                "dns_records": {"cdn.example.com": "104.16.1.1"},
+            }
+        )
 
         assert result.success is True
         data = result.outputs["geoip_data"]["104.16.1.1"]
@@ -568,6 +595,7 @@ class TestPhase7aRegistration:
 
     def test_checks_in_resolver(self):
         from app.check_resolver import get_real_checks
+
         checks = get_real_checks()
         names = [c.name for c in checks]
         assert "wildcard_dns" in names
@@ -577,6 +605,7 @@ class TestPhase7aRegistration:
     def test_check_order(self):
         """Phase 7a checks run before port_scan."""
         from app.check_resolver import get_real_checks
+
         checks = get_real_checks()
         names = [c.name for c in checks]
         wc_idx = names.index("wildcard_dns")
@@ -591,6 +620,7 @@ class TestPhase7aRegistration:
 
     def test_suite_inference(self):
         from app.check_resolver import infer_suite
+
         assert infer_suite("wildcard_dns") == "network"
         assert infer_suite("dns_records") == "network"
         assert infer_suite("geoip") == "network"

@@ -20,13 +20,12 @@ from app.config import (
     LiteLLMConfig,
     PathsConfig,
     ScopeConfig,
-    get_config,
-    load_config,
     _apply_env,
     _apply_yaml,
     _load_yaml_file,
+    get_config,
+    load_config,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ScopeConfig Tests
@@ -215,14 +214,17 @@ class TestApplyYaml:
     def test_apply_scope(self):
         """scope section is applied."""
         cfg = ChainsmithConfig()
-        _apply_yaml(cfg, {
-            "scope": {
-                "in_scope_domains": ["example.com"],
-                "out_of_scope_domains": ["admin.example.com"],
-                "in_scope_ports": [80, 443],
-                "port_profile": "web",
-            }
-        })
+        _apply_yaml(
+            cfg,
+            {
+                "scope": {
+                    "in_scope_domains": ["example.com"],
+                    "out_of_scope_domains": ["admin.example.com"],
+                    "in_scope_ports": [80, 443],
+                    "port_profile": "web",
+                }
+            },
+        )
 
         assert cfg.scope.in_scope_domains == ["example.com"]
         assert cfg.scope.out_of_scope_domains == ["admin.example.com"]
@@ -232,12 +234,15 @@ class TestApplyYaml:
     def test_apply_litellm(self):
         """litellm section is applied."""
         cfg = ChainsmithConfig()
-        _apply_yaml(cfg, {
-            "litellm": {
-                "base_url": "http://custom:4000",
-                "model_chainsmith": "gpt-4",
-            }
-        })
+        _apply_yaml(
+            cfg,
+            {
+                "litellm": {
+                    "base_url": "http://custom:4000",
+                    "model_chainsmith": "gpt-4",
+                }
+            },
+        )
 
         assert cfg.litellm.base_url == "http://custom:4000"
         assert cfg.litellm.model_chainsmith == "gpt-4"
@@ -245,11 +250,14 @@ class TestApplyYaml:
     def test_apply_paths(self):
         """paths section is applied."""
         cfg = ChainsmithConfig()
-        _apply_yaml(cfg, {
-            "paths": {
-                "db_path": "/custom/db.sqlite",
-            }
-        })
+        _apply_yaml(
+            cfg,
+            {
+                "paths": {
+                    "db_path": "/custom/db.sqlite",
+                }
+            },
+        )
 
         assert cfg.paths.db_path == Path("/custom/db.sqlite")
 
@@ -427,6 +435,7 @@ class TestGetConfig:
 
         # Reset the module-level cache
         import app.config
+
         app.config._config = None
 
         cfg1 = get_config()
@@ -439,6 +448,7 @@ class TestGetConfig:
         monkeypatch.chdir(tmp_path)
 
         import app.config
+
         app.config._config = None
 
         cfg1 = get_config()
@@ -460,6 +470,7 @@ class TestBackwardCompat:
         monkeypatch.chdir(tmp_path)
 
         import app.config
+
         app.config._config = None
 
         # Access via __getattr__
@@ -472,6 +483,7 @@ class TestBackwardCompat:
         monkeypatch.chdir(tmp_path)
 
         import app.config
+
         app.config._config = None
 
         path = app.config.RECON_DB_PATH

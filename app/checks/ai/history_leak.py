@@ -7,10 +7,10 @@ Multi-tenant LLM deployments sometimes share context across users.
 
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.lib.ai_helpers import extract_response_text, format_chat_request
 from app.lib.findings import build_finding
-from app.lib.ai_helpers import format_chat_request, extract_response_text
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
 
@@ -48,9 +48,15 @@ class ConversationHistoryLeakCheck(BaseCheck):
 
     # Indicators of cross-session leakage
     LEAK_INDICATORS = [
-        "previous conversation", "earlier today", "last user",
-        "someone asked", "another user", "before you",
-        "previous session", "in our last", "you mentioned",
+        "previous conversation",
+        "earlier today",
+        "last user",
+        "someone asked",
+        "another user",
+        "before you",
+        "previous session",
+        "in our last",
+        "you mentioned",
     ]
 
     async def run(self, context: dict[str, Any]) -> CheckResult:
@@ -74,7 +80,10 @@ class ConversationHistoryLeakCheck(BaseCheck):
         return result
 
     async def _test_history_leak(
-        self, url: str, service: Service, api_format: str,
+        self,
+        url: str,
+        service: Service,
+        api_format: str,
     ) -> CheckResult:
         result = CheckResult(success=True)
         host = service.host
@@ -91,7 +100,8 @@ class ConversationHistoryLeakCheck(BaseCheck):
                     api_format,
                 )
                 await client.post(
-                    url, json=canary_body,
+                    url,
+                    json=canary_body,
                     headers={"Content-Type": "application/json"},
                 )
 
@@ -101,7 +111,8 @@ class ConversationHistoryLeakCheck(BaseCheck):
 
                     body = format_chat_request(probe_prompt, api_format)
                     resp = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
 
@@ -118,11 +129,13 @@ class ConversationHistoryLeakCheck(BaseCheck):
                     # Check for leak indicators
                     for indicator in self.LEAK_INDICATORS:
                         if indicator in text:
-                            leak_indicators_found.append({
-                                "probe": probe_id,
-                                "indicator": indicator,
-                                "preview": text[:200],
-                            })
+                            leak_indicators_found.append(
+                                {
+                                    "probe": probe_id,
+                                    "indicator": indicator,
+                                    "preview": text[:200],
+                                }
+                            )
                             break  # One indicator per probe is enough
 
         except Exception as e:
@@ -135,42 +148,54 @@ class ConversationHistoryLeakCheck(BaseCheck):
         }
 
         if canary_found:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Conversation history leak: canary recovered from separate session",
-                description=(
-                    f"Canary string '{self.CANARY}' planted in one request was "
-                    f"returned in a subsequent request, indicating shared context"
-                ),
-                severity="critical",
-                evidence=f"Canary '{self.CANARY}' recovered in probe response",
-                host=host, discriminator="canary-leak",
-                target=service, target_url=url,
-                raw_data=leak_info,
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Conversation history leak: canary recovered from separate session",
+                    description=(
+                        f"Canary string '{self.CANARY}' planted in one request was "
+                        f"returned in a subsequent request, indicating shared context"
+                    ),
+                    severity="critical",
+                    evidence=f"Canary '{self.CANARY}' recovered in probe response",
+                    host=host,
+                    discriminator="canary-leak",
+                    target=service,
+                    target_url=url,
+                    raw_data=leak_info,
+                    references=self.references,
+                )
+            )
         elif leak_indicators_found:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Shared context detected: model references prior interactions ({len(leak_indicators_found)} indicators)",
-                description="Model responses reference previous conversations not from this session",
-                severity="high",
-                evidence=f"Indicators: {', '.join(li['indicator'] for li in leak_indicators_found[:5])}",
-                host=host, discriminator="history-indicators",
-                target=service, target_url=url,
-                raw_data={"indicators": leak_indicators_found},
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Shared context detected: model references prior interactions ({len(leak_indicators_found)} indicators)",
+                    description="Model responses reference previous conversations not from this session",
+                    severity="high",
+                    evidence=f"Indicators: {', '.join(li['indicator'] for li in leak_indicators_found[:5])}",
+                    host=host,
+                    discriminator="history-indicators",
+                    target=service,
+                    target_url=url,
+                    raw_data={"indicators": leak_indicators_found},
+                    references=self.references,
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="No cross-session leakage detected",
-                description=f"Tested {len(self.LEAK_PROBES)} probes, no history leakage indicators found",
-                severity="info",
-                evidence=f"Probes: {len(self.LEAK_PROBES)}, canary not recovered, 0 indicators",
-                host=host, discriminator="no-leak",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="No cross-session leakage detected",
+                    description=f"Tested {len(self.LEAK_PROBES)} probes, no history leakage indicators found",
+                    severity="info",
+                    evidence=f"Probes: {len(self.LEAK_PROBES)}, canary not recovered, 0 indicators",
+                    host=host,
+                    discriminator="no-leak",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
         result.outputs[f"history_leak_{service.port}"] = leak_info
         return result

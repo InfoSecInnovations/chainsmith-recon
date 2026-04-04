@@ -17,9 +17,9 @@ Feeds: additional hostname discovery (from SANs), security posture
 import asyncio
 import datetime
 import logging
-import ssl
 import socket
-from typing import Any, Optional
+import ssl
+from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.findings import build_finding
@@ -148,9 +148,7 @@ class TlsAnalysisCheck(BaseCheck):
 
         return result
 
-    async def _get_cert_info(
-        self, host: str, port: int
-    ) -> Optional[dict[str, Any]]:
+    async def _get_cert_info(self, host: str, port: int) -> dict[str, Any] | None:
         """Connect to host:port with TLS and extract certificate details."""
         loop = asyncio.get_event_loop()
         try:
@@ -158,11 +156,11 @@ class TlsAnalysisCheck(BaseCheck):
                 loop.run_in_executor(None, self._fetch_cert, host, port),
                 timeout=10.0,
             )
-        except (asyncio.TimeoutError, Exception) as exc:
+        except (TimeoutError, Exception) as exc:
             logger.debug(f"TLS connect failed for {host}:{port}: {exc}")
             return None
 
-    def _fetch_cert(self, host: str, port: int) -> Optional[dict[str, Any]]:
+    def _fetch_cert(self, host: str, port: int) -> dict[str, Any] | None:
         """Synchronous TLS certificate fetch."""
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
@@ -191,37 +189,25 @@ class TlsAnalysisCheck(BaseCheck):
 
                     # Parse PEM cert dict (returned by getpeercert())
                     if pem_cert:
-                        info["subject"] = self._parse_dn(
-                            pem_cert.get("subject", ())
-                        )
-                        info["issuer"] = self._parse_dn(
-                            pem_cert.get("issuer", ())
-                        )
+                        info["subject"] = self._parse_dn(pem_cert.get("subject", ()))
+                        info["issuer"] = self._parse_dn(pem_cert.get("issuer", ()))
                         info["serial"] = pem_cert.get("serialNumber")
                         info["version"] = pem_cert.get("version")
 
                         # SANs
                         san_entries = pem_cert.get("subjectAltName", ())
-                        info["sans"] = [
-                            val for typ, val in san_entries if typ == "DNS"
-                        ]
+                        info["sans"] = [val for typ, val in san_entries if typ == "DNS"]
 
                         # Dates
                         not_before = pem_cert.get("notBefore")
                         not_after = pem_cert.get("notAfter")
                         if not_before:
-                            info["not_before"] = self._parse_cert_date(
-                                not_before
-                            )
+                            info["not_before"] = self._parse_cert_date(not_before)
                         if not_after:
-                            info["not_after"] = self._parse_cert_date(
-                                not_after
-                            )
+                            info["not_after"] = self._parse_cert_date(not_after)
 
                         # Self-signed detection
-                        info["self_signed"] = (
-                            info["subject"] == info["issuer"]
-                        )
+                        info["self_signed"] = info["subject"] == info["issuer"]
                     else:
                         # Binary-only cert — limited info
                         info["serial"] = der_cert[:20].hex()
@@ -233,7 +219,7 @@ class TlsAnalysisCheck(BaseCheck):
 
                     return info
 
-        except (ssl.SSLError, socket.error, OSError) as exc:
+        except (ssl.SSLError, OSError) as exc:
             logger.debug(f"TLS handshake failed {host}:{port}: {exc}")
             return None
 
@@ -279,60 +265,60 @@ class TlsAnalysisCheck(BaseCheck):
         san_str = ", ".join(sans[:10])
         if len(sans) > 10:
             san_str += f" (+{len(sans) - 10} more)"
-        evidence = (
-            f"Subject: {subject_cn} | Issuer: {issuer_cn} | "
-            f"SANs: {san_str or 'none'}"
-        )
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"TLS certificate: {endpoint} ({issuer_cn})",
-            description=(
-                f"Certificate for {subject_cn} issued by {issuer_cn}. "
-                f"{len(sans)} Subject Alternative Name(s) found."
-            ),
-            severity="info",
-            evidence=evidence,
-            host=host,
-            discriminator=f"cert-{port}",
-            raw_data=cert_info,
-        ))
-
-        # SANs with new hostnames
-        new_sans = [
-            s for s in sans
-            if s != host and not s.startswith("*.")
-        ]
-        if new_sans:
-            result.findings.append(build_finding(
+        evidence = f"Subject: {subject_cn} | Issuer: {issuer_cn} | SANs: {san_str or 'none'}"
+        result.findings.append(
+            build_finding(
                 check_name=self.name,
-                title=f"Certificate SANs discovered: {endpoint}",
+                title=f"TLS certificate: {endpoint} ({issuer_cn})",
                 description=(
-                    f"The TLS certificate for {endpoint} contains "
-                    f"{len(new_sans)} additional hostname(s) not yet known. "
-                    f"These may include internal or staging environments."
+                    f"Certificate for {subject_cn} issued by {issuer_cn}. "
+                    f"{len(sans)} Subject Alternative Name(s) found."
                 ),
                 severity="info",
-                evidence=f"New SANs: {', '.join(new_sans[:20])}",
+                evidence=evidence,
                 host=host,
-                discriminator=f"sans-{port}",
-            ))
+                discriminator=f"cert-{port}",
+                raw_data=cert_info,
+            )
+        )
+
+        # SANs with new hostnames
+        new_sans = [s for s in sans if s != host and not s.startswith("*.")]
+        if new_sans:
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Certificate SANs discovered: {endpoint}",
+                    description=(
+                        f"The TLS certificate for {endpoint} contains "
+                        f"{len(new_sans)} additional hostname(s) not yet known. "
+                        f"These may include internal or staging environments."
+                    ),
+                    severity="info",
+                    evidence=f"New SANs: {', '.join(new_sans[:20])}",
+                    host=host,
+                    discriminator=f"sans-{port}",
+                )
+            )
 
         # Self-signed certificate
         if cert_info.get("self_signed"):
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Self-signed certificate: {endpoint}",
-                description=(
-                    f"The certificate on {endpoint} is self-signed "
-                    f"(subject and issuer match: {issuer_cn}). "
-                    f"This may indicate a development/staging environment "
-                    f"or a misconfigured production service."
-                ),
-                severity="medium",
-                evidence=f"Subject CN: {subject_cn} | Issuer CN: {issuer_cn}",
-                host=host,
-                discriminator=f"self-signed-{port}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Self-signed certificate: {endpoint}",
+                    description=(
+                        f"The certificate on {endpoint} is self-signed "
+                        f"(subject and issuer match: {issuer_cn}). "
+                        f"This may indicate a development/staging environment "
+                        f"or a misconfigured production service."
+                    ),
+                    severity="medium",
+                    evidence=f"Subject CN: {subject_cn} | Issuer CN: {issuer_cn}",
+                    host=host,
+                    discriminator=f"self-signed-{port}",
+                )
+            )
 
         # Certificate expiry
         not_after = cert_info.get("not_after")
@@ -343,37 +329,39 @@ class TlsAnalysisCheck(BaseCheck):
                 days_left = (expiry - now).days
 
                 if days_left < self.EXPIRY_CRITICAL_DAYS:
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Expired certificate: {endpoint}",
-                        description=(
-                            f"The certificate for {endpoint} expired "
-                            f"{abs(days_left)} day(s) ago on {not_after}."
-                        ),
-                        severity="medium",
-                        evidence=f"Expired: {not_after} ({abs(days_left)} days ago)",
-                        host=host,
-                        discriminator=f"expired-{port}",
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Expired certificate: {endpoint}",
+                            description=(
+                                f"The certificate for {endpoint} expired "
+                                f"{abs(days_left)} day(s) ago on {not_after}."
+                            ),
+                            severity="medium",
+                            evidence=f"Expired: {not_after} ({abs(days_left)} days ago)",
+                            host=host,
+                            discriminator=f"expired-{port}",
+                        )
+                    )
                 elif days_left <= self.EXPIRY_WARNING_DAYS:
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Certificate expires soon: {endpoint}",
-                        description=(
-                            f"The certificate for {endpoint} expires in "
-                            f"{days_left} day(s) on {not_after}."
-                        ),
-                        severity="low",
-                        evidence=f"Expires: {not_after} ({days_left} days remaining)",
-                        host=host,
-                        discriminator=f"expiring-{port}",
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Certificate expires soon: {endpoint}",
+                            description=(
+                                f"The certificate for {endpoint} expires in "
+                                f"{days_left} day(s) on {not_after}."
+                            ),
+                            severity="low",
+                            evidence=f"Expires: {not_after} ({days_left} days remaining)",
+                            host=host,
+                            discriminator=f"expiring-{port}",
+                        )
+                    )
             except (ValueError, TypeError):
                 logger.debug(f"Could not parse expiry date: {not_after}")
 
-    async def _probe_protocols(
-        self, host: str, port: int
-    ) -> list[str]:
+    async def _probe_protocols(self, host: str, port: int) -> list[str]:
         """Probe for supported TLS protocol versions."""
         loop = asyncio.get_event_loop()
         supported: list[str] = []
@@ -384,44 +372,38 @@ class TlsAnalysisCheck(BaseCheck):
                 continue
             try:
                 ok = await asyncio.wait_for(
-                    loop.run_in_executor(
-                        None, self._try_protocol, host, port, protocol_const
-                    ),
+                    loop.run_in_executor(None, self._try_protocol, host, port, protocol_const),
                     timeout=5.0,
                 )
                 if ok:
                     supported.append(version_name)
-            except (asyncio.TimeoutError, Exception):
+            except (TimeoutError, Exception):
                 pass
 
         # TLS 1.2 and 1.3 via default context (always check)
         try:
             result = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None, self._check_modern_tls, host, port
-                ),
+                loop.run_in_executor(None, self._check_modern_tls, host, port),
                 timeout=5.0,
             )
             for v in result:
                 if v not in supported:
                     supported.append(v)
-        except (asyncio.TimeoutError, Exception):
+        except (TimeoutError, Exception):
             pass
 
         return supported
 
-    def _try_protocol(
-        self, host: str, port: int, protocol_const: int
-    ) -> bool:
+    def _try_protocol(self, host: str, port: int, protocol_const: int) -> bool:
         """Try connecting with a specific TLS protocol version."""
         try:
             ctx = ssl.SSLContext(protocol_const)
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
             with socket.create_connection((host, port), timeout=3) as sock:
-                with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                with ctx.wrap_socket(sock, server_hostname=host):
                     return True
-        except (ssl.SSLError, socket.error, OSError):
+        except (ssl.SSLError, OSError):
             return False
 
     def _check_modern_tls(self, host: str, port: int) -> list[str]:
@@ -439,7 +421,7 @@ class TlsAnalysisCheck(BaseCheck):
                             versions.append("TLS 1.3")
                         elif "TLSv1.2" in ver:
                             versions.append("TLS 1.2")
-        except (ssl.SSLError, socket.error, OSError):
+        except (ssl.SSLError, OSError):
             pass
         return versions
 
@@ -455,19 +437,21 @@ class TlsAnalysisCheck(BaseCheck):
 
         deprecated = [p for p in protocols if p in ("TLS 1.0", "TLS 1.1")]
         for proto in deprecated:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"{proto} supported: {endpoint}",
-                description=(
-                    f"{endpoint} accepts connections using {proto}, which is "
-                    f"deprecated and has known vulnerabilities (BEAST, POODLE). "
-                    f"Modern clients should use TLS 1.2 or 1.3."
-                ),
-                severity="low",
-                evidence=f"Supported protocols: {', '.join(protocols)}",
-                host=host,
-                discriminator=f"deprecated-{proto.replace(' ', '').replace('.', '')}-{port}",
-                references=[
-                    "RFC 8996 — Deprecating TLS 1.0 and TLS 1.1",
-                ],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"{proto} supported: {endpoint}",
+                    description=(
+                        f"{endpoint} accepts connections using {proto}, which is "
+                        f"deprecated and has known vulnerabilities (BEAST, POODLE). "
+                        f"Modern clients should use TLS 1.2 or 1.3."
+                    ),
+                    severity="low",
+                    evidence=f"Supported protocols: {', '.join(protocols)}",
+                    host=host,
+                    discriminator=f"deprecated-{proto.replace(' ', '').replace('.', '')}-{port}",
+                    references=[
+                        "RFC 8996 — Deprecating TLS 1.0 and TLS 1.1",
+                    ],
+                )
+            )

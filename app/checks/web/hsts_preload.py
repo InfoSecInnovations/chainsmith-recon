@@ -11,9 +11,9 @@ Uses the hstspreload.org API for verification.
 import logging
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
 
@@ -43,16 +43,18 @@ class HSTSPreloadCheck(ServiceIteratingCheck):
         hsts_header = self._get_hsts_header(service, context)
 
         if not hsts_header and service.scheme != "https":
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"No HSTS header: {service.host}",
-                description="No HSTS header present — HSTS preload check not applicable",
-                severity="info",
-                evidence="No Strict-Transport-Security header detected",
-                host=service.host,
-                discriminator="no-hsts",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"No HSTS header: {service.host}",
+                    description="No HSTS header present — HSTS preload check not applicable",
+                    severity="info",
+                    evidence="No Strict-Transport-Security header detected",
+                    host=service.host,
+                    discriminator="no-hsts",
+                    target=service,
+                )
+            )
             result.outputs["hsts_preload_info"] = preload_info
             return result
 
@@ -103,40 +105,46 @@ class HSTSPreloadCheck(ServiceIteratingCheck):
             result.errors.append(f"HSTS preload API error: {e}")
             preload_status = "api_error"
 
-        preload_info.update({
-            "checked": True,
-            "preloaded": is_preloaded,
-            "has_preload_directive": has_preload_directive,
-            "has_include_subdomains": has_include_subdomains,
-            "max_age": max_age,
-            "status": preload_status,
-        })
+        preload_info.update(
+            {
+                "checked": True,
+                "preloaded": is_preloaded,
+                "has_preload_directive": has_preload_directive,
+                "has_include_subdomains": has_include_subdomains,
+                "max_age": max_age,
+                "status": preload_status,
+            }
+        )
 
         # Generate findings based on preload status
         if is_preloaded:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Domain is HSTS preloaded: {service.host}",
-                description="Domain is on the Chromium HSTS preload list — browsers enforce HTTPS on first visit",
-                severity="info",
-                evidence=f"hstspreload.org status: {preload_status} | HSTS: {hsts_header[:200]}",
-                host=service.host,
-                discriminator="preloaded",
-                target=service,
-                references=["RFC 6797"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Domain is HSTS preloaded: {service.host}",
+                    description="Domain is on the Chromium HSTS preload list — browsers enforce HTTPS on first visit",
+                    severity="info",
+                    evidence=f"hstspreload.org status: {preload_status} | HSTS: {hsts_header[:200]}",
+                    host=service.host,
+                    discriminator="preloaded",
+                    target=service,
+                    references=["RFC 6797"],
+                )
+            )
         elif has_preload_directive and not is_preloaded:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"HSTS preload directive present but not yet preloaded: {service.host}",
-                description="The HSTS header includes the preload directive, but the domain is not yet on the preload list. Submission may be pending or rejected.",
-                severity="info",
-                evidence=f"hstspreload.org status: {preload_status} | HSTS: {hsts_header[:200]}",
-                host=service.host,
-                discriminator="preload-pending",
-                target=service,
-                references=["RFC 6797", "hstspreload.org"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"HSTS preload directive present but not yet preloaded: {service.host}",
+                    description="The HSTS header includes the preload directive, but the domain is not yet on the preload list. Submission may be pending or rejected.",
+                    severity="info",
+                    evidence=f"hstspreload.org status: {preload_status} | HSTS: {hsts_header[:200]}",
+                    host=service.host,
+                    discriminator="preload-pending",
+                    target=service,
+                    references=["RFC 6797", "hstspreload.org"],
+                )
+            )
         elif hsts_header and not is_preloaded:
             # HSTS present but not preloaded — first-visit vulnerability
             missing = []
@@ -147,19 +155,23 @@ class HSTSPreloadCheck(ServiceIteratingCheck):
             if max_age is not None and max_age < 31536000:
                 missing.append(f"max-age too short ({max_age}, need >= 31536000)")
 
-            detail = f"Missing: {', '.join(missing)}" if missing else "Preload list submission required"
+            detail = (
+                f"Missing: {', '.join(missing)}" if missing else "Preload list submission required"
+            )
 
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"HSTS header present but domain not preloaded: {service.host}",
-                description=f"HSTS is configured but the domain is not on the browser preload list — first visit is still vulnerable to SSL stripping. {detail}",
-                severity="low",
-                evidence=f"HSTS: {hsts_header[:200]} | Preload status: {preload_status}",
-                host=service.host,
-                discriminator="not-preloaded",
-                target=service,
-                references=["RFC 6797", "hstspreload.org"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"HSTS header present but domain not preloaded: {service.host}",
+                    description=f"HSTS is configured but the domain is not on the browser preload list — first visit is still vulnerable to SSL stripping. {detail}",
+                    severity="low",
+                    evidence=f"HSTS: {hsts_header[:200]} | Preload status: {preload_status}",
+                    host=service.host,
+                    discriminator="not-preloaded",
+                    target=service,
+                    references=["RFC 6797", "hstspreload.org"],
+                )
+            )
 
         result.outputs["hsts_preload_info"] = preload_info
         return result

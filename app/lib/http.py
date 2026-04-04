@@ -12,12 +12,12 @@ Wrapper around httpx with:
 import asyncio
 import logging
 import time
-from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 try:
     import httpx
+
     _HTTPX_AVAILABLE = True
 except ImportError:
     httpx = None
@@ -29,13 +29,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class HttpConfig:
     """Configuration for the HTTP client."""
+
     timeout_seconds: float = 10.0
     connect_timeout_seconds: float = 5.0
     retries: int = 2
-    retry_backoff_base: float = 0.5   # seconds; doubles each retry
+    retry_backoff_base: float = 0.5  # seconds; doubles each retry
     follow_redirects: bool = True
     max_redirects: int = 5
-    verify_ssl: bool = False           # Lab environments often use self-signed certs
+    verify_ssl: bool = False  # Lab environments often use self-signed certs
     user_agent: str = "Chainsmith-Recon/1.0"
     headers: dict[str, str] = field(default_factory=dict)
 
@@ -43,6 +44,7 @@ class HttpConfig:
 @dataclass
 class HttpResponse:
     """Normalized HTTP response."""
+
     url: str
     status_code: int
     headers: dict[str, str]
@@ -50,7 +52,7 @@ class HttpResponse:
     elapsed_ms: float
     redirected: bool = False
     final_url: str = ""
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -58,6 +60,7 @@ class HttpResponse:
 
     def json(self) -> Any:
         import json
+
         return json.loads(self.body)
 
     def to_dict(self) -> dict:
@@ -75,7 +78,8 @@ class HttpResponse:
 
 class HttpError(Exception):
     """Raised when a request fails after all retries."""
-    def __init__(self, message: str, response: Optional[HttpResponse] = None):
+
+    def __init__(self, message: str, response: HttpResponse | None = None):
         super().__init__(message)
         self.response = response
 
@@ -93,7 +97,7 @@ class AsyncHttpClient:
         resp = await AsyncHttpClient.fetch("https://example.com")
     """
 
-    def __init__(self, config: Optional[HttpConfig] = None):
+    def __init__(self, config: HttpConfig | None = None):
         self.config = config or HttpConfig()
         self._client = None  # Optional[httpx.AsyncClient]
 
@@ -138,20 +142,22 @@ class AsyncHttpClient:
         method: str,
         url: str,
         *,
-        headers: Optional[dict] = None,
-        json: Optional[Any] = None,
-        data: Optional[Any] = None,
-        params: Optional[dict] = None,
+        headers: dict | None = None,
+        json: Any | None = None,
+        data: Any | None = None,
+        params: dict | None = None,
     ) -> HttpResponse:
         await self._init_client()
 
-        last_error: Optional[str] = None
+        last_error: str | None = None
         attempts = self.config.retries + 1
 
         for attempt in range(attempts):
             if attempt > 0:
                 backoff = self.config.retry_backoff_base * (2 ** (attempt - 1))
-                logger.debug(f"Retry {attempt}/{self.config.retries} for {url} after {backoff:.1f}s")
+                logger.debug(
+                    f"Retry {attempt}/{self.config.retries} for {url} after {backoff:.1f}s"
+                )
                 await asyncio.sleep(backoff)
 
             start = time.monotonic()
@@ -201,16 +207,25 @@ class AsyncHttpClient:
             error=last_error,
         )
 
-    async def get(self, url: str, *, headers: Optional[dict] = None, params: Optional[dict] = None) -> HttpResponse:
+    async def get(
+        self, url: str, *, headers: dict | None = None, params: dict | None = None
+    ) -> HttpResponse:
         return await self._request("GET", url, headers=headers, params=params)
 
-    async def post(self, url: str, *, headers: Optional[dict] = None, json: Optional[Any] = None, data: Optional[Any] = None) -> HttpResponse:
+    async def post(
+        self,
+        url: str,
+        *,
+        headers: dict | None = None,
+        json: Any | None = None,
+        data: Any | None = None,
+    ) -> HttpResponse:
         return await self._request("POST", url, headers=headers, json=json, data=data)
 
-    async def head(self, url: str, *, headers: Optional[dict] = None) -> HttpResponse:
+    async def head(self, url: str, *, headers: dict | None = None) -> HttpResponse:
         return await self._request("HEAD", url, headers=headers)
 
-    async def options(self, url: str, *, headers: Optional[dict] = None) -> HttpResponse:
+    async def options(self, url: str, *, headers: dict | None = None) -> HttpResponse:
         return await self._request("OPTIONS", url, headers=headers)
 
     @classmethod
@@ -218,7 +233,7 @@ class AsyncHttpClient:
         cls,
         url: str,
         method: str = "GET",
-        config: Optional[HttpConfig] = None,
+        config: HttpConfig | None = None,
         **kwargs,
     ) -> HttpResponse:
         """One-shot request without managing client lifecycle."""

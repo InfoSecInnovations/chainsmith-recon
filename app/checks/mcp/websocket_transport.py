@@ -14,9 +14,9 @@ import base64
 import os
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class WebSocketTransportCheck(BaseCheck):
@@ -129,16 +129,18 @@ class WebSocketTransportCheck(BaseCheck):
                                     "credentials. This allows bypassing HTTP auth via WebSocket."
                                 )
 
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=title,
-                                description=desc,
-                                severity=severity,
-                                evidence=f"URL: {url}\nStatus: 101 Switching Protocols\nPath: {path}",
-                                host=host,
-                                discriminator=f"ws-{path.strip('/').replace('/', '-') or 'root'}",
-                                raw_data=ws_info,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=title,
+                                    description=desc,
+                                    severity=severity,
+                                    evidence=f"URL: {url}\nStatus: 101 Switching Protocols\nPath: {path}",
+                                    host=host,
+                                    discriminator=f"ws-{path.strip('/').replace('/', '-') or 'root'}",
+                                    raw_data=ws_info,
+                                )
+                            )
                             break  # Found WS on this server
 
                         # Check for upgrade-related headers even on non-101
@@ -149,20 +151,22 @@ class WebSocketTransportCheck(BaseCheck):
                                 break
 
                         if upgrade_header.lower() == "websocket" and resp.status_code != 101:
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"WebSocket upgrade indicated but not completed at {path}",
-                                description=(
-                                    f"Server returned Upgrade: websocket header at {path} "
-                                    f"but status was {resp.status_code} instead of 101. "
-                                    "WebSocket may require additional parameters."
-                                ),
-                                severity="info",
-                                evidence=f"URL: {url}\nStatus: {resp.status_code}\nUpgrade: {upgrade_header}",
-                                host=host,
-                                discriminator=f"ws-partial-{path.strip('/').replace('/', '-') or 'root'}",
-                                raw_data={"url": url, "status": resp.status_code},
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"WebSocket upgrade indicated but not completed at {path}",
+                                    description=(
+                                        f"Server returned Upgrade: websocket header at {path} "
+                                        f"but status was {resp.status_code} instead of 101. "
+                                        "WebSocket may require additional parameters."
+                                    ),
+                                    severity="info",
+                                    evidence=f"URL: {url}\nStatus: {resp.status_code}\nUpgrade: {upgrade_header}",
+                                    host=host,
+                                    discriminator=f"ws-partial-{path.strip('/').replace('/', '-') or 'root'}",
+                                    raw_data={"url": url, "status": resp.status_code},
+                                )
+                            )
 
             except Exception as e:
                 result.errors.append(f"{base_url}: {e}")
@@ -171,15 +175,17 @@ class WebSocketTransportCheck(BaseCheck):
             # Add info finding that WS was not found
             if mcp_servers:
                 host = mcp_servers[0].get("service", {}).get("host", "unknown")
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="WebSocket upgrade rejected on all tested paths",
-                    description="No MCP WebSocket transport endpoints were discovered.",
-                    severity="info",
-                    evidence=f"Paths tested: {', '.join(self.WS_PATHS)}",
-                    host=host,
-                    discriminator="ws-not-found",
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="WebSocket upgrade rejected on all tested paths",
+                        description="No MCP WebSocket transport endpoints were discovered.",
+                        severity="info",
+                        evidence=f"Paths tested: {', '.join(self.WS_PATHS)}",
+                        host=host,
+                        discriminator="ws-not-found",
+                    )
+                )
 
         if ws_servers:
             result.outputs["mcp_websocket_servers"] = ws_servers

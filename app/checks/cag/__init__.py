@@ -56,32 +56,32 @@ References:
 
 from app.checks.base import BaseCheck
 
-# Phase 1: Discovery
-from app.checks.cag.discovery import CAGDiscoveryCheck
-from app.checks.cag.cache_probe import CAGCacheProbeCheck
-
 # Phase 2: Infrastructure analysis
 from app.checks.cag.cache_eviction import CacheEvictionCheck
-from app.checks.cag.cache_warming import CacheWarmingCheck
-from app.checks.cag.ttl_mapping import TTLMappingCheck
-from app.checks.cag.multi_layer import MultiLayerCacheCheck
-from app.checks.cag.cache_quota import CacheQuotaCheck
-from app.checks.cag.provider_caching import ProviderCachingCheck
-
-# Phase 3: Deep probing
-from app.checks.cag.cross_user_leakage import CrossUserLeakageCheck
 from app.checks.cag.cache_key_reverse import CacheKeyReverseCheck
-from app.checks.cag.semantic_threshold import SemanticThresholdCheck
-from app.checks.cag.side_channel import SideChannelCheck
-from app.checks.cag.stale_context import StaleContextCheck
 
 # Phase 4: Active exploitation
 from app.checks.cag.cache_poisoning import CachePoisoningCheck
+from app.checks.cag.cache_probe import CAGCacheProbeCheck
+from app.checks.cag.cache_quota import CacheQuotaCheck
+from app.checks.cag.cache_warming import CacheWarmingCheck
+
+# Phase 3: Deep probing
+from app.checks.cag.cross_user_leakage import CrossUserLeakageCheck
+
+# Phase 1: Discovery
+from app.checks.cag.discovery import CAGDiscoveryCheck
+from app.checks.cag.distributed_cache import DistributedCacheCheck
 from app.checks.cag.injection_persistence import InjectionPersistenceCheck
+from app.checks.cag.multi_layer import MultiLayerCacheCheck
+from app.checks.cag.provider_caching import ProviderCachingCheck
+from app.checks.cag.semantic_threshold import SemanticThresholdCheck
 
 # Phase 5: Advanced
 from app.checks.cag.serialization import SerializationCheck
-from app.checks.cag.distributed_cache import DistributedCacheCheck
+from app.checks.cag.side_channel import SideChannelCheck
+from app.checks.cag.stale_context import StaleContextCheck
+from app.checks.cag.ttl_mapping import TTLMappingCheck
 
 __all__ = [
     # Phase 1

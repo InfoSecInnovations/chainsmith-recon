@@ -16,10 +16,9 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Common default API keys to test
 DEFAULT_KEYS = [
@@ -107,9 +106,7 @@ class MCPAuthCheck(BaseCheck):
                     server_auth["tests"]["session_reuse"] = session_result
 
                     # Test 5: CORS on MCP endpoints
-                    cors_result = await self._test_cors(
-                        client, server_url, base_path, host, result
-                    )
+                    cors_result = await self._test_cors(client, server_url, base_path, host, result)
                     server_auth["tests"]["cors"] = cors_result
 
                     auth_status.append(server_auth)
@@ -146,46 +143,52 @@ class MCPAuthCheck(BaseCheck):
             has_tools = self._response_has_tools(resp.body)
 
             if has_tools:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="MCP server requires no authentication: tools accessible without credentials",
-                    description=(
-                        "The MCP server responds to tools/list requests without any authentication. "
-                        "An unauthenticated attacker can enumerate all available tools and their schemas."
-                    ),
-                    severity="critical",
-                    evidence=f"URL: {url}\nStatus: {resp.status_code}\nBody: {(resp.body or '')[:500]}",
-                    host=host,
-                    discriminator="no-auth-tools",
-                    raw_data={"url": url, "status": resp.status_code},
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="MCP server requires no authentication: tools accessible without credentials",
+                        description=(
+                            "The MCP server responds to tools/list requests without any authentication. "
+                            "An unauthenticated attacker can enumerate all available tools and their schemas."
+                        ),
+                        severity="critical",
+                        evidence=f"URL: {url}\nStatus: {resp.status_code}\nBody: {(resp.body or '')[:500]}",
+                        host=host,
+                        discriminator="no-auth-tools",
+                        raw_data={"url": url, "status": resp.status_code},
+                    )
+                )
             else:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="MCP endpoint accessible without authentication",
-                    description=(
-                        "The MCP server responds to requests without authentication headers, "
-                        "though the response may not contain tool data."
-                    ),
-                    severity="high",
-                    evidence=f"URL: {url}\nStatus: {resp.status_code}",
-                    host=host,
-                    discriminator="no-auth-endpoint",
-                    raw_data={"url": url, "status": resp.status_code},
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="MCP endpoint accessible without authentication",
+                        description=(
+                            "The MCP server responds to requests without authentication headers, "
+                            "though the response may not contain tool data."
+                        ),
+                        severity="high",
+                        evidence=f"URL: {url}\nStatus: {resp.status_code}",
+                        host=host,
+                        discriminator="no-auth-endpoint",
+                        raw_data={"url": url, "status": resp.status_code},
+                    )
+                )
 
         elif not resp.error and resp.status_code == 401:
             test_result["accessible"] = False
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="MCP server enforces authentication",
-                description="The MCP server correctly returns 401 for unauthenticated requests.",
-                severity="info",
-                evidence=f"URL: {url}\nStatus: 401",
-                host=host,
-                discriminator="auth-enforced",
-                raw_data={"url": url, "status": 401},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="MCP server enforces authentication",
+                    description="The MCP server correctly returns 401 for unauthenticated requests.",
+                    severity="info",
+                    evidence=f"URL: {url}\nStatus: 401",
+                    host=host,
+                    discriminator="auth-enforced",
+                    raw_data={"url": url, "status": 401},
+                )
+            )
 
         return test_result
 
@@ -207,33 +210,40 @@ class MCPAuthCheck(BaseCheck):
                     headers={"Content-Type": "application/json", header_name: auth_value},
                 )
 
-                if not resp.error and resp.status_code == 200 and self._response_has_tools(resp.body):
-                    test_result["accepted_keys"].append({
-                        "header": header_name,
-                        "key": key or "(empty)",
-                    })
+                if (
+                    not resp.error
+                    and resp.status_code == 200
+                    and self._response_has_tools(resp.body)
+                ):
+                    test_result["accepted_keys"].append(
+                        {
+                            "header": header_name,
+                            "key": key or "(empty)",
+                        }
+                    )
 
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Default API key accepted: '{key or '(empty)'}' grants MCP access",
-                        description=(
-                            f"The MCP server accepts the default key '{key or '(empty)'}' "
-                            f"via {header_name} header, granting access to tool enumeration."
-                        ),
-                        severity="medium",
-                        evidence=f"Header: {header_name}: {auth_value}\nStatus: {resp.status_code}",
-                        host=host,
-                        discriminator=f"default-key-{key or 'empty'}",
-                        raw_data={"header": header_name, "key": key},
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Default API key accepted: '{key or '(empty)'}' grants MCP access",
+                            description=(
+                                f"The MCP server accepts the default key '{key or '(empty)'}' "
+                                f"via {header_name} header, granting access to tool enumeration."
+                            ),
+                            severity="medium",
+                            evidence=f"Header: {header_name}: {auth_value}\nStatus: {resp.status_code}",
+                            host=host,
+                            discriminator=f"default-key-{key or 'empty'}",
+                            raw_data={"header": header_name, "key": key},
+                        )
+                    )
                     # Found one working key via this header, move to next key
                     break
 
         return test_result
 
     async def _test_auth_scope(
-        self, client, server_url: str, base_path: str, host: str,
-        result: CheckResult, server: dict
+        self, client, server_url: str, base_path: str, host: str, result: CheckResult, server: dict
     ) -> dict:
         """Test if auth scope differs between initialize and tools/list."""
         test_result = {"scope_mismatch": False}
@@ -257,7 +267,7 @@ class MCPAuthCheck(BaseCheck):
             headers={"Content-Type": "application/json"},
         )
 
-        init_requires_auth = (not init_resp.error and init_resp.status_code == 401)
+        init_requires_auth = not init_resp.error and init_resp.status_code == 401
 
         # Try tools/list
         tools_path = f"{base_path.rstrip('/')}/tools/list" if base_path else "/mcp/tools/list"
@@ -269,27 +279,29 @@ class MCPAuthCheck(BaseCheck):
             headers={"Content-Type": "application/json"},
         )
 
-        tools_requires_auth = (not tools_resp.error and tools_resp.status_code == 401)
+        tools_requires_auth = not tools_resp.error and tools_resp.status_code == 401
 
         if init_requires_auth and not tools_requires_auth:
             test_result["scope_mismatch"] = True
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Auth bypass: initialize requires auth but tools/list does not",
-                description=(
-                    "The MCP server requires authentication for the initialize handshake "
-                    "but allows unauthenticated access to tools/list. This inconsistency "
-                    "allows attackers to enumerate tools without credentials."
-                ),
-                severity="high",
-                evidence=f"initialize: 401 at {init_url}\ntools/list: {tools_resp.status_code} at {tools_url}",
-                host=host,
-                discriminator="auth-scope-mismatch",
-                raw_data={
-                    "init_status": init_resp.status_code,
-                    "tools_status": tools_resp.status_code,
-                },
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Auth bypass: initialize requires auth but tools/list does not",
+                    description=(
+                        "The MCP server requires authentication for the initialize handshake "
+                        "but allows unauthenticated access to tools/list. This inconsistency "
+                        "allows attackers to enumerate tools without credentials."
+                    ),
+                    severity="high",
+                    evidence=f"initialize: 401 at {init_url}\ntools/list: {tools_resp.status_code} at {tools_url}",
+                    host=host,
+                    discriminator="auth-scope-mismatch",
+                    raw_data={
+                        "init_status": init_resp.status_code,
+                        "tools_status": tools_resp.status_code,
+                    },
+                )
+            )
 
         return test_result
 
@@ -347,20 +359,22 @@ class MCPAuthCheck(BaseCheck):
 
         if not reuse_resp.error and reuse_resp.status_code == 200:
             test_result["session_reusable"] = True
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Session reuse: MCP session ID accepted from different client context",
-                description=(
-                    "The MCP server accepts a session ID obtained from one client context "
-                    "when used by a different client. This enables session hijacking if an "
-                    "attacker obtains a valid session ID."
-                ),
-                severity="high",
-                evidence=f"Session ID: {session_id}\nReuse status: {reuse_resp.status_code}",
-                host=host,
-                discriminator="session-reuse",
-                raw_data={"session_id": session_id, "reuse_status": reuse_resp.status_code},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Session reuse: MCP session ID accepted from different client context",
+                    description=(
+                        "The MCP server accepts a session ID obtained from one client context "
+                        "when used by a different client. This enables session hijacking if an "
+                        "attacker obtains a valid session ID."
+                    ),
+                    severity="high",
+                    evidence=f"Session ID: {session_id}\nReuse status: {reuse_resp.status_code}",
+                    host=host,
+                    discriminator="session-reuse",
+                    raw_data={"session_id": session_id, "reuse_status": reuse_resp.status_code},
+                )
+            )
 
         return test_result
 
@@ -394,20 +408,22 @@ class MCPAuthCheck(BaseCheck):
 
         if acao == "*" or acao == "https://evil.attacker.com":
             test_result["allows_any_origin"] = True
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="MCP endpoint allows cross-origin requests: browser-based MCP access possible",
-                description=(
-                    f"The MCP endpoint returns Access-Control-Allow-Origin: {acao}, "
-                    "allowing browser-based JavaScript from any origin to interact with "
-                    "the MCP server. This enables cross-site MCP attacks."
-                ),
-                severity="high",
-                evidence=f"URL: {url}\nAccess-Control-Allow-Origin: {acao}",
-                host=host,
-                discriminator="cors-open",
-                raw_data={"acao": acao, "url": url},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="MCP endpoint allows cross-origin requests: browser-based MCP access possible",
+                    description=(
+                        f"The MCP endpoint returns Access-Control-Allow-Origin: {acao}, "
+                        "allowing browser-based JavaScript from any origin to interact with "
+                        "the MCP server. This enables cross-site MCP attacks."
+                    ),
+                    severity="high",
+                    evidence=f"URL: {url}\nAccess-Control-Allow-Origin: {acao}",
+                    host=host,
+                    discriminator="cors-open",
+                    raw_data={"acao": acao, "url": url},
+                )
+            )
 
         return test_result
 

@@ -24,7 +24,6 @@ from app.checks.mcp.discovery import MCPDiscoveryCheck
 from app.checks.mcp.tool_enumeration import MCPToolEnumerationCheck
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test Fixtures
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -67,9 +66,11 @@ def make_response(
 ) -> HttpResponse:
     """Create a mock HTTP response."""
     return HttpResponse(
+        url="http://mcp.example.com:8080",
         status_code=status_code,
         headers=headers or {},
         body=body,
+        elapsed_ms=100.0,
         error=error,
     )
 
@@ -96,7 +97,7 @@ class TestMCPDiscoveryCheck:
     async def test_discovers_mcp_via_well_known(self, check, sample_service):
         """Test MCP discovery via .well-known path."""
         mock_client = AsyncMock()
-        
+
         # Most paths return 404, but /.well-known/mcp returns MCP response
         async def mock_get(url, **kwargs):
             if "/.well-known/mcp" in url:
@@ -106,7 +107,7 @@ class TestMCPDiscoveryCheck:
                     body='{"jsonrpc": "2.0", "capabilities": ["tools"]}',
                 )
             return make_response(status_code=404)
-        
+
         mock_client.get = mock_get
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
@@ -123,7 +124,7 @@ class TestMCPDiscoveryCheck:
     async def test_detects_mcp_headers(self, check, sample_service):
         """Test detection via MCP-specific headers."""
         mock_client = AsyncMock()
-        
+
         async def mock_get(url, **kwargs):
             if "/mcp" in url:
                 return make_response(
@@ -132,7 +133,7 @@ class TestMCPDiscoveryCheck:
                     body="{}",
                 )
             return make_response(status_code=404)
-        
+
         mock_client.get = mock_get
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
@@ -147,7 +148,7 @@ class TestMCPDiscoveryCheck:
     async def test_detects_sse_transport(self, check, sample_service):
         """Test SSE transport detection."""
         mock_client = AsyncMock()
-        
+
         async def mock_get(url, **kwargs):
             if "/mcp/sse" in url:
                 return make_response(
@@ -156,7 +157,7 @@ class TestMCPDiscoveryCheck:
                     body="",
                 )
             return make_response(status_code=404)
-        
+
         mock_client.get = mock_get
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
@@ -173,12 +174,12 @@ class TestMCPDiscoveryCheck:
     async def test_detects_auth_required(self, check, sample_service):
         """Test auth requirement detection."""
         mock_client = AsyncMock()
-        
+
         async def mock_get(url, **kwargs):
             if "/mcp" in url:
                 return make_response(status_code=401)
             return make_response(status_code=404)
-        
+
         mock_client.get = mock_get
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
@@ -229,7 +230,7 @@ class TestMCPToolEnumerationCheck:
     async def test_enumerates_tools_jsonrpc(self, check, sample_service, mcp_server_context):
         """Test tool enumeration via JSON-RPC."""
         mock_client = AsyncMock()
-        
+
         tools_response = {
             "jsonrpc": "2.0",
             "result": {
@@ -237,13 +238,15 @@ class TestMCPToolEnumerationCheck:
                     {"name": "read_file", "description": "Read a file from disk"},
                     {"name": "get_time", "description": "Get current time"},
                 ]
-            }
+            },
         }
-        
-        mock_client.post = AsyncMock(return_value=make_response(
-            status_code=200,
-            body=str(tools_response).replace("'", '"'),
-        ))
+
+        mock_client.post = AsyncMock(
+            return_value=make_response(
+                status_code=200,
+                body=str(tools_response).replace("'", '"'),
+            )
+        )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
@@ -258,7 +261,7 @@ class TestMCPToolEnumerationCheck:
     async def test_classifies_critical_tools(self, check, sample_service, mcp_server_context):
         """Test critical tool detection (exec, shell, eval)."""
         mock_client = AsyncMock()
-        
+
         tools_response = {
             "jsonrpc": "2.0",
             "result": {
@@ -266,13 +269,15 @@ class TestMCPToolEnumerationCheck:
                     {"name": "execute_command", "description": "Execute shell command"},
                     {"name": "eval_code", "description": "Evaluate Python code"},
                 ]
-            }
+            },
         }
-        
-        mock_client.post = AsyncMock(return_value=make_response(
-            status_code=200,
-            body=str(tools_response).replace("'", '"'),
-        ))
+
+        mock_client.post = AsyncMock(
+            return_value=make_response(
+                status_code=200,
+                body=str(tools_response).replace("'", '"'),
+            )
+        )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
@@ -291,7 +296,7 @@ class TestMCPToolEnumerationCheck:
     async def test_classifies_high_risk_tools(self, check, sample_service, mcp_server_context):
         """Test high-risk tool detection (file, http, sql)."""
         mock_client = AsyncMock()
-        
+
         tools_response = {
             "jsonrpc": "2.0",
             "result": {
@@ -300,13 +305,15 @@ class TestMCPToolEnumerationCheck:
                     {"name": "write_file", "description": "Write to file"},
                     {"name": "http_request", "description": "Make HTTP request"},
                 ]
-            }
+            },
         }
-        
-        mock_client.post = AsyncMock(return_value=make_response(
-            status_code=200,
-            body=str(tools_response).replace("'", '"'),
-        ))
+
+        mock_client.post = AsyncMock(
+            return_value=make_response(
+                status_code=200,
+                body=str(tools_response).replace("'", '"'),
+            )
+        )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
@@ -322,7 +329,7 @@ class TestMCPToolEnumerationCheck:
     async def test_benign_tools_low_severity(self, check, sample_service, mcp_server_context):
         """Test benign tools get low/info severity."""
         mock_client = AsyncMock()
-        
+
         tools_response = {
             "jsonrpc": "2.0",
             "result": {
@@ -330,13 +337,15 @@ class TestMCPToolEnumerationCheck:
                     {"name": "get_current_time", "description": "Get current timestamp"},
                     {"name": "format_text", "description": "Format text string"},
                 ]
-            }
+            },
         }
-        
-        mock_client.post = AsyncMock(return_value=make_response(
-            status_code=200,
-            body=str(tools_response).replace("'", '"'),
-        ))
+
+        mock_client.post = AsyncMock(
+            return_value=make_response(
+                status_code=200,
+                body=str(tools_response).replace("'", '"'),
+            )
+        )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
@@ -352,6 +361,6 @@ class TestMCPToolEnumerationCheck:
     async def test_no_mcp_servers_skips(self, check, sample_service):
         """Test check skips when no MCP servers in context."""
         result = await check.check_service(sample_service, {})
-        
+
         assert result.success
         assert len(result.findings) == 0

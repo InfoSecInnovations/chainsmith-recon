@@ -7,8 +7,8 @@ TCP port scanning to discover open services.
 import asyncio
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.checks.network.port_profiles import resolve_ports, DEFAULT_PROFILE
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.checks.network.port_profiles import resolve_ports
 from app.config import get_config
 
 
@@ -58,7 +58,7 @@ class PortScanCheck(BaseCheck):
     learning_objectives = [
         "Understand TCP handshake and port states",
         "Learn common port/service mappings",
-        "Recognize service fingerprints"
+        "Recognize service fingerprints",
     ]
 
     def __init__(self, ports: list[int] = None, profile: str = None):
@@ -78,11 +78,7 @@ class PortScanCheck(BaseCheck):
 
         # Determine profile: explicit arg > context > config
         cfg = get_config()
-        profile = (
-            self._explicit_profile
-            or context.get("port_profile")
-            or cfg.scope.port_profile
-        )
+        profile = self._explicit_profile or context.get("port_profile") or cfg.scope.port_profile
         in_scope = cfg.scope.in_scope_ports
 
         return resolve_ports(profile=profile, in_scope_ports=in_scope)
@@ -102,17 +98,13 @@ class PortScanCheck(BaseCheck):
                 try:
                     # TCP connect scan
                     reader, writer = await asyncio.wait_for(
-                        asyncio.open_connection(host, port),
-                        timeout=2.0
+                        asyncio.open_connection(host, port), timeout=2.0
                     )
                     writer.close()
                     await writer.wait_closed()
 
                     # Port is open - check if we already have this service
-                    existing = any(
-                        s.host == host and s.port == port
-                        for s in result.services
-                    )
+                    existing = any(s.host == host and s.port == port for s in result.services)
 
                     if not existing:
                         service = Service(
@@ -120,19 +112,21 @@ class PortScanCheck(BaseCheck):
                             host=host,
                             port=port,
                             scheme="http",
-                            service_type="unknown"
+                            service_type="unknown",
                         )
                         result.services.append(service)
 
-                        result.findings.append(self.create_finding(
-                            title=f"Open port: {host}:{port}",
-                            description=f"TCP port {port} is accepting connections",
-                            severity="info",
-                            evidence=f"TCP connect to {host}:{port} succeeded",
-                            target=service
-                        ))
+                        result.findings.append(
+                            self.create_finding(
+                                title=f"Open port: {host}:{port}",
+                                description=f"TCP port {port} is accepting connections",
+                                severity="info",
+                                evidence=f"TCP connect to {host}:{port} succeeded",
+                                target=service,
+                            )
+                        )
 
-                except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+                except (TimeoutError, ConnectionRefusedError, OSError):
                     # Port closed or filtered - not an error
                     pass
                 except Exception as e:

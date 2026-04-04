@@ -5,31 +5,31 @@ Load and query injection payloads for reconnaissance checks.
 
 Usage:
     from app.lib.payloads import PayloadLibrary
-    
+
     library = PayloadLibrary()
-    
+
     # Get payloads by category
     goal_payloads = library.get_category("goal_injection")
-    
+
     # Get payloads by technique
     jailbreak_payloads = library.get_by_technique("jailbreak")
-    
+
     # Get payloads by severity
     critical_payloads = library.get_by_severity("critical")
-    
+
     # Get specific payload
     payload = library.get_payload("goal_injection", "system_prompt_leak")
 """
 
 import json
-from pathlib import Path
-from typing import Optional
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
 class Payload:
     """A single injection payload."""
+
     id: str
     name: str
     payload: str
@@ -37,7 +37,7 @@ class Payload:
     severity: str
     technique: str
     category: str
-    note: Optional[str] = None
+    note: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -55,7 +55,7 @@ class Payload:
 class PayloadLibrary:
     """
     Load and query injection payloads.
-    
+
     Payloads are organized by category:
     - goal_injection: Direct agent goal hijacking
     - indirect_injection: RAG/document-based injection
@@ -70,7 +70,7 @@ class PayloadLibrary:
 
     DEFAULT_PATH = Path(__file__).parent.parent / "data" / "injection_payloads.json"
 
-    def __init__(self, path: Optional[Path] = None):
+    def __init__(self, path: Path | None = None):
         self.path = path or self.DEFAULT_PATH
         self._data: dict = {}
         self._payloads: dict[str, dict[str, Payload]] = {}
@@ -85,20 +85,20 @@ class PayloadLibrary:
         except FileNotFoundError:
             self._data = {"meta": {}}
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid payload file: {e}")
+            raise ValueError(f"Invalid payload file: {e}") from e
 
     def _index_payloads(self):
         """Index payloads by category and ID."""
         for category, category_data in self._data.items():
             if category == "meta":
                 continue
-            
+
             if not isinstance(category_data, dict):
                 continue
-            
+
             payloads = category_data.get("payloads", [])
             self._payloads[category] = {}
-            
+
             for p in payloads:
                 payload = Payload(
                     id=p.get("id", ""),
@@ -126,7 +126,7 @@ class PayloadLibrary:
         """Get all payloads in a category."""
         return list(self._payloads.get(category, {}).values())
 
-    def get_payload(self, category: str, payload_id: str) -> Optional[Payload]:
+    def get_payload(self, category: str, payload_id: str) -> Payload | None:
         """Get a specific payload by category and ID."""
         return self._payloads.get(category, {}).get(payload_id)
 
@@ -161,19 +161,21 @@ class PayloadLibrary:
         results = []
         for category_payloads in self._payloads.values():
             for payload in category_payloads.values():
-                if (query_lower in payload.id.lower() or
-                    query_lower in payload.name.lower() or
-                    query_lower in payload.payload.lower()):
+                if (
+                    query_lower in payload.id.lower()
+                    or query_lower in payload.name.lower()
+                    or query_lower in payload.payload.lower()
+                ):
                     results.append(payload)
         return results
 
     def get_for_check(self, check_type: str) -> list[Payload]:
         """
         Get payloads appropriate for a specific check type.
-        
+
         Args:
             check_type: One of "agent", "rag", "mcp", "cag", "llm"
-        
+
         Returns:
             List of relevant payloads
         """
@@ -184,7 +186,7 @@ class PayloadLibrary:
             "cag": ["cache_specific", "context_manipulation"],
             "llm": ["jailbreak", "information_extraction", "authority_bypass"],
         }
-        
+
         categories = mapping.get(check_type, [])
         results = []
         for category in categories:
@@ -193,22 +195,19 @@ class PayloadLibrary:
 
     def count(self) -> dict[str, int]:
         """Get payload counts by category."""
-        return {
-            category: len(payloads)
-            for category, payloads in self._payloads.items()
-        }
+        return {category: len(payloads) for category, payloads in self._payloads.items()}
 
     def stats(self) -> dict:
         """Get library statistics."""
         all_payloads = self.get_all()
-        
+
         severity_counts = {}
         technique_counts = {}
-        
+
         for p in all_payloads:
             severity_counts[p.severity] = severity_counts.get(p.severity, 0) + 1
             technique_counts[p.technique] = technique_counts.get(p.technique, 0) + 1
-        
+
         return {
             "total_payloads": len(all_payloads),
             "categories": len(self._payloads),
@@ -219,7 +218,7 @@ class PayloadLibrary:
 
 
 # Singleton instance for convenience
-_library: Optional[PayloadLibrary] = None
+_library: PayloadLibrary | None = None
 
 
 def get_payload_library() -> PayloadLibrary:

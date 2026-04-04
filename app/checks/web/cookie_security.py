@@ -12,11 +12,9 @@ Parses Set-Cookie headers and checks for missing security attributes:
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-from app.lib.evidence import fmt_header_evidence
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Cookie names that suggest session/auth tokens
 SESSION_COOKIE_PATTERNS = re.compile(
@@ -93,73 +91,83 @@ class CookieSecurityCheck(ServiceIteratingCheck):
         # ── Missing Secure flag ──
         if "secure" not in attrs:
             severity = "medium" if is_session else "low"
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Cookie missing Secure flag: {name}",
-                description=f"Cookie '{name}' can be sent over unencrypted HTTP connections",
-                severity=severity,
-                evidence=f"Set-Cookie: {cookie['raw'][:200]}",
-                host=service.host,
-                discriminator=f"no-secure-{name}",
-                target=service,
-                references=["CWE-614"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Cookie missing Secure flag: {name}",
+                    description=f"Cookie '{name}' can be sent over unencrypted HTTP connections",
+                    severity=severity,
+                    evidence=f"Set-Cookie: {cookie['raw'][:200]}",
+                    host=service.host,
+                    discriminator=f"no-secure-{name}",
+                    target=service,
+                    references=["CWE-614"],
+                )
+            )
 
         # ── Missing HttpOnly flag ──
         if "httponly" not in attrs:
             severity = "medium" if is_session else "low"
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Cookie missing HttpOnly: {name}",
-                description=f"Cookie '{name}' is accessible to JavaScript — vulnerable to XSS theft",
-                severity=severity,
-                evidence=f"Set-Cookie: {cookie['raw'][:200]}",
-                host=service.host,
-                discriminator=f"no-httponly-{name}",
-                target=service,
-                references=["CWE-1004"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Cookie missing HttpOnly: {name}",
+                    description=f"Cookie '{name}' is accessible to JavaScript — vulnerable to XSS theft",
+                    severity=severity,
+                    evidence=f"Set-Cookie: {cookie['raw'][:200]}",
+                    host=service.host,
+                    discriminator=f"no-httponly-{name}",
+                    target=service,
+                    references=["CWE-1004"],
+                )
+            )
 
         # ── Missing or weak SameSite ──
         samesite = attrs.get("samesite", "").lower()
         if not samesite:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Cookie missing SameSite: {name}",
-                description=f"Cookie '{name}' has no SameSite attribute — browser default may vary",
-                severity="low",
-                evidence=f"Set-Cookie: {cookie['raw'][:200]}",
-                host=service.host,
-                discriminator=f"no-samesite-{name}",
-                target=service,
-                references=["CWE-352"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Cookie missing SameSite: {name}",
+                    description=f"Cookie '{name}' has no SameSite attribute — browser default may vary",
+                    severity="low",
+                    evidence=f"Set-Cookie: {cookie['raw'][:200]}",
+                    host=service.host,
+                    discriminator=f"no-samesite-{name}",
+                    target=service,
+                    references=["CWE-352"],
+                )
+            )
         elif samesite == "none":
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Cookie SameSite=None: {name}",
-                description=f"Cookie '{name}' is sent on all cross-site requests — CSRF risk",
-                severity="medium" if is_session else "low",
-                evidence=f"Set-Cookie: {cookie['raw'][:200]}",
-                host=service.host,
-                discriminator=f"samesite-none-{name}",
-                target=service,
-                references=["CWE-352"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Cookie SameSite=None: {name}",
+                    description=f"Cookie '{name}' is sent on all cross-site requests — CSRF risk",
+                    severity="medium" if is_session else "low",
+                    evidence=f"Set-Cookie: {cookie['raw'][:200]}",
+                    host=service.host,
+                    discriminator=f"samesite-none-{name}",
+                    target=service,
+                    references=["CWE-352"],
+                )
+            )
 
         # ── Broad domain scope ──
         domain = attrs.get("domain", "")
         if domain and domain.startswith("."):
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Cookie scoped to broad domain: {domain}",
-                description=f"Cookie '{name}' is shared across all subdomains of {domain}",
-                severity="low",
-                evidence=f"Set-Cookie: {cookie['raw'][:200]}",
-                host=service.host,
-                discriminator=f"broad-domain-{name}",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Cookie scoped to broad domain: {domain}",
+                    description=f"Cookie '{name}' is shared across all subdomains of {domain}",
+                    severity="low",
+                    evidence=f"Set-Cookie: {cookie['raw'][:200]}",
+                    host=service.host,
+                    discriminator=f"broad-domain-{name}",
+                    target=service,
+                )
+            )
 
         # ── Excessively long-lived session cookie ──
         max_age = attrs.get("max-age")
@@ -167,17 +175,19 @@ class CookieSecurityCheck(ServiceIteratingCheck):
             try:
                 age_val = int(max_age)
                 if age_val > MAX_AGE_THRESHOLD:
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Long-lived session cookie: {name}",
-                        description=f"Session cookie '{name}' has Max-Age={age_val} "
-                                    f"(>{MAX_AGE_THRESHOLD}s / 1 year)",
-                        severity="low",
-                        evidence=f"Set-Cookie: {cookie['raw'][:200]}",
-                        host=service.host,
-                        discriminator=f"long-lived-{name}",
-                        target=service,
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Long-lived session cookie: {name}",
+                            description=f"Session cookie '{name}' has Max-Age={age_val} "
+                            f"(>{MAX_AGE_THRESHOLD}s / 1 year)",
+                            severity="low",
+                            evidence=f"Set-Cookie: {cookie['raw'][:200]}",
+                            host=service.host,
+                            discriminator=f"long-lived-{name}",
+                            target=service,
+                        )
+                    )
             except ValueError:
                 pass
 

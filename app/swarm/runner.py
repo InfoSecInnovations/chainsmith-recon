@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Callable, Optional, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.swarm.coordinator import SwarmCoordinator
@@ -28,7 +29,7 @@ class SwarmRunner:
     (state.runner.checks) works without modification.
     """
 
-    def __init__(self, checks: list, context: dict, coordinator: "SwarmCoordinator"):
+    def __init__(self, checks: list, context: dict, coordinator: SwarmCoordinator):
         # Expose checks as a dict keyed by name (for route compatibility)
         self.checks = {c.name: c for c in checks}
         self.context = context
@@ -36,8 +37,8 @@ class SwarmRunner:
 
     async def run_all(
         self,
-        on_check_start: Optional[Callable] = None,
-        on_check_complete: Optional[Callable] = None,
+        on_check_start: Callable | None = None,
+        on_check_complete: Callable | None = None,
     ) -> list:
         """
         Block until all coordinator tasks are terminal.

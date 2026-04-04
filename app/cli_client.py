@@ -6,7 +6,7 @@ Returns raw dicts (parsed JSON).
 """
 
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import httpx
 
@@ -62,38 +62,54 @@ class ChainsmithClient:
 
     # ─── Scope ────────────────────────────────────────────────
 
-    def set_scope(self, target: str, exclude: list[str] = None,
-                  techniques: list[str] = None) -> dict:
-        return self._request("POST", "/api/scope", json={
-            "target": target,
-            "exclude": exclude or [],
-            "techniques": techniques or [],
-        })
+    def set_scope(
+        self, target: str, exclude: list[str] = None, techniques: list[str] = None
+    ) -> dict:
+        return self._request(
+            "POST",
+            "/api/scope",
+            json={
+                "target": target,
+                "exclude": exclude or [],
+                "techniques": techniques or [],
+            },
+        )
 
     def get_scope(self) -> dict:
         return self._request("GET", "/api/scope")
 
     # ─── Settings ─────────────────────────────────────────────
 
-    def update_settings(self, parallel: bool = False, rate_limit: float = 10.0,
-                        default_techniques: list[str] = None,
-                        verification_level: str = "none") -> dict:
-        return self._request("POST", "/api/settings", json={
-            "parallel": parallel,
-            "rate_limit": rate_limit,
-            "default_techniques": default_techniques or [],
-            "verification_level": verification_level,
-        })
+    def update_settings(
+        self,
+        parallel: bool = False,
+        rate_limit: float = 10.0,
+        default_techniques: list[str] = None,
+        verification_level: str = "none",
+    ) -> dict:
+        return self._request(
+            "POST",
+            "/api/settings",
+            json={
+                "parallel": parallel,
+                "rate_limit": rate_limit,
+                "default_techniques": default_techniques or [],
+                "verification_level": verification_level,
+            },
+        )
 
     def get_settings(self) -> dict:
         return self._request("GET", "/api/settings")
 
     # ─── Scan ─────────────────────────────────────────────────
 
-    def start_scan(self, checks: list[str] = None,
-                   suites: list[str] = None,
-                   engagement_id: str = None,
-                   port_profile: str = None) -> dict:
+    def start_scan(
+        self,
+        checks: list[str] = None,
+        suites: list[str] = None,
+        engagement_id: str = None,
+        port_profile: str = None,
+    ) -> dict:
         body: dict = {}
         if checks:
             body["checks"] = checks
@@ -111,8 +127,9 @@ class ChainsmithClient:
     def get_scan_checks(self) -> dict:
         return self._request("GET", "/api/scan/checks")
 
-    def poll_scan(self, interval: float = 1.0,
-                  callback: Optional[Callable[[dict], None]] = None) -> dict:
+    def poll_scan(
+        self, interval: float = 1.0, callback: Callable[[dict], None] | None = None
+    ) -> dict:
         """Poll GET /api/scan until status is 'complete' or 'error'."""
         while True:
             status = self.get_scan_status()
@@ -176,8 +193,7 @@ class ChainsmithClient:
     def get_profile(self, name: str) -> dict:
         return self._request("GET", f"/api/profiles/{name}")
 
-    def create_profile(self, name: str, description: str = "",
-                       base: Optional[str] = None) -> dict:
+    def create_profile(self, name: str, description: str = "", base: str | None = None) -> dict:
         body: dict = {"name": name, "description": description}
         if base:
             body["base"] = base
@@ -197,8 +213,9 @@ class ChainsmithClient:
 
     # ─── Scan History ────────────────────────────────────────
 
-    def list_scans(self, target: str = None, status: str = None,
-                   engagement_id: str = None, limit: int = 50) -> dict:
+    def list_scans(
+        self, target: str = None, status: str = None, engagement_id: str = None, limit: int = 50
+    ) -> dict:
         params = {"limit": limit}
         if target:
             params["target"] = target
@@ -225,8 +242,9 @@ class ChainsmithClient:
     def list_engagements(self) -> dict:
         return self._request("GET", "/api/engagements")
 
-    def create_engagement(self, name: str, target_domain: str,
-                          description: str = None, client_name: str = None) -> dict:
+    def create_engagement(
+        self, name: str, target_domain: str, description: str = None, client_name: str = None
+    ) -> dict:
         body = {"name": name, "target_domain": target_domain}
         if description:
             body["description"] = description
@@ -251,8 +269,7 @@ class ChainsmithClient:
 
     # ─── Finding Overrides ────────────────────────────────────
 
-    def set_finding_override(self, fingerprint: str, status: str,
-                             reason: str = None) -> dict:
+    def set_finding_override(self, fingerprint: str, status: str, reason: str = None) -> dict:
         body = {"status": status}
         if reason:
             body["reason"] = reason
@@ -281,29 +298,36 @@ class ChainsmithClient:
         return self._request("POST", path, json=payload)
 
     def generate_technical_report(self, scan_id: str, fmt: str = "md") -> dict:
-        return self._report_request("/api/reports/technical",
-                                    {"scan_id": scan_id, "format": fmt}, fmt)
+        return self._report_request(
+            "/api/reports/technical", {"scan_id": scan_id, "format": fmt}, fmt
+        )
 
     def generate_delta_report(self, scan_a_id: str, scan_b_id: str, fmt: str = "md") -> dict:
-        return self._report_request("/api/reports/delta",
-                                    {"scan_a_id": scan_a_id, "scan_b_id": scan_b_id, "format": fmt}, fmt)
+        return self._report_request(
+            "/api/reports/delta",
+            {"scan_a_id": scan_a_id, "scan_b_id": scan_b_id, "format": fmt},
+            fmt,
+        )
 
-    def generate_executive_report(self, scan_id: str, fmt: str = "md",
-                                  engagement_id: str = None) -> dict:
+    def generate_executive_report(
+        self, scan_id: str, fmt: str = "md", engagement_id: str = None
+    ) -> dict:
         payload = {"scan_id": scan_id, "format": fmt}
         if engagement_id:
             payload["engagement_id"] = engagement_id
         return self._report_request("/api/reports/executive", payload, fmt)
 
-    def generate_compliance_report(self, scan_id: str, fmt: str = "md",
-                                   engagement_id: str = None) -> dict:
+    def generate_compliance_report(
+        self, scan_id: str, fmt: str = "md", engagement_id: str = None
+    ) -> dict:
         payload = {"scan_id": scan_id, "format": fmt}
         if engagement_id:
             payload["engagement_id"] = engagement_id
         return self._report_request("/api/reports/compliance", payload, fmt)
 
-    def generate_trend_report(self, fmt: str = "md", engagement_id: str = None,
-                              target: str = None) -> dict:
+    def generate_trend_report(
+        self, fmt: str = "md", engagement_id: str = None, target: str = None
+    ) -> dict:
         payload = {"format": fmt}
         if engagement_id:
             payload["engagement_id"] = engagement_id

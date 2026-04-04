@@ -22,15 +22,13 @@ References:
   https://portswigger.net/web-security/web-cache-poisoning
 """
 
-import json
-import time
 import hashlib
+import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Cache probe payloads
 CACHE_PROBE_TESTS = [
@@ -91,7 +89,7 @@ CACHE_VULN_INDICATORS = {
 class CAGCacheProbeCheck(ServiceIteratingCheck):
     """
     Probe CAG endpoints for cache-related vulnerabilities.
-    
+
     Tests for cross-session leakage, cache poisoning vectors,
     stale context exploitation, and timing-based side channels.
     """
@@ -117,16 +115,15 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
 
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
-        
+
         # Get CAG endpoints from context
         cag_endpoints = context.get("cag_endpoints", [])
-        
+
         # Filter to endpoints on this service
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
-        
+
         if not service_endpoints:
             return result
 
@@ -137,45 +134,47 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
         try:
             async with AsyncHttpClient(cfg) as client:
                 for endpoint in service_endpoints:
-                    endpoint_results = await self._probe_endpoint(
-                        client, endpoint, service
-                    )
-                    
+                    endpoint_results = await self._probe_endpoint(client, endpoint, service)
+
                     for test_result in endpoint_results:
                         if test_result.get("timing_data"):
                             timing_results.append(test_result)
-                        
+
                         if test_result.get("vulnerability_detected"):
                             cache_vulns.append(test_result)
-                            
+
                             severity = self._determine_severity(test_result)
-                            
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Cache vulnerability: {test_result['test_id']}",
-                                description=self._build_description(test_result),
-                                severity=severity,
-                                evidence=self._build_evidence(test_result),
-                                host=service.host,
-                                discriminator=f"cache-vuln-{test_result['test_id']}",
-                                target=service,
-                                target_url=endpoint.get("url"),
-                                raw_data=test_result,
-                                references=self.references,
-                            ))
+
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Cache vulnerability: {test_result['test_id']}",
+                                    description=self._build_description(test_result),
+                                    severity=severity,
+                                    evidence=self._build_evidence(test_result),
+                                    host=service.host,
+                                    discriminator=f"cache-vuln-{test_result['test_id']}",
+                                    target=service,
+                                    target_url=endpoint.get("url"),
+                                    raw_data=test_result,
+                                    references=self.references,
+                                )
+                            )
                         elif test_result.get("potential_issue"):
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Potential cache issue: {test_result['test_id']}",
-                                description=self._build_description(test_result),
-                                severity="low",
-                                evidence=self._build_evidence(test_result),
-                                host=service.host,
-                                discriminator=f"cache-issue-{test_result['test_id']}",
-                                target=service,
-                                target_url=endpoint.get("url"),
-                                raw_data=test_result,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Potential cache issue: {test_result['test_id']}",
+                                    description=self._build_description(test_result),
+                                    severity="low",
+                                    evidence=self._build_evidence(test_result),
+                                    host=service.host,
+                                    discriminator=f"cache-issue-{test_result['test_id']}",
+                                    target=service,
+                                    target_url=endpoint.get("url"),
+                                    raw_data=test_result,
+                                )
+                            )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -193,41 +192,44 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
         """Probe an endpoint with all cache tests."""
         results = []
         url = endpoint.get("url", service.url)
-        
+
         # Test 1: Cross-session cache leakage
         cross_session_result = await self._test_cross_session(client, url)
         results.append(cross_session_result)
-        
+
         # Test 2: Cache timing analysis
         timing_result = await self._test_cache_timing(client, url)
         results.append(timing_result)
-        
+
         # Test 3: Context ID enumeration
         enum_result = await self._test_id_enumeration(client, url, endpoint)
         results.append(enum_result)
-        
+
         # Test 4: Cache key predictability
         key_result = await self._test_cache_key_prediction(client, url)
         results.append(key_result)
-        
+
         return results
 
     async def _test_cross_session(self, client: AsyncHttpClient, url: str) -> dict:
         """Test for cross-session cache leakage."""
         test_id = "cross_session_leak"
-        
+
         try:
             # First request with session A context
             unique_marker_a = f"SESSION_A_{int(time.time())}"
             resp1 = await client.post(
                 url,
-                json={"input": f"Remember this marker: {unique_marker_a}", "query": unique_marker_a},
+                json={
+                    "input": f"Remember this marker: {unique_marker_a}",
+                    "query": unique_marker_a,
+                },
                 headers={
                     "Content-Type": "application/json",
                     "X-Session-Id": "test-session-a",
                 },
             )
-            
+
             # Second request with session B, asking about session A's data
             resp2 = await client.post(
                 url,
@@ -237,7 +239,7 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                     "X-Session-Id": "test-session-b",  # Different session
                 },
             )
-            
+
             if resp1.error or resp2.error:
                 return {
                     "test_id": test_id,
@@ -245,17 +247,17 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                     "error": resp1.error or resp2.error,
                     "vulnerability_detected": False,
                 }
-            
+
             # Check if session B got session A's data
             body2_lower = (resp2.body or "").lower()
             leaked = unique_marker_a.lower() in body2_lower or "session_a" in body2_lower
-            
+
             # Check for cross-session indicators
             indicators = []
             for indicator in CACHE_VULN_INDICATORS["cross_session"]:
                 if indicator in body2_lower:
                     indicators.append(indicator)
-            
+
             return {
                 "test_id": test_id,
                 "category": "information_leakage",
@@ -265,7 +267,7 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                 "indicators": indicators,
                 "response_preview": resp2.body[:300] if resp2.body else "",
             }
-            
+
         except Exception as e:
             return {
                 "test_id": test_id,
@@ -276,11 +278,11 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
     async def _test_cache_timing(self, client: AsyncHttpClient, url: str) -> dict:
         """Analyze cache timing to detect caching behavior."""
         test_id = "cache_timing"
-        
+
         try:
             # Unique query to ensure cache miss on first request
             unique_query = f"timing_test_{int(time.time())}_{hashlib.md5(str(time.time()).encode()).hexdigest()[:8]}"
-            
+
             # First request (should be cache miss)
             start1 = time.time()
             resp1 = await client.post(
@@ -289,7 +291,7 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                 headers={"Content-Type": "application/json"},
             )
             time1 = (time.time() - start1) * 1000  # ms
-            
+
             # Second identical request (might be cache hit)
             start2 = time.time()
             resp2 = await client.post(
@@ -298,28 +300,28 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                 headers={"Content-Type": "application/json"},
             )
             time2 = (time.time() - start2) * 1000  # ms
-            
+
             # Third request (confirm pattern)
             start3 = time.time()
-            resp3 = await client.post(
+            await client.post(
                 url,
                 json={"input": unique_query, "query": unique_query},
                 headers={"Content-Type": "application/json"},
             )
             time3 = (time.time() - start3) * 1000  # ms
-            
+
             if resp1.error:
                 return {
                     "test_id": test_id,
                     "error": resp1.error,
                     "vulnerability_detected": False,
                 }
-            
+
             # Analyze timing pattern
             # Significant speedup (>50%) on subsequent requests indicates caching
             speedup = (time1 - time2) / time1 if time1 > 0 else 0
             consistent_cache = time2 < time1 * 0.7 and time3 < time1 * 0.7
-            
+
             timing_data = {
                 "first_request_ms": round(time1, 2),
                 "second_request_ms": round(time2, 2),
@@ -327,13 +329,13 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                 "speedup_ratio": round(speedup, 2),
                 "caching_detected": consistent_cache,
             }
-            
+
             # Check response headers for cache indicators
             cache_headers = []
             for header in ["x-cache", "x-cache-hit", "x-cache-status", "age"]:
-                if header in [h.lower() for h in resp2.headers.keys()]:
+                if header in [h.lower() for h in resp2.headers]:
                     cache_headers.append(header)
-            
+
             return {
                 "test_id": test_id,
                 "category": "side_channel",
@@ -343,7 +345,7 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                 "timing_data": timing_data,
                 "cache_headers": cache_headers,
             }
-            
+
         except Exception as e:
             return {
                 "test_id": test_id,
@@ -351,35 +353,39 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                 "vulnerability_detected": False,
             }
 
-    async def _test_id_enumeration(
-        self, client: AsyncHttpClient, url: str, endpoint: dict
-    ) -> dict:
+    async def _test_id_enumeration(self, client: AsyncHttpClient, url: str, endpoint: dict) -> dict:
         """Test for context/session ID enumeration."""
         test_id = "context_id_enumeration"
-        
+
         try:
             # Try common ID patterns
             test_ids = [
-                "1", "0", "admin", "test", "default",
+                "1",
+                "0",
+                "admin",
+                "test",
+                "default",
                 "00000000-0000-0000-0000-000000000001",
-                "ctx_1", "session_1", "user_1",
+                "ctx_1",
+                "session_1",
+                "user_1",
             ]
-            
+
             accessible_ids = []
-            
+
             for test_context_id in test_ids:
                 resp = await client.get(
                     url,
                     headers={"X-Context-Id": test_context_id},
                 )
-                
+
                 # Check if we got valid data back
                 if resp.status_code == 200 and resp.body and len(resp.body) > 50:
                     # Check if response contains actual content (not just error)
                     body_lower = resp.body.lower()
                     if "error" not in body_lower and "not found" not in body_lower:
                         accessible_ids.append(test_context_id)
-            
+
             return {
                 "test_id": test_id,
                 "category": "information_leakage",
@@ -388,7 +394,7 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                 "potential_issue": len(accessible_ids) > 0,
                 "accessible_ids": accessible_ids,
             }
-            
+
         except Exception as e:
             return {
                 "test_id": test_id,
@@ -399,17 +405,17 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
     async def _test_cache_key_prediction(self, client: AsyncHttpClient, url: str) -> dict:
         """Test for predictable cache key generation."""
         test_id = "cache_key_collision"
-        
+
         try:
             # Send request with specific input
             test_input = "test query for cache key analysis"
-            
+
             resp1 = await client.post(
                 url,
                 json={"input": test_input, "query": test_input},
                 headers={"Content-Type": "application/json"},
             )
-            
+
             # Send similar request that might collide
             similar_input = "test query for cache key analysis "  # Trailing space
             resp2 = await client.post(
@@ -417,24 +423,24 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                 json={"input": similar_input, "query": similar_input},
                 headers={"Content-Type": "application/json"},
             )
-            
+
             if resp1.error or resp2.error:
                 return {
                     "test_id": test_id,
                     "error": resp1.error or resp2.error,
                     "vulnerability_detected": False,
                 }
-            
+
             # Check if responses are identical (potential key collision)
             responses_match = resp1.body == resp2.body and resp1.body
-            
+
             # Check for cache hit headers on second request
             cache_hit = any(
                 "hit" in resp2.headers.get(h, "").lower()
                 for h in resp2.headers
                 if "cache" in h.lower()
             )
-            
+
             return {
                 "test_id": test_id,
                 "category": "cache_poisoning",
@@ -444,7 +450,7 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                 "responses_identical": responses_match,
                 "cache_hit_detected": cache_hit,
             }
-            
+
         except Exception as e:
             return {
                 "test_id": test_id,
@@ -455,34 +461,36 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
     def _determine_severity(self, test_result: dict) -> str:
         """Determine finding severity."""
         category = test_result.get("category", "")
-        
-        if category == "information_leakage":
-            return "high"
-        elif category == "cache_poisoning":
+
+        if category == "information_leakage" or category == "cache_poisoning":
             return "high"
         elif category == "integrity":
             return "medium"
         elif category == "side_channel":
             return "low"
-        
+
         return "medium"
 
     def _build_description(self, test_result: dict) -> str:
         """Build description for finding."""
         parts = []
-        
+
         if test_result.get("vulnerability_detected"):
-            parts.append(f"Cache vulnerability detected: {test_result.get('description', test_result['test_id'])}.")
+            parts.append(
+                f"Cache vulnerability detected: {test_result.get('description', test_result['test_id'])}."
+            )
             parts.append(f"Category: {test_result.get('category', 'unknown')}.")
         else:
-            parts.append(f"Potential cache issue: {test_result.get('description', test_result['test_id'])}.")
-        
+            parts.append(
+                f"Potential cache issue: {test_result.get('description', test_result['test_id'])}."
+            )
+
         if test_result.get("accessible_ids"):
             parts.append(f"Accessible IDs: {', '.join(test_result['accessible_ids'][:3])}.")
-        
+
         if test_result.get("timing_data", {}).get("caching_detected"):
             parts.append("Caching behavior confirmed via timing analysis.")
-        
+
         return " ".join(parts)
 
     def _build_evidence(self, test_result: dict) -> str:
@@ -491,18 +499,20 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
             f"Test: {test_result['test_id']}",
             f"Category: {test_result.get('category', 'unknown')}",
         ]
-        
+
         if test_result.get("timing_data"):
             td = test_result["timing_data"]
-            lines.append(f"Timing: {td.get('first_request_ms')}ms -> {td.get('second_request_ms')}ms (speedup: {td.get('speedup_ratio', 0):.0%})")
-        
+            lines.append(
+                f"Timing: {td.get('first_request_ms')}ms -> {td.get('second_request_ms')}ms (speedup: {td.get('speedup_ratio', 0):.0%})"
+            )
+
         if test_result.get("indicators"):
             lines.append(f"Indicators: {', '.join(test_result['indicators'][:3])}")
-        
+
         if test_result.get("accessible_ids"):
             lines.append(f"Accessible IDs: {', '.join(test_result['accessible_ids'][:3])}")
-        
+
         if test_result.get("response_preview"):
             lines.append(f"Response preview: {test_result['response_preview'][:100]}...")
-        
+
         return "\n".join(lines)

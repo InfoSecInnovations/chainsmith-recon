@@ -12,11 +12,16 @@ Deep analysis of HTTP response headers for:
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.parsing import extract_headers_dict, extract_security_headers, extract_cors_headers, extract_server_header
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.lib.evidence import fmt_cors_evidence, fmt_header_evidence
 from app.lib.findings import build_finding
-from app.lib.evidence import fmt_header_evidence, fmt_cors_evidence
+from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.parsing import (
+    extract_cors_headers,
+    extract_headers_dict,
+    extract_security_headers,
+    extract_server_header,
+)
 
 
 class HeaderAnalysisCheck(ServiceIteratingCheck):
@@ -82,19 +87,23 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
             cors = extract_cors_headers(resp.headers)
 
             # ── Missing security headers ──────────────────────────
-            missing = [(h, msg) for h, msg in self.SECURITY_HEADERS.items() if security.get(h) is None]
+            missing = [
+                (h, msg) for h, msg in self.SECURITY_HEADERS.items() if security.get(h) is None
+            ]
             if missing:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Missing security headers ({len(missing)})",
-                    description="\n".join(f"- {h}: {msg}" for h, msg in missing),
-                    severity="low",
-                    evidence="Headers not present: " + ", ".join(h for h, _ in missing),
-                    host=service.host,
-                    discriminator="missing-security-headers",
-                    target=service,
-                    references=["OWASP Secure Headers Project"],
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Missing security headers ({len(missing)})",
+                        description="\n".join(f"- {h}: {msg}" for h, msg in missing),
+                        severity="low",
+                        evidence="Headers not present: " + ", ".join(h for h, _ in missing),
+                        host=service.host,
+                        discriminator="missing-security-headers",
+                        target=service,
+                        references=["OWASP Secure Headers Project"],
+                    )
+                )
 
             # ── CSP value grading ─────────────────────────────────
             csp = security.get("content-security-policy")
@@ -126,31 +135,35 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
             acac = (cors.get("access-control-allow-credentials") or "").lower()
             if acao == "*":
                 severity = "high" if acac == "true" else "medium"
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="CORS allows any origin",
-                    description="Wildcard CORS policy may allow cross-origin attacks",
-                    severity=severity,
-                    evidence=fmt_cors_evidence("*", acao) + f" (credentials: {acac})",
-                    host=service.host,
-                    discriminator="cors-wildcard",
-                    target=service,
-                    references=["CWE-942"],
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="CORS allows any origin",
+                        description="Wildcard CORS policy may allow cross-origin attacks",
+                        severity=severity,
+                        evidence=fmt_cors_evidence("*", acao) + f" (credentials: {acac})",
+                        host=service.host,
+                        discriminator="cors-wildcard",
+                        target=service,
+                        references=["CWE-942"],
+                    )
+                )
 
             # ── Server version disclosure ─────────────────────────
             server = extract_server_header(resp.headers) or ""
             if server and any(c.isdigit() for c in server):
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Server version disclosed: {server}",
-                    description="Server header reveals version information",
-                    severity="low",
-                    evidence=fmt_header_evidence("Server", server),
-                    host=service.host,
-                    discriminator="server-version-disclosure",
-                    target=service,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Server version disclosed: {server}",
+                        description="Server header reveals version information",
+                        severity="low",
+                        evidence=fmt_header_evidence("Server", server),
+                        host=service.host,
+                        discriminator="server-version-disclosure",
+                        target=service,
+                    )
+                )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -183,18 +196,20 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
             issues.append("missing default-src")
 
         if issues:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Weak CSP policy ({len(issues)} issue{'s' if len(issues) != 1 else ''})",
-                description="Content-Security-Policy contains weak directives:\n"
-                            + "\n".join(f"- {i}" for i in issues),
-                severity="medium",
-                evidence=fmt_header_evidence("Content-Security-Policy", csp),
-                host=service.host,
-                discriminator="csp-weak",
-                target=service,
-                references=["CWE-693", "OWASP CSP Cheat Sheet"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Weak CSP policy ({len(issues)} issue{'s' if len(issues) != 1 else ''})",
+                    description="Content-Security-Policy contains weak directives:\n"
+                    + "\n".join(f"- {i}" for i in issues),
+                    severity="medium",
+                    evidence=fmt_header_evidence("Content-Security-Policy", csp),
+                    host=service.host,
+                    discriminator="csp-weak",
+                    target=service,
+                    references=["CWE-693", "OWASP CSP Cheat Sheet"],
+                )
+            )
 
     # ── HSTS grading ─────────────────────────────────────────────────
 
@@ -208,7 +223,9 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
         if ma_match:
             max_age = int(ma_match.group(1))
             if max_age < self.HSTS_MIN_MAX_AGE:
-                issues.append(f"max-age too short: {max_age} (should be >= {self.HSTS_MIN_MAX_AGE})")
+                issues.append(
+                    f"max-age too short: {max_age} (should be >= {self.HSTS_MIN_MAX_AGE})"
+                )
         else:
             issues.append("max-age not set")
 
@@ -216,18 +233,20 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
             issues.append("missing includeSubDomains directive")
 
         if issues:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Weak HSTS configuration ({len(issues)} issue{'s' if len(issues) != 1 else ''})",
-                description="Strict-Transport-Security header is present but weak:\n"
-                            + "\n".join(f"- {i}" for i in issues),
-                severity="low",
-                evidence=fmt_header_evidence("Strict-Transport-Security", hsts),
-                host=service.host,
-                discriminator="hsts-weak",
-                target=service,
-                references=["CWE-319"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Weak HSTS configuration ({len(issues)} issue{'s' if len(issues) != 1 else ''})",
+                    description="Strict-Transport-Security header is present but weak:\n"
+                    + "\n".join(f"- {i}" for i in issues),
+                    severity="low",
+                    evidence=fmt_header_evidence("Strict-Transport-Security", hsts),
+                    host=service.host,
+                    discriminator="hsts-weak",
+                    target=service,
+                    references=["CWE-319"],
+                )
+            )
 
     # ── X-Frame-Options grading ──────────────────────────────────────
 
@@ -235,18 +254,20 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
         """Grade X-Frame-Options header value."""
         xfo_upper = xfo.strip().upper()
         if xfo_upper.startswith("ALLOW-FROM"):
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="X-Frame-Options uses deprecated ALLOW-FROM",
-                description="ALLOW-FROM is deprecated and ignored by modern browsers — "
-                            "use CSP frame-ancestors instead",
-                severity="medium",
-                evidence=fmt_header_evidence("X-Frame-Options", xfo),
-                host=service.host,
-                discriminator="xfo-allow-from",
-                target=service,
-                references=["CWE-1021"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="X-Frame-Options uses deprecated ALLOW-FROM",
+                    description="ALLOW-FROM is deprecated and ignored by modern browsers — "
+                    "use CSP frame-ancestors instead",
+                    severity="medium",
+                    evidence=fmt_header_evidence("X-Frame-Options", xfo),
+                    host=service.host,
+                    discriminator="xfo-allow-from",
+                    target=service,
+                    references=["CWE-1021"],
+                )
+            )
 
     # ── Referrer-Policy grading ──────────────────────────────────────
 
@@ -258,17 +279,19 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
         grade = self.REFERRER_GRADES.get(effective, "unknown")
 
         if grade == "weak":
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Weak Referrer-Policy: {effective}",
-                description=f"Referrer-Policy '{effective}' may leak full URLs to external sites",
-                severity="low",
-                evidence=fmt_header_evidence("Referrer-Policy", rp),
-                host=service.host,
-                discriminator="referrer-policy-weak",
-                target=service,
-                references=["CWE-200"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Weak Referrer-Policy: {effective}",
+                    description=f"Referrer-Policy '{effective}' may leak full URLs to external sites",
+                    severity="low",
+                    evidence=fmt_header_evidence("Referrer-Policy", rp),
+                    host=service.host,
+                    discriminator="referrer-policy-weak",
+                    target=service,
+                    references=["CWE-200"],
+                )
+            )
 
     # ── Permissions-Policy grading ───────────────────────────────────
 
@@ -286,15 +309,17 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
                 permissive.append(feature)
 
         if permissive:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Permissive Permissions-Policy ({len(permissive)} feature{'s' if len(permissive) != 1 else ''})",
-                description="Permissions-Policy allows all origins for sensitive features:\n"
-                            + "\n".join(f"- {f}" for f in sorted(permissive)),
-                severity="low",
-                evidence=fmt_header_evidence("Permissions-Policy", pp),
-                host=service.host,
-                discriminator="permissions-policy-permissive",
-                target=service,
-                references=["OWASP Secure Headers Project"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Permissive Permissions-Policy ({len(permissive)} feature{'s' if len(permissive) != 1 else ''})",
+                    description="Permissions-Policy allows all origins for sensitive features:\n"
+                    + "\n".join(f"- {f}" for f in sorted(permissive)),
+                    severity="low",
+                    evidence=fmt_header_evidence("Permissions-Policy", pp),
+                    host=service.host,
+                    discriminator="permissions-policy-permissive",
+                    target=service,
+                    references=["OWASP Secure Headers Project"],
+                )
+            )

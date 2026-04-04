@@ -12,19 +12,19 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
+from app.check_resolver import infer_suite
 from app.checks.base import Service
 from app.checks.chain import ChainOrchestrator
-from app.check_resolver import resolve_checks, infer_suite
 from app.config import get_config
 from app.swarm.models import (
     AgentInfo,
     AgentStatus,
     CoordinatorStatus,
     SwarmTask,
-    TaskPayload,
     TaskResultPayload,
     TaskStatus,
 )
@@ -51,14 +51,14 @@ class SwarmCoordinator:
         self.phase_tasks: dict[int, list[str]] = {}  # phase_number -> [task_ids]
         self.scan_context: dict[str, Any] = {}
         self.findings: list[dict] = []
-        self.state: Optional["AppState"] = None
-        self.scan_id: Optional[str] = None
-        self.scan_start_time: Optional[float] = None
+        self.state: AppState | None = None
+        self.scan_id: str | None = None
+        self.scan_start_time: float | None = None
         self.is_running: bool = False
 
         # Progress callbacks (set by SwarmRunner)
-        self._on_check_start: Optional[Callable] = None
-        self._on_check_complete: Optional[Callable] = None
+        self._on_check_start: Callable | None = None
+        self._on_check_complete: Callable | None = None
 
     def reset(self):
         """Clear all state for a new scan."""
@@ -120,7 +120,7 @@ class SwarmCoordinator:
         agent = self.agents.get(agent_id)
         if agent is None:
             return False
-        agent.last_heartbeat = datetime.now(timezone.utc)
+        agent.last_heartbeat = datetime.now(UTC)
         agent.status = AgentStatus.ONLINE
         return True
 
@@ -128,7 +128,7 @@ class SwarmCoordinator:
 
     def create_tasks_from_plan(
         self,
-        state: "AppState",
+        state: AppState,
         checks: list,
         context: dict,
     ):
@@ -156,7 +156,9 @@ class SwarmCoordinator:
 
         # Build target info from state
         target_info = {
-            "url": f"https://{state.target}" if not state.target.startswith("http") else state.target,
+            "url": f"https://{state.target}"
+            if not state.target.startswith("http")
+            else state.target,
             "domains": self.scan_context.get("scope_domains", [state.target]),
             "ports": cfg.scope.in_scope_ports or [],
         }
@@ -183,7 +185,9 @@ class SwarmCoordinator:
         self.is_running = True
         logger.info(
             "Created %d tasks across %d phases for scan of %s",
-            len(self.tasks), len(phases), state.target,
+            len(self.tasks),
+            len(phases),
+            state.target,
         )
 
     # ── Task assignment ──────────────────────────────────────────
@@ -195,12 +199,9 @@ class SwarmCoordinator:
 
     def _task_dependencies_met(self, task: SwarmTask) -> bool:
         """A task is assignable when all earlier phases are complete."""
-        for pn in range(1, task.phase_number):
-            if not self._phase_complete(pn):
-                return False
-        return True
+        return all(self._phase_complete(pn) for pn in range(1, task.phase_number))
 
-    def get_next_task(self, agent_id: str) -> Optional[SwarmTask]:
+    def get_next_task(self, agent_id: str) -> SwarmTask | None:
         """
         Find the next assignable task for an agent.
 
@@ -212,7 +213,8 @@ class SwarmCoordinator:
 
         # Respect agent concurrency limit
         active = sum(
-            1 for tid in agent.current_tasks
+            1
+            for tid in agent.current_tasks
             if tid in self.tasks and not self.tasks[tid].is_terminal
         )
         if active >= agent.max_concurrent:
@@ -237,7 +239,9 @@ class SwarmCoordinator:
             if self._on_check_start:
                 self._on_check_start(task.check_name)
 
-            logger.info("Assigned task %s (%s) to agent %s", task.task_id, task.check_name, agent.name)
+            logger.info(
+                "Assigned task %s (%s) to agent %s", task.task_id, task.check_name, agent.name
+            )
             return task
 
         return None
@@ -252,8 +256,7 @@ class SwarmCoordinator:
         for key, value in self.scan_context.items():
             if key == "services":
                 ctx["services"] = [
-                    svc.to_dict() if isinstance(svc, Service) else svc
-                    for svc in value
+                    svc.to_dict() if isinstance(svc, Service) else svc for svc in value
                 ]
             elif isinstance(value, list):
                 serialized = []
@@ -276,7 +279,7 @@ class SwarmCoordinator:
             return False
 
         task.status = TaskStatus.IN_PROGRESS
-        task.started_at = datetime.now(timezone.utc)
+        task.started_at = datetime.now(UTC)
         return True
 
     def complete_task(self, task_id: str, result: TaskResultPayload) -> bool:
@@ -290,7 +293,7 @@ class SwarmCoordinator:
             return False
 
         task.status = TaskStatus.COMPLETE
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = datetime.now(UTC)
         task.result = {
             "success": result.success,
             "findings_count": len(result.findings),
@@ -299,7 +302,11 @@ class SwarmCoordinator:
 
         # Merge outputs into scan_context (list-append, scalar-replace)
         for key, value in result.outputs.items():
-            if key in self.scan_context and isinstance(self.scan_context[key], list) and isinstance(value, list):
+            if (
+                key in self.scan_context
+                and isinstance(self.scan_context[key], list)
+                and isinstance(value, list)
+            ):
                 existing = {str(v) for v in self.scan_context[key]}
                 for item in value:
                     if str(item) not in existing:
@@ -330,7 +337,9 @@ class SwarmCoordinator:
 
         logger.info(
             "Task %s (%s) complete: %d findings",
-            task_id, task.check_name, len(result.findings),
+            task_id,
+            task.check_name,
+            len(result.findings),
         )
 
         self._check_scan_complete()
@@ -343,7 +352,7 @@ class SwarmCoordinator:
             return False
 
         task.status = TaskStatus.FAILED
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = datetime.now(UTC)
         task.error = error
 
         if self.state:
@@ -391,7 +400,8 @@ class SwarmCoordinator:
             self.is_running = False
             logger.info(
                 "Scan complete: %d findings from %d tasks",
-                len(self.findings), len(self.tasks),
+                len(self.findings),
+                len(self.tasks),
             )
 
     # ── Status ───────────────────────────────────────────────────
@@ -429,7 +439,7 @@ class SwarmCoordinator:
 
 # ── Module-level singleton ───────────────────────────────────────
 
-_coordinator: Optional[SwarmCoordinator] = None
+_coordinator: SwarmCoordinator | None = None
 
 
 def get_coordinator() -> SwarmCoordinator:

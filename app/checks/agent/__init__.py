@@ -35,24 +35,24 @@ References:
   https://python.langchain.com/docs/langserve
 """
 
-from app.checks.base import BaseCheck
-from app.checks.agent.discovery import AgentDiscoveryCheck
-from app.checks.agent.goal_injection import AgentGoalInjectionCheck
-from app.checks.agent.multi_agent_detection import AgentMultiAgentDetectionCheck
-from app.checks.agent.framework_version import AgentFrameworkVersionCheck
-from app.checks.agent.memory_extraction import AgentMemoryExtractionCheck
-from app.checks.agent.tool_abuse import AgentToolAbuseCheck
-from app.checks.agent.privilege_escalation import AgentPrivilegeEscalationCheck
-from app.checks.agent.loop_detection import AgentLoopDetectionCheck
 from app.checks.agent.callback_injection import AgentCallbackInjectionCheck
-from app.checks.agent.streaming_injection import AgentStreamingInjectionCheck
-from app.checks.agent.framework_exploits import AgentFrameworkExploitsCheck
-from app.checks.agent.memory_poisoning import AgentMemoryPoisoningCheck
 from app.checks.agent.context_overflow import AgentContextOverflowCheck
+from app.checks.agent.cross_injection import AgentCrossInjectionCheck
+from app.checks.agent.discovery import AgentDiscoveryCheck
+from app.checks.agent.framework_exploits import AgentFrameworkExploitsCheck
+from app.checks.agent.framework_version import AgentFrameworkVersionCheck
+from app.checks.agent.goal_injection import AgentGoalInjectionCheck
+from app.checks.agent.loop_detection import AgentLoopDetectionCheck
+from app.checks.agent.memory_extraction import AgentMemoryExtractionCheck
+from app.checks.agent.memory_poisoning import AgentMemoryPoisoningCheck
+from app.checks.agent.multi_agent_detection import AgentMultiAgentDetectionCheck
+from app.checks.agent.privilege_escalation import AgentPrivilegeEscalationCheck
 from app.checks.agent.reflection_abuse import AgentReflectionAbuseCheck
 from app.checks.agent.state_manipulation import AgentStateManipulationCheck
+from app.checks.agent.streaming_injection import AgentStreamingInjectionCheck
+from app.checks.agent.tool_abuse import AgentToolAbuseCheck
 from app.checks.agent.trust_chain import AgentTrustChainCheck
-from app.checks.agent.cross_injection import AgentCrossInjectionCheck
+from app.checks.base import BaseCheck
 
 __all__ = [
     "AgentDiscoveryCheck",

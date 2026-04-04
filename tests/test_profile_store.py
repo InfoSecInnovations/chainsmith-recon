@@ -7,20 +7,19 @@ Tests cover:
   - Legacy API compatibility
 """
 
-import pytest
 from pathlib import Path
 
-from app.preferences import (
-    Profile,
-    ProfileStore,
-    BUILTIN_PROFILES,
-    load_profile_store,
-    save_profile_store,
-    load_preferences,
-    save_preferences,
-    Preferences,
-)
+import pytest
 
+from app.preferences import (
+    BUILTIN_PROFILES,
+    Preferences,
+    ProfileStore,
+    load_preferences,
+    load_profile_store,
+    save_preferences,
+    save_profile_store,
+)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures
@@ -167,10 +166,10 @@ class TestFileIO:
         store = ProfileStore()
         store.create_profile("saved-profile", description="Saved")
         store.activate_profile("saved-profile")
-        
+
         result = save_profile_store(store, temp_prefs_path)
         assert result is True
-        
+
         loaded = load_profile_store(temp_prefs_path)
         assert loaded.active_profile == "saved-profile"
         assert "saved-profile" in loaded.profiles
@@ -180,7 +179,7 @@ class TestFileIO:
         json_path = tmp_path / "preferences.json"
         store = ProfileStore()
         store.create_profile("json-profile")
-        
+
         save_profile_store(store, json_path)
         loaded = load_profile_store(json_path)
         assert "json-profile" in loaded.profiles
@@ -196,7 +195,7 @@ class TestFileIO:
         store = ProfileStore()
         store.activate_profile("aggressive")
         save_profile_store(store, temp_prefs_path)
-        
+
         prefs = load_preferences(temp_prefs_path)
         assert prefs.network.timeout_seconds == 120.0
 
@@ -204,11 +203,11 @@ class TestFileIO:
         """Test legacy save_preferences function."""
         store = ProfileStore()
         save_profile_store(store, temp_prefs_path)
-        
+
         prefs = Preferences()
         prefs.network.timeout_seconds = 88.0
         save_preferences(prefs, temp_prefs_path)
-        
+
         loaded = load_profile_store(temp_prefs_path)
         resolved = loaded.get_active_preferences()
         assert resolved.network.timeout_seconds == 88.0

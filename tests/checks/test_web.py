@@ -26,19 +26,17 @@ Covers:
 Note: All HTTP calls are mocked to avoid actual network traffic.
 """
 
-from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.checks.base import Service
-from app.checks.web.headers import HeaderAnalysisCheck
-from app.checks.web.robots import RobotsTxtCheck
-from app.checks.web.paths import PathProbeCheck
-from app.checks.web.openapi import OpenAPICheck
 from app.checks.web.cors import CorsCheck
+from app.checks.web.headers import HeaderAnalysisCheck
+from app.checks.web.openapi import OpenAPICheck
+from app.checks.web.paths import PathProbeCheck
+from app.checks.web.robots import RobotsTxtCheck
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test Fixtures
@@ -141,15 +139,17 @@ class TestHeaderAnalysisCheckService:
     async def test_all_security_headers_present(self, sample_service):
         """No missing headers finding when all present."""
         check = HeaderAnalysisCheck()
-        response = make_response(headers={
-            "content-type": "text/html",
-            "strict-transport-security": "max-age=31536000",
-            "x-content-type-options": "nosniff",
-            "x-frame-options": "DENY",
-            "content-security-policy": "default-src 'self'",
-            "x-xss-protection": "1; mode=block",
-            "referrer-policy": "no-referrer",
-        })
+        response = make_response(
+            headers={
+                "content-type": "text/html",
+                "strict-transport-security": "max-age=31536000",
+                "x-content-type-options": "nosniff",
+                "x-frame-options": "DENY",
+                "content-security-policy": "default-src 'self'",
+                "x-xss-protection": "1; mode=block",
+                "referrer-policy": "no-referrer",
+            }
+        )
 
         with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
@@ -160,10 +160,12 @@ class TestHeaderAnalysisCheckService:
     async def test_cors_wildcard_detection(self, sample_service):
         """CORS wildcard creates finding."""
         check = HeaderAnalysisCheck()
-        response = make_response(headers={
-            "content-type": "text/html",
-            "access-control-allow-origin": "*",
-        })
+        response = make_response(
+            headers={
+                "content-type": "text/html",
+                "access-control-allow-origin": "*",
+            }
+        )
 
         with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
@@ -175,11 +177,13 @@ class TestHeaderAnalysisCheckService:
     async def test_cors_wildcard_with_credentials_high_severity(self, sample_service):
         """CORS wildcard with credentials is high severity."""
         check = HeaderAnalysisCheck()
-        response = make_response(headers={
-            "content-type": "text/html",
-            "access-control-allow-origin": "*",
-            "access-control-allow-credentials": "true",
-        })
+        response = make_response(
+            headers={
+                "content-type": "text/html",
+                "access-control-allow-origin": "*",
+                "access-control-allow-credentials": "true",
+            }
+        )
 
         with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
@@ -191,10 +195,12 @@ class TestHeaderAnalysisCheckService:
     async def test_server_version_disclosure(self, sample_service):
         """Server version disclosure creates finding."""
         check = HeaderAnalysisCheck()
-        response = make_response(headers={
-            "content-type": "text/html",
-            "server": "nginx/1.21.3",
-        })
+        response = make_response(
+            headers={
+                "content-type": "text/html",
+                "server": "nginx/1.21.3",
+            }
+        )
 
         with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
@@ -591,9 +597,11 @@ class TestCorsCheckService:
         check = CorsCheck()
         check.TEST_ORIGINS = ["https://evil.com"]
 
-        response = make_response(headers={
-            "access-control-allow-origin": "*",
-        })
+        response = make_response(
+            headers={
+                "access-control-allow-origin": "*",
+            }
+        )
 
         with patch("app.checks.web.cors.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
@@ -607,10 +615,12 @@ class TestCorsCheckService:
         check = CorsCheck()
         check.TEST_ORIGINS = ["https://evil.com"]
 
-        response = make_response(headers={
-            "access-control-allow-origin": "*",
-            "access-control-allow-credentials": "true",
-        })
+        response = make_response(
+            headers={
+                "access-control-allow-origin": "*",
+                "access-control-allow-credentials": "true",
+            }
+        )
 
         with patch("app.checks.web.cors.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
@@ -623,9 +633,11 @@ class TestCorsCheckService:
         check = CorsCheck()
         check.TEST_ORIGINS = ["https://evil.attacker.com"]
 
-        response = make_response(headers={
-            "access-control-allow-origin": "https://evil.attacker.com",
-        })
+        response = make_response(
+            headers={
+                "access-control-allow-origin": "https://evil.attacker.com",
+            }
+        )
 
         with patch("app.checks.web.cors.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
@@ -638,9 +650,11 @@ class TestCorsCheckService:
         check = CorsCheck()
         check.TEST_ORIGINS = ["null"]
 
-        response = make_response(headers={
-            "access-control-allow-origin": "null",
-        })
+        response = make_response(
+            headers={
+                "access-control-allow-origin": "null",
+            }
+        )
 
         with patch("app.checks.web.cors.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})

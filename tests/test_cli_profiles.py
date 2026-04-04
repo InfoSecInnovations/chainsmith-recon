@@ -36,9 +36,24 @@ class TestProfileList:
         client = _mock_client()
         client.list_profiles.return_value = {
             "profiles": [
-                {"name": "default", "description": "Default settings", "active": True, "built_in": True},
-                {"name": "aggressive", "description": "Fast scanning", "active": False, "built_in": True},
-                {"name": "stealth", "description": "Slow and quiet", "active": False, "built_in": True},
+                {
+                    "name": "default",
+                    "description": "Default settings",
+                    "active": True,
+                    "built_in": True,
+                },
+                {
+                    "name": "aggressive",
+                    "description": "Fast scanning",
+                    "active": False,
+                    "built_in": True,
+                },
+                {
+                    "name": "stealth",
+                    "description": "Slow and quiet",
+                    "active": False,
+                    "built_in": True,
+                },
             ],
             "count": 3,
         }
@@ -146,19 +161,25 @@ class TestProfileCreate:
         }
 
         with _patch_client(client):
-            result = runner.invoke(cli, [
-                "prefs", "profile", "create", "my-aggressive",
-                "--base", "aggressive",
-                "-d", "My aggressive variant",
-            ])
+            result = runner.invoke(
+                cli,
+                [
+                    "prefs",
+                    "profile",
+                    "create",
+                    "my-aggressive",
+                    "--base",
+                    "aggressive",
+                    "-d",
+                    "My aggressive variant",
+                ],
+            )
             assert result.exit_code == 0
             assert "Based on: aggressive" in result.output
 
     def test_create_profile_invalid_name(self, runner):
         client = _mock_client()
-        client.create_profile.side_effect = ChainsmithAPIError(
-            400, "Invalid profile name"
-        )
+        client.create_profile.side_effect = ChainsmithAPIError(400, "Invalid profile name")
 
         with _patch_client(client):
             result = runner.invoke(cli, ["prefs", "profile", "create", "has spaces"])
@@ -251,9 +272,7 @@ class TestProfileDelete:
 
     def test_delete_not_found(self, runner):
         client = _mock_client()
-        client.get_profile.side_effect = ChainsmithAPIError(
-            404, "Profile 'nonexistent' not found"
-        )
+        client.get_profile.side_effect = ChainsmithAPIError(404, "Profile 'nonexistent' not found")
 
         with _patch_client(client):
             result = runner.invoke(cli, ["prefs", "profile", "delete", "nonexistent", "-y"])
@@ -313,17 +332,22 @@ class TestProfileCopy:
         }
 
         with _patch_client(client):
-            result = runner.invoke(cli, [
-                "prefs", "profile", "copy", "aggressive", "my-copy",
-            ])
+            result = runner.invoke(
+                cli,
+                [
+                    "prefs",
+                    "profile",
+                    "copy",
+                    "aggressive",
+                    "my-copy",
+                ],
+            )
             assert result.exit_code == 0
             assert "Created profile 'my-copy'" in result.output
 
     def test_copy_source_not_found(self, runner):
         client = _mock_client()
-        client.get_profile.side_effect = ChainsmithAPIError(
-            404, "Profile 'nonexistent' not found"
-        )
+        client.get_profile.side_effect = ChainsmithAPIError(404, "Profile 'nonexistent' not found")
 
         with _patch_client(client):
             result = runner.invoke(cli, ["prefs", "profile", "copy", "nonexistent", "new"])

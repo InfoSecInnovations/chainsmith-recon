@@ -25,18 +25,15 @@ Usage in docker-compose.yml:
 
 import os
 import random
-from typing import Optional
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from app.scenario_services.common.config import (
-    SERVICE_NAME,
-    is_finding_active,
-    get_or_create_session,
     get_brand_name,
+    get_or_create_session,
+    is_finding_active,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -60,22 +57,23 @@ app = FastAPI(
 # MODELS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class Document(BaseModel):
     id: str
     content: str
-    metadata: Optional[dict] = {}
-    namespace: Optional[str] = "default"
+    metadata: dict | None = {}
+    namespace: str | None = "default"
 
 
 class SearchRequest(BaseModel):
     query: str
-    top_k: Optional[int] = 5
-    namespace: Optional[str] = "default"
+    top_k: int | None = 5
+    namespace: str | None = "default"
 
 
 class UpsertRequest(BaseModel):
     documents: list[Document]
-    namespace: Optional[str] = "default"
+    namespace: str | None = "default"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -125,6 +123,7 @@ DOCUMENTS: dict[str, list[Document]] = {
 # MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     """Add headers based on active findings."""
@@ -141,6 +140,7 @@ async def add_headers(request: Request, call_next):
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.get("/")
 async def root():
@@ -169,7 +169,7 @@ async def health():
 async def list_namespaces():
     """
     List available namespaces.
-    
+
     Finding: namespace_leak
     When active, internal namespaces are visible.
     """
@@ -182,7 +182,7 @@ async def list_namespaces():
 async def search(request: SearchRequest):
     """
     Search for similar documents.
-    
+
     Finding: namespace_leak
     When active, internal namespace is accessible.
     """
@@ -192,7 +192,7 @@ async def search(request: SearchRequest):
         raise HTTPException(403, "Access to internal namespace denied")
 
     docs = DOCUMENTS.get(namespace, [])
-    
+
     # Simulate semantic search with random scores
     results = [
         {
@@ -216,7 +216,7 @@ async def search(request: SearchRequest):
 async def upsert_documents(request: UpsertRequest):
     """
     Upsert documents to the vector store.
-    
+
     Finding: corpus_writable
     When active, allows writing documents (enables RAG poisoning).
     """
@@ -245,7 +245,7 @@ async def upsert_documents(request: UpsertRequest):
 async def delete_document(document_id: str, namespace: str = "default"):
     """
     Delete a document from the vector store.
-    
+
     Finding: corpus_writable
     When active, allows deletion.
     """
@@ -276,7 +276,7 @@ async def get_stats():
             continue
         stats[namespace] = {
             "document_count": len(docs),
-            "types": list(set(d.metadata.get("type", "unknown") for d in docs)),
+            "types": list({d.metadata.get("type", "unknown") for d in docs}),
         }
 
     return {"namespaces": stats, "version": VECTOR_VERSION}

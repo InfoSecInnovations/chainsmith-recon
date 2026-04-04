@@ -12,29 +12,27 @@ Covers all 15 new CAG checks added in Phase 14:
 Note: All HTTP calls are mocked to avoid actual network traffic.
 """
 
-import time
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.checks.base import Service
 from app.checks.cag.cache_eviction import CacheEvictionCheck
-from app.checks.cag.cache_warming import CacheWarmingCheck
-from app.checks.cag.ttl_mapping import TTLMappingCheck
-from app.checks.cag.multi_layer import MultiLayerCacheCheck
-from app.checks.cag.cache_quota import CacheQuotaCheck
-from app.checks.cag.provider_caching import ProviderCachingCheck
-from app.checks.cag.cross_user_leakage import CrossUserLeakageCheck
 from app.checks.cag.cache_key_reverse import CacheKeyReverseCheck
+from app.checks.cag.cache_poisoning import CachePoisoningCheck
+from app.checks.cag.cache_quota import CacheQuotaCheck
+from app.checks.cag.cache_warming import CacheWarmingCheck
+from app.checks.cag.cross_user_leakage import CrossUserLeakageCheck
+from app.checks.cag.distributed_cache import DistributedCacheCheck
+from app.checks.cag.injection_persistence import InjectionPersistenceCheck
+from app.checks.cag.multi_layer import MultiLayerCacheCheck
+from app.checks.cag.provider_caching import ProviderCachingCheck
 from app.checks.cag.semantic_threshold import SemanticThresholdCheck
+from app.checks.cag.serialization import SerializationCheck
 from app.checks.cag.side_channel import SideChannelCheck
 from app.checks.cag.stale_context import StaleContextCheck
-from app.checks.cag.cache_poisoning import CachePoisoningCheck
-from app.checks.cag.injection_persistence import InjectionPersistenceCheck
-from app.checks.cag.serialization import SerializationCheck
-from app.checks.cag.distributed_cache import DistributedCacheCheck
+from app.checks.cag.ttl_mapping import TTLMappingCheck
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test Fixtures
@@ -119,7 +117,9 @@ class TestCacheEvictionCheck:
         assert check.intrusive is True
 
     @pytest.mark.asyncio
-    async def test_detects_accessible_clear_endpoint(self, check, sample_service, cag_endpoint_context):
+    async def test_detects_accessible_clear_endpoint(
+        self, check, sample_service, cag_endpoint_context
+    ):
         async def mock_post(url, **kwargs):
             if "/cache/clear" in url:
                 return make_response(status_code=200, body='{"status": "cleared"}')
@@ -506,9 +506,11 @@ class TestInjectionPersistenceCheck:
     async def test_no_injection(self, check, sample_service, cag_endpoint_context):
         """No injection = info finding."""
         client = make_mock_client(
-            post=AsyncMock(return_value=make_response(
-                status_code=200, body='{"answer": "The capital of France is Paris."}'
-            ))
+            post=AsyncMock(
+                return_value=make_response(
+                    status_code=200, body='{"answer": "The capital of France is Paris."}'
+                )
+            )
         )
 
         with patch("app.checks.cag.injection_persistence.AsyncHttpClient", return_value=client):
@@ -546,7 +548,7 @@ class TestSerializationCheck:
             if "/redis" in url:
                 return make_response(
                     status_code=200,
-                    body='redis_version:7.0.0\nconnected_clients:5',
+                    body="redis_version:7.0.0\nconnected_clients:5",
                 )
             return make_response(status_code=404)
 
@@ -617,29 +619,42 @@ class TestDistributedCacheCheck:
 class TestCAGRegistry:
     def test_all_checks_registered(self):
         from app.checks.cag import get_checks
+
         checks = get_checks()
         assert len(checks) == 17
 
         names = [cls().name for cls in checks]
         expected_names = [
-            "cag_discovery", "cag_cache_probe",
-            "cag_cache_eviction", "cag_cache_warming", "cag_ttl_mapping",
-            "cag_multi_layer_cache", "cag_cache_quota", "cag_provider_caching",
-            "cag_cross_user_leakage", "cag_cache_key_reverse", "cag_semantic_threshold",
-            "cag_side_channel", "cag_stale_context",
-            "cag_cache_poisoning", "cag_injection_persistence",
-            "cag_serialization", "cag_distributed_cache",
+            "cag_discovery",
+            "cag_cache_probe",
+            "cag_cache_eviction",
+            "cag_cache_warming",
+            "cag_ttl_mapping",
+            "cag_multi_layer_cache",
+            "cag_cache_quota",
+            "cag_provider_caching",
+            "cag_cross_user_leakage",
+            "cag_cache_key_reverse",
+            "cag_semantic_threshold",
+            "cag_side_channel",
+            "cag_stale_context",
+            "cag_cache_poisoning",
+            "cag_injection_persistence",
+            "cag_serialization",
+            "cag_distributed_cache",
         ]
         assert names == expected_names
 
     def test_all_checks_have_produces(self):
         from app.checks.cag import get_checks
+
         for cls in get_checks():
             check = cls()
             assert len(check.produces) > 0, f"{check.name} has no produces"
 
     def test_all_checks_have_conditions(self):
         from app.checks.cag import get_checks
+
         for cls in get_checks():
             check = cls()
             assert len(check.conditions) > 0, f"{check.name} has no conditions"

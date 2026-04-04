@@ -10,22 +10,19 @@ Covers:
 - Metadata and serialization
 """
 
-import asyncio
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from app.checks.base import CheckResult, CheckStatus, Service
+from app.checks.base import CheckStatus
 from app.checks.simulator.simulated_check import (
+    VALID_FAILURE_MODES,
     SimulatedCheck,
     SimulationBehavior,
     SimulationConfig,
     load_simulated_check,
     load_simulated_checks_from_dir,
-    VALID_FAILURE_MODES,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SimulationBehavior Tests
@@ -101,11 +98,7 @@ class TestSimulationConfig:
             "emulates": "dns_enumeration",
             "target": "example.local",
             "disposition": "hosts_found",
-            "output": {
-                "hosts": [
-                    {"name": "www.example.local", "ip": "10.0.0.1", "port": 80}
-                ]
-            },
+            "output": {"hosts": [{"name": "www.example.local", "ip": "10.0.0.1", "port": 80}]},
         }
 
         config = SimulationConfig.from_dict(data)
@@ -364,11 +357,7 @@ class TestSimulatedCheckHostGeneration:
             emulates="dns_enumeration",
             target="example.local",
             disposition="hosts_found",
-            output={
-                "hosts": [
-                    {"name": "www.example.local", "ip": "10.0.0.1", "port": 80}
-                ]
-            },
+            output={"hosts": [{"name": "www.example.local", "ip": "10.0.0.1", "port": 80}]},
         )
         check = SimulatedCheck(config)
 
@@ -387,11 +376,7 @@ class TestSimulatedCheckHostGeneration:
             emulates="dns_enumeration",
             target="example.local",
             disposition="hosts_found",
-            output={
-                "hosts": [
-                    {"name": "www.example.local", "ip": "192.168.1.1", "port": 443}
-                ]
-            },
+            output={"hosts": [{"name": "www.example.local", "ip": "192.168.1.1", "port": 443}]},
         )
         check = SimulatedCheck(config)
 
@@ -410,7 +395,12 @@ class TestSimulatedCheckHostGeneration:
             disposition="hosts_found",
             output={
                 "hosts": [
-                    {"name": "secure.example.local", "ip": "10.0.0.1", "port": 443, "scheme": "https"}
+                    {
+                        "name": "secure.example.local",
+                        "ip": "10.0.0.1",
+                        "port": 443,
+                        "scheme": "https",
+                    }
                 ]
             },
         )
@@ -449,11 +439,7 @@ class TestSimulatedCheckHostGeneration:
             emulates="dns_enumeration",
             target="example.local",
             disposition="hosts_found",
-            output={
-                "hosts": [
-                    {"name": "www.example.local", "ip": "10.0.0.1", "port": 80}
-                ]
-            },
+            output={"hosts": [{"name": "www.example.local", "ip": "10.0.0.1", "port": 80}]},
         )
         check = SimulatedCheck(config)
 
@@ -564,11 +550,7 @@ class TestSimulatedCheckDnsFormat:
             emulates="port_scan",  # Not dns_enumeration
             target="example.local",
             disposition="ports_found",
-            output={
-                "hosts": [
-                    {"host": "www.example.local", "ip": "10.0.1.10", "port": 8080}
-                ]
-            },
+            output={"hosts": [{"host": "www.example.local", "ip": "10.0.1.10", "port": 8080}]},
         )
         check = SimulatedCheck(config)
 

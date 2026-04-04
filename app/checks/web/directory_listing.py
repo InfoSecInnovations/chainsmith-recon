@@ -8,10 +8,10 @@ Detects Apache, nginx, IIS, and Python SimpleHTTPServer signatures.
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class DirectoryListingCheck(ServiceIteratingCheck):
@@ -43,10 +43,27 @@ class DirectoryListingCheck(ServiceIteratingCheck):
 
     # Sensitive file extensions in listings
     SENSITIVE_EXTENSIONS = [
-        ".py", ".env", ".json", ".yaml", ".yml", ".toml", ".conf", ".cfg",
-        ".key", ".pem", ".sql", ".db", ".sqlite",
-        ".pt", ".onnx", ".safetensors", ".pkl", ".h5",  # Model files
-        ".bak", ".old", ".backup",
+        ".py",
+        ".env",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".conf",
+        ".cfg",
+        ".key",
+        ".pem",
+        ".sql",
+        ".db",
+        ".sqlite",
+        ".pt",
+        ".onnx",
+        ".safetensors",
+        ".pkl",
+        ".h5",  # Model files
+        ".bak",
+        ".old",
+        ".backup",
     ]
 
     # Paths to check for directory listing
@@ -90,22 +107,28 @@ class DirectoryListingCheck(ServiceIteratingCheck):
                         severity = "medium"
                         title = f"Directory listing enabled: {service.host}{path}"
 
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=title,
-                        description=f"Directory listing enabled at {path}"
-                                    + (f" — sensitive files visible: {', '.join(sensitive_files[:5])}" if sensitive_files else ""),
-                        severity=severity,
-                        evidence=fmt_status_evidence(url, 200, resp.body[:300]),
-                        host=service.host,
-                        discriminator=f"listing-{path.replace('/', '-').strip('-') or 'root'}",
-                        target=service,
-                        target_url=url,
-                        raw_data={
-                            "path": path,
-                            "sensitive_files": sensitive_files[:20],
-                        },
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=title,
+                            description=f"Directory listing enabled at {path}"
+                            + (
+                                f" — sensitive files visible: {', '.join(sensitive_files[:5])}"
+                                if sensitive_files
+                                else ""
+                            ),
+                            severity=severity,
+                            evidence=fmt_status_evidence(url, 200, resp.body[:300]),
+                            host=service.host,
+                            discriminator=f"listing-{path.replace('/', '-').strip('-') or 'root'}",
+                            target=service,
+                            target_url=url,
+                            raw_data={
+                                "path": path,
+                                "sensitive_files": sensitive_files[:20],
+                            },
+                        )
+                    )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")

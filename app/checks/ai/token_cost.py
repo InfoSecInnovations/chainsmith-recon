@@ -6,10 +6,10 @@ Test if expensive operations can be triggered beyond simple rate limiting.
 
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.lib.ai_helpers import format_chat_request_with_extra
 from app.lib.findings import build_finding
-from app.lib.ai_helpers import format_chat_request_with_extra, extract_response_text
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
 
@@ -82,9 +82,7 @@ class TokenCostExhaustionCheck(BaseCheck):
 
         return result
 
-    async def _test_cost(
-        self, url: str, service: Service, api_format: str
-    ) -> CheckResult:
+    async def _test_cost(self, url: str, service: Service, api_format: str) -> CheckResult:
         result = CheckResult(success=True)
         accepted = []
         rejected = []
@@ -96,12 +94,11 @@ class TokenCostExhaustionCheck(BaseCheck):
                 for test_name, extra_params, prompt, desc in self.COST_TESTS:
                     await self._rate_limit()
 
-                    body = format_chat_request_with_extra(
-                        prompt, api_format, **extra_params
-                    )
+                    body = format_chat_request_with_extra(prompt, api_format, **extra_params)
 
                     resp = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
 
@@ -116,11 +113,13 @@ class TokenCostExhaustionCheck(BaseCheck):
                         if usage and isinstance(usage, dict):
                             usage_data = usage
 
-                        accepted.append({
-                            "test": test_name,
-                            "description": desc,
-                            "usage": usage,
-                        })
+                        accepted.append(
+                            {
+                                "test": test_name,
+                                "description": desc,
+                                "usage": usage,
+                            }
+                        )
                     elif resp.status_code in (400, 413, 422):
                         # Parameter rejected or payload too large
                         rejected.append(test_name)
@@ -143,38 +142,50 @@ class TokenCostExhaustionCheck(BaseCheck):
         )
 
         if extreme_accepted:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="No output token limit enforced",
-                description="Endpoint accepted extreme max_tokens values — cost exhaustion possible",
-                severity="high",
-                evidence=f"Accepted: {', '.join(a['test'] for a in accepted)}",
-                host=host, discriminator="no-token-limit",
-                target=service, target_url=url,
-                raw_data={"accepted": accepted, "usage": usage_data},
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="No output token limit enforced",
+                    description="Endpoint accepted extreme max_tokens values — cost exhaustion possible",
+                    severity="high",
+                    evidence=f"Accepted: {', '.join(a['test'] for a in accepted)}",
+                    host=host,
+                    discriminator="no-token-limit",
+                    target=service,
+                    target_url=url,
+                    raw_data={"accepted": accepted, "usage": usage_data},
+                    references=self.references,
+                )
+            )
         elif accepted:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Large completions accepted ({len(accepted)} tests)",
-                description="Some expensive operations are possible",
-                severity="medium",
-                evidence=f"Accepted: {', '.join(a['test'] for a in accepted)}",
-                host=host, discriminator="large-completions",
-                target=service, target_url=url,
-                raw_data={"accepted": accepted},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Large completions accepted ({len(accepted)} tests)",
+                    description="Some expensive operations are possible",
+                    severity="medium",
+                    evidence=f"Accepted: {', '.join(a['test'] for a in accepted)}",
+                    host=host,
+                    discriminator="large-completions",
+                    target=service,
+                    target_url=url,
+                    raw_data={"accepted": accepted},
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Token limits enforced",
-                description="Cost exhaustion tests were rejected",
-                severity="info",
-                evidence=f"Rejected: {', '.join(rejected)}",
-                host=host, discriminator="token-limits-ok",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Token limits enforced",
+                    description="Cost exhaustion tests were rejected",
+                    severity="info",
+                    evidence=f"Rejected: {', '.join(rejected)}",
+                    host=host,
+                    discriminator="token-limits-ok",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
         result.outputs[f"token_cost_{service.port}"] = cost_info
         return result

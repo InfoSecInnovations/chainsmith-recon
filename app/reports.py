@@ -9,10 +9,10 @@ All data is pulled from the database via repositories.
 import html as html_lib
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from app.db.repositories import (
+    SEVERITY_WEIGHTS,
     ChainRepository,
     CheckLogRepository,
     ComparisonRepository,
@@ -21,7 +21,6 @@ from app.db.repositories import (
     FindingRepository,
     ScanRepository,
     TrendRepository,
-    SEVERITY_WEIGHTS,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,7 +56,7 @@ _SARIF_SEV_RANK = {
 
 
 def _count_by_severity(findings: list[dict]) -> dict:
-    counts = {s: 0 for s in SEVERITY_ORDER}
+    counts = dict.fromkeys(SEVERITY_ORDER, 0)
     for f in findings:
         sev = f.get("severity", "info").lower()
         if sev in counts:
@@ -247,7 +246,7 @@ def _technical_markdown(scan, findings, chains, severity_counts, risk, coverage)
 def _technical_json(scan, findings, chains, severity_counts, risk, coverage) -> str:
     report = {
         "report_type": "technical",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "scan": scan,
         "summary": {
             "by_severity": severity_counts,
@@ -380,7 +379,7 @@ def _delta_markdown(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) ->
 def _delta_json(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str:
     report = {
         "report_type": "delta",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "scan_a": scan_a,
         "scan_b": scan_b,
         "summary": {
@@ -469,7 +468,7 @@ def _wrap_html(title: str, body: str) -> str:
     return _HTML_TEMPLATE.format(
         title=_esc(title),
         body=body,
-        timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        timestamp=datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
     )
 
 
@@ -532,20 +531,21 @@ def _pdf_rewrite_stat_grids(html_content: str) -> str:
         # Extract each stat div
         stats = re.findall(
             r'<div class="stat">(.*?)</div>\s*(?=<div class="stat">|$)',
-            inner, re.DOTALL,
+            inner,
+            re.DOTALL,
         )
         if not stats:
             # Fallback: try to capture stat blocks with nested divs
             stats = re.findall(
                 r'<div class="stat"><div class="stat-value[^"]*">(.*?)</div>'
                 r'<div class="stat-label">(.*?)</div></div>',
-                inner, re.DOTALL,
+                inner,
+                re.DOTALL,
             )
             if stats:
                 cells = "".join(
-                    f'<td><div class="stat-value">{v}</div>'
-                    f'<div class="stat-label">{l}</div></td>'
-                    for v, l in stats
+                    f'<td><div class="stat-value">{v}</div><div class="stat-label">{label}</div></td>'
+                    for v, label in stats
                 )
                 return f'<div class="stat-grid"><table><tr>{cells}</tr></table></div>'
         # If we got raw inner content for each stat, keep it
@@ -556,36 +556,49 @@ def _pdf_rewrite_stat_grids(html_content: str) -> str:
 
     return re.sub(
         r'<div class="stat-grid">(.*?)</div>\s*(?=<h[123]|<div class="(?!stat)|<table|$|</body)',
-        _grid_to_table, html_content, flags=re.DOTALL,
+        _grid_to_table,
+        html_content,
+        flags=re.DOTALL,
     )
 
 
 def _pdf_resolve_css_vars(html_content: str) -> str:
     """Replace CSS var() references with literal color values for xhtml2pdf."""
     import re
+
     var_map = {
-        "--bg": "#ffffff", "--surface": "#f5f5f7", "--border": "#d1d5db",
-        "--text": "#1a1a2e", "--muted": "#6b7280", "--accent": "#2563eb",
-        "--critical": "#dc2626", "--high": "#ea580c", "--medium": "#d97706",
-        "--low": "#2563eb", "--info": "#6b7280",
-        "--green": "#059669", "--red": "#dc2626",
+        "--bg": "#ffffff",
+        "--surface": "#f5f5f7",
+        "--border": "#d1d5db",
+        "--text": "#1a1a2e",
+        "--muted": "#6b7280",
+        "--accent": "#2563eb",
+        "--critical": "#dc2626",
+        "--high": "#ea580c",
+        "--medium": "#d97706",
+        "--low": "#2563eb",
+        "--info": "#6b7280",
+        "--green": "#059669",
+        "--red": "#dc2626",
     }
+
     def _replace_var(m):
         name = m.group(1).strip()
         return var_map.get(name, "#000000")
-    return re.sub(r'var\(\s*(--[\w-]+)\s*\)', _replace_var, html_content)
+
+    return re.sub(r"var\(\s*(--[\w-]+)\s*\)", _replace_var, html_content)
 
 
 def _html_to_pdf(html_content: str) -> bytes:
     """Convert HTML report to PDF with print-optimised light theme."""
     import io
+
     try:
         from xhtml2pdf import pisa
-    except ImportError:
+    except ImportError as err:
         raise RuntimeError(
-            "xhtml2pdf is required for PDF output. "
-            "Install it with: pip install xhtml2pdf"
-        )
+            "xhtml2pdf is required for PDF output. Install it with: pip install xhtml2pdf"
+        ) from err
     # Inject print CSS (replaces the dark-theme screen styles)
     pdf_html = html_content.replace("</head>", _PRINT_CSS + "</head>")
     # Resolve any remaining CSS variable references
@@ -619,16 +632,20 @@ def _technical_html(scan, findings, chains, severity_counts, risk, coverage) -> 
     parts = [
         "<h1>Technical Security Report</h1>",
         f'<div class="meta"><span>Target: <strong>{target}</strong></span>'
-        f'<span>Scan: <code>{_esc(scan["id"])}</code></span>'
+        f"<span>Scan: <code>{_esc(scan['id'])}</code></span>"
         f"<span>Date: {date}</span><span>Duration: {duration}</span></div>",
         '<div class="stat-grid">',
     ]
     for sev in SEVERITY_ORDER:
         c = severity_counts[sev]
-        parts.append(f'<div class="stat"><div class="stat-value">{c}</div>'
-                     f'<div class="stat-label">{sev}</div></div>')
-    parts.append(f'<div class="stat"><div class="stat-value">{risk}</div>'
-                 f'<div class="stat-label">Risk Score</div></div>')
+        parts.append(
+            f'<div class="stat"><div class="stat-value">{c}</div>'
+            f'<div class="stat-label">{sev}</div></div>'
+        )
+    parts.append(
+        f'<div class="stat"><div class="stat-value">{risk}</div>'
+        f'<div class="stat-label">Risk Score</div></div>'
+    )
     parts.append("</div>")
 
     # Findings
@@ -646,9 +663,13 @@ def _technical_html(scan, findings, chains, severity_counts, risk, coverage) -> 
             override_cls = " override" if f.get("override") else ""
             override_tag = ""
             if f.get("override"):
-                override_tag = f' <span class="badge badge-info">{_esc(f["override"]["status"])}</span>'
+                override_tag = (
+                    f' <span class="badge badge-info">{_esc(f["override"]["status"])}</span>'
+                )
             parts.append(f'<div class="card{override_cls}">')
-            parts.append(f'<div class="card-title">{_severity_badge(sev)} {_esc(f.get("title", "Untitled"))}{override_tag}</div>')
+            parts.append(
+                f'<div class="card-title">{_severity_badge(sev)} {_esc(f.get("title", "Untitled"))}{override_tag}</div>'
+            )
             if f.get("description"):
                 parts.append(f'<div class="card-detail">{_esc(f["description"])}</div>')
             details = []
@@ -668,17 +689,21 @@ def _technical_html(scan, findings, chains, severity_counts, risk, coverage) -> 
     if chains:
         parts.append(f"<h2>Attack Chains ({len(chains)})</h2>")
         for c in chains:
-            parts.append(f'<div class="card"><div class="card-title">'
-                         f'{_severity_badge(c.get("severity", "info"))} {_esc(c.get("title", "Untitled"))}</div>'
-                         f'<div class="card-detail">Source: {_esc(c.get("source", "N/A"))}</div>')
+            parts.append(
+                f'<div class="card"><div class="card-title">'
+                f"{_severity_badge(c.get('severity', 'info'))} {_esc(c.get('title', 'Untitled'))}</div>"
+                f'<div class="card-detail">Source: {_esc(c.get("source", "N/A"))}</div>'
+            )
             if c.get("description"):
                 parts.append(f'<div class="card-detail">{_esc(c["description"])}</div>')
             parts.append("</div>")
 
     # Coverage
     parts.append("<h2>Check Coverage</h2>")
-    parts.append(f'<p>Completed: {coverage["completed"]}/{coverage["total"]} &middot; '
-                 f'Failed: {coverage["failed"]} &middot; Skipped: {coverage["skipped"]}</p>')
+    parts.append(
+        f"<p>Completed: {coverage['completed']}/{coverage['total']} &middot; "
+        f"Failed: {coverage['failed']} &middot; Skipped: {coverage['skipped']}</p>"
+    )
 
     return _wrap_html(f"Technical Report — {target}", "\n".join(parts))
 
@@ -693,7 +718,7 @@ def _delta_html(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str
     parts = [
         "<h1>Delta Report</h1>",
         f'<div class="meta"><span>Scan A: <code>{_esc(scan_a["id"])}</code></span>'
-        f'<span>Scan B: <code>{_esc(scan_b["id"])}</code></span>'
+        f"<span>Scan B: <code>{_esc(scan_b['id'])}</code></span>"
         f"<span>Target: <strong>{target}</strong></span></div>",
         '<div class="stat-grid">',
         f'<div class="stat"><div class="stat-value trend-up">+{new_count}</div><div class="stat-label">New</div></div>',
@@ -706,12 +731,14 @@ def _delta_html(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str
 
     # Severity comparison table
     parts.append("<h2>Severity Comparison</h2>")
-    parts.append('<table><tr><th>Severity</th><th>Scan A</th><th>Scan B</th><th>Change</th></tr>')
+    parts.append("<table><tr><th>Severity</th><th>Scan A</th><th>Scan B</th><th>Change</th></tr>")
     for sev in SEVERITY_ORDER:
         a, b = sev_a.get(sev, 0), sev_b.get(sev, 0)
         diff = b - a
         diff_str = f"+{diff}" if diff > 0 else str(diff)
-        parts.append(f"<tr><td>{_severity_badge(sev)}</td><td>{a}</td><td>{b}</td><td>{diff_str}</td></tr>")
+        parts.append(
+            f"<tr><td>{_severity_badge(sev)}</td><td>{a}</td><td>{b}</td><td>{diff_str}</td></tr>"
+        )
     parts.append("</table>")
 
     # New findings
@@ -719,15 +746,19 @@ def _delta_html(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str
     if new_findings:
         parts.append(f"<h2>New Findings ({len(new_findings)})</h2>")
         for f in new_findings:
-            parts.append(f'<div class="card"><div class="card-title">'
-                         f'{_severity_badge(f.get("severity", "info"))} {_esc(f.get("title", "Untitled"))}</div></div>')
+            parts.append(
+                f'<div class="card"><div class="card-title">'
+                f"{_severity_badge(f.get('severity', 'info'))} {_esc(f.get('title', 'Untitled'))}</div></div>"
+            )
 
     resolved_findings = comparison.get("resolved_findings", [])
     if resolved_findings:
         parts.append(f"<h2>Resolved Findings ({len(resolved_findings)})</h2>")
         for f in resolved_findings:
-            parts.append(f'<div class="card override"><div class="card-title">'
-                         f'{_severity_badge(f.get("severity", "info"))} {_esc(f.get("title", "Untitled"))}</div></div>')
+            parts.append(
+                f'<div class="card override"><div class="card-title">'
+                f"{_severity_badge(f.get('severity', 'info'))} {_esc(f.get('title', 'Untitled'))}</div></div>"
+            )
 
     if not new_findings and not resolved_findings:
         parts.append("<p><em>No changes between scans.</em></p>")
@@ -739,7 +770,9 @@ def _delta_html(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str
 
 
 async def generate_executive_report(
-    scan_id: str, fmt: str = "md", engagement_id: Optional[str] = None,
+    scan_id: str,
+    fmt: str = "md",
+    engagement_id: str | None = None,
 ) -> dict:
     """
     Generate an executive summary report for a scan.
@@ -763,8 +796,8 @@ async def generate_executive_report(
     # Top 5 findings by severity weight
     def _sev_weight(f):
         return SEVERITY_WEIGHTS.get(f.get("severity", "info").lower(), 0)
-    active_findings = [f for f in findings
-                       if f.get("fingerprint") not in override_map]
+
+    active_findings = [f for f in findings if f.get("fingerprint") not in override_map]
     top_findings = sorted(active_findings, key=_sev_weight, reverse=True)[:5]
 
     # Previous scan for trend (same target, completed before this one)
@@ -838,18 +871,26 @@ def _executive_markdown(d: dict) -> str:
 
     # Risk with trend
     if d["prev_risk"] is not None:
-        direction = "improved" if risk < d["prev_risk"] else "worsened" if risk > d["prev_risk"] else "unchanged"
+        direction = (
+            "improved"
+            if risk < d["prev_risk"]
+            else "worsened"
+            if risk > d["prev_risk"]
+            else "unchanged"
+        )
         lines.append(f"**Risk Score:** {risk} (previously {d['prev_risk']} — {direction})")
     else:
         lines.append(f"**Risk Score:** {risk}")
 
-    lines.extend([
-        f"**Active Findings:** {total_active}",
-        f"**Overridden (accepted/false positive):** {d['overridden_count']}",
-        "",
-        "| Severity | Count |",
-        "|----------|-------|",
-    ])
+    lines.extend(
+        [
+            f"**Active Findings:** {total_active}",
+            f"**Overridden (accepted/false positive):** {d['overridden_count']}",
+            "",
+            "| Severity | Count |",
+            "|----------|-------|",
+        ]
+    )
     for s in SEVERITY_ORDER:
         lines.append(f"| {s.capitalize()} | {sev[s]} |")
 
@@ -878,7 +919,7 @@ def _executive_markdown(d: dict) -> str:
 def _executive_json(d: dict) -> str:
     report = {
         "report_type": "executive",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "scan": d["scan"],
         "target": d["target"],
         "summary": {
@@ -902,24 +943,34 @@ def _executive_html(d: dict) -> str:
     parts = [
         "<h1>Executive Summary</h1>",
         f'<div class="meta"><span>Target: <strong>{target}</strong></span>'
-        f'<span>Scan: <code>{_esc(scan["id"])}</code></span>'
-        f'<span>Date: {_esc(scan.get("started_at", "N/A"))}</span></div>',
+        f"<span>Scan: <code>{_esc(scan['id'])}</code></span>"
+        f"<span>Date: {_esc(scan.get('started_at', 'N/A'))}</span></div>",
         '<div class="stat-grid">',
     ]
     # Risk stat with trend
     if d["prev_risk"] is not None:
-        parts.append(f'<div class="stat"><div class="stat-value">{risk}</div>'
-                     f'<div class="stat-label">Risk Score {_trend_arrow(d["prev_risk"], risk)}</div></div>')
+        parts.append(
+            f'<div class="stat"><div class="stat-value">{risk}</div>'
+            f'<div class="stat-label">Risk Score {_trend_arrow(d["prev_risk"], risk)}</div></div>'
+        )
     else:
-        parts.append(f'<div class="stat"><div class="stat-value">{risk}</div>'
-                     f'<div class="stat-label">Risk Score</div></div>')
-    parts.append(f'<div class="stat"><div class="stat-value">{d["total_active"]}</div>'
-                 f'<div class="stat-label">Active Findings</div></div>')
+        parts.append(
+            f'<div class="stat"><div class="stat-value">{risk}</div>'
+            f'<div class="stat-label">Risk Score</div></div>'
+        )
+    parts.append(
+        f'<div class="stat"><div class="stat-value">{d["total_active"]}</div>'
+        f'<div class="stat-label">Active Findings</div></div>'
+    )
     for s in ["critical", "high"]:
-        parts.append(f'<div class="stat"><div class="stat-value">{sev[s]}</div>'
-                     f'<div class="stat-label">{s}</div></div>')
-    parts.append(f'<div class="stat"><div class="stat-value">{d["overridden_count"]}</div>'
-                 f'<div class="stat-label">Overridden</div></div>')
+        parts.append(
+            f'<div class="stat"><div class="stat-value">{sev[s]}</div>'
+            f'<div class="stat-label">{s}</div></div>'
+        )
+    parts.append(
+        f'<div class="stat"><div class="stat-value">{d["overridden_count"]}</div>'
+        f'<div class="stat-label">Overridden</div></div>'
+    )
     parts.append("</div>")
 
     # Severity table
@@ -933,8 +984,10 @@ def _executive_html(d: dict) -> str:
     parts.append("<h2>Top Findings</h2>")
     if d["top_findings"]:
         for f in d["top_findings"]:
-            parts.append(f'<div class="card"><div class="card-title">'
-                         f'{_severity_badge(f.get("severity", "info"))} {_esc(f.get("title", "Untitled"))}</div>')
+            parts.append(
+                f'<div class="card"><div class="card-title">'
+                f"{_severity_badge(f.get('severity', 'info'))} {_esc(f.get('title', 'Untitled'))}</div>"
+            )
             if f.get("description"):
                 parts.append(f'<div class="card-detail">{_esc(f["description"])}</div>')
             parts.append("</div>")
@@ -948,7 +1001,9 @@ def _executive_html(d: dict) -> str:
 
 
 async def generate_compliance_report(
-    scan_id: str, fmt: str = "md", engagement_id: Optional[str] = None,
+    scan_id: str,
+    fmt: str = "md",
+    engagement_id: str | None = None,
 ) -> dict:
     """
     Generate a compliance report for a scan (optionally within an engagement).
@@ -982,22 +1037,26 @@ async def generate_compliance_report(
         fp = f.get("fingerprint")
         if fp and fp in override_map:
             ov = override_map[fp]
-            override_audit.append({
-                "finding_title": f.get("title", "Untitled"),
-                "fingerprint": fp,
-                "status": ov["status"],
-                "reason": ov.get("reason", ""),
-                "overridden_at": ov.get("overridden_at", ""),
-            })
+            override_audit.append(
+                {
+                    "finding_title": f.get("title", "Untitled"),
+                    "fingerprint": fp,
+                    "status": ov["status"],
+                    "reason": ov.get("reason", ""),
+                    "overridden_at": ov.get("overridden_at", ""),
+                }
+            )
 
     # Check execution details from log
     checks_run = []
     for entry in log_entries:
         if entry.get("event") == "started":
-            checks_run.append({
-                "check": entry.get("check", "unknown"),
-                "suite": entry.get("suite", "unknown"),
-            })
+            checks_run.append(
+                {
+                    "check": entry.get("check", "unknown"),
+                    "suite": entry.get("suite", "unknown"),
+                }
+            )
 
     data = {
         "scan": scan,
@@ -1045,27 +1104,31 @@ def _compliance_markdown(d: dict) -> str:
     ]
 
     if engagement:
-        lines.extend([
-            "",
-            "## Engagement",
-            "",
-            f"**Name:** {engagement.get('name', 'N/A')}",
-            f"**Client:** {engagement.get('client_name', 'N/A')}",
-            f"**Status:** {engagement.get('status', 'N/A')}",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Engagement",
+                "",
+                f"**Name:** {engagement.get('name', 'N/A')}",
+                f"**Client:** {engagement.get('client_name', 'N/A')}",
+                f"**Status:** {engagement.get('status', 'N/A')}",
+            ]
+        )
 
-    lines.extend([
-        "",
-        "---",
-        "",
-        "## Scope and Coverage",
-        "",
-        f"**Checks Executed:** {cov['total']}",
-        f"**Completed:** {cov['completed']}",
-        f"**Failed:** {cov['failed']}",
-        f"**Skipped:** {cov['skipped']}",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "---",
+            "",
+            "## Scope and Coverage",
+            "",
+            f"**Checks Executed:** {cov['total']}",
+            f"**Completed:** {cov['completed']}",
+            f"**Failed:** {cov['failed']}",
+            f"**Skipped:** {cov['skipped']}",
+            "",
+        ]
+    )
 
     if d["checks_run"]:
         lines.append("### Checks Performed")
@@ -1076,26 +1139,30 @@ def _compliance_markdown(d: dict) -> str:
             lines.append(f"| {c['check']} | {c['suite']} |")
         lines.append("")
 
-    lines.extend([
-        "## Finding Summary",
-        "",
-        f"**Total Findings:** {d['total_findings']}",
-        f"**Overridden:** {d['overridden_count']}",
-        "",
-        "| Severity | Count |",
-        "|----------|-------|",
-    ])
+    lines.extend(
+        [
+            "## Finding Summary",
+            "",
+            f"**Total Findings:** {d['total_findings']}",
+            f"**Overridden:** {d['overridden_count']}",
+            "",
+            "| Severity | Count |",
+            "|----------|-------|",
+        ]
+    )
     for s in SEVERITY_ORDER:
         lines.append(f"| {s.capitalize()} | {d['severity_counts'][s]} |")
 
     if d["override_audit"]:
-        lines.extend([
-            "",
-            "## Override Audit Trail",
-            "",
-            "| Finding | Status | Reason | Date |",
-            "|---------|--------|--------|------|",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Override Audit Trail",
+                "",
+                "| Finding | Status | Reason | Date |",
+                "|---------|--------|--------|------|",
+            ]
+        )
         for ov in d["override_audit"]:
             lines.append(
                 f"| {ov['finding_title']} | {ov['status']} | "
@@ -1109,7 +1176,7 @@ def _compliance_markdown(d: dict) -> str:
 def _compliance_json(d: dict) -> str:
     report = {
         "report_type": "compliance",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "scan": d["scan"],
         "engagement": d["engagement"],
         "target": d["target"],
@@ -1139,23 +1206,33 @@ def _compliance_html(d: dict) -> str:
     parts = [
         "<h1>Compliance Report</h1>",
         f'<div class="meta"><span>Target: <strong>{target}</strong></span>'
-        f'<span>Scan: <code>{_esc(scan["id"])}</code></span>'
-        f'<span>Started: {_esc(scan.get("started_at", "N/A"))}</span>'
-        f'<span>Status: {_esc(scan.get("status", "N/A"))}</span></div>',
+        f"<span>Scan: <code>{_esc(scan['id'])}</code></span>"
+        f"<span>Started: {_esc(scan.get('started_at', 'N/A'))}</span>"
+        f"<span>Status: {_esc(scan.get('status', 'N/A'))}</span></div>",
     ]
 
     if engagement:
-        parts.append(f'<div class="card"><div class="card-title">Engagement: {_esc(engagement.get("name", "N/A"))}</div>'
-                     f'<div class="card-detail">Client: {_esc(engagement.get("client_name", "N/A"))} &middot; '
-                     f'Status: {_esc(engagement.get("status", "N/A"))}</div></div>')
+        parts.append(
+            f'<div class="card"><div class="card-title">Engagement: {_esc(engagement.get("name", "N/A"))}</div>'
+            f'<div class="card-detail">Client: {_esc(engagement.get("client_name", "N/A"))} &middot; '
+            f"Status: {_esc(engagement.get('status', 'N/A'))}</div></div>"
+        )
 
     # Coverage stats
     parts.append("<h2>Scope and Coverage</h2>")
     parts.append('<div class="stat-grid">')
-    parts.append(f'<div class="stat"><div class="stat-value">{cov["total"]}</div><div class="stat-label">Checks Executed</div></div>')
-    parts.append(f'<div class="stat"><div class="stat-value">{cov["completed"]}</div><div class="stat-label">Completed</div></div>')
-    parts.append(f'<div class="stat"><div class="stat-value">{cov["failed"]}</div><div class="stat-label">Failed</div></div>')
-    parts.append(f'<div class="stat"><div class="stat-value">{cov["skipped"]}</div><div class="stat-label">Skipped</div></div>')
+    parts.append(
+        f'<div class="stat"><div class="stat-value">{cov["total"]}</div><div class="stat-label">Checks Executed</div></div>'
+    )
+    parts.append(
+        f'<div class="stat"><div class="stat-value">{cov["completed"]}</div><div class="stat-label">Completed</div></div>'
+    )
+    parts.append(
+        f'<div class="stat"><div class="stat-value">{cov["failed"]}</div><div class="stat-label">Failed</div></div>'
+    )
+    parts.append(
+        f'<div class="stat"><div class="stat-value">{cov["skipped"]}</div><div class="stat-label">Skipped</div></div>'
+    )
     parts.append("</div>")
 
     if d["checks_run"]:
@@ -1168,9 +1245,13 @@ def _compliance_html(d: dict) -> str:
     # Finding summary
     parts.append("<h2>Finding Summary</h2>")
     parts.append('<div class="stat-grid">')
-    parts.append(f'<div class="stat"><div class="stat-value">{d["total_findings"]}</div><div class="stat-label">Total</div></div>')
+    parts.append(
+        f'<div class="stat"><div class="stat-value">{d["total_findings"]}</div><div class="stat-label">Total</div></div>'
+    )
     for s in SEVERITY_ORDER:
-        parts.append(f'<div class="stat"><div class="stat-value">{d["severity_counts"][s]}</div><div class="stat-label">{s}</div></div>')
+        parts.append(
+            f'<div class="stat"><div class="stat-value">{d["severity_counts"][s]}</div><div class="stat-label">{s}</div></div>'
+        )
     parts.append("</div>")
 
     # Override audit
@@ -1178,8 +1259,10 @@ def _compliance_html(d: dict) -> str:
         parts.append("<h2>Override Audit Trail</h2>")
         parts.append("<table><tr><th>Finding</th><th>Status</th><th>Reason</th><th>Date</th></tr>")
         for ov in d["override_audit"]:
-            parts.append(f"<tr><td>{_esc(ov['finding_title'])}</td><td>{_esc(ov['status'])}</td>"
-                         f"<td>{_esc(ov['reason'] or 'N/A')}</td><td>{_esc(ov['overridden_at'] or 'N/A')}</td></tr>")
+            parts.append(
+                f"<tr><td>{_esc(ov['finding_title'])}</td><td>{_esc(ov['status'])}</td>"
+                f"<td>{_esc(ov['reason'] or 'N/A')}</td><td>{_esc(ov['overridden_at'] or 'N/A')}</td></tr>"
+            )
         parts.append("</table>")
 
     return _wrap_html(f"Compliance Report — {target}", "\n".join(parts))
@@ -1190,8 +1273,8 @@ def _compliance_html(d: dict) -> str:
 
 async def generate_trend_report(
     fmt: str = "md",
-    engagement_id: Optional[str] = None,
-    target: Optional[str] = None,
+    engagement_id: str | None = None,
+    target: str | None = None,
 ) -> dict:
     """
     Generate a trend report across multiple scans.
@@ -1281,11 +1364,19 @@ def _trend_markdown(d: dict) -> str:
     if len(data_points) >= 2:
         first_risk = data_points[0]["risk_score"]
         last_risk = data_points[-1]["risk_score"]
-        direction = "improving" if last_risk < first_risk else "worsening" if last_risk > first_risk else "stable"
-        lines.extend([
-            "",
-            f"**Overall trend:** {direction} ({first_risk} → {last_risk})",
-        ])
+        direction = (
+            "improving"
+            if last_risk < first_risk
+            else "worsening"
+            if last_risk > first_risk
+            else "stable"
+        )
+        lines.extend(
+            [
+                "",
+                f"**Overall trend:** {direction} ({first_risk} → {last_risk})",
+            ]
+        )
 
     # Suite breakdown
     suite_totals: dict[str, int] = {}
@@ -1313,7 +1404,7 @@ def _trend_markdown(d: dict) -> str:
 def _trend_json(d: dict) -> str:
     report = {
         "report_type": "trend",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "scope": d["label"],
         "engagement": d["engagement"],
         "target": d["target"],
@@ -1327,7 +1418,7 @@ def _trend_json(d: dict) -> str:
 def _trend_html(d: dict) -> str:
     label = _esc(d["label"])
     data_points = d["data_points"]
-    averages = d["averages"]
+    d["averages"]
 
     parts = [
         "<h1>Trend Report</h1>",
@@ -1344,10 +1435,18 @@ def _trend_html(d: dict) -> str:
         first_risk = data_points[0]["risk_score"]
         last_risk = data_points[-1]["risk_score"]
         parts.append('<div class="stat-grid">')
-        parts.append(f'<div class="stat"><div class="stat-value">{first_risk}</div><div class="stat-label">First Risk</div></div>')
-        parts.append(f'<div class="stat"><div class="stat-value">{last_risk}</div><div class="stat-label">Latest Risk</div></div>')
-        parts.append(f'<div class="stat"><div class="stat-value">{_trend_arrow(first_risk, last_risk)}</div><div class="stat-label">Trend</div></div>')
-        parts.append(f'<div class="stat"><div class="stat-value">{len(data_points)}</div><div class="stat-label">Scans</div></div>')
+        parts.append(
+            f'<div class="stat"><div class="stat-value">{first_risk}</div><div class="stat-label">First Risk</div></div>'
+        )
+        parts.append(
+            f'<div class="stat"><div class="stat-value">{last_risk}</div><div class="stat-label">Latest Risk</div></div>'
+        )
+        parts.append(
+            f'<div class="stat"><div class="stat-value">{_trend_arrow(first_risk, last_risk)}</div><div class="stat-label">Trend</div></div>'
+        )
+        parts.append(
+            f'<div class="stat"><div class="stat-value">{len(data_points)}</div><div class="stat-label">Scans</div></div>'
+        )
         parts.append("</div>")
 
     # Visual risk trend (bar chart using CSS)
@@ -1366,8 +1465,10 @@ def _trend_html(d: dict) -> str:
 
     # Data table
     parts.append("<h2>Scan Details</h2>")
-    parts.append("<table><tr><th>Scan</th><th>Date</th><th>Risk</th>"
-                 "<th>Total</th><th>Crit</th><th>High</th><th>Med</th><th>Low</th></tr>")
+    parts.append(
+        "<table><tr><th>Scan</th><th>Date</th><th>Risk</th>"
+        "<th>Total</th><th>Crit</th><th>High</th><th>Med</th><th>Low</th></tr>"
+    )
     for dp in data_points:
         parts.append(
             f"<tr><td><code>{_esc(dp['scan_id'][:8])}</code></td>"
@@ -1420,11 +1521,13 @@ def _finding_to_sarif_result(f: dict) -> dict:
     # Location
     uri = f.get("target_url") or f.get("host")
     if uri:
-        result["locations"] = [{
-            "physicalLocation": {
-                "artifactLocation": {"uri": uri},
-            },
-        }]
+        result["locations"] = [
+            {
+                "physicalLocation": {
+                    "artifactLocation": {"uri": uri},
+                },
+            }
+        ]
 
     # Fingerprint
     if f.get("fingerprint"):
@@ -1432,19 +1535,23 @@ def _finding_to_sarif_result(f: dict) -> dict:
 
     # Evidence as attachment
     if f.get("evidence"):
-        result["attachments"] = [{
-            "description": {"text": "Evidence"},
-            "contents": {"text": f["evidence"]},
-        }]
+        result["attachments"] = [
+            {
+                "description": {"text": "Evidence"},
+                "contents": {"text": f["evidence"]},
+            }
+        ]
 
     # Override annotation
     if f.get("override"):
         ov = f["override"]
-        result["suppressions"] = [{
-            "kind": "inSource",
-            "status": "accepted" if ov["status"] == "accepted" else "rejected",
-            "justification": ov.get("reason", ""),
-        }]
+        result["suppressions"] = [
+            {
+                "kind": "inSource",
+                "status": "accepted" if ov["status"] == "accepted" else "rejected",
+                "justification": ov.get("reason", ""),
+            }
+        ]
 
     return result
 
@@ -1480,18 +1587,20 @@ def _sarif_envelope(
     sarif = {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{
-            "tool": {
-                "driver": {
-                    "name": "Chainsmith Recon",
-                    "version": "1.3.0",
-                    "informationUri": "https://github.com/chainsmith/recon",
-                    "rules": rules,
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "Chainsmith Recon",
+                        "version": "1.3.0",
+                        "informationUri": "https://github.com/chainsmith/recon",
+                        "rules": rules,
+                    },
                 },
-            },
-            "invocations": [invocation],
-            "results": results,
-        }],
+                "invocations": [invocation],
+                "results": results,
+            }
+        ],
     }
     return json.dumps(sarif, indent=2)
 
@@ -1500,15 +1609,19 @@ def _technical_sarif(scan, findings, chains, severity_counts, risk, coverage) ->
     """SARIF output for a technical report."""
     results = [_finding_to_sarif_result(f) for f in findings]
     rules = _build_sarif_rules(findings)
-    return _sarif_envelope(results, rules, invocation_props={
-        "reportType": "technical",
-        "scanId": scan["id"],
-        "target": scan.get("target_domain", "unknown"),
-        "riskScore": risk,
-        "severityCounts": severity_counts,
-        "checkCoverage": coverage,
-        "chainCount": len(chains),
-    })
+    return _sarif_envelope(
+        results,
+        rules,
+        invocation_props={
+            "reportType": "technical",
+            "scanId": scan["id"],
+            "target": scan.get("target_domain", "unknown"),
+            "riskScore": risk,
+            "severityCounts": severity_counts,
+            "checkCoverage": coverage,
+            "chainCount": len(chains),
+        },
+    )
 
 
 def _delta_sarif(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str:
@@ -1516,17 +1629,21 @@ def _delta_sarif(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> st
     new_findings = comparison.get("new_findings", [])
     results = [_finding_to_sarif_result(f) for f in new_findings]
     rules = _build_sarif_rules(new_findings)
-    return _sarif_envelope(results, rules, invocation_props={
-        "reportType": "delta",
-        "scanA": scan_a["id"],
-        "scanB": scan_b["id"],
-        "target": scan_b.get("target_domain", scan_a.get("target_domain", "unknown")),
-        "newCount": comparison.get("new_count", 0),
-        "resolvedCount": comparison.get("resolved_count", 0),
-        "recurringCount": comparison.get("recurring_count", 0),
-        "riskA": risk_a,
-        "riskB": risk_b,
-    })
+    return _sarif_envelope(
+        results,
+        rules,
+        invocation_props={
+            "reportType": "delta",
+            "scanA": scan_a["id"],
+            "scanB": scan_b["id"],
+            "target": scan_b.get("target_domain", scan_a.get("target_domain", "unknown")),
+            "newCount": comparison.get("new_count", 0),
+            "resolvedCount": comparison.get("resolved_count", 0),
+            "recurringCount": comparison.get("recurring_count", 0),
+            "riskA": risk_a,
+            "riskB": risk_b,
+        },
+    )
 
 
 def _executive_sarif(data: dict) -> str:
@@ -1551,59 +1668,81 @@ def _compliance_sarif(data: dict) -> str:
     """SARIF output for a compliance report — override audit as suppressions."""
     results = []
     for ov in data.get("override_audit", []):
-        results.append({
-            "ruleId": "finding_override",
-            "level": "note",
-            "message": {"text": f"Override: {ov['finding_title']}"},
-            "fingerprints": {"chainsmith/v1": ov["fingerprint"]},
-            "suppressions": [{
-                "kind": "inSource",
-                "status": "accepted" if ov["status"] == "accepted" else "rejected",
-                "justification": ov.get("reason", ""),
-            }],
-        })
-    rules = [{"id": "finding_override", "shortDescription": {"text": "Finding Override Audit Entry"}}] if results else []
-    return _sarif_envelope(results, rules, invocation_props={
-        "reportType": "compliance",
-        "scanId": data["scan"]["id"],
-        "target": data["target"],
-        "totalFindings": data["total_findings"],
-        "checkCoverage": data["coverage"],
-        "checksRun": len(data["checks_run"]),
-        "overrideCount": data["overridden_count"],
-        "engagement": data.get("engagement"),
-    })
+        results.append(
+            {
+                "ruleId": "finding_override",
+                "level": "note",
+                "message": {"text": f"Override: {ov['finding_title']}"},
+                "fingerprints": {"chainsmith/v1": ov["fingerprint"]},
+                "suppressions": [
+                    {
+                        "kind": "inSource",
+                        "status": "accepted" if ov["status"] == "accepted" else "rejected",
+                        "justification": ov.get("reason", ""),
+                    }
+                ],
+            }
+        )
+    rules = (
+        [{"id": "finding_override", "shortDescription": {"text": "Finding Override Audit Entry"}}]
+        if results
+        else []
+    )
+    return _sarif_envelope(
+        results,
+        rules,
+        invocation_props={
+            "reportType": "compliance",
+            "scanId": data["scan"]["id"],
+            "target": data["target"],
+            "totalFindings": data["total_findings"],
+            "checkCoverage": data["coverage"],
+            "checksRun": len(data["checks_run"]),
+            "overrideCount": data["overridden_count"],
+            "engagement": data.get("engagement"),
+        },
+    )
 
 
 def _trend_sarif(data: dict) -> str:
     """SARIF output for a trend report — one result per data point."""
     results = []
     for dp in data.get("data_points", []):
-        results.append({
-            "ruleId": "trend_data_point",
-            "level": "note",
-            "message": {
-                "text": f"Scan {dp['scan_id'][:8]} on {dp.get('date', 'N/A')}: "
-                        f"risk={dp['risk_score']}, total={dp['total']}",
-            },
-            "properties": {
-                "scanId": dp["scan_id"],
-                "date": dp.get("date"),
-                "riskScore": dp["risk_score"],
-                "total": dp["total"],
-                "bySeverity": {s: dp.get(s, 0) for s in SEVERITY_ORDER},
-                "bySuite": dp.get("by_suite", {}),
-                "new": dp.get("new", 0),
-                "resolved": dp.get("resolved", 0),
-            },
-        })
-    rules = [{"id": "trend_data_point", "shortDescription": {"text": "Trend Data Point"}}] if results else []
-    return _sarif_envelope(results, rules, invocation_props={
-        "reportType": "trend",
-        "scope": data["label"],
-        "scanCount": len(data["data_points"]),
-        "averages": data.get("averages", {}),
-    })
+        results.append(
+            {
+                "ruleId": "trend_data_point",
+                "level": "note",
+                "message": {
+                    "text": f"Scan {dp['scan_id'][:8]} on {dp.get('date', 'N/A')}: "
+                    f"risk={dp['risk_score']}, total={dp['total']}",
+                },
+                "properties": {
+                    "scanId": dp["scan_id"],
+                    "date": dp.get("date"),
+                    "riskScore": dp["risk_score"],
+                    "total": dp["total"],
+                    "bySeverity": {s: dp.get(s, 0) for s in SEVERITY_ORDER},
+                    "bySuite": dp.get("by_suite", {}),
+                    "new": dp.get("new", 0),
+                    "resolved": dp.get("resolved", 0),
+                },
+            }
+        )
+    rules = (
+        [{"id": "trend_data_point", "shortDescription": {"text": "Trend Data Point"}}]
+        if results
+        else []
+    )
+    return _sarif_envelope(
+        results,
+        rules,
+        invocation_props={
+            "reportType": "trend",
+            "scope": data["label"],
+            "scanCount": len(data["data_points"]),
+            "averages": data.get("averages", {}),
+        },
+    )
 
 
 # ─── Targeted Export ────────────────────────────────────────────────────────
@@ -1621,6 +1760,7 @@ async def generate_targeted_export(
     Returns {"content": str, "filename": str, "format": str}.
     """
     from sqlalchemy import select
+
     from app.db.engine import get_session
     from app.db.models import Finding
 
@@ -1636,18 +1776,26 @@ async def generate_targeted_export(
             )
             row = result.scalar_one_or_none()
             if row:
-                findings.append({
-                    "title": row.title,
-                    "severity": row.severity,
-                    "check_name": row.check_name,
-                    "host": row.host,
-                    "suite": row.suite,
-                    "target_url": row.target_url,
-                    "evidence": row.evidence,
-                    "description": row.description,
-                    "fingerprint": row.fingerprint,
-                    "references": (json.loads(row.references) if isinstance(row.references, str) else row.references) if row.references else [],
-                })
+                findings.append(
+                    {
+                        "title": row.title,
+                        "severity": row.severity,
+                        "check_name": row.check_name,
+                        "host": row.host,
+                        "suite": row.suite,
+                        "target_url": row.target_url,
+                        "evidence": row.evidence,
+                        "description": row.description,
+                        "fingerprint": row.fingerprint,
+                        "references": (
+                            json.loads(row.references)
+                            if isinstance(row.references, str)
+                            else row.references
+                        )
+                        if row.references
+                        else [],
+                    }
+                )
 
     if not findings:
         raise ValueError("No findings found for the provided fingerprints")
@@ -1657,25 +1805,32 @@ async def generate_targeted_export(
     risk = _risk_score(severity_counts)
 
     if fmt == "json":
-        content = json.dumps({
-            "report_type": "targeted",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "title": report_title,
-            "summary": {
-                "by_severity": severity_counts,
-                "risk_score": risk,
-                "total_findings": len(findings),
+        content = json.dumps(
+            {
+                "report_type": "targeted",
+                "generated_at": datetime.now(UTC).isoformat(),
+                "title": report_title,
+                "summary": {
+                    "by_severity": severity_counts,
+                    "risk_score": risk,
+                    "total_findings": len(findings),
+                },
+                "findings": findings,
             },
-            "findings": findings,
-        }, indent=2)
+            indent=2,
+        )
     elif fmt == "sarif":
         results = [_finding_to_sarif_result(f) for f in findings]
         rules = _build_sarif_rules(findings)
-        content = _sarif_envelope(results, rules, invocation_props={
-            "reportType": "targeted",
-            "title": report_title,
-            "riskScore": risk,
-        })
+        content = _sarif_envelope(
+            results,
+            rules,
+            invocation_props={
+                "reportType": "targeted",
+                "title": report_title,
+                "riskScore": risk,
+            },
+        )
     elif fmt in ("html", "pdf"):
         parts = [
             f"<h1>{_esc(report_title)}</h1>",
@@ -1686,17 +1841,23 @@ async def generate_targeted_export(
         for sev in SEVERITY_ORDER:
             c = severity_counts[sev]
             if c:
-                parts.append(f'<div class="stat"><div class="stat-value">{c}</div>'
-                             f'<div class="stat-label">{sev}</div></div>')
-        parts.append(f'<div class="stat"><div class="stat-value">{risk}</div>'
-                     f'<div class="stat-label">Risk Score</div></div>')
+                parts.append(
+                    f'<div class="stat"><div class="stat-value">{c}</div>'
+                    f'<div class="stat-label">{sev}</div></div>'
+                )
+        parts.append(
+            f'<div class="stat"><div class="stat-value">{risk}</div>'
+            f'<div class="stat-label">Risk Score</div></div>'
+        )
         parts.append("</div>")
 
         parts.append(f"<h2>Findings ({len(findings)})</h2>")
         for f in findings:
             sev = f.get("severity", "info")
-            parts.append(f'<div class="card">')
-            parts.append(f'<div class="card-title">{_severity_badge(sev)} {_esc(f.get("title", "Untitled"))}</div>')
+            parts.append('<div class="card">')
+            parts.append(
+                f'<div class="card-title">{_severity_badge(sev)} {_esc(f.get("title", "Untitled"))}</div>'
+            )
             if f.get("description"):
                 parts.append(f'<div class="card-detail">{_esc(f["description"])}</div>')
             details = []
@@ -1707,10 +1868,14 @@ async def generate_targeted_export(
             if f.get("target_url"):
                 details.append(f"URL: <code>{_esc(f['target_url'])}</code>")
             if details:
-                parts.append(f'<div class="card-detail" style="margin-top:4px">{" | ".join(details)}</div>')
+                parts.append(
+                    f'<div class="card-detail" style="margin-top:4px">{" | ".join(details)}</div>'
+                )
             if f.get("evidence"):
-                parts.append(f'<div class="card-detail" style="margin-top:4px;font-family:monospace">'
-                             f'{_esc(f["evidence"])}</div>')
+                parts.append(
+                    f'<div class="card-detail" style="margin-top:4px;font-family:monospace">'
+                    f"{_esc(f['evidence'])}</div>"
+                )
             parts.append("</div>")
 
         content = _wrap_html(report_title, "\n".join(parts))

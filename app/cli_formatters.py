@@ -7,10 +7,8 @@ Functions accept plain dicts (from API JSON responses) rather than domain object
 
 import json
 from datetime import datetime
-from typing import Optional
 
 import click
-
 
 SEVERITY_COLORS = {
     "critical": "red",
@@ -178,11 +176,13 @@ def _sarif_rules(findings: list[dict]) -> list[dict]:
         if rule_id in seen:
             continue
         seen.add(rule_id)
-        rules.append({
-            "id": rule_id,
-            "shortDescription": {"text": f.get("title", "")},
-            "fullDescription": {"text": f.get("description") or f.get("title", "")},
-        })
+        rules.append(
+            {
+                "id": rule_id,
+                "shortDescription": {"text": f.get("title", "")},
+                "fullDescription": {"text": f.get("description") or f.get("title", "")},
+            }
+        )
     return rules
 
 
@@ -198,18 +198,20 @@ def _sarif_results(findings: list[dict], target: str) -> list[dict]:
 
     results = []
     for f in findings:
-        results.append({
-            "ruleId": f.get("check_name") or f.get("id", ""),
-            "level": severity_map.get(f.get("severity", "info"), "note"),
-            "message": {"text": f.get("title", "")},
-            "locations": [
-                {
-                    "physicalLocation": {
-                        "artifactLocation": {"uri": f.get("target_url") or target},
+        results.append(
+            {
+                "ruleId": f.get("check_name") or f.get("id", ""),
+                "level": severity_map.get(f.get("severity", "info"), "note"),
+                "message": {"text": f.get("title", "")},
+                "locations": [
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": f.get("target_url") or target},
+                        }
                     }
-                }
-            ],
-        })
+                ],
+            }
+        )
     return results
 
 
@@ -228,8 +230,9 @@ def _count_by_severity(findings: list[dict]) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def print_checks_list(checks: list[dict], suites: list[str], verbose: bool = False,
-                      deps: bool = False):
+def print_checks_list(
+    checks: list[dict], suites: list[str], verbose: bool = False, deps: bool = False
+):
     """Print checks grouped by suite."""
     click.echo(click.style("\nChainsmith Checks", fg="cyan", bold=True))
     click.echo(f"Total: {len(checks)} checks in {len(suites)} suites\n")
@@ -362,9 +365,15 @@ def format_chain_summary(chains_data: dict, no_color: bool = False) -> str:
     return f"{base} {suffix}"
 
 
-def output_findings(findings: list[dict], target: str, fmt: str,
-                    output: Optional[str], verbose: bool, quiet: bool,
-                    no_color: bool = False):
+def output_findings(
+    findings: list[dict],
+    target: str,
+    fmt: str,
+    output: str | None,
+    verbose: bool,
+    quiet: bool,
+    no_color: bool = False,
+):
     """Output findings in the requested format, optionally to file."""
     if fmt == "text":
         if not findings:
@@ -393,7 +402,7 @@ def output_findings(findings: list[dict], target: str, fmt: str,
         _write_or_echo(result, output, quiet)
 
 
-def _write_or_echo(result: str, output: Optional[str], quiet: bool):
+def _write_or_echo(result: str, output: str | None, quiet: bool):
     """Write result to file or echo to stdout."""
     from pathlib import Path
 

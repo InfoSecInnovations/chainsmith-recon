@@ -5,17 +5,16 @@ Covers FindingOverrideRepository CRUD and the override API endpoints.
 """
 
 import pytest
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from app.db.engine import init_db, close_db, get_session
+from app.db.engine import close_db, get_session, init_db
 from app.db.models import Finding, FindingOverride
 from app.db.repositories import (
+    ComparisonRepository,
     FindingOverrideRepository,
     FindingRepository,
     ScanRepository,
-    ComparisonRepository,
 )
-
 
 # --- Fixtures ----------------------------------------------------------------
 
@@ -55,11 +54,12 @@ SAMPLE_FP = "abc123def456dead"
 
 
 class TestFindingOverrideCRUD:
-
     @pytest.mark.asyncio
     async def test_set_override_accepted(self, db, override_repo):
         result = await override_repo.set_override(
-            SAMPLE_FP, "accepted", reason="Accepted per CISO",
+            SAMPLE_FP,
+            "accepted",
+            reason="Accepted per CISO",
         )
         assert result["fingerprint"] == SAMPLE_FP
         assert result["status"] == "accepted"
@@ -69,7 +69,9 @@ class TestFindingOverrideCRUD:
     @pytest.mark.asyncio
     async def test_set_override_false_positive(self, db, override_repo):
         result = await override_repo.set_override(
-            SAMPLE_FP, "false_positive", reason="Test endpoint",
+            SAMPLE_FP,
+            "false_positive",
+            reason="Test endpoint",
         )
         assert result["status"] == "false_positive"
 
@@ -82,16 +84,16 @@ class TestFindingOverrideCRUD:
     async def test_set_override_upsert(self, db, override_repo):
         """Setting override twice updates rather than duplicates."""
         await override_repo.set_override(SAMPLE_FP, "accepted", reason="First")
-        result = await override_repo.set_override(SAMPLE_FP, "false_positive", reason="Changed mind")
+        result = await override_repo.set_override(
+            SAMPLE_FP, "false_positive", reason="Changed mind"
+        )
 
         assert result["status"] == "false_positive"
         assert result["reason"] == "Changed mind"
 
         # Only one row in DB
         async with get_session() as session:
-            count = await session.execute(
-                select(func.count()).select_from(FindingOverride)
-            )
+            count = await session.execute(select(func.count()).select_from(FindingOverride))
             assert count.scalar() == 1
 
     @pytest.mark.asyncio
@@ -162,28 +164,40 @@ class TestFindingOverrideCRUD:
 
 
 class TestOverrideWithHistory:
-
     @pytest.mark.asyncio
     async def test_override_appears_in_history_context(
-        self, db, scan_repo, finding_repo, comparison_repo, override_repo,
+        self,
+        db,
+        scan_repo,
+        finding_repo,
+        comparison_repo,
+        override_repo,
     ):
         """Override info can be retrieved alongside finding history."""
         # Create a scan with a finding
         await scan_repo.create_scan(
-            scan_id="ov-scan-1", session_id="s1", target_domain="example.com",
+            scan_id="ov-scan-1",
+            session_id="s1",
+            target_domain="example.com",
         )
-        await finding_repo.bulk_create("ov-scan-1", [
-            {"id": "ov-f1", "title": "XSS", "severity": "high",
-             "check_name": "xss", "host": "example.com"},
-        ])
+        await finding_repo.bulk_create(
+            "ov-scan-1",
+            [
+                {
+                    "id": "ov-f1",
+                    "title": "XSS",
+                    "severity": "high",
+                    "check_name": "xss",
+                    "host": "example.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("ov-scan-1", status="complete", findings_count=1)
         await comparison_repo.compute_finding_statuses("ov-scan-1")
 
         # Get the fingerprint
         async with get_session() as session:
-            result = await session.execute(
-                select(Finding.fingerprint).where(Finding.id == "ov-f1")
-            )
+            result = await session.execute(select(Finding.fingerprint).where(Finding.id == "ov-f1"))
             fp = result.scalar_one()
 
         # Set override
@@ -199,22 +213,35 @@ class TestOverrideWithHistory:
 
     @pytest.mark.asyncio
     async def test_reopen_after_accept(
-        self, db, scan_repo, finding_repo, comparison_repo, override_repo,
+        self,
+        db,
+        scan_repo,
+        finding_repo,
+        comparison_repo,
+        override_repo,
     ):
         """Accepting then reopening removes the override."""
         await scan_repo.create_scan(
-            scan_id="reopen-scan", session_id="s1", target_domain="example.com",
+            scan_id="reopen-scan",
+            session_id="s1",
+            target_domain="example.com",
         )
-        await finding_repo.bulk_create("reopen-scan", [
-            {"id": "ro-f1", "title": "SQLi", "severity": "critical",
-             "check_name": "sqli", "host": "example.com"},
-        ])
+        await finding_repo.bulk_create(
+            "reopen-scan",
+            [
+                {
+                    "id": "ro-f1",
+                    "title": "SQLi",
+                    "severity": "critical",
+                    "check_name": "sqli",
+                    "host": "example.com",
+                },
+            ],
+        )
         await scan_repo.complete_scan("reopen-scan", status="complete", findings_count=1)
 
         async with get_session() as session:
-            result = await session.execute(
-                select(Finding.fingerprint).where(Finding.id == "ro-f1")
-            )
+            result = await session.execute(select(Finding.fingerprint).where(Finding.id == "ro-f1"))
             fp = result.scalar_one()
 
         # Accept then reopen

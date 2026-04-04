@@ -28,17 +28,14 @@ Usage in docker-compose.yml:
 import os
 import traceback
 
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.scenario_services.common.config import (
-    SERVICE_NAME,
-    is_finding_active,
-    get_or_create_session,
     get_brand_name,
-    get_brand_domain,
+    get_or_create_session,
+    is_finding_active,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -61,6 +58,7 @@ app = FastAPI(
 # ═══════════════════════════════════════════════════════════════════════════════
 # ERROR HANDLING
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.exception_handler(Exception)
 async def verbose_exception_handler(request: Request, exc: Exception):
@@ -90,6 +88,7 @@ async def verbose_exception_handler(request: Request, exc: Exception):
 # MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     """Add headers based on active findings."""
@@ -107,6 +106,7 @@ async def add_headers(request: Request, call_next):
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -181,11 +181,12 @@ async def get_settings():
 # DEBUG ENDPOINTS (findings)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.get("/debug")
 async def debug_info():
     """
     Debug endpoint.
-    
+
     Finding: debug_endpoints_enabled
     Only accessible when this finding is active.
     """
@@ -208,7 +209,7 @@ async def debug_info():
 async def debug_dump():
     """
     Full debug dump - very sensitive!
-    
+
     Finding: config_dump_endpoint
     Returns fake but realistic credentials.
     """
@@ -237,7 +238,7 @@ async def debug_dump():
 async def trigger_error():
     """
     Endpoint to trigger an error for stack trace testing.
-    
+
     Used for demonstrating stack_trace_leak finding.
     """
     raise ValueError("Intentional error for debugging")
@@ -247,7 +248,7 @@ async def trigger_error():
 async def debug_env():
     """
     Environment variable dump.
-    
+
     Finding: config_dump_endpoint
     """
     if not is_finding_active("config_dump_endpoint"):
@@ -268,7 +269,7 @@ async def debug_env():
 async def debug_routes():
     """
     List all registered routes.
-    
+
     Finding: debug_endpoints_enabled
     """
     if not is_finding_active("debug_endpoints_enabled"):
@@ -277,9 +278,11 @@ async def debug_routes():
     routes = []
     for route in app.routes:
         if hasattr(route, "path") and hasattr(route, "methods"):
-            routes.append({
-                "path": route.path,
-                "methods": list(route.methods) if route.methods else [],
-            })
+            routes.append(
+                {
+                    "path": route.path,
+                    "methods": list(route.methods) if route.methods else [],
+                }
+            )
 
     return {"routes": routes, "total": len(routes)}

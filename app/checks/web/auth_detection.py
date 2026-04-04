@@ -13,11 +13,10 @@ Outputs auth_mechanisms for downstream checks.
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
-
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Paths to probe for auth mechanisms
 AUTH_PROBE_PATHS = [
@@ -83,37 +82,46 @@ class AuthDetectionCheck(ServiceIteratingCheck):
                         body = (resp.body or "").lower()
                         if "issuer" in body and "authorization_endpoint" in body:
                             mechanisms.setdefault("oidc", []).append(path)
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"OAuth/OIDC provider detected: {service.host}",
-                                description="OpenID Connect discovery document found",
-                                severity="info",
-                                evidence=fmt_status_evidence(
-                                    service.with_path(path), 200,
-                                    (resp.body or "")[:200],
-                                ),
-                                host=service.host,
-                                discriminator="oidc-discovery",
-                                target=service,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"OAuth/OIDC provider detected: {service.host}",
+                                    description="OpenID Connect discovery document found",
+                                    severity="info",
+                                    evidence=fmt_status_evidence(
+                                        service.with_path(path),
+                                        200,
+                                        (resp.body or "")[:200],
+                                    ),
+                                    host=service.host,
+                                    discriminator="oidc-discovery",
+                                    target=service,
+                                )
+                            )
 
                     # OAuth endpoints
-                    if path in ("/oauth/authorize", "/oauth/token") and resp.status_code in (200, 302, 400):
+                    if path in ("/oauth/authorize", "/oauth/token") and resp.status_code in (
+                        200,
+                        302,
+                        400,
+                    ):
                         mechanisms.setdefault("oauth", []).append(path)
 
                     # Login form detection
                     if resp.status_code == 200 and resp.body and LOGIN_FORM_RE.search(resp.body):
                         mechanisms.setdefault("login_form", []).append(path)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Login page detected: {service.host}{path}",
-                            description="HTML page with password input form found",
-                            severity="info",
-                            evidence=fmt_status_evidence(service.with_path(path), 200),
-                            host=service.host,
-                            discriminator=f"login-form-{path.replace('/', '-')}",
-                            target=service,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Login page detected: {service.host}{path}",
+                                description="HTML page with password input form found",
+                                severity="info",
+                                evidence=fmt_status_evidence(service.with_path(path), 200),
+                                host=service.host,
+                                discriminator=f"login-form-{path.replace('/', '-')}",
+                                target=service,
+                            )
+                        )
 
                 # ── Check if API endpoints lack auth ──
                 api_paths = self._get_api_paths(service, context)
@@ -129,16 +137,18 @@ class AuthDetectionCheck(ServiceIteratingCheck):
                                 ct = v.lower()
                                 break
                         if "json" in ct or "api" in api_path:
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"API endpoint requires no authentication: {service.host}{api_path}",
-                                description="API endpoint returned 200 with no authentication required",
-                                severity="medium",
-                                evidence=fmt_status_evidence(service.with_path(api_path), 200),
-                                host=service.host,
-                                discriminator=f"no-auth-{api_path.replace('/', '-')}",
-                                target=service,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"API endpoint requires no authentication: {service.host}{api_path}",
+                                    description="API endpoint returned 200 with no authentication required",
+                                    severity="medium",
+                                    evidence=fmt_status_evidence(service.with_path(api_path), 200),
+                                    host=service.host,
+                                    discriminator=f"no-auth-{api_path.replace('/', '-')}",
+                                    target=service,
+                                )
+                            )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -172,16 +182,18 @@ class AuthDetectionCheck(ServiceIteratingCheck):
         if auth_type == "bearer" and service.scheme == "http":
             severity = "low"
 
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"{auth_type.title()} auth required: {service.host}{path}",
-            description=f"WWW-Authenticate header specifies {auth_type} authentication",
-            severity=severity,
-            evidence=f"HTTP {resp.status_code} | WWW-Authenticate: {www_auth[:200]}",
-            host=service.host,
-            discriminator=f"www-auth-{auth_type}-{path.replace('/', '-')}",
-            target=service,
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"{auth_type.title()} auth required: {service.host}{path}",
+                description=f"WWW-Authenticate header specifies {auth_type} authentication",
+                severity=severity,
+                evidence=f"HTTP {resp.status_code} | WWW-Authenticate: {www_auth[:200]}",
+                host=service.host,
+                discriminator=f"www-auth-{auth_type}-{path.replace('/', '-')}",
+                target=service,
+            )
+        )
 
     @staticmethod
     def _get_api_paths(service: Service, context: dict) -> list[str]:
@@ -195,4 +207,8 @@ class AuthDetectionCheck(ServiceIteratingCheck):
         else:
             accessible = []
         # Filter to paths that look like API endpoints
-        return [p for p in accessible if any(seg in p.lower() for seg in ["/api/", "/v1/", "/v2/", "/graphql"])]
+        return [
+            p
+            for p in accessible
+            if any(seg in p.lower() for seg in ["/api/", "/v1/", "/v2/", "/graphql"])
+        ]

@@ -27,16 +27,14 @@ Config schema (app/checks/simulator/simulations/<suite>/<name>.yaml):
 """
 
 import asyncio
-import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
 from app.checks.base import BaseCheck, CheckResult, Finding, Service
-
 
 # ── Config schema ─────────────────────────────────────────────────
 
@@ -107,6 +105,7 @@ class SimulationConfig:
 
 # ── SimulatedCheck ────────────────────────────────────────────────
 
+
 class SimulatedCheck(BaseCheck):
     """
     Generic simulation component that impersonates any real check.
@@ -129,12 +128,13 @@ class SimulatedCheck(BaseCheck):
             try:
                 # Import here to avoid circular imports
                 from app.main import get_all_checks
+
                 for check in get_all_checks():
                     cls._real_check_registry[check.name] = {
-                        "description": getattr(check, 'description', ''),
-                        "reason": getattr(check, 'reason', ''),
-                        "references": getattr(check, 'references', []),
-                        "techniques": getattr(check, 'techniques', []),
+                        "description": getattr(check, "description", ""),
+                        "reason": getattr(check, "reason", ""),
+                        "references": getattr(check, "references", []),
+                        "techniques": getattr(check, "techniques", []),
                     }
             except ImportError:
                 pass  # Fallback to empty registry if import fails
@@ -158,10 +158,10 @@ class SimulatedCheck(BaseCheck):
 
         # Inherit educational metadata from the real check we're emulating
         real_check_info = self._get_real_check_registry().get(config.emulates, {})
-        self.description = real_check_info.get('description', f'Simulated {config.emulates} check')
-        self.reason = real_check_info.get('reason', 'Simulated check for testing and demonstration')
-        self.references = real_check_info.get('references', [])
-        self.techniques = real_check_info.get('techniques', [])
+        self.description = real_check_info.get("description", f"Simulated {config.emulates} check")
+        self.reason = real_check_info.get("reason", "Simulated check for testing and demonstration")
+        self.references = real_check_info.get("references", [])
+        self.techniques = real_check_info.get("techniques", [])
 
     # ── BaseCheck interface ───────────────────────────────────────
 
@@ -177,7 +177,7 @@ class SimulatedCheck(BaseCheck):
         """
         config = self._config
         behavior = config.behavior
-        started = datetime.now(timezone.utc)
+        started = datetime.now(UTC)
 
         # Artificial latency
         if behavior.latency_ms > 0:
@@ -213,21 +213,23 @@ class SimulatedCheck(BaseCheck):
         if "target_hosts" in config.output and "dns_records" in config.output:
             target_hosts = config.output.get("target_hosts", [])
             dns_records = config.output.get("dns_records", {})
-            
+
             for hostname in target_hosts:
                 ip = dns_records.get(hostname, hostname)
-                result.findings.append(Finding(
-                    id=f"{self.name}-{hostname}",
-                    title=f"Host discovered: {hostname}",
-                    description=f"DNS resolved {hostname} to {ip}",
-                    severity="info",
-                    evidence=f"Host: {hostname} | IP: {ip}",
-                    target=None,
-                    target_url=None,
-                    check_name=self.name,
-                    raw_data={"hostname": hostname, "ip": ip, "simulated": True},
-                ))
-        
+                result.findings.append(
+                    Finding(
+                        id=f"{self.name}-{hostname}",
+                        title=f"Host discovered: {hostname}",
+                        description=f"DNS resolved {hostname} to {ip}",
+                        severity="info",
+                        evidence=f"Host: {hostname} | IP: {ip}",
+                        target=None,
+                        target_url=None,
+                        check_name=self.name,
+                        raw_data={"hostname": hostname, "ip": ip, "simulated": True},
+                    )
+                )
+
         # Handle legacy hosts format (for non-DNS checks like port_scan)
         # These checks output Service objects
         elif "hosts" in config.output and isinstance(config.output["hosts"], list):
@@ -248,17 +250,19 @@ class SimulatedCheck(BaseCheck):
                         metadata={"ip": ip, "simulated": True},
                     )
                     result.services.append(svc)
-                    result.findings.append(Finding(
-                        id=f"{self.name}-{host}",
-                        title=f"Host discovered: {host}",
-                        description=f"Simulated host at {host}:{port}",
-                        severity="info",
-                        evidence=f"Simulation: {host} -> {ip}:{port} ({svc_type})",
-                        target=svc,
-                        target_url=svc.url,
-                        check_name=self.name,
-                        raw_data=host_entry,
-                    ))
+                    result.findings.append(
+                        Finding(
+                            id=f"{self.name}-{host}",
+                            title=f"Host discovered: {host}",
+                            description=f"Simulated host at {host}:{port}",
+                            severity="info",
+                            evidence=f"Simulation: {host} -> {ip}:{port} ({svc_type})",
+                            target=svc,
+                            target_url=svc.url,
+                            check_name=self.name,
+                            raw_data=host_entry,
+                        )
+                    )
 
         # Propagate services to context key
         if result.services:
@@ -284,6 +288,7 @@ class SimulatedCheck(BaseCheck):
 
 # ── Factory ───────────────────────────────────────────────────────
 
+
 def load_simulated_check(config_path: Path) -> SimulatedCheck:
     """
     Load a SimulatedCheck from a YAML config file.
@@ -304,7 +309,7 @@ def load_simulated_check(config_path: Path) -> SimulatedCheck:
 
 def load_simulated_checks_from_dir(
     simulations_dir: Path,
-    suite: Optional[str] = None,
+    suite: str | None = None,
 ) -> list[SimulatedCheck]:
     """
     Load all simulation configs from a directory tree.
@@ -326,6 +331,7 @@ def load_simulated_checks_from_dir(
         except (ValueError, FileNotFoundError, yaml.YAMLError) as e:
             # Log but don't abort — bad config shouldn't break the whole suite
             import logging
+
             logging.getLogger(__name__).warning(
                 f"Skipping invalid simulation config {yaml_path}: {e}"
             )

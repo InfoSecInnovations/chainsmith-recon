@@ -12,9 +12,9 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,9 @@ class SRICheck(ServiceIteratingCheck):
     timeout_seconds = 30.0
     delay_between_targets = 0.2
 
-    reason = "External scripts without SRI are vulnerable to CDN compromise and supply-chain attacks"
+    reason = (
+        "External scripts without SRI are vulnerable to CDN compromise and supply-chain attacks"
+    )
     references = ["W3C Subresource Integrity", "CWE-353"]
     techniques = ["SRI verification", "supply chain analysis"]
 
@@ -97,8 +99,11 @@ class SRICheck(ServiceIteratingCheck):
 
                     pages_checked += 1
                     self._analyze_html(
-                        resp.body, service, path,
-                        external_without_sri, external_with_sri,
+                        resp.body,
+                        service,
+                        path,
+                        external_without_sri,
+                        external_with_sri,
                     )
 
                 total_external = len(external_without_sri) + len(external_with_sri)
@@ -117,57 +122,65 @@ class SRICheck(ServiceIteratingCheck):
             count = len(external_without_sri)
             severity = "medium" if count >= 3 else "low"
 
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"{count} external resource(s) without SRI: {service.host}",
-                description=f"{count} external scripts/stylesheets loaded without integrity verification. "
-                            f"Sources: {', '.join(sorted(hosts_without_sri)[:5])}",
-                severity=severity,
-                evidence=" | ".join(
-                    f"{r['type']}: {r['url']}" for r in external_without_sri[:10]
-                ),
-                host=service.host,
-                discriminator="missing-sri",
-                target=service,
-                references=["CWE-353", "W3C SRI"],
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"{count} external resource(s) without SRI: {service.host}",
+                    description=f"{count} external scripts/stylesheets loaded without integrity verification. "
+                    f"Sources: {', '.join(sorted(hosts_without_sri)[:5])}",
+                    severity=severity,
+                    evidence=" | ".join(
+                        f"{r['type']}: {r['url']}" for r in external_without_sri[:10]
+                    ),
+                    host=service.host,
+                    discriminator="missing-sri",
+                    target=service,
+                    references=["CWE-353", "W3C SRI"],
+                )
+            )
 
             # Individual findings for the first few
             for resource in external_without_sri[:5]:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"External {resource['type']} without SRI: {resource['url'][:80]}",
-                    description=f"External {resource['type']} loaded from {resource['url']} without an integrity attribute",
-                    severity="low",
-                    evidence=f"<{resource['type']} src=\"{resource['url']}\"> on {resource['page']} — no integrity= attribute",
-                    host=service.host,
-                    discriminator=f"no-sri-{_url_slug(resource['url'])}",
-                    target=service,
-                    target_url=service.with_path(resource["page"]),
-                    references=["CWE-353"],
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"External {resource['type']} without SRI: {resource['url'][:80]}",
+                        description=f"External {resource['type']} loaded from {resource['url']} without an integrity attribute",
+                        severity="low",
+                        evidence=f'<{resource["type"]} src="{resource["url"]}"> on {resource["page"]} — no integrity= attribute',
+                        host=service.host,
+                        discriminator=f"no-sri-{_url_slug(resource['url'])}",
+                        target=service,
+                        target_url=service.with_path(resource["page"]),
+                        references=["CWE-353"],
+                    )
+                )
         elif total_external > 0:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"All external resources use SRI: {service.host}",
-                description=f"All {total_external} external resource(s) have integrity attributes",
-                severity="info",
-                evidence=f"{total_external} external resources with SRI hashes verified",
-                host=service.host,
-                discriminator="all-sri",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"All external resources use SRI: {service.host}",
+                    description=f"All {total_external} external resource(s) have integrity attributes",
+                    severity="info",
+                    evidence=f"{total_external} external resources with SRI hashes verified",
+                    host=service.host,
+                    discriminator="all-sri",
+                    target=service,
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"No external resources found: {service.host}",
-                description="No external scripts or stylesheets detected in HTML responses",
-                severity="info",
-                evidence="No <script src> or <link href> tags referencing external origins",
-                host=service.host,
-                discriminator="no-external",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"No external resources found: {service.host}",
+                    description="No external scripts or stylesheets detected in HTML responses",
+                    severity="info",
+                    evidence="No <script src> or <link href> tags referencing external origins",
+                    host=service.host,
+                    discriminator="no-external",
+                    target=service,
+                )
+            )
 
         result.outputs["sri_info"] = {
             "total_external": total_external,
@@ -209,7 +222,7 @@ class SRICheck(ServiceIteratingCheck):
             tag_text = match.group(0)
 
             # Only consider stylesheet links
-            if 'rel=' not in tag_text.lower() or 'stylesheet' not in tag_text.lower():
+            if "rel=" not in tag_text.lower() or "stylesheet" not in tag_text.lower():
                 continue
 
             if not self._is_external(href, service_origin):

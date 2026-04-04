@@ -18,13 +18,13 @@ References:
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 """
 
+import contextlib
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 DIMENSION_MAP = {
     1536: ("OpenAI ada-002", "high"),
@@ -84,9 +84,7 @@ class RAGEmbeddingFingerprintCheck(ServiceIteratingCheck):
                     if ep.get("service", {}).get("host") != service.host:
                         continue
                     if "embed" in ep.get("path", "").lower():
-                        dims = await self._probe_embedding_endpoint(
-                            client, ep, service
-                        )
+                        dims = await self._probe_embedding_endpoint(client, ep, service)
                         if dims:
                             model_info["dimensions"] = dims
                             model_info["signals"].append(f"embedding_endpoint:{dims}d")
@@ -108,20 +106,20 @@ class RAGEmbeddingFingerprintCheck(ServiceIteratingCheck):
                         if hdr in headers_lower:
                             model_info["signals"].append(f"header:{hdr}={headers_lower[hdr]}")
                             if "dimensions" in hdr:
-                                try:
+                                with contextlib.suppress(ValueError):
                                     model_info["dimensions"] = int(headers_lower[hdr])
-                                except ValueError:
-                                    pass
                             elif model_info["model_name"] is None:
                                 model_info["model_name"] = headers_lower[hdr]
 
                 # Signal 3: Check vector store collection config
-                for store in (accessible_stores or []):
-                    for coll in (kb_structure or []):
+                for _store in accessible_stores or []:
+                    for coll in kb_structure or []:
                         for c in coll.get("collections", []):
                             if c.get("dimensions"):
                                 model_info["dimensions"] = c["dimensions"]
-                                model_info["signals"].append(f"collection_config:{c['dimensions']}d")
+                                model_info["signals"].append(
+                                    f"collection_config:{c['dimensions']}d"
+                                )
 
                 # Signal 4: Try to get dimensions from embedding API if we have one
                 if not model_info["dimensions"]:
@@ -140,7 +138,9 @@ class RAGEmbeddingFingerprintCheck(ServiceIteratingCheck):
                         model_info["confidence"] = "low"
 
                 if model_info["model_name"]:
-                    model_info["confidence"] = "high" if len(model_info["signals"]) > 1 else "medium"
+                    model_info["confidence"] = (
+                        "high" if len(model_info["signals"]) > 1 else "medium"
+                    )
                 elif model_info["dimensions"]:
                     model_info["confidence"] = "low"
 
@@ -153,39 +153,46 @@ class RAGEmbeddingFingerprintCheck(ServiceIteratingCheck):
             if model_info["dimensions"]:
                 title += f" ({model_info['dimensions']}d)"
 
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=title,
-                description=(
-                    f"Embedding model fingerprinted via {len(model_info['signals'])} signal(s). "
-                    f"Confidence: {model_info['confidence']}."
-                ),
-                severity="low",
-                evidence=self._build_evidence(model_info),
-                host=service.host,
-                discriminator="embedding-model",
-                target=service,
-                raw_data=model_info,
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=title,
+                    description=(
+                        f"Embedding model fingerprinted via {len(model_info['signals'])} signal(s). "
+                        f"Confidence: {model_info['confidence']}."
+                    ),
+                    severity="low",
+                    evidence=self._build_evidence(model_info),
+                    host=service.host,
+                    discriminator="embedding-model",
+                    target=service,
+                    raw_data=model_info,
+                    references=self.references,
+                )
+            )
 
             result.outputs["embedding_model"] = model_info
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Embedding model not identified",
-                description="Could not determine the embedding model in use.",
-                severity="info",
-                evidence="No dimensionality or model signals detected",
-                host=service.host,
-                discriminator="embedding-unknown",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Embedding model not identified",
+                    description="Could not determine the embedding model in use.",
+                    severity="info",
+                    evidence="No dimensionality or model signals detected",
+                    host=service.host,
+                    discriminator="embedding-unknown",
+                    target=service,
+                )
+            )
 
         return result
 
     async def _probe_embedding_endpoint(
-        self, client: AsyncHttpClient, endpoint: dict, service: Service,
+        self,
+        client: AsyncHttpClient,
+        endpoint: dict,
+        service: Service,
     ) -> int | None:
         """Send a test embedding and measure vector dimensions."""
         url = endpoint.get("url", service.url)
@@ -195,7 +202,8 @@ class RAGEmbeddingFingerprintCheck(ServiceIteratingCheck):
             {"input": ["test"]},
         ]:
             resp = await client.post(
-                url, json=payload,
+                url,
+                json=payload,
                 headers={"Content-Type": "application/json"},
             )
             if resp.error or resp.status_code != 200:
@@ -220,7 +228,10 @@ class RAGEmbeddingFingerprintCheck(ServiceIteratingCheck):
         return None
 
     async def _try_embedding_api(
-        self, client: AsyncHttpClient, service: Service, context: dict,
+        self,
+        client: AsyncHttpClient,
+        service: Service,
+        context: dict,
     ) -> int | None:
         """Try common embedding API paths."""
         base = service.url

@@ -18,27 +18,48 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Endpoints that reveal multi-agent architectures
 MULTI_AGENT_PATHS = [
-    "/crew", "/kickoff", "/agents/list", "/agents",
-    "/groupchat", "/workers", "/supervisor", "/orchestrator",
-    "/v1/agents", "/api/agents", "/agent/list",
-    "/graph", "/nodes", "/edges",
+    "/crew",
+    "/kickoff",
+    "/agents/list",
+    "/agents",
+    "/groupchat",
+    "/workers",
+    "/supervisor",
+    "/orchestrator",
+    "/v1/agents",
+    "/api/agents",
+    "/agent/list",
+    "/graph",
+    "/nodes",
+    "/edges",
 ]
 
 # Delegation indicators in agent responses
 DELEGATION_PATTERNS = [
-    "delegating to", "passing to", "forwarding to",
-    "agent-1", "agent-2", "agent_1", "agent_2",
-    "the research agent", "the analysis agent", "the review agent",
-    "specialist agent", "worker agent", "supervisor",
-    "handing off to", "routing to", "assigned to",
-    "crew member", "task delegation",
+    "delegating to",
+    "passing to",
+    "forwarding to",
+    "agent-1",
+    "agent-2",
+    "agent_1",
+    "agent_2",
+    "the research agent",
+    "the analysis agent",
+    "the review agent",
+    "specialist agent",
+    "worker agent",
+    "supervisor",
+    "handing off to",
+    "routing to",
+    "assigned to",
+    "crew member",
+    "task delegation",
 ]
 
 # Test prompts to elicit multi-agent behavior
@@ -87,8 +108,7 @@ class AgentMultiAgentDetectionCheck(ServiceIteratingCheck):
 
         agent_endpoints = context.get("agent_endpoints", [])
         service_endpoints = [
-            ep for ep in agent_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in agent_endpoints if ep.get("service", {}).get("host") == service.host
         ]
         if not service_endpoints:
             return result
@@ -112,19 +132,13 @@ class AgentMultiAgentDetectionCheck(ServiceIteratingCheck):
                     if resp.error or resp.status_code in (404, 405, 502, 503):
                         continue
 
-                    endpoint_data = self._analyze_management_endpoint(
-                        resp, path, service
-                    )
+                    endpoint_data = self._analyze_management_endpoint(resp, path, service)
                     if endpoint_data:
                         topology["management_endpoints"].append(endpoint_data)
                         if endpoint_data.get("agent_names"):
-                            topology["agent_names"].extend(
-                                endpoint_data["agent_names"]
-                            )
+                            topology["agent_names"].extend(endpoint_data["agent_names"])
                         if endpoint_data.get("architecture"):
-                            topology["architecture"] = endpoint_data[
-                                "architecture"
-                            ]
+                            topology["architecture"] = endpoint_data["architecture"]
 
                 # 2. Probe execution endpoints for delegation indicators
                 exec_endpoints = [
@@ -170,9 +184,7 @@ class AgentMultiAgentDetectionCheck(ServiceIteratingCheck):
 
         # Deduplicate
         topology["agent_names"] = list(set(topology["agent_names"]))
-        topology["delegation_patterns"] = list(
-            set(topology["delegation_patterns"])
-        )
+        topology["delegation_patterns"] = list(set(topology["delegation_patterns"]))
         topology["agent_count"] = max(
             len(topology["agent_names"]),
             2 if topology["delegation_patterns"] else 0,
@@ -247,9 +259,7 @@ class AgentMultiAgentDetectionCheck(ServiceIteratingCheck):
 
         return result
 
-    def _analyze_management_endpoint(
-        self, resp, path: str, service: Service
-    ) -> dict | None:
+    def _analyze_management_endpoint(self, resp, path: str, service: Service) -> dict | None:
         """Analyze a management endpoint response for agent information."""
         body = resp.body or ""
         body_lower = body.lower()
@@ -258,18 +268,14 @@ class AgentMultiAgentDetectionCheck(ServiceIteratingCheck):
         agent_names = []
         architecture = None
 
-        if resp.status_code == 200 and "application/json" in resp.headers.get(
-            "content-type", ""
-        ):
+        if resp.status_code == 200 and "application/json" in resp.headers.get("content-type", ""):
             try:
                 data = json.loads(body)
                 if isinstance(data, list):
                     # List of agents
                     for item in data[:20]:
                         if isinstance(item, dict):
-                            name = item.get("name") or item.get(
-                                "agent_name"
-                            ) or item.get("id")
+                            name = item.get("name") or item.get("agent_name") or item.get("id")
                             if name:
                                 agent_names.append(str(name))
                         elif isinstance(item, str):
@@ -280,9 +286,7 @@ class AgentMultiAgentDetectionCheck(ServiceIteratingCheck):
                         agents = data["agents"]
                         if isinstance(agents, list):
                             for a in agents[:20]:
-                                n = (
-                                    a.get("name") if isinstance(a, dict) else str(a)
-                                )
+                                n = a.get("name") if isinstance(a, dict) else str(a)
                                 if n:
                                     agent_names.append(n)
                     if "nodes" in data:
@@ -374,9 +378,7 @@ class AgentMultiAgentDetectionCheck(ServiceIteratingCheck):
             lines.append(f"Agent names: {', '.join(topology['agent_names'][:5])}")
         lines.append(f"Architecture: {topology['architecture']}")
         if topology["delegation_patterns"]:
-            lines.append(
-                f"Delegation patterns: {', '.join(topology['delegation_patterns'][:3])}"
-            )
+            lines.append(f"Delegation patterns: {', '.join(topology['delegation_patterns'][:3])}")
         if topology["management_endpoints"]:
             paths = [e["path"] for e in topology["management_endpoints"]]
             lines.append(f"Management endpoints: {', '.join(paths)}")

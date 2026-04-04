@@ -13,10 +13,10 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from app.state import state
-from app.api_models import ScanStatus, ScanStartInput
-from app.engine.scanner import get_check_info, run_scan, AVAILABLE_CHECKS
+from app.api_models import ScanStartInput, ScanStatus
+from app.engine.scanner import AVAILABLE_CHECKS, get_check_info, run_scan
 from app.scenarios import get_scenario_manager
+from app.state import state
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,7 @@ router = APIRouter()
 
 
 # ─── Scan Execution ───────────────────────────────────────────
+
 
 @router.post("/api/v1/scan", status_code=202)
 @router.post("/api/scan", status_code=202)
@@ -53,18 +54,17 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     state.engagement_id = body.engagement_id
 
     # Launch scan in background with optional filters
-    asyncio.create_task(run_scan(
-        state,
-        check_names=body.checks or None,
-        suites=body.suites or None,
-        port_profile=body.port_profile or None,
-    ))
+    asyncio.create_task(
+        run_scan(
+            state,
+            check_names=body.checks or None,
+            suites=body.suites or None,
+            port_profile=body.port_profile or None,
+        )
+    )
 
     logger.info(f"Scan started (checks={body.checks or 'all'}, suites={body.suites or 'all'})")
-    return {
-        "status": "accepted",
-        "message": "Scan started. Poll GET /api/scan for status."
-    }
+    return {"status": "accepted", "message": "Scan started. Poll GET /api/scan for status."}
 
 
 @router.get("/api/v1/scan")
@@ -78,7 +78,7 @@ async def get_scan_status():
         checks_total=state.checks_total,
         checks_completed=state.checks_completed,
         current_check=state.current_check,
-        error=state.error_message
+        error=state.error_message,
     )
 
 
@@ -88,31 +88,31 @@ async def get_check_statuses():
     """Get status of all checks that are registered for the current scan."""
     mgr = get_scenario_manager()
     checks = []
-    
+
     # If we have a runner/launcher with registered checks, use those (reflects actual scan)
     if state.runner and state.runner.checks:
         sim_names = set()
         if mgr.is_active:
             sim_names = {s.name for s in mgr.get_simulations()}
-        
+
         # Handle checks as dict (CheckLauncher) or list (CheckRunner)
         check_items = state.runner.checks
         if isinstance(check_items, dict):
             check_items = check_items.values()
-        
+
         for check in check_items:
             info = get_check_info(check)
             info["simulated"] = check.name in sim_names
             status = state.check_statuses.get(check.name, "pending")
             # Include suite info for UI grouping
-            info["suite"] = getattr(check, 'suite', None) or _infer_suite(check.name)
+            info["suite"] = getattr(check, "suite", None) or _infer_suite(check.name)
             checks.append({**info, "status": status})
     elif mgr.is_active:
         # No scan running, but scenario active - show what would run
         for check in mgr.get_simulations():
             info = get_check_info(check)
             info["simulated"] = True
-            info["suite"] = getattr(check, 'suite', None) or _infer_suite(check.name)
+            info["suite"] = getattr(check, "suite", None) or _infer_suite(check.name)
             status = state.check_statuses.get(check.name, "pending")
             checks.append({**info, "status": status})
     else:
@@ -121,7 +121,7 @@ async def get_check_statuses():
             status = state.check_statuses.get(name, "pending")
             info_copy = {**info, "suite": _infer_suite(name)}
             checks.append({**info_copy, "status": status})
-    
+
     return {"checks": checks, "scenario": mgr.active.name if mgr.is_active else None}
 
 
@@ -129,18 +129,54 @@ def _infer_suite(check_name: str) -> str:
     """Infer suite from check name for UI grouping."""
     name_lower = check_name.lower()
     suite_patterns = {
-        "network": ["dns", "wildcard_dns", "geoip", "reverse_dns", "port_scan",
-                    "tls_analysis", "service_probe", "http_method_enum",
-                    "banner_grab"],
-        "web": ["header", "robots", "path", "openapi", "cors",
-                "webdav", "vcs_exposure", "config_exposure", "directory_listing",
-                "default_creds", "debug_endpoints",
-                "cookie_security", "auth_detection", "waf_detection",
-                "sitemap", "redirect_chain", "error_page", "ssrf_indicator",
-                "favicon", "http2_detection", "hsts_preload", "sri_check",
-                "mass_assignment"],
-        "ai": ["llm", "embedding", "model_info", "fingerprint", "error",
-                "tool_discovery", "prompt", "rate_limit", "filter", "context"],
+        "network": [
+            "dns",
+            "wildcard_dns",
+            "geoip",
+            "reverse_dns",
+            "port_scan",
+            "tls_analysis",
+            "service_probe",
+            "http_method_enum",
+            "banner_grab",
+        ],
+        "web": [
+            "header",
+            "robots",
+            "path",
+            "openapi",
+            "cors",
+            "webdav",
+            "vcs_exposure",
+            "config_exposure",
+            "directory_listing",
+            "default_creds",
+            "debug_endpoints",
+            "cookie_security",
+            "auth_detection",
+            "waf_detection",
+            "sitemap",
+            "redirect_chain",
+            "error_page",
+            "ssrf_indicator",
+            "favicon",
+            "http2_detection",
+            "hsts_preload",
+            "sri_check",
+            "mass_assignment",
+        ],
+        "ai": [
+            "llm",
+            "embedding",
+            "model_info",
+            "fingerprint",
+            "error",
+            "tool_discovery",
+            "prompt",
+            "rate_limit",
+            "filter",
+            "context",
+        ],
         "mcp": ["mcp"],
         "agent": ["agent", "goal"],
         "rag": ["rag", "indirect"],

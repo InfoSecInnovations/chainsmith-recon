@@ -31,24 +31,22 @@ Usage in docker-compose.yml:
 
 import os
 import random
-from typing import Optional, Union
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from app.scenario_services.common.config import (
-    SERVICE_NAME,
-    is_finding_active,
-    get_or_create_session,
     get_brand_name,
+    get_or_create_session,
+    is_finding_active,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
 ML_VERSION = os.getenv("ML_VERSION", "2.1.0")
+
 
 def _get_model_id() -> str:
     if model_id := os.getenv("MODEL_ID"):
@@ -72,20 +70,22 @@ app = FastAPI(
 # MODELS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class EmbeddingRequest(BaseModel):
-    text: Union[str, list[str]]
-    model: Optional[str] = None
+    text: str | list[str]
+    model: str | None = None
 
 
 class InferenceRequest(BaseModel):
     prompt: str
-    max_tokens: Optional[int] = 256
-    temperature: Optional[float] = 0.7
+    max_tokens: int | None = 256
+    temperature: float | None = 0.7
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
@@ -108,6 +108,7 @@ async def add_headers(request: Request, call_next):
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.get("/")
 async def root():
@@ -137,10 +138,10 @@ async def health():
 async def list_models():
     """
     Model listing endpoint.
-    
+
     Finding: model_info_endpoint
     When active, returns detailed model information.
-    
+
     Finding: model_config_exposed
     When active, includes training configuration.
     """
@@ -157,13 +158,15 @@ async def list_models():
 
     # Finding: model_info_endpoint - leak detailed model info
     if is_finding_active("model_info_endpoint"):
-        models[0].update({
-            "architecture": "llama-7b-hf",
-            "quantization": "awq-4bit",
-            "max_context": 4096,
-            "fine_tuned": True,
-            "base_model": "meta-llama/Llama-2-7b-hf",
-        })
+        models[0].update(
+            {
+                "architecture": "llama-7b-hf",
+                "quantization": "awq-4bit",
+                "max_context": 4096,
+                "fine_tuned": True,
+                "base_model": "meta-llama/Llama-2-7b-hf",
+            }
+        )
 
     # Finding: model_config_exposed - leak training config
     if is_finding_active("model_config_exposed"):
@@ -180,13 +183,13 @@ async def list_models():
 async def create_embedding(request: EmbeddingRequest):
     """
     Embedding endpoint.
-    
+
     Finding: no_rate_limit
     When not active, limits to 10 texts per request.
-    
+
     Finding: bulk_query_allowed
     When not active, prevents bulk queries.
-    
+
     Finding: embedding_endpoint_exposed
     When active, includes debug info in response.
     """
@@ -252,7 +255,7 @@ async def create_completion(request: InferenceRequest):
 async def debug_config():
     """
     Debug config endpoint.
-    
+
     Finding: model_config_exposed
     Only available when this finding is active.
     """
@@ -285,7 +288,7 @@ async def debug_config():
 async def metrics():
     """
     Prometheus-style metrics endpoint.
-    
+
     Finding: model_config_exposed
     Only available when this finding is active.
     """
@@ -313,4 +316,5 @@ ml_gpu_memory_bytes{{device="0"}} 15032385536
 """
 
     from fastapi.responses import PlainTextResponse
+
     return PlainTextResponse(metrics_text, media_type="text/plain")

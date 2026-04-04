@@ -5,10 +5,8 @@ Utilities for parsing, normalizing, and pattern-matching targets.
 Handles hostnames, IPs, URLs, wildcard patterns, and scope checks.
 """
 
-import re
 from dataclasses import dataclass
 from fnmatch import fnmatch
-from typing import Optional
 from urllib.parse import urlparse
 
 from app.checks.base import Service
@@ -26,9 +24,10 @@ class TargetSpec:
         "10.0.0.1:8080"
         "*.example.com"
     """
+
     raw: str
     host: str
-    port: Optional[int]
+    port: int | None
     scheme: str
     is_wildcard: bool
     is_ip: bool
@@ -101,6 +100,7 @@ def parse_target(raw: str) -> TargetSpec:
 def _is_ip(host: str) -> bool:
     """True if host is an IPv4 or IPv6 address."""
     import ipaddress
+
     try:
         ipaddress.ip_address(host)
         return True
@@ -120,17 +120,14 @@ def host_matches_pattern(host: str, pattern: str) -> bool:
     """
     host = host.lower().strip()
     pattern = pattern.lower().strip()
-    
+
     # Direct fnmatch first (handles wildcards and exact matches)
     if fnmatch(host, pattern):
         return True
-    
+
     # If pattern doesn't start with wildcard, also check if host is a subdomain
     # e.g., "fakobanko.local" should match "www.fakobanko.local"
-    if not pattern.startswith("*") and host.endswith("." + pattern):
-        return True
-    
-    return False
+    return bool(not pattern.startswith("*") and host.endswith("." + pattern))
 
 
 def url_matches_patterns(url: str, patterns: list[str]) -> bool:
@@ -177,7 +174,7 @@ def service_from_target(
     port: int,
     scheme: str = "http",
     service_type: str = "unknown",
-    metadata: Optional[dict] = None,
+    metadata: dict | None = None,
 ) -> Service:
     """
     Construct a Service object from resolved target components.

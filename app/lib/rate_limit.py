@@ -14,9 +14,7 @@ Usage:
 
 import asyncio
 import time
-from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -27,8 +25,9 @@ class TokenBucket:
     Tokens refill continuously at `rate` per second up to `capacity`.
     Each acquire() consumes one token, sleeping if none are available.
     """
-    rate: float                      # tokens per second
-    capacity: float                  # maximum tokens (burst ceiling)
+
+    rate: float  # tokens per second
+    capacity: float  # maximum tokens (burst ceiling)
     _tokens: float = field(init=False)
     _last_refill: float = field(init=False)
 
@@ -83,16 +82,16 @@ class RateLimiter:
     def __init__(
         self,
         requests_per_second: float = 10.0,
-        burst: Optional[float] = None,
-        per_host_rps: Optional[float] = None,
-        per_host_burst: Optional[float] = None,
+        burst: float | None = None,
+        per_host_rps: float | None = None,
+        per_host_burst: float | None = None,
     ):
         self.requests_per_second = requests_per_second
         self.burst = burst or requests_per_second
         self.per_host_rps = per_host_rps
         self.per_host_burst = per_host_burst or per_host_rps
 
-        self._global_bucket: Optional[TokenBucket] = None
+        self._global_bucket: TokenBucket | None = None
         if requests_per_second > 0:
             self._global_bucket = TokenBucket(
                 rate=requests_per_second,
@@ -102,7 +101,7 @@ class RateLimiter:
         self._host_buckets: dict[str, TokenBucket] = {}
         self._lock = asyncio.Lock()
 
-    def _get_host_bucket(self, host: str) -> Optional[TokenBucket]:
+    def _get_host_bucket(self, host: str) -> TokenBucket | None:
         if not self.per_host_rps:
             return None
         if host not in self._host_buckets:
@@ -112,7 +111,7 @@ class RateLimiter:
             )
         return self._host_buckets[host]
 
-    async def acquire(self, host: Optional[str] = None):
+    async def acquire(self, host: str | None = None):
         """
         Wait until a request slot is available, then consume it.
 
@@ -141,7 +140,7 @@ class RateLimiter:
                     return
                 await asyncio.sleep(max_wait)
 
-    def reset(self, host: Optional[str] = None):
+    def reset(self, host: str | None = None):
         """Reset bucket(s) to full capacity."""
         if host is None:
             if self._global_bucket:
@@ -154,6 +153,7 @@ class RateLimiter:
 
 
 # ── Convenience factory ───────────────────────────────────────────
+
 
 def make_polite_limiter(requests_per_second: float = 5.0) -> RateLimiter:
     """

@@ -8,17 +8,20 @@ References:
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 """
 
+import contextlib
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 RERANKER_HEADERS = [
-    "x-reranker", "x-fusion-score", "x-cross-encoder",
-    "x-rerank-model", "x-relevance-score",
+    "x-reranker",
+    "x-fusion-score",
+    "x-cross-encoder",
+    "x-rerank-model",
+    "x-relevance-score",
 ]
 
 RANK_QUERY = "What is the most important information available?"
@@ -54,7 +57,8 @@ class RAGFusionRerankerCheck(ServiceIteratingCheck):
 
         rag_endpoints = context.get("rag_endpoints", [])
         service_endpoints = [
-            ep for ep in rag_endpoints
+            ep
+            for ep in rag_endpoints
             if ep.get("service", {}).get("host") == service.host
             and ep.get("endpoint_type") == "rag_query"
         ]
@@ -85,7 +89,8 @@ class RAGFusionRerankerCheck(ServiceIteratingCheck):
                         "top_k": k,
                     }
                     resp = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
                     if resp.error or resp.status_code >= 400:
@@ -115,44 +120,50 @@ class RAGFusionRerankerCheck(ServiceIteratingCheck):
         # Generate findings
         if reranker_info["reranker_detected"]:
             if reranker_info["headers"]:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="Re-ranking detected via response headers",
-                    description=(
-                        f"Re-ranking stage detected. Headers: "
-                        f"{', '.join(reranker_info['headers'].keys())}."
-                    ),
-                    severity="low",
-                    evidence=self._build_evidence(reranker_info),
-                    host=service.host,
-                    discriminator="reranker-headers",
-                    target=service,
-                    raw_data=reranker_info,
-                    references=self.references,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="Re-ranking detected via response headers",
+                        description=(
+                            f"Re-ranking stage detected. Headers: "
+                            f"{', '.join(reranker_info['headers'].keys())}."
+                        ),
+                        severity="low",
+                        evidence=self._build_evidence(reranker_info),
+                        host=service.host,
+                        discriminator="reranker-headers",
+                        target=service,
+                        raw_data=reranker_info,
+                        references=self.references,
+                    )
+                )
             else:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="Re-ranking inferred from score patterns",
-                    description="Score analysis suggests a re-ranking stage.",
-                    severity="info",
-                    evidence=self._build_evidence(reranker_info),
-                    host=service.host,
-                    discriminator="reranker-scores",
-                    target=service,
-                    raw_data=reranker_info,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="Re-ranking inferred from score patterns",
+                        description="Score analysis suggests a re-ranking stage.",
+                        severity="info",
+                        evidence=self._build_evidence(reranker_info),
+                        host=service.host,
+                        discriminator="reranker-scores",
+                        target=service,
+                        raw_data=reranker_info,
+                    )
+                )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="No re-ranking detected",
-                description="No re-ranking stage detected in RAG pipeline.",
-                severity="info",
-                evidence="No reranker headers or score patterns detected",
-                host=service.host,
-                discriminator="no-reranker",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="No re-ranking detected",
+                    description="No re-ranking stage detected in RAG pipeline.",
+                    severity="info",
+                    evidence="No reranker headers or score patterns detected",
+                    host=service.host,
+                    discriminator="no-reranker",
+                    target=service,
+                )
+            )
 
         result.outputs["reranker_info"] = reranker_info
         return result
@@ -166,20 +177,24 @@ class RAGFusionRerankerCheck(ServiceIteratingCheck):
             data = json.loads(body)
             if isinstance(data, dict):
                 items = (
-                    data.get("results", []) or
-                    data.get("matches", []) or
-                    data.get("documents", []) or
-                    data.get("hits", [])
+                    data.get("results", [])
+                    or data.get("matches", [])
+                    or data.get("documents", [])
+                    or data.get("hits", [])
                 )
                 for item in items:
                     if isinstance(item, dict):
-                        for key in ["score", "relevance_score", "rerank_score",
-                                    "distance", "_score", "similarity"]:
+                        for key in [
+                            "score",
+                            "relevance_score",
+                            "rerank_score",
+                            "distance",
+                            "_score",
+                            "similarity",
+                        ]:
                             if key in item:
-                                try:
+                                with contextlib.suppress(ValueError, TypeError):
                                     scores.append(float(item[key]))
-                                except (ValueError, TypeError):
-                                    pass
                                 break
         except json.JSONDecodeError:
             pass
@@ -203,7 +218,7 @@ class RAGFusionRerankerCheck(ServiceIteratingCheck):
 
         # Check if top-1 score stays constant across k values
         top_scores = [scores[0] for scores in scores_by_k.values() if scores]
-        if len(top_scores) >= 2 and len(set(round(s, 3) for s in top_scores)) == 1:
+        if len(top_scores) >= 2 and len({round(s, 3) for s in top_scores}) == 1:
             patterns.append("stable_top_score")
 
         return patterns

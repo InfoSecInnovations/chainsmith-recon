@@ -18,7 +18,7 @@ Requirements:
 import asyncio
 import logging
 import socket
-from typing import Any, Optional
+from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
@@ -26,8 +26,9 @@ from app.lib.findings import build_finding
 logger = logging.getLogger(__name__)
 
 try:
-    import dns.resolver
     import dns.exception
+    import dns.resolver
+
     HAS_DNSPYTHON = True
 except ImportError:
     HAS_DNSPYTHON = False
@@ -116,13 +117,9 @@ class IPv6DiscoveryCheck(BaseCheck):
                     "ipv6_addresses": ipv6_addrs,
                     "has_ipv4": has_ipv4,
                     "ipv6_only": has_ipv6 and not has_ipv4,
-                    "ula_detected": any(
-                        addr.lower().startswith(ULA_PREFIX)
-                        for addr in ipv6_addrs
-                    ),
+                    "ula_detected": any(addr.lower().startswith(ULA_PREFIX) for addr in ipv6_addrs),
                     "link_local": any(
-                        addr.lower().startswith(LINK_LOCAL_PREFIX)
-                        for addr in ipv6_addrs
+                        addr.lower().startswith(LINK_LOCAL_PREFIX) for addr in ipv6_addrs
                     ),
                 }
                 ipv6_data[hostname] = entry
@@ -141,7 +138,7 @@ class IPv6DiscoveryCheck(BaseCheck):
                 loop.run_in_executor(None, self._sync_resolve_aaaa, hostname),
                 timeout=self.DNS_TIMEOUT,
             )
-        except (asyncio.TimeoutError, Exception) as exc:
+        except (TimeoutError, Exception) as exc:
             logger.debug(f"AAAA resolution failed for {hostname}: {exc}")
             return []
 
@@ -160,19 +157,21 @@ class IPv6DiscoveryCheck(BaseCheck):
                     addr = str(rdata)
                     if addr not in addresses:
                         addresses.append(addr)
-            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
-                    dns.resolver.NoNameservers, dns.exception.Timeout,
-                    dns.exception.DNSException):
+            except (
+                dns.resolver.NXDOMAIN,
+                dns.resolver.NoAnswer,
+                dns.resolver.NoNameservers,
+                dns.exception.Timeout,
+                dns.exception.DNSException,
+            ):
                 pass
             except Exception as exc:
                 logger.debug(f"dnspython AAAA error for {hostname}: {exc}")
         else:
             # Fallback: socket.getaddrinfo for AF_INET6
             try:
-                results = socket.getaddrinfo(
-                    hostname, None, socket.AF_INET6, socket.SOCK_STREAM
-                )
-                for family, type_, proto, canonname, sockaddr in results:
+                results = socket.getaddrinfo(hostname, None, socket.AF_INET6, socket.SOCK_STREAM)
+                for _family, _type, _proto, _canonname, sockaddr in results:
                     addr = sockaddr[0]
                     if addr not in addresses:
                         addresses.append(addr)
@@ -195,56 +194,60 @@ class IPv6DiscoveryCheck(BaseCheck):
             addr_str += f" (+{len(ipv6_addrs) - 3} more)"
 
         # Info: IPv6 address discovered
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"IPv6 address discovered: {hostname}",
-            description=(
-                f"{hostname} has {len(ipv6_addrs)} IPv6 address(es): {addr_str}. "
-                f"Dual-stack: {'yes' if entry['has_ipv4'] else 'no (IPv6 only)'}."
-            ),
-            severity="info",
-            evidence=f"Host: {hostname} | IPv6: {addr_str} | IPv4: {entry['has_ipv4']}",
-            host=hostname,
-            discriminator="ipv6",
-            raw_data=entry,
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"IPv6 address discovered: {hostname}",
+                description=(
+                    f"{hostname} has {len(ipv6_addrs)} IPv6 address(es): {addr_str}. "
+                    f"Dual-stack: {'yes' if entry['has_ipv4'] else 'no (IPv6 only)'}."
+                ),
+                severity="info",
+                evidence=f"Host: {hostname} | IPv6: {addr_str} | IPv4: {entry['has_ipv4']}",
+                host=hostname,
+                discriminator="ipv6",
+                raw_data=entry,
+            )
+        )
 
         # Medium: IPv6-only host (reachable on IPv6 but not IPv4 — possible firewall bypass)
         if entry["ipv6_only"]:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Service reachable on IPv6 but not IPv4: {hostname}",
-                description=(
-                    f"{hostname} resolves to IPv6 ({addr_str}) but has no "
-                    f"IPv4 (A record) entry. This could indicate an IPv6-only "
-                    f"service or a potential firewall bypass if IPv4 ACLs were "
-                    f"configured but IPv6 was overlooked."
-                ),
-                severity="medium",
-                evidence=(
-                    f"Host: {hostname} | IPv6: {addr_str} | "
-                    f"IPv4: not resolved | Possible firewall bypass"
-                ),
-                host=hostname,
-                discriminator="ipv6-only",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Service reachable on IPv6 but not IPv4: {hostname}",
+                    description=(
+                        f"{hostname} resolves to IPv6 ({addr_str}) but has no "
+                        f"IPv4 (A record) entry. This could indicate an IPv6-only "
+                        f"service or a potential firewall bypass if IPv4 ACLs were "
+                        f"configured but IPv6 was overlooked."
+                    ),
+                    severity="medium",
+                    evidence=(
+                        f"Host: {hostname} | IPv6: {addr_str} | "
+                        f"IPv4: not resolved | Possible firewall bypass"
+                    ),
+                    host=hostname,
+                    discriminator="ipv6-only",
+                )
+            )
 
         # Low: ULA address exposed
         if entry.get("ula_detected"):
-            ula_addrs = [
-                a for a in ipv6_addrs if a.lower().startswith(ULA_PREFIX)
-            ]
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"RFC 4193 unique local address exposed: {hostname}",
-                description=(
-                    f"{hostname} resolves to a unique local address (ULA) "
-                    f"in the fd00::/8 range ({', '.join(ula_addrs)}). "
-                    f"ULA addresses are intended for local communication only "
-                    f"and may indicate internal infrastructure leaking into DNS."
-                ),
-                severity="low",
-                evidence=f"Host: {hostname} | ULA: {', '.join(ula_addrs)}",
-                host=hostname,
-                discriminator="ula",
-            ))
+            ula_addrs = [a for a in ipv6_addrs if a.lower().startswith(ULA_PREFIX)]
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"RFC 4193 unique local address exposed: {hostname}",
+                    description=(
+                        f"{hostname} resolves to a unique local address (ULA) "
+                        f"in the fd00::/8 range ({', '.join(ula_addrs)}). "
+                        f"ULA addresses are intended for local communication only "
+                        f"and may indicate internal infrastructure leaking into DNS."
+                    ),
+                    severity="low",
+                    evidence=f"Host: {hostname} | ULA: {', '.join(ula_addrs)}",
+                    host=hostname,
+                    discriminator="ula",
+                )
+            )

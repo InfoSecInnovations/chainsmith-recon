@@ -13,8 +13,6 @@ Covers:
 import asyncio
 from typing import Any
 
-import pytest
-
 from app.checks.base import (
     BaseCheck,
     CheckCondition,
@@ -25,7 +23,6 @@ from app.checks.base import (
     ServiceIteratingCheck,
     Severity,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Service Tests
@@ -481,7 +478,7 @@ class TestServiceIteratingCheck:
         check.service_types = ["ai"]
         context = {"services": sample_services}
 
-        result = await check.run(context)
+        await check.run(context)
 
         assert len(check.checked_services) == 1
         assert check.checked_services[0].service_type == "ai"
@@ -514,7 +511,7 @@ class TestServiceIteratingCheck:
         check = ConcreteIteratingCheck()
         context = {"services": [sample_service.to_dict()]}
 
-        result = await check.run(context)
+        await check.run(context)
 
         assert len(check.checked_services) == 1
         assert isinstance(check.checked_services[0], Service)

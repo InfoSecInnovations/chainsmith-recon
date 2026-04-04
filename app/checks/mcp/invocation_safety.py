@@ -13,7 +13,7 @@ Used by: tool_invocation, resource_traversal, template_injection
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,7 @@ def classify_tool_probe_type(tool: dict) -> str:
     desc = tool.get("description", "").lower()
     schema = tool.get("input_schema", tool.get("inputSchema", {}))
     props = schema.get("properties", {}) if schema else {}
-    prop_names = {p.lower() for p in props.keys()}
+    prop_names = {p.lower() for p in props}
     combined = f"{name} {desc}"
 
     if any(kw in combined for kw in ["file", "read_file", "write_file", "fs_read"]):
@@ -176,7 +176,9 @@ def classify_tool_probe_type(tool: dict) -> str:
     return "generic"
 
 
-def log_invocation(tool_name: str, payload: dict, response_status: int | None, response_body: str) -> dict:
+def log_invocation(
+    tool_name: str, payload: dict, response_status: int | None, response_body: str
+) -> dict:
     """Create an invocation log entry for proof-of-scope compliance."""
     entry = {
         "tool": tool_name,

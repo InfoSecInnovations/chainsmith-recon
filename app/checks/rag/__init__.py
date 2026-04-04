@@ -47,23 +47,23 @@ References:
 """
 
 from app.checks.base import BaseCheck
-from app.checks.rag.discovery import RAGDiscoveryCheck
-from app.checks.rag.indirect_injection import RAGIndirectInjectionCheck
-from app.checks.rag.vector_store_access import RAGVectorStoreAccessCheck
+from app.checks.rag.adversarial_embedding import RAGAdversarialEmbeddingCheck
 from app.checks.rag.auth_bypass import RAGAuthBypassCheck
+from app.checks.rag.cache_poisoning import RAGCachePoisoningCheck
+from app.checks.rag.chunk_boundary import RAGChunkBoundaryCheck
 from app.checks.rag.collection_enumeration import RAGCollectionEnumerationCheck
-from app.checks.rag.embedding_fingerprint import RAGEmbeddingFingerprintCheck
+from app.checks.rag.corpus_poisoning import RAGCorpusPoisoningCheck
+from app.checks.rag.cross_collection import RAGCrossCollectionCheck
+from app.checks.rag.discovery import RAGDiscoveryCheck
 from app.checks.rag.document_exfiltration import RAGDocumentExfiltrationCheck
+from app.checks.rag.embedding_fingerprint import RAGEmbeddingFingerprintCheck
+from app.checks.rag.fusion_reranker import RAGFusionRerankerCheck
+from app.checks.rag.indirect_injection import RAGIndirectInjectionCheck
+from app.checks.rag.metadata_injection import RAGMetadataInjectionCheck
+from app.checks.rag.multimodal_injection import RAGMultimodalInjectionCheck
 from app.checks.rag.retrieval_manipulation import RAGRetrievalManipulationCheck
 from app.checks.rag.source_attribution import RAGSourceAttributionCheck
-from app.checks.rag.cache_poisoning import RAGCachePoisoningCheck
-from app.checks.rag.corpus_poisoning import RAGCorpusPoisoningCheck
-from app.checks.rag.metadata_injection import RAGMetadataInjectionCheck
-from app.checks.rag.chunk_boundary import RAGChunkBoundaryCheck
-from app.checks.rag.multimodal_injection import RAGMultimodalInjectionCheck
-from app.checks.rag.fusion_reranker import RAGFusionRerankerCheck
-from app.checks.rag.cross_collection import RAGCrossCollectionCheck
-from app.checks.rag.adversarial_embedding import RAGAdversarialEmbeddingCheck
+from app.checks.rag.vector_store_access import RAGVectorStoreAccessCheck
 
 __all__ = [
     "RAGDiscoveryCheck",

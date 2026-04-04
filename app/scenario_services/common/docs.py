@@ -29,17 +29,16 @@ Usage in docker-compose.yml:
 import os
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import HTMLResponse
 
 from app.scenario_services.common.config import (
     SERVICE_NAME,
-    is_finding_active,
-    get_or_create_session,
-    get_brand_name,
     get_brand_domain,
+    get_brand_name,
+    get_or_create_session,
+    is_finding_active,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -64,10 +63,11 @@ app = FastAPI(
 # OPENAPI CUSTOMIZATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def custom_openapi():
     """
     Generate customized OpenAPI schema with optional internal info.
-    
+
     Findings:
         openapi_exposed: Adds internal server URLs
         internal_endpoints_documented: Documents admin endpoints
@@ -90,7 +90,10 @@ def custom_openapi():
         openapi_schema["info"]["x-internal"] = True
         openapi_schema["servers"] = [
             {"url": f"https://api.{domain}", "description": "Production"},
-            {"url": f"https://api-staging.{domain.replace('.local', '.internal')}", "description": "Staging"},
+            {
+                "url": f"https://api-staging.{domain.replace('.local', '.internal')}",
+                "description": "Staging",
+            },
             {"url": "http://localhost:8080", "description": "Development"},
         ]
 
@@ -122,6 +125,7 @@ app.openapi = custom_openapi
 # MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     """Add headers based on active findings."""
@@ -139,6 +143,7 @@ async def add_headers(request: Request, call_next):
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -162,20 +167,20 @@ async def root():
     <div class="container">
         <h1>🏦 {brand} API Documentation</h1>
         <p>Welcome to the {brand} API documentation portal.</p>
-        
+
         <h2>Quick Links</h2>
         <ul>
             <li><a href="/docs">Interactive API Docs (Swagger UI)</a></li>
             <li><a href="/redoc">API Reference (ReDoc)</a></li>
             <li><a href="/openapi.json">OpenAPI Specification</a></li>
         </ul>
-        
+
         <h2>Available APIs</h2>
         <div class="endpoint"><span class="method">GET</span> /api/v1/accounts - List accounts</div>
         <div class="endpoint"><span class="method">GET</span> /api/v1/transactions - Get transactions</div>
         <div class="endpoint"><span class="method">POST</span> /api/v1/transfers - Initiate transfer</div>
         <div class="endpoint"><span class="method">GET</span> /api/v1/customers - Customer lookup</div>
-        
+
         <h2>Authentication</h2>
         <p>All API requests require authentication via Bearer token or API key.</p>
     </div>
@@ -200,6 +205,7 @@ async def health():
 # ═══════════════════════════════════════════════════════════════════════════════
 # STUB API ENDPOINTS (for OpenAPI documentation)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.get("/api/v1/accounts")
 async def list_accounts():

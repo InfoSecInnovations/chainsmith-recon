@@ -12,10 +12,9 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Parameters to try overriding
 TOPK_VALUES = [1, 5, 20, 50, 100]
@@ -64,7 +63,8 @@ class RAGRetrievalManipulationCheck(ServiceIteratingCheck):
 
         rag_endpoints = context.get("rag_endpoints", [])
         service_endpoints = [
-            ep for ep in rag_endpoints
+            ep
+            for ep in rag_endpoints
             if ep.get("service", {}).get("host") == service.host
             and ep.get("endpoint_type") == "rag_query"
         ]
@@ -106,7 +106,8 @@ class RAGRetrievalManipulationCheck(ServiceIteratingCheck):
                     }
                     body.update(override)
                     resp = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
                     if resp.error or resp.status_code >= 400:
@@ -122,49 +123,55 @@ class RAGRetrievalManipulationCheck(ServiceIteratingCheck):
         # Generate findings
         if control_results["topk_overridable"]:
             max_k = control_results["max_topk_accepted"]
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Retrieval manipulation: {control_results['topk_param']} accepts client override",
-                description=(
-                    f"Client-supplied '{control_results['topk_param']}' parameter controls "
-                    f"retrieval count. Maximum accepted: {max_k}. "
-                    f"Expanded retrieval increases attack surface for indirect injection."
-                ),
-                severity="high",
-                evidence=self._build_topk_evidence(control_results),
-                host=service.host,
-                discriminator="topk-override",
-                target=service,
-                raw_data=control_results,
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Retrieval manipulation: {control_results['topk_param']} accepts client override",
+                    description=(
+                        f"Client-supplied '{control_results['topk_param']}' parameter controls "
+                        f"retrieval count. Maximum accepted: {max_k}. "
+                        f"Expanded retrieval increases attack surface for indirect injection."
+                    ),
+                    severity="high",
+                    evidence=self._build_topk_evidence(control_results),
+                    host=service.host,
+                    discriminator="topk-override",
+                    target=service,
+                    raw_data=control_results,
+                    references=self.references,
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="top_k parameter bounded by server",
-                description="Client override of retrieval parameters was rejected or had no effect.",
-                severity="low",
-                evidence="Tested parameters: " + ", ".join(TOPK_PARAMS),
-                host=service.host,
-                discriminator="topk-bounded",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="top_k parameter bounded by server",
+                    description="Client override of retrieval parameters was rejected or had no effect.",
+                    severity="low",
+                    evidence="Tested parameters: " + ", ".join(TOPK_PARAMS),
+                    host=service.host,
+                    discriminator="topk-bounded",
+                    target=service,
+                )
+            )
 
         if control_results["filter_bypassable"]:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Retrieval filter override accepted",
-                description=(
-                    "Filter/where clause parameters accepted from client — "
-                    "metadata-based access controls may be bypassable."
-                ),
-                severity="medium",
-                evidence="Empty filter/where clause accepted without error",
-                host=service.host,
-                discriminator="filter-bypass",
-                target=service,
-                raw_data={"filter_bypassable": True},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Retrieval filter override accepted",
+                    description=(
+                        "Filter/where clause parameters accepted from client — "
+                        "metadata-based access controls may be bypassable."
+                    ),
+                    severity="medium",
+                    evidence="Empty filter/where clause accepted without error",
+                    host=service.host,
+                    discriminator="filter-bypass",
+                    target=service,
+                    raw_data={"filter_bypassable": True},
+                )
+            )
 
         result.outputs["retrieval_control"] = control_results
         return result
@@ -188,7 +195,8 @@ class RAGRetrievalManipulationCheck(ServiceIteratingCheck):
                 param_name: k,
             }
             resp = await client.post(
-                url, json=body,
+                url,
+                json=body,
                 headers={"Content-Type": "application/json"},
             )
             if resp.error or resp.status_code >= 400:
@@ -207,8 +215,15 @@ class RAGRetrievalManipulationCheck(ServiceIteratingCheck):
         try:
             data = json.loads(body)
             if isinstance(data, dict):
-                for key in ["results", "documents", "sources", "matches",
-                            "chunks", "hits", "source_documents"]:
+                for key in [
+                    "results",
+                    "documents",
+                    "sources",
+                    "matches",
+                    "chunks",
+                    "hits",
+                    "source_documents",
+                ]:
                     if key in data and isinstance(data[key], list):
                         return len(data[key])
             if isinstance(data, list):

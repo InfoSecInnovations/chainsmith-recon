@@ -7,10 +7,10 @@ Discover tools, functions, and capabilities available to AI agents.
 import re
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.lib.ai_helpers import extract_response_text, format_chat_request
 from app.lib.findings import build_finding
-from app.lib.ai_helpers import format_chat_request, extract_response_text
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
 
@@ -28,7 +28,9 @@ class ToolDiscoveryCheck(BaseCheck):
     sequential = True
     requests_per_second = 1.0
 
-    reason = "Understanding chatbot capabilities reveals attack surface for tool abuse and data access"
+    reason = (
+        "Understanding chatbot capabilities reveals attack surface for tool abuse and data access"
+    )
     references = ["OWASP LLM Top 10 - LLM07 Insecure Plugin Design"]
     techniques = ["capability enumeration", "social engineering", "tool discovery"]
 
@@ -41,10 +43,27 @@ class ToolDiscoveryCheck(BaseCheck):
     ]
 
     TOOL_INDICATORS = [
-        "get_account", "get_balance", "get_transaction", "get_customer",
-        "lookup", "search", "fetch", "retrieve", "query", "database",
-        "transfer", "payment", "send", "update", "delete", "create",
-        "internal", "admin", "tool", "function", "capability",
+        "get_account",
+        "get_balance",
+        "get_transaction",
+        "get_customer",
+        "lookup",
+        "search",
+        "fetch",
+        "retrieve",
+        "query",
+        "database",
+        "transfer",
+        "payment",
+        "send",
+        "update",
+        "delete",
+        "create",
+        "internal",
+        "admin",
+        "tool",
+        "function",
+        "capability",
     ]
 
     HIGH_RISK_TOOLS = {"admin", "database", "internal", "delete", "transfer"}
@@ -96,7 +115,7 @@ class ToolDiscoveryCheck(BaseCheck):
                             discovered_tools.add(indicator)
 
                     # Extract snake_case function-like names
-                    discovered_tools.update(re.findall(r'\b([a-z]+_[a-z_]+)\b', text))
+                    discovered_tools.update(re.findall(r"\b([a-z]+_[a-z_]+)\b", text))
 
         except Exception as e:
             result.errors.append(f"{url}: {e}")
@@ -106,17 +125,20 @@ class ToolDiscoveryCheck(BaseCheck):
         if tools:
             severity = "high" if any(t in self.HIGH_RISK_TOOLS for t in tools) else "medium"
 
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Tools discovered ({len(tools)})",
-                description="Chatbot revealed available tools through conversation",
-                severity=severity,
-                evidence=f"Tools: {', '.join(tools[:10])}",
-                host=service.host,
-                discriminator="tools-discovered",
-                target=service, target_url=url,
-                raw_data={"tools": tools},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Tools discovered ({len(tools)})",
+                    description="Chatbot revealed available tools through conversation",
+                    severity=severity,
+                    evidence=f"Tools: {', '.join(tools[:10])}",
+                    host=service.host,
+                    discriminator="tools-discovered",
+                    target=service,
+                    target_url=url,
+                    raw_data={"tools": tools},
+                )
+            )
             result.outputs["discovered_tools"] = tools
 
         return result

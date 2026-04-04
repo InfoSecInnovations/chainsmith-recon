@@ -16,8 +16,8 @@ Profiles:
 
 # Standard web servers and HTTPS
 WEB = [
-    80,    # HTTP
-    443,   # HTTPS
+    80,  # HTTP
+    443,  # HTTPS
     8080,  # Alt HTTP (Tomcat, proxies)
     8443,  # Alt HTTPS
     8000,  # Django, uvicorn
@@ -29,54 +29,62 @@ WEB = [
 
 # API gateways, proxies, management planes
 API = [
-    4000,   # LiteLLM, GraphQL servers
-    8001,   # Kong admin
-    8444,   # Kong admin SSL
-    8090,   # Various API servers
-    9080,   # API gateways (APISIX, etc.)
-    5555,   # Flower (Celery), misc APIs
+    4000,  # LiteLLM, GraphQL servers
+    8001,  # Kong admin
+    8444,  # Kong admin SSL
+    8090,  # Various API servers
+    9080,  # API gateways (APISIX, etc.)
+    5555,  # Flower (Celery), misc APIs
 ]
 
 # AI / ML inference and tooling
 AI = [
     11434,  # Ollama
-    7860,   # Gradio
-    8501,   # Streamlit
-    5001,   # MLflow
-    6333,   # Qdrant gRPC
-    6334,   # Qdrant HTTP
-    8265,   # Ray Dashboard
+    7860,  # Gradio
+    8501,  # Streamlit
+    5001,  # MLflow
+    6333,  # Qdrant gRPC
+    6334,  # Qdrant HTTP
+    8265,  # Ray Dashboard
     19530,  # Milvus
-    9090,   # Prometheus
-    3100,   # Loki
+    9090,  # Prometheus
+    3100,  # Loki
 ]
 
 # Databases commonly exposed alongside web services
 DATA = [
-    5432,   # PostgreSQL
-    3306,   # MySQL / MariaDB
+    5432,  # PostgreSQL
+    3306,  # MySQL / MariaDB
     27017,  # MongoDB
-    6379,   # Redis
-    9200,   # Elasticsearch
-    8529,   # ArangoDB
+    6379,  # Redis
+    9200,  # Elasticsearch
+    8529,  # ArangoDB
 ]
 
 # Lab / container range - dev servers, Docker-mapped services
 LAB = [
-    8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089,
-    3001,   # Dev servers (Next.js, etc.)
-    4200,   # Angular CLI
-    5173,   # Vite
+    8081,
+    8082,
+    8083,
+    8084,
+    8085,
+    8086,
+    8087,
+    8088,
+    8089,
+    3001,  # Dev servers (Next.js, etc.)
+    4200,  # Angular CLI
+    5173,  # Vite
 ]
 
 
 # ── Named profiles ───────────────────────────────────────────────
 
 PROFILES: dict[str, list[int]] = {
-    "web":  sorted(set(WEB + API)),
-    "ai":   sorted(set(WEB + API + AI)),
+    "web": sorted(set(WEB + API)),
+    "ai": sorted(set(WEB + API + AI)),
     "full": sorted(set(WEB + API + AI + DATA)),
-    "lab":  sorted(set(WEB + API + AI + DATA + LAB)),
+    "lab": sorted(set(WEB + API + AI + DATA + LAB)),
 }
 
 # Default profile when nothing is specified

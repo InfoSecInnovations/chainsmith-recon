@@ -17,9 +17,8 @@ optional/best-effort.
 import asyncio
 import logging
 import socket
-import struct
 import time
-from typing import Any, Optional
+from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
@@ -133,7 +132,7 @@ class TracerouteCheck(BaseCheck):
         result.outputs["traceroute_data"] = traceroute_data
         return result
 
-    async def _trace_route(self, target_ip: str) -> Optional[dict[str, Any]]:
+    async def _trace_route(self, target_ip: str) -> dict[str, Any] | None:
         """Trace the network path to target_ip using TCP probes."""
         loop = asyncio.get_event_loop()
         try:
@@ -141,14 +140,14 @@ class TracerouteCheck(BaseCheck):
                 loop.run_in_executor(None, self._sync_trace_route, target_ip),
                 timeout=self.timeout_seconds / 2,  # Per-target timeout
             )
-        except (asyncio.TimeoutError, Exception) as exc:
+        except (TimeoutError, Exception) as exc:
             logger.debug(f"Traceroute failed for {target_ip}: {exc}")
             return None
 
-    def _sync_trace_route(self, target_ip: str) -> Optional[dict[str, Any]]:
+    def _sync_trace_route(self, target_ip: str) -> dict[str, Any] | None:
         """Synchronous TCP traceroute implementation."""
         hops: list[dict[str, Any]] = []
-        cdn_detected: Optional[str] = None
+        cdn_detected: str | None = None
 
         for ttl in range(1, MAX_HOPS + 1):
             hop_info = self._probe_hop(target_ip, ttl)
@@ -206,7 +205,7 @@ class TracerouteCheck(BaseCheck):
                 elapsed = (time.monotonic() - start) * 1000
                 hop_info["ip"] = target_ip
                 hop_info["rtt_ms"] = round(elapsed, 2)
-            except socket.timeout:
+            except TimeoutError:
                 # Timeout — no response at this TTL
                 pass
             except OSError as exc:
@@ -216,7 +215,7 @@ class TracerouteCheck(BaseCheck):
                 # On some platforms, errno 10013/10065 indicate TTL expired
                 # or host unreachable — we can still extract info
                 if hasattr(exc, "errno") and exc.errno in (
-                    111,    # Connection refused (Linux)
+                    111,  # Connection refused (Linux)
                     10061,  # Connection refused (Windows)
                 ):
                     # Reached the target but port is closed
@@ -238,7 +237,7 @@ class TracerouteCheck(BaseCheck):
 
         return hop_info
 
-    def _detect_cdn(self, hostname: str) -> Optional[str]:
+    def _detect_cdn(self, hostname: str) -> str | None:
         """Check if a hostname matches known CDN/WAF patterns."""
         hostname_lower = hostname.lower()
         for provider, patterns in CDN_PATTERNS.items():
@@ -263,23 +262,25 @@ class TracerouteCheck(BaseCheck):
         rtt_str = f"{avg_rtt}ms avg" if avg_rtt else "unknown"
 
         # Info: route summary
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"Route to {host}: {total_hops} hops, {rtt_str}",
-            description=(
-                f"Network path to {host} ({target_ip}): {total_hops} hops, "
-                f"average latency {rtt_str}. "
-                f"Target {'reached' if reached else 'not reached (blocked/filtered)'}."
-            ),
-            severity="info",
-            evidence=(
-                f"Target: {host} ({target_ip}) | Hops: {total_hops} | "
-                f"Avg RTT: {rtt_str} | Reached: {reached}"
-            ),
-            host=host,
-            discriminator="route",
-            raw_data=trace,
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"Route to {host}: {total_hops} hops, {rtt_str}",
+                description=(
+                    f"Network path to {host} ({target_ip}): {total_hops} hops, "
+                    f"average latency {rtt_str}. "
+                    f"Target {'reached' if reached else 'not reached (blocked/filtered)'}."
+                ),
+                severity="info",
+                evidence=(
+                    f"Target: {host} ({target_ip}) | Hops: {total_hops} | "
+                    f"Avg RTT: {rtt_str} | Reached: {reached}"
+                ),
+                host=host,
+                discriminator="route",
+                raw_data=trace,
+            )
+        )
 
         # Info: CDN/WAF detected in path
         if cdn:
@@ -291,18 +292,18 @@ class TracerouteCheck(BaseCheck):
                     break
 
             hop_str = f" (hop {cdn_hop})" if cdn_hop else ""
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"CDN detected in path to {host}: {cdn}{hop_str}",
-                description=(
-                    f"Traffic to {host} ({target_ip}) passes through {cdn} "
-                    f"infrastructure{hop_str}. This means service_probe and "
-                    f"web check results may reflect the CDN, not the origin server."
-                ),
-                severity="info",
-                evidence=(
-                    f"Target: {host} | CDN: {cdn} | Hop: {cdn_hop or 'unknown'}"
-                ),
-                host=host,
-                discriminator=f"cdn-{cdn.lower().replace('/', '-').replace(' ', '-')}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"CDN detected in path to {host}: {cdn}{hop_str}",
+                    description=(
+                        f"Traffic to {host} ({target_ip}) passes through {cdn} "
+                        f"infrastructure{hop_str}. This means service_probe and "
+                        f"web check results may reflect the CDN, not the origin server."
+                    ),
+                    severity="info",
+                    evidence=(f"Target: {host} | CDN: {cdn} | Hop: {cdn_hop or 'unknown'}"),
+                    host=host,
+                    discriminator=f"cdn-{cdn.lower().replace('/', '-').replace(' ', '-')}",
+                )
+            )

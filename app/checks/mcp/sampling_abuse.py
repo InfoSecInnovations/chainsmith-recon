@@ -14,10 +14,10 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import cap_response
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class MCPSamplingAbuseCheck(BaseCheck):
@@ -73,41 +73,41 @@ class MCPSamplingAbuseCheck(BaseCheck):
             try:
                 async with AsyncHttpClient(cfg) as client:
                     # Test 1: Basic sampling/createMessage
-                    basic = await self._test_basic_sampling(
-                        client, server_url, host, result
-                    )
+                    basic = await self._test_basic_sampling(client, server_url, host, result)
                     server_sampling["sampling_accessible"] = basic.get("accessible", False)
 
                     if basic.get("accessible"):
                         # Test 2: System prompt injection
-                        await self._test_system_prompt(
-                            client, server_url, host, result
-                        )
+                        await self._test_system_prompt(client, server_url, host, result)
 
                         # Test 3: Auth on sampling
                         if not has_sampling:
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title="Undeclared sampling endpoint accessible",
-                                description=(
-                                    "sampling/createMessage is accessible even though sampling "
-                                    "was not declared in server capabilities."
-                                ),
-                                severity="high",
-                                evidence=f"URL: {server_url}\nCapabilities: {capabilities}",
-                                host=host,
-                                discriminator="sampling-undeclared",
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title="Undeclared sampling endpoint accessible",
+                                    description=(
+                                        "sampling/createMessage is accessible even though sampling "
+                                        "was not declared in server capabilities."
+                                    ),
+                                    severity="high",
+                                    evidence=f"URL: {server_url}\nCapabilities: {capabilities}",
+                                    host=host,
+                                    discriminator="sampling-undeclared",
+                                )
+                            )
                     elif not has_sampling:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Sampling capability not exposed",
-                            description="The MCP server does not declare or respond to sampling requests.",
-                            severity="info",
-                            evidence=f"URL: {server_url}",
-                            host=host,
-                            discriminator="sampling-absent",
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Sampling capability not exposed",
+                                description="The MCP server does not declare or respond to sampling requests.",
+                                severity="info",
+                                evidence=f"URL: {server_url}",
+                                host=host,
+                                discriminator="sampling-absent",
+                            )
+                        )
 
             except Exception as e:
                 result.errors.append(f"Sampling test on {server_url}: {e}")
@@ -154,19 +154,21 @@ class MCPSamplingAbuseCheck(BaseCheck):
                     return {"accessible": False}
                 rpc_result = data.get("result", {})
                 if isinstance(rpc_result, dict) and rpc_result.get("content"):
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title="MCP sampling endpoint exposed: open LLM proxy via sampling/createMessage",
-                        description=(
-                            "The MCP server's sampling endpoint is accessible and returns "
-                            "LLM completions. This is effectively an open LLM proxy."
-                        ),
-                        severity="high",
-                        evidence=f"URL: {server_url}\nResponse: {cap_response(body)[:300]}",
-                        host=host,
-                        discriminator="sampling-open",
-                        raw_data={"response": cap_response(body)},
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title="MCP sampling endpoint exposed: open LLM proxy via sampling/createMessage",
+                            description=(
+                                "The MCP server's sampling endpoint is accessible and returns "
+                                "LLM completions. This is effectively an open LLM proxy."
+                            ),
+                            severity="high",
+                            evidence=f"URL: {server_url}\nResponse: {cap_response(body)[:300]}",
+                            host=host,
+                            discriminator="sampling-open",
+                            raw_data={"response": cap_response(body)},
+                        )
+                    )
                     return {"accessible": True, "response": cap_response(body)}
         except (json.JSONDecodeError, TypeError):
             pass
@@ -212,17 +214,19 @@ class MCPSamplingAbuseCheck(BaseCheck):
             text = content.get("text", str(content)) if isinstance(content, dict) else str(content)
 
             if "chainsmithprobe" in text.lower() or "chainsmith" in text.lower():
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title="Sampling accepts client-supplied system prompt",
-                    description=(
-                        "The sampling endpoint accepted and followed a client-supplied "
-                        "system prompt, allowing clients to override the LLM's behavior."
-                    ),
-                    severity="medium",
-                    evidence=f"URL: {server_url}\nSystem prompt: 'ChainsmithProbe'\nResponse: {text[:200]}",
-                    host=host,
-                    discriminator="sampling-sysprompt",
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title="Sampling accepts client-supplied system prompt",
+                        description=(
+                            "The sampling endpoint accepted and followed a client-supplied "
+                            "system prompt, allowing clients to override the LLM's behavior."
+                        ),
+                        severity="medium",
+                        evidence=f"URL: {server_url}\nSystem prompt: 'ChainsmithProbe'\nResponse: {text[:200]}",
+                        host=host,
+                        discriminator="sampling-sysprompt",
+                    )
+                )
         except (json.JSONDecodeError, TypeError, AttributeError):
             pass

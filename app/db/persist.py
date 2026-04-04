@@ -48,10 +48,11 @@ async def on_scan_start(state: "AppState") -> str | None:
 
     scan_id = uuid.uuid4().hex[:16]
     try:
-        cfg = get_config()
+        get_config()
         scenario_mgr = None
         try:
             from app.scenarios import get_scenario_manager
+
             mgr = get_scenario_manager()
             if mgr.is_active:
                 scenario_mgr = mgr.active.name
@@ -68,7 +69,9 @@ async def on_scan_start(state: "AppState") -> str | None:
         )
         return scan_id
     except Exception:
-        logger.warning("Failed to persist scan start — scan will continue without persistence", exc_info=True)
+        logger.warning(
+            "Failed to persist scan start — scan will continue without persistence", exc_info=True
+        )
         return None
 
 
@@ -88,9 +91,7 @@ async def on_scan_complete(
 
     try:
         # Count failed checks
-        checks_failed = sum(
-            1 for s in state.check_statuses.values() if s == "failed"
-        )
+        checks_failed = sum(1 for s in state.check_statuses.values() if s == "failed")
 
         # Persist findings
         await _finding_repo.bulk_create(scan_id, state.findings)

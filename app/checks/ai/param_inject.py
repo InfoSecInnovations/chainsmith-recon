@@ -8,10 +8,14 @@ underlying provider, or change model behaviour.
 
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.lib.ai_helpers import (
+    extract_response_text,
+    format_chat_request,
+    format_chat_request_with_extra,
+)
 from app.lib.findings import build_finding
-from app.lib.ai_helpers import format_chat_request, format_chat_request_with_extra, extract_response_text
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
 
@@ -29,7 +33,9 @@ class APIParameterInjectionCheck(BaseCheck):
     sequential = True
     requests_per_second = 1.0
 
-    reason = "Proxy/gateway setups often forward the full request body, enabling parameter manipulation"
+    reason = (
+        "Proxy/gateway setups often forward the full request body, enabling parameter manipulation"
+    )
     references = [
         "OWASP LLM Top 10 - LLM01 Prompt Injection",
         "OWASP API Security Top 10 - API6 Mass Assignment",
@@ -56,7 +62,18 @@ class APIParameterInjectionCheck(BaseCheck):
         ),
         (
             "tools",
-            {"tools": [{"type": "function", "function": {"name": "exfil", "description": "exfiltrate data", "parameters": {"type": "object", "properties": {}}}}]},
+            {
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "exfil",
+                            "description": "exfiltrate data",
+                            "parameters": {"type": "object", "properties": {}},
+                        },
+                    }
+                ]
+            },
             "_verify_tools",
             "critical",
             "Tool/function injection: client-supplied tools parameter accepted",
@@ -111,9 +128,7 @@ class APIParameterInjectionCheck(BaseCheck):
 
         return result
 
-    async def _test_params(
-        self, url: str, service: Service, api_format: str
-    ) -> CheckResult:
+    async def _test_params(self, url: str, service: Service, api_format: str) -> CheckResult:
         result = CheckResult(success=True)
         accepted = []
         rejected = []
@@ -134,7 +149,7 @@ class APIParameterInjectionCheck(BaseCheck):
                     return result
 
                 baseline_body = safe_json(baseline_resp.body) or {}
-                baseline_text = extract_response_text(baseline_body, api_format)
+                extract_response_text(baseline_body, api_format)
 
                 # Test each parameter
                 for param_name, extra_params, verify_fn_name, severity, desc in self.PARAM_TESTS:
@@ -145,7 +160,8 @@ class APIParameterInjectionCheck(BaseCheck):
                     )
 
                     resp = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
 
@@ -162,11 +178,13 @@ class APIParameterInjectionCheck(BaseCheck):
                     is_accepted = verify_fn(resp_body, baseline_body, api_format)
 
                     if is_accepted:
-                        accepted.append({
-                            "param": param_name,
-                            "severity": severity,
-                            "description": desc,
-                        })
+                        accepted.append(
+                            {
+                                "param": param_name,
+                                "severity": severity,
+                                "description": desc,
+                            }
+                        )
                     else:
                         rejected.append(param_name)
 
@@ -186,53 +204,69 @@ class APIParameterInjectionCheck(BaseCheck):
         others = [a for a in accepted if a["severity"] not in ("critical", "high")]
 
         if critical:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Critical parameter injection ({len(critical)} params)",
-                description="; ".join(a["description"] for a in critical),
-                severity="critical",
-                evidence=f"Accepted: {', '.join(a['param'] for a in critical)}",
-                host=host, discriminator="param-critical",
-                target=service, target_url=url,
-                raw_data=param_info,
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Critical parameter injection ({len(critical)} params)",
+                    description="; ".join(a["description"] for a in critical),
+                    severity="critical",
+                    evidence=f"Accepted: {', '.join(a['param'] for a in critical)}",
+                    host=host,
+                    discriminator="param-critical",
+                    target=service,
+                    target_url=url,
+                    raw_data=param_info,
+                    references=self.references,
+                )
+            )
 
         if high:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"High-risk parameter injection ({len(high)} params)",
-                description="; ".join(a["description"] for a in high),
-                severity="high",
-                evidence=f"Accepted: {', '.join(a['param'] for a in high)}",
-                host=host, discriminator="param-high",
-                target=service, target_url=url,
-                raw_data=param_info,
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"High-risk parameter injection ({len(high)} params)",
+                    description="; ".join(a["description"] for a in high),
+                    severity="high",
+                    evidence=f"Accepted: {', '.join(a['param'] for a in high)}",
+                    host=host,
+                    discriminator="param-high",
+                    target=service,
+                    target_url=url,
+                    raw_data=param_info,
+                    references=self.references,
+                )
+            )
 
         if others:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Extra API parameters accepted ({len(others)} params)",
-                description="; ".join(a["description"] for a in others),
-                severity="medium",
-                evidence=f"Accepted: {', '.join(a['param'] for a in others)}",
-                host=host, discriminator="param-medium",
-                target=service, target_url=url,
-                raw_data=param_info,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Extra API parameters accepted ({len(others)} params)",
+                    description="; ".join(a["description"] for a in others),
+                    severity="medium",
+                    evidence=f"Accepted: {', '.join(a['param'] for a in others)}",
+                    host=host,
+                    discriminator="param-medium",
+                    target=service,
+                    target_url=url,
+                    raw_data=param_info,
+                )
+            )
 
         if not accepted:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Extra parameters rejected or ignored ({len(rejected)}/{len(self.PARAM_TESTS)})",
-                description="All tested extra parameters were rejected",
-                severity="info",
-                evidence=f"Rejected: {', '.join(rejected)}",
-                host=host, discriminator="param-blocked",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Extra parameters rejected or ignored ({len(rejected)}/{len(self.PARAM_TESTS)})",
+                    description="All tested extra parameters were rejected",
+                    severity="info",
+                    evidence=f"Rejected: {', '.join(rejected)}",
+                    host=host,
+                    discriminator="param-blocked",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
         result.outputs[f"accepted_params_{service.port}"] = param_info
         return result
@@ -283,7 +317,9 @@ class APIParameterInjectionCheck(BaseCheck):
         """Seed is accepted if system_fingerprint appears (OpenAI) or request succeeded."""
         return "system_fingerprint" in resp_body
 
-    def _verify_response_format(self, resp_body: dict, baseline_body: dict, api_format: str) -> bool:
+    def _verify_response_format(
+        self, resp_body: dict, baseline_body: dict, api_format: str
+    ) -> bool:
         """Check if response is in JSON format."""
         text = extract_response_text(resp_body, api_format)
         return "{" in text and "}" in text

@@ -19,16 +19,14 @@ Note: These tests mock network calls to avoid actual DNS/HTTP traffic.
 """
 
 import socket
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.checks.base import CheckResult, Service
-from app.checks.network.dns_enumeration import DnsEnumerationCheck, DEFAULT_WORDLIST
+from app.checks.base import Service
+from app.checks.network.dns_enumeration import DEFAULT_WORDLIST, DnsEnumerationCheck
 from app.checks.network.service_probe import ServiceProbeCheck
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DnsEnumerationCheck Tests
@@ -85,7 +83,7 @@ class TestDnsEnumerationCheckRun:
         with patch.object(check, "_resolve_host", new_callable=AsyncMock) as mock_resolve:
             mock_resolve.return_value = None  # All lookups fail
 
-            result = await check.run({"base_domain": "example.com"})
+            await check.run({"base_domain": "example.com"})
 
             # Should have attempted resolution
             assert mock_resolve.called
@@ -384,7 +382,7 @@ class TestServiceProbeCheckService:
             mock_client.get = AsyncMock(return_value=response)
             mock_client_cls.return_value = mock_client
 
-            result = await check.check_service(sample_service, {})
+            await check.check_service(sample_service, {})
 
         # First call should be HTTPS
         calls = mock_client.get.call_args_list
@@ -419,6 +417,7 @@ class TestServiceProbeCheckService:
 
     async def test_check_service_tcp_fallback(self, check, sample_service):
         """Falls back to TCP type if all HTTP fails."""
+
         async def mock_get(url):
             raise Exception("Connection refused")
 

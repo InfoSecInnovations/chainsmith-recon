@@ -13,11 +13,9 @@ Outputs waf_detected for downstream check annotation.
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-from app.lib.evidence import fmt_header_evidence
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # ── WAF/CDN signature database ──────────────────────────────────────
 
@@ -77,9 +75,16 @@ WAF_BODY_PATTERNS: list[tuple[str, str]] = [
 
 # Products known to provide WAF functionality (not just CDN)
 WAF_PRODUCTS = {
-    "Cloudflare", "AWS WAF", "Imperva/Incapsula", "Sucuri",
-    "F5 BIG-IP", "DenyAll WAF", "Barracuda WAF", "Citrix ADC",
-    "Citrix NetScaler", "Baidu Yunjiasu",
+    "Cloudflare",
+    "AWS WAF",
+    "Imperva/Incapsula",
+    "Sucuri",
+    "F5 BIG-IP",
+    "DenyAll WAF",
+    "Barracuda WAF",
+    "Citrix ADC",
+    "Citrix NetScaler",
+    "Baidu Yunjiasu",
 }
 
 
@@ -132,33 +137,36 @@ class WAFDetectionCheck(ServiceIteratingCheck):
             product_type = info.get("type", "CDN/WAF")
             is_waf = is_waf or "waf" in product_type.lower()
 
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"{product_type} detected: {product}",
-                description=f"{product} identified on {service.host} via {info.get('method', 'header analysis')}",
-                severity="info",
-                evidence=info.get("evidence", f"{product} signatures found"),
-                host=service.host,
-                discriminator=f"detected-{_slugify(product)}",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"{product_type} detected: {product}",
+                    description=f"{product} identified on {service.host} via {info.get('method', 'header analysis')}",
+                    severity="info",
+                    evidence=info.get("evidence", f"{product} signatures found"),
+                    host=service.host,
+                    discriminator=f"detected-{_slugify(product)}",
+                    target=service,
+                )
+            )
 
         if is_waf:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"WAF may affect scan accuracy: {service.host}",
-                description="A WAF was detected — downstream AI/injection check results "
-                            "may reflect WAF behavior rather than application behavior",
-                severity="low",
-                evidence=f"WAF products detected: {', '.join(detected.keys())}",
-                host=service.host,
-                discriminator="waf-accuracy-warning",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"WAF may affect scan accuracy: {service.host}",
+                    description="A WAF was detected — downstream AI/injection check results "
+                    "may reflect WAF behavior rather than application behavior",
+                    severity="low",
+                    evidence=f"WAF products detected: {', '.join(detected.keys())}",
+                    host=service.host,
+                    discriminator="waf-accuracy-warning",
+                    target=service,
+                )
+            )
 
         result.outputs["waf_detected"] = {
-            product: {"type": info.get("type", "unknown")}
-            for product, info in detected.items()
+            product: {"type": info.get("type", "unknown")} for product, info in detected.items()
         }
         return result
 

@@ -26,9 +26,9 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.payloads import get_payloads_for_check
 
 
@@ -112,7 +112,7 @@ INJECTION_SUCCESS_PATTERNS = {
 class RAGIndirectInjectionCheck(ServiceIteratingCheck):
     """
     Test RAG endpoints for indirect prompt injection vulnerabilities.
-    
+
     Sends queries designed to probe for injection vulnerabilities
     in retrieved content and analyzes responses for success indicators.
     """
@@ -138,17 +138,18 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
 
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
-        
+
         # Get RAG endpoints from context
         rag_endpoints = context.get("rag_endpoints", [])
-        
+
         # Filter to query endpoints on this service
         service_endpoints = [
-            ep for ep in rag_endpoints
+            ep
+            for ep in rag_endpoints
             if ep.get("service", {}).get("host") == service.host
             and ep.get("endpoint_type") == "rag_query"
         ]
-        
+
         if not service_endpoints:
             return result
 
@@ -159,51 +160,57 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
         try:
             async with AsyncHttpClient(cfg) as client:
                 for endpoint in service_endpoints:
-                    endpoint_results = await self._test_endpoint(
-                        client, endpoint, service
-                    )
-                    
+                    endpoint_results = await self._test_endpoint(client, endpoint, service)
+
                     injection_results.extend(endpoint_results)
-                    
+
                     # Check for successful injections
                     successful = [r for r in endpoint_results if r.get("injection_detected")]
                     if successful:
-                        vulnerable_endpoints.append({
-                            "endpoint": endpoint,
-                            "successful_tests": successful,
-                        })
-                    
+                        vulnerable_endpoints.append(
+                            {
+                                "endpoint": endpoint,
+                                "successful_tests": successful,
+                            }
+                        )
+
                     # Generate findings
                     for test_result in endpoint_results:
                         if test_result.get("injection_detected"):
-                            severity = "high" if test_result.get("confidence", 0) > 0.6 else "medium"
-                            
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Indirect injection indicator: {test_result['payload_id']}",
-                                description=self._build_description(test_result),
-                                severity=severity,
-                                evidence=self._build_evidence(test_result),
-                                host=service.host,
-                                discriminator=f"indirect-{test_result['payload_id']}",
-                                target=service,
-                                target_url=endpoint.get("url"),
-                                raw_data=test_result,
-                                references=self.references,
-                            ))
+                            severity = (
+                                "high" if test_result.get("confidence", 0) > 0.6 else "medium"
+                            )
+
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Indirect injection indicator: {test_result['payload_id']}",
+                                    description=self._build_description(test_result),
+                                    severity=severity,
+                                    evidence=self._build_evidence(test_result),
+                                    host=service.host,
+                                    discriminator=f"indirect-{test_result['payload_id']}",
+                                    target=service,
+                                    target_url=endpoint.get("url"),
+                                    raw_data=test_result,
+                                    references=self.references,
+                                )
+                            )
                         elif test_result.get("partial_indicators"):
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Potential injection vector: {test_result['payload_id']}",
-                                description=self._build_description(test_result),
-                                severity="low",
-                                evidence=self._build_evidence(test_result),
-                                host=service.host,
-                                discriminator=f"partial-{test_result['payload_id']}",
-                                target=service,
-                                target_url=endpoint.get("url"),
-                                raw_data=test_result,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Potential injection vector: {test_result['payload_id']}",
+                                    description=self._build_description(test_result),
+                                    severity="low",
+                                    evidence=self._build_evidence(test_result),
+                                    host=service.host,
+                                    discriminator=f"partial-{test_result['payload_id']}",
+                                    target=service,
+                                    target_url=endpoint.get("url"),
+                                    raw_data=test_result,
+                                )
+                            )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -221,54 +228,60 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
         """Test an endpoint with all injection payloads."""
         results = []
         url = endpoint.get("url", service.url)
-        
+
         # Get payloads from library
         payloads = _get_indirect_injection_payloads()
-        
+
         for payload_info in payloads:
             try:
                 # Build request body
                 request_body = self._build_request_body(payload_info["query"], endpoint)
-                
+
                 resp = await client.post(
                     url,
                     json=request_body,
                     headers={"Content-Type": "application/json"},
                 )
-                
+
                 if resp.error or resp.status_code >= 500:
-                    results.append({
-                        "payload_id": payload_info["id"],
-                        "payload_category": payload_info["category"],
-                        "error": resp.error or f"HTTP {resp.status_code}",
-                        "injection_detected": False,
-                    })
+                    results.append(
+                        {
+                            "payload_id": payload_info["id"],
+                            "payload_category": payload_info["category"],
+                            "error": resp.error or f"HTTP {resp.status_code}",
+                            "injection_detected": False,
+                        }
+                    )
                     continue
-                
+
                 # Analyze response
                 analysis = self._analyze_response(resp, payload_info)
-                
-                results.append({
-                    "payload_id": payload_info["id"],
-                    "payload_category": payload_info["category"],
-                    "payload_description": payload_info["description"],
-                    "endpoint_path": endpoint.get("path"),
-                    "status_code": resp.status_code,
-                    "injection_detected": analysis["detected"],
-                    "partial_indicators": analysis["partial"],
-                    "confidence": analysis["confidence"],
-                    "matched_indicators": analysis["matched_indicators"],
-                    "retrieved_count": analysis.get("retrieved_count", 0),
-                    "response_preview": resp.body[:500] if resp.body else "",
-                })
-                
+
+                results.append(
+                    {
+                        "payload_id": payload_info["id"],
+                        "payload_category": payload_info["category"],
+                        "payload_description": payload_info["description"],
+                        "endpoint_path": endpoint.get("path"),
+                        "status_code": resp.status_code,
+                        "injection_detected": analysis["detected"],
+                        "partial_indicators": analysis["partial"],
+                        "confidence": analysis["confidence"],
+                        "matched_indicators": analysis["matched_indicators"],
+                        "retrieved_count": analysis.get("retrieved_count", 0),
+                        "response_preview": resp.body[:500] if resp.body else "",
+                    }
+                )
+
             except Exception as e:
-                results.append({
-                    "payload_id": payload_info["id"],
-                    "error": str(e),
-                    "injection_detected": False,
-                })
-        
+                results.append(
+                    {
+                        "payload_id": payload_info["id"],
+                        "error": str(e),
+                        "injection_detected": False,
+                    }
+                )
+
         return results
 
     def _build_request_body(self, query: str, endpoint: dict) -> dict:
@@ -287,20 +300,20 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
         """Analyze response for injection indicators."""
         body = resp.body or ""
         body_lower = body.lower()
-        
+
         matched_indicators = []
-        
+
         # Check for payload-specific success indicators
         for indicator in payload_info.get("success_indicators", []):
             if indicator.lower() in body_lower:
                 matched_indicators.append(f"payload:{indicator}")
-        
+
         # Check for general injection success patterns
         for category, patterns in INJECTION_SUCCESS_PATTERNS.items():
             for pattern in patterns:
                 if pattern in body_lower:
                     matched_indicators.append(f"{category}:{pattern}")
-        
+
         # Try to count retrieved documents
         retrieved_count = 0
         try:
@@ -312,11 +325,11 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
                         break
         except json.JSONDecodeError:
             pass
-        
+
         # Calculate confidence
         payload_matches = len([m for m in matched_indicators if m.startswith("payload:")])
         pattern_matches = len([m for m in matched_indicators if not m.startswith("payload:")])
-        
+
         # High confidence: multiple payload indicators or payload + pattern
         if payload_matches >= 2 or (payload_matches >= 1 and pattern_matches >= 1):
             return {
@@ -326,7 +339,7 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
                 "matched_indicators": matched_indicators,
                 "retrieved_count": retrieved_count,
             }
-        
+
         # Medium confidence: single payload indicator
         if payload_matches == 1:
             return {
@@ -336,7 +349,7 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
                 "matched_indicators": matched_indicators,
                 "retrieved_count": retrieved_count,
             }
-        
+
         # Partial: only pattern matches (might indicate vulnerability)
         if pattern_matches >= 2:
             return {
@@ -346,7 +359,7 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
                 "matched_indicators": matched_indicators,
                 "retrieved_count": retrieved_count,
             }
-        
+
         return {
             "detected": False,
             "partial": False,
@@ -358,20 +371,24 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
     def _build_description(self, test_result: dict) -> str:
         """Build description for finding."""
         parts = []
-        
+
         if test_result.get("injection_detected"):
-            parts.append(f"Indirect injection indicators detected using '{test_result['payload_id']}' test.")
+            parts.append(
+                f"Indirect injection indicators detected using '{test_result['payload_id']}' test."
+            )
             parts.append(f"Category: {test_result.get('payload_category', 'unknown')}.")
             parts.append(f"Confidence: {test_result.get('confidence', 0):.0%}.")
         else:
-            parts.append(f"Potential injection vector identified with '{test_result['payload_id']}' test.")
-        
+            parts.append(
+                f"Potential injection vector identified with '{test_result['payload_id']}' test."
+            )
+
         if test_result.get("payload_description"):
             parts.append(f"Test: {test_result['payload_description']}.")
-        
+
         if test_result.get("retrieved_count", 0) > 0:
             parts.append(f"Retrieved {test_result['retrieved_count']} documents.")
-        
+
         return " ".join(parts)
 
     def _build_evidence(self, test_result: dict) -> str:
@@ -381,15 +398,15 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
             f"Category: {test_result.get('payload_category', 'unknown')}",
             f"Confidence: {test_result.get('confidence', 0):.0%}",
         ]
-        
+
         if test_result.get("matched_indicators"):
             lines.append(f"Matched: {', '.join(test_result['matched_indicators'][:5])}")
-        
+
         if test_result.get("retrieved_count", 0) > 0:
             lines.append(f"Documents retrieved: {test_result['retrieved_count']}")
-        
+
         if test_result.get("response_preview"):
             preview = test_result["response_preview"][:150]
             lines.append(f"Response preview: {preview}...")
-        
+
         return "\n".join(lines)

@@ -64,7 +64,7 @@ class CheckLauncher:
         logger.info("=" * 60)
         logger.info(f"Checks received ({len(checks)}): {list(self.checks.keys())}")
         logger.info(f"port_scan in checks: {'port_scan' in self.checks}")
-    
+
     async def run_all(self, on_check_start=None, on_check_complete=None) -> list:
         """
         Run all checks in dependency order.
@@ -124,45 +124,45 @@ class CheckLauncher:
         self._log_final_state()
 
         return self.findings
-    
+
     def _get_runnable(self) -> list:
         """Get checks that are pending and have all conditions met."""
         runnable = []
-        
+
         logger.info(f">>> Evaluating {len(self.checks)} checks for runnability")
-        
+
         for name, check in self.checks.items():
             if name in self.completed or name in self.failed:
                 logger.info(f"  {name}: SKIP (already completed/failed)")
                 continue
-            
+
             met, missing = self._check_conditions(check)
             if met:
                 logger.info(f"  {name}: RUNNABLE (conditions met)")
                 runnable.append(check)
             else:
                 logger.info(f"  {name}: BLOCKED by {missing}")
-        
+
         logger.info(f">>> Runnable this iteration: {[c.name for c in runnable]}")
         return runnable
-    
+
     def _check_conditions(self, check) -> tuple[bool, list[str]]:
         """
         Check if all conditions are satisfied.
-        
+
         Returns:
             (all_met: bool, missing: list of unmet condition descriptions)
         """
         missing = []
-        conditions = getattr(check, 'conditions', [])
-        
+        conditions = getattr(check, "conditions", [])
+
         for cond in conditions:
             output_name = cond.output_name
             operator = cond.operator
             value = cond.value
-            
+
             ctx_value = self.context.get(output_name)
-            
+
             if operator == "truthy":
                 if not ctx_value:
                     missing.append(f"{output_name} is truthy")
@@ -172,12 +172,11 @@ class CheckLauncher:
             elif operator == "contains":
                 if not ctx_value or value not in ctx_value:
                     missing.append(f"{output_name} contains {value}")
-            elif operator == "gte":
-                if ctx_value is None or ctx_value < value:
-                    missing.append(f"{output_name} >= {value}")
-        
+            elif operator == "gte" and (ctx_value is None or ctx_value < value):
+                missing.append(f"{output_name} >= {value}")
+
         return (len(missing) == 0, missing)
-    
+
     async def _run_check(self, check) -> tuple[bool, int]:
         """
         Execute a single check and update context.
@@ -195,25 +194,27 @@ class CheckLauncher:
             self.completed.add(name)
 
             # Extract outputs and update context
-            outputs = getattr(result, 'outputs', {}) or {}
-            produces = getattr(check, 'produces', []) or []
+            outputs = getattr(result, "outputs", {}) or {}
+            produces = getattr(check, "produces", []) or []
 
             for key in produces:
                 if key in outputs:
                     old_val = self.context.get(key)
                     new_val = outputs[key]
                     self.context[key] = new_val
-                    logger.info(f"  Context[{key}] = {self._summarize(new_val)} (was: {self._summarize(old_val)})")
+                    logger.info(
+                        f"  Context[{key}] = {self._summarize(new_val)} (was: {self._summarize(old_val)})"
+                    )
 
             # Collect findings and track critical ones
-            findings = getattr(result, 'findings', []) or []
+            findings = getattr(result, "findings", []) or []
             check_suite = self._infer_suite(name)
 
             for f in findings:
                 # Extract host from the original object before dict conversion
                 host = self._extract_host(f)
 
-                if hasattr(f, 'to_dict'):
+                if hasattr(f, "to_dict"):
                     finding_dict = f.to_dict()
                 elif isinstance(f, dict):
                     finding_dict = f
@@ -226,7 +227,7 @@ class CheckLauncher:
 
                 # Ensure raw_data dict exists
                 if "raw_data" not in finding_dict or finding_dict["raw_data"] is None:
-                    raw = getattr(f, 'raw_data', None)
+                    raw = getattr(f, "raw_data", None)
                     finding_dict["raw_data"] = dict(raw) if raw else {}
 
                 # Annotate finding if host has prior critical findings from another suite
@@ -249,7 +250,7 @@ class CheckLauncher:
             logger.error(f"  Failed: {name} — {e}")
             self.failed.add(name)
             return (False, 0)
-    
+
     # ── on_critical helpers ────────────────────────────────────────
 
     def _record_critical(self, host: str, suite: str, check_name: str, finding_dict: dict) -> None:
@@ -338,6 +339,7 @@ class CheckLauncher:
         """Resolve the on_critical behavior for a suite using preferences."""
         try:
             from app.preferences import get_preferences, resolve_on_critical
+
             prefs = get_preferences()
             return resolve_on_critical(prefs, suite)
         except Exception:
@@ -346,11 +348,11 @@ class CheckLauncher:
     def _extract_host(self, finding_obj) -> str | None:
         """Extract host from a finding object or dict."""
         # Try finding object attributes first
-        if hasattr(finding_obj, 'host'):
+        if hasattr(finding_obj, "host"):
             return finding_obj.host
-        if hasattr(finding_obj, 'target') and finding_obj.target:
+        if hasattr(finding_obj, "target") and finding_obj.target:
             target = finding_obj.target
-            if hasattr(target, 'host'):
+            if hasattr(target, "host"):
                 return target.host
 
         # Fall back to dict access
@@ -367,6 +369,7 @@ class CheckLauncher:
     def _infer_suite(check_name: str) -> str:
         """Infer the suite name from a check name."""
         from app.check_resolver import infer_suite
+
         return infer_suite(check_name)
 
     # ── Logging helpers ─────────────────────────────────────────
@@ -374,32 +377,38 @@ class CheckLauncher:
     def _log_context_state(self):
         """Log current context state."""
         logger.info(f"Context keys: {list(self.context.keys())}")
-        
+
         # Log key values that checks depend on
-        for key in ['target_hosts', 'services', 'chat_endpoints']:
+        for key in ["target_hosts", "services", "chat_endpoints"]:
             val = self.context.get(key)
             logger.info(f"  {key} = {self._summarize(val)}")
-    
+
     def _log_check_states(self, runnable: list):
         """Log state of each check."""
         runnable_names = {c.name for c in runnable}
-        
+
         for name, check in self.checks.items():
-            status = "completed" if name in self.completed else "failed" if name in self.failed else "pending"
+            status = (
+                "completed"
+                if name in self.completed
+                else "failed"
+                if name in self.failed
+                else "pending"
+            )
             met, missing = self._check_conditions(check)
             can_run = name in runnable_names
-            
+
             if status == "pending":
                 if can_run:
                     logger.info(f"  {name}: READY to run")
                 else:
                     logger.info(f"  {name}: waiting on {missing}")
-    
+
     def _log_final_state(self):
         """Log final state summary."""
         pending = set(self.checks.keys()) - self.completed - self.failed
 
-        logger.info(f"Final state:")
+        logger.info("Final state:")
         logger.info(f"  Completed: {len(self.completed)} — {sorted(self.completed)}")
         logger.info(f"  Skipped (on_critical): {len(self.skipped)} — {sorted(self.skipped)}")
         logger.info(f"  Failed: {len(self.failed)} — {sorted(self.failed)}")
@@ -414,7 +423,7 @@ class CheckLauncher:
                 check = self.checks[name]
                 _, missing = self._check_conditions(check)
                 logger.info(f"    {name}: needs {missing}")
-    
+
     def _summarize(self, val: Any, max_len: int = 60) -> str:
         """Summarize a value for logging."""
         if val is None:

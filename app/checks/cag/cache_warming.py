@@ -14,14 +14,13 @@ References:
   OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 """
 
-import json
+import contextlib
 import uuid
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Warming endpoints to probe
 WARM_ENDPOINTS = [
@@ -87,8 +86,7 @@ class CacheWarmingCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -100,26 +98,26 @@ class CacheWarmingCheck(ServiceIteratingCheck):
         try:
             async with AsyncHttpClient(cfg) as client:
                 for ep_def in WARM_ENDPOINTS:
-                    probe_result = await self._probe_warming_endpoint(
-                        client, service, ep_def
-                    )
+                    probe_result = await self._probe_warming_endpoint(client, service, ep_def)
                     if probe_result:
                         warm_results.append(probe_result)
 
                         severity = self._determine_severity(probe_result)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Cache warming endpoint: {ep_def['path']}",
-                            description=self._build_description(probe_result),
-                            severity=severity,
-                            evidence=self._build_evidence(probe_result),
-                            host=service.host,
-                            discriminator=f"warming-{ep_def['path'].strip('/').replace('/', '-')}",
-                            target=service,
-                            target_url=service.with_path(ep_def["path"]),
-                            raw_data=probe_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Cache warming endpoint: {ep_def['path']}",
+                                description=self._build_description(probe_result),
+                                severity=severity,
+                                evidence=self._build_evidence(probe_result),
+                                host=service.host,
+                                discriminator=f"warming-{ep_def['path'].strip('/').replace('/', '-')}",
+                                target=service,
+                                target_url=service.with_path(ep_def["path"]),
+                                raw_data=probe_result,
+                                references=self.references,
+                            )
+                        )
 
                         # Attempt cleanup if content was accepted
                         if probe_result.get("content_accepted"):
@@ -201,8 +199,7 @@ class CacheWarmingCheck(ServiceIteratingCheck):
         return None
 
     async def _verify_warming(
-        self, client: AsyncHttpClient, service: Service,
-        payload: dict, marker: str
+        self, client: AsyncHttpClient, service: Service, payload: dict, marker: str
     ) -> bool:
         """Verify if warmed content is actually served."""
         query = payload.get("query") or payload.get("prompt") or payload.get("key", "")
@@ -232,10 +229,8 @@ class CacheWarmingCheck(ServiceIteratingCheck):
         # Try to clear via eviction endpoints
         for clear_path in ["/cache/clear", "/cache/invalidate"]:
             url = service.with_path(clear_path)
-            try:
+            with contextlib.suppress(Exception):
                 await client.post(url, json={}, headers={"Content-Type": "application/json"})
-            except Exception:
-                pass
 
     def _determine_severity(self, probe_result: dict) -> str:
         """Determine finding severity."""

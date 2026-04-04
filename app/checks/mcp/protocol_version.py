@@ -12,10 +12,9 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Known MCP protocol versions (oldest to newest)
 PROTOCOL_VERSIONS = [
@@ -79,7 +78,10 @@ class MCPProtocolVersionCheck(BaseCheck):
                                 "params": {
                                     "protocolVersion": version,
                                     "capabilities": {},
-                                    "clientInfo": {"name": "chainsmith-version-probe", "version": "1.0"},
+                                    "clientInfo": {
+                                        "name": "chainsmith-version-probe",
+                                        "version": "1.0",
+                                    },
                                 },
                                 "id": 1,
                             },
@@ -97,12 +99,16 @@ class MCPProtocolVersionCheck(BaseCheck):
                                 rpc_result = data.get("result", {})
                                 server_version = rpc_result.get("protocolVersion", "")
                                 caps = rpc_result.get("capabilities", {})
-                                accepted_versions.append({
-                                    "requested": version,
-                                    "server_responded": server_version,
-                                    "capabilities": list(caps.keys()) if isinstance(caps, dict) else [],
-                                    "description": desc,
-                                })
+                                accepted_versions.append(
+                                    {
+                                        "requested": version,
+                                        "server_responded": server_version,
+                                        "capabilities": list(caps.keys())
+                                        if isinstance(caps, dict)
+                                        else [],
+                                        "description": desc,
+                                    }
+                                )
                             else:
                                 rejected_versions.append(version)
                         except (json.JSONDecodeError, TypeError):
@@ -129,34 +135,42 @@ class MCPProtocolVersionCheck(BaseCheck):
 
                         if oldest["requested"] != newest["requested"]:
                             severity = "medium" if missing_in_old else "low"
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"MCP server supports protocol downgrade: accepted version {oldest['requested']}",
-                                description=(
-                                    f"Server accepted protocol version {oldest['requested']} ({oldest['description']}). "
-                                    f"Latest accepted: {newest['requested']}. "
-                                    + (f"Older version missing capabilities: {', '.join(missing_in_old)}" if missing_in_old else "")
-                                ),
-                                severity=severity,
-                                evidence=(
-                                    f"Accepted versions: {', '.join(v['requested'] for v in accepted_versions)}\n"
-                                    f"Oldest caps: {', '.join(oldest_caps) or 'none'}\n"
-                                    f"Newest caps: {', '.join(newest_caps) or 'none'}"
-                                ),
-                                host=host,
-                                discriminator="protocol-downgrade",
-                                raw_data=version_info,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"MCP server supports protocol downgrade: accepted version {oldest['requested']}",
+                                    description=(
+                                        f"Server accepted protocol version {oldest['requested']} ({oldest['description']}). "
+                                        f"Latest accepted: {newest['requested']}. "
+                                        + (
+                                            f"Older version missing capabilities: {', '.join(missing_in_old)}"
+                                            if missing_in_old
+                                            else ""
+                                        )
+                                    ),
+                                    severity=severity,
+                                    evidence=(
+                                        f"Accepted versions: {', '.join(v['requested'] for v in accepted_versions)}\n"
+                                        f"Oldest caps: {', '.join(oldest_caps) or 'none'}\n"
+                                        f"Newest caps: {', '.join(newest_caps) or 'none'}"
+                                    ),
+                                    host=host,
+                                    discriminator="protocol-downgrade",
+                                    raw_data=version_info,
+                                )
+                            )
                     elif len(accepted_versions) == 1:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Server only accepts current protocol version",
-                            description=f"MCP server only accepted version {accepted_versions[0]['requested']}.",
-                            severity="info",
-                            evidence=f"Accepted: {accepted_versions[0]['requested']}\nRejected: {', '.join(rejected_versions)}",
-                            host=host,
-                            discriminator="protocol-current",
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Server only accepts current protocol version",
+                                description=f"MCP server only accepted version {accepted_versions[0]['requested']}.",
+                                severity="info",
+                                evidence=f"Accepted: {accepted_versions[0]['requested']}\nRejected: {', '.join(rejected_versions)}",
+                                host=host,
+                                discriminator="protocol-current",
+                            )
+                        )
 
             except Exception as e:
                 result.errors.append(f"Protocol version probe on {server_url}: {e}")

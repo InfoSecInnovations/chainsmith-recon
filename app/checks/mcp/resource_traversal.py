@@ -16,11 +16,10 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import cap_response, log_invocation
-
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Traversal payloads — read-only probes only
 TRAVERSAL_PAYLOADS = [
@@ -35,7 +34,11 @@ TRAVERSAL_PAYLOADS = [
 SSRF_PAYLOADS = [
     ("http://169.254.169.254/latest/meta-data/", "cloud_metadata", "AWS metadata endpoint"),
     ("http://169.254.169.254/metadata/instance", "cloud_metadata", "Azure metadata endpoint"),
-    ("http://metadata.google.internal/computeMetadata/v1/", "cloud_metadata", "GCP metadata endpoint"),
+    (
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "cloud_metadata",
+        "GCP metadata endpoint",
+    ),
     ("http://localhost:6379/", "internal_service", "Local Redis"),
     ("http://127.0.0.1:9200/", "internal_service", "Local Elasticsearch"),
 ]
@@ -90,92 +93,112 @@ class MCPResourceTraversalCheck(BaseCheck):
                 continue
 
             # Only test servers that declare resources capability
-            has_resources = any(
-                "resource" in str(c).lower() for c in capabilities
-            ) if capabilities else True  # If no caps listed, probe anyway
+            (
+                any("resource" in str(c).lower() for c in capabilities) if capabilities else True
+            )  # If no caps listed, probe anyway
 
             try:
                 async with AsyncHttpClient(cfg) as client:
                     # First: enumerate resources to understand URI format
-                    resource_list = await self._enumerate_resources(client, server_url)
+                    await self._enumerate_resources(client, server_url)
 
                     # Test path traversal
-                    for uri, attack_type, desc in TRAVERSAL_PAYLOADS:
+                    for uri, attack_type, _desc in TRAVERSAL_PAYLOADS:
                         r = await self._probe_resource(client, server_url, uri)
-                        inv = log_invocation(f"resources/read:{attack_type}", {"uri": uri}, r.get("status"), r.get("body", ""))
+                        inv = log_invocation(
+                            f"resources/read:{attack_type}",
+                            {"uri": uri},
+                            r.get("status"),
+                            r.get("body", ""),
+                        )
                         traversal_results.append(inv)
 
                         if r["success"] and r["has_content"]:
                             # Check for actual file content indicators
                             body = r["body"]
                             if self._looks_like_file_content(body, attack_type):
-                                result.findings.append(build_finding(
-                                    check_name=self.name,
-                                    title=f"Resource path traversal: {uri} returned file contents",
-                                    description=f"The MCP resource endpoint returned actual file contents for traversal URI: {uri}",
-                                    severity="critical",
-                                    evidence=f"URI: {uri}\nResponse: {cap_response(body)[:300]}",
-                                    host=host,
-                                    discriminator=f"traversal-{attack_type}",
-                                    raw_data={"uri": uri, "body": cap_response(body)},
-                                ))
+                                result.findings.append(
+                                    build_finding(
+                                        check_name=self.name,
+                                        title=f"Resource path traversal: {uri} returned file contents",
+                                        description=f"The MCP resource endpoint returned actual file contents for traversal URI: {uri}",
+                                        severity="critical",
+                                        evidence=f"URI: {uri}\nResponse: {cap_response(body)[:300]}",
+                                        host=host,
+                                        discriminator=f"traversal-{attack_type}",
+                                        raw_data={"uri": uri, "body": cap_response(body)},
+                                    )
+                                )
                             elif r.get("error_leaks_path"):
-                                result.findings.append(build_finding(
-                                    check_name=self.name,
-                                    title=f"Resource traversal blocked but error leaks file path",
-                                    description=f"Error message reveals internal path structure for URI: {uri}",
-                                    severity="medium",
-                                    evidence=f"URI: {uri}\nError: {cap_response(body)[:300]}",
-                                    host=host,
-                                    discriminator=f"traversal-leak-{attack_type}",
-                                    raw_data={"uri": uri, "body": cap_response(body)},
-                                ))
+                                result.findings.append(
+                                    build_finding(
+                                        check_name=self.name,
+                                        title="Resource traversal blocked but error leaks file path",
+                                        description=f"Error message reveals internal path structure for URI: {uri}",
+                                        severity="medium",
+                                        evidence=f"URI: {uri}\nError: {cap_response(body)[:300]}",
+                                        host=host,
+                                        discriminator=f"traversal-leak-{attack_type}",
+                                        raw_data={"uri": uri, "body": cap_response(body)},
+                                    )
+                                )
 
                     # Test SSRF
-                    for uri, attack_type, desc in SSRF_PAYLOADS:
+                    for uri, attack_type, _desc in SSRF_PAYLOADS:
                         r = await self._probe_resource(client, server_url, uri)
-                        inv = log_invocation(f"resources/read:{attack_type}", {"uri": uri}, r.get("status"), r.get("body", ""))
+                        inv = log_invocation(
+                            f"resources/read:{attack_type}",
+                            {"uri": uri},
+                            r.get("status"),
+                            r.get("body", ""),
+                        )
                         traversal_results.append(inv)
 
                         if r["success"] and r["has_content"]:
                             if self._looks_like_ssrf_content(r["body"], attack_type):
-                                result.findings.append(build_finding(
-                                    check_name=self.name,
-                                    title=f"SSRF via MCP resource: {uri} returned internal data",
-                                    description=f"The MCP resource endpoint fetched an internal URL: {uri}",
-                                    severity="critical",
-                                    evidence=f"URI: {uri}\nResponse: {cap_response(r['body'])[:300]}",
-                                    host=host,
-                                    discriminator=f"ssrf-{attack_type}",
-                                    raw_data={"uri": uri, "body": cap_response(r["body"])},
-                                ))
+                                result.findings.append(
+                                    build_finding(
+                                        check_name=self.name,
+                                        title=f"SSRF via MCP resource: {uri} returned internal data",
+                                        description=f"The MCP resource endpoint fetched an internal URL: {uri}",
+                                        severity="critical",
+                                        evidence=f"URI: {uri}\nResponse: {cap_response(r['body'])[:300]}",
+                                        host=host,
+                                        discriminator=f"ssrf-{attack_type}",
+                                        raw_data={"uri": uri, "body": cap_response(r["body"])},
+                                    )
+                                )
 
                     # Test protocol smuggling
-                    for uri, attack_type, desc in PROTOCOL_PAYLOADS:
+                    for uri, attack_type, _desc in PROTOCOL_PAYLOADS:
                         r = await self._probe_resource(client, server_url, uri)
                         if r["success"] and r["has_content"]:
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Resource URI accepts {uri.split(':')[0]}:// protocol",
-                                description=f"The MCP resource endpoint accepted a non-standard protocol URI: {uri}",
-                                severity="high",
-                                evidence=f"URI: {uri}\nResponse: {cap_response(r['body'])[:300]}",
-                                host=host,
-                                discriminator=f"protocol-{attack_type}",
-                                raw_data={"uri": uri},
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Resource URI accepts {uri.split(':')[0]}:// protocol",
+                                    description=f"The MCP resource endpoint accepted a non-standard protocol URI: {uri}",
+                                    severity="high",
+                                    evidence=f"URI: {uri}\nResponse: {cap_response(r['body'])[:300]}",
+                                    host=host,
+                                    discriminator=f"protocol-{attack_type}",
+                                    raw_data={"uri": uri},
+                                )
+                            )
 
                     # If nothing found
                     if not any(f.check_name == self.name for f in result.findings):
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Resource URI validation enforced (traversal attempts rejected)",
-                            description="MCP resource URIs are properly validated against traversal and SSRF.",
-                            severity="info",
-                            evidence=f"Server: {server_url}\nPayloads tested: {len(TRAVERSAL_PAYLOADS) + len(SSRF_PAYLOADS) + len(PROTOCOL_PAYLOADS)}",
-                            host=host,
-                            discriminator="resource-safe",
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Resource URI validation enforced (traversal attempts rejected)",
+                                description="MCP resource URIs are properly validated against traversal and SSRF.",
+                                severity="info",
+                                evidence=f"Server: {server_url}\nPayloads tested: {len(TRAVERSAL_PAYLOADS) + len(SSRF_PAYLOADS) + len(PROTOCOL_PAYLOADS)}",
+                                host=host,
+                                discriminator="resource-safe",
+                            )
+                        )
 
             except Exception as e:
                 result.errors.append(f"Resource traversal on {server_url}: {e}")
@@ -253,7 +276,7 @@ class MCPResourceTraversalCheck(BaseCheck):
                         probe_result["has_content"] = True
                         # Flatten content for analysis
                         probe_result["body"] = str(contents[0])
-                elif result_data and str(result_data) not in ('{}', '[]', 'None', ''):
+                elif result_data and str(result_data) not in ("{}", "[]", "None", ""):
                     probe_result["success"] = True
                     probe_result["has_content"] = True
             except (json.JSONDecodeError, TypeError):
@@ -268,11 +291,18 @@ class MCPResourceTraversalCheck(BaseCheck):
         if not body:
             return False
         body_lower = body.lower()
-        return any(indicator in body_lower for indicator in [
-            "root:", "/bin/bash", "/bin/sh",  # /etc/passwd
-            "localhost", "127.0.0.1",  # /etc/hosts
-            "linux", "darwin",  # /etc/hostname, /proc/version
-        ])
+        return any(
+            indicator in body_lower
+            for indicator in [
+                "root:",
+                "/bin/bash",
+                "/bin/sh",  # /etc/passwd
+                "localhost",
+                "127.0.0.1",  # /etc/hosts
+                "linux",
+                "darwin",  # /etc/hostname, /proc/version
+            ]
+        )
 
     def _looks_like_ssrf_content(self, body: str, attack_type: str) -> bool:
         """Check if response looks like internal service data."""
@@ -280,13 +310,27 @@ class MCPResourceTraversalCheck(BaseCheck):
             return False
         body_lower = body.lower()
         if attack_type == "cloud_metadata":
-            return any(kw in body_lower for kw in [
-                "ami-id", "instance-id", "availability-zone",
-                "compute", "metadata", "project-id",
-            ])
+            return any(
+                kw in body_lower
+                for kw in [
+                    "ami-id",
+                    "instance-id",
+                    "availability-zone",
+                    "compute",
+                    "metadata",
+                    "project-id",
+                ]
+            )
         elif attack_type == "internal_service":
-            return any(kw in body_lower for kw in [
-                "redis", "connected_clients", "elasticsearch",
-                "cluster_name", "version", "tagline",
-            ])
+            return any(
+                kw in body_lower
+                for kw in [
+                    "redis",
+                    "connected_clients",
+                    "elasticsearch",
+                    "cluster_name",
+                    "version",
+                    "tagline",
+                ]
+            )
         return len(body) > 20

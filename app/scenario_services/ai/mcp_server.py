@@ -29,27 +29,24 @@ Usage in docker-compose.yml:
 import asyncio
 import json
 import os
-from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.scenario_services.common.config import (
-    SERVICE_NAME,
-    is_finding_active,
-    get_or_create_session,
     get_brand_name,
-    get_brand_domain,
+    get_or_create_session,
+    is_finding_active,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
 MCP_VERSION = os.getenv("MCP_VERSION", "2024-11-05")
+
 
 def _get_server_name() -> str:
     if name := os.getenv("MCP_SERVER_NAME"):
@@ -73,18 +70,19 @@ app = FastAPI(
 # MODELS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class MCPRequest(BaseModel):
     jsonrpc: str = "2.0"
     method: str
-    params: Optional[dict] = {}
-    id: Optional[int] = None
+    params: dict | None = {}
+    id: int | None = None
 
 
 class MCPResponse(BaseModel):
     jsonrpc: str = "2.0"
-    result: Optional[Any] = None
-    error: Optional[dict] = None
-    id: Optional[int] = None
+    result: Any | None = None
+    error: dict | None = None
+    id: int | None = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -171,12 +169,13 @@ SENSITIVE_RESOURCES = [
 # MCP HANDLERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def handle_initialize(params: dict) -> dict:
     """Handle MCP initialize request."""
     server_name = _get_server_name()
-    
+
     capabilities = {"tools": {}, "resources": {}}
-    
+
     # Finding: dynamic_tool_loading - enables shadow tool registration
     if is_finding_active("dynamic_tool_loading"):
         capabilities["tools"]["dynamicRegistration"] = True
@@ -205,28 +204,20 @@ def handle_tools_list(params: dict) -> dict:
 def handle_tools_call(params: dict) -> dict:
     """Handle tools/call request."""
     tool_name = params.get("name", "")
-    tool_args = params.get("arguments", {})
+    params.get("arguments", {})
 
     # Check if it's a shadow tool
     if tool_name in DYNAMIC_TOOLS:
-        return {
-            "content": [
-                {"type": "text", "text": f"[SHADOW TOOL] Executed {tool_name}"}
-            ]
-        }
+        return {"content": [{"type": "text", "text": f"[SHADOW TOOL] Executed {tool_name}"}]}
 
     # Simulate tool execution
-    return {
-        "content": [
-            {"type": "text", "text": f"Executed {tool_name} successfully."}
-        ]
-    }
+    return {"content": [{"type": "text", "text": f"Executed {tool_name} successfully."}]}
 
 
 def handle_tools_register(params: dict) -> dict:
     """
     Handle dynamic tool registration.
-    
+
     Finding: dynamic_tool_loading
     When active, allows registering arbitrary tools.
     """
@@ -235,12 +226,12 @@ def handle_tools_register(params: dict) -> dict:
 
     tool = params.get("tool", {})
     tool_name = tool.get("name")
-    
+
     if not tool_name:
         raise HTTPException(400, "Tool name required")
 
     DYNAMIC_TOOLS[tool_name] = tool
-    
+
     return {"registered": tool_name, "status": "success"}
 
 
@@ -301,6 +292,7 @@ MCP_HANDLERS = {
 # MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     """Add MCP server headers."""
@@ -312,6 +304,7 @@ async def add_headers(request: Request, call_next):
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @app.get("/")
 async def root():
@@ -329,7 +322,7 @@ async def health():
     """Health check endpoint."""
     session = get_or_create_session()
     server_name = _get_server_name()
-    
+
     return {
         "status": "healthy",
         "service": server_name,
@@ -341,11 +334,11 @@ async def health():
 async def mcp_endpoint(request: MCPRequest):
     """
     Main MCP JSON-RPC endpoint.
-    
+
     Handles all MCP protocol methods via JSON-RPC 2.0.
     """
     handler = MCP_HANDLERS.get(request.method)
-    
+
     if not handler:
         return MCPResponse(
             id=request.id,
@@ -371,7 +364,7 @@ async def mcp_endpoint(request: MCPRequest):
 async def sse_endpoint():
     """
     Server-Sent Events endpoint for MCP.
-    
+
     Provides a persistent connection for real-time updates.
     """
     server_name = _get_server_name()
@@ -389,7 +382,7 @@ async def sse_endpoint():
 async def mcp_discovery():
     """
     MCP discovery endpoint.
-    
+
     Finding: mcp_endpoint_exposed
     When active, this endpoint is accessible and reveals server capabilities.
     """

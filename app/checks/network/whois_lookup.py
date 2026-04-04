@@ -16,10 +16,11 @@ Requirements:
 """
 
 import asyncio
+import contextlib
 import logging
 import socket
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
@@ -29,11 +30,12 @@ logger = logging.getLogger(__name__)
 try:
     from ipwhois import IPWhois
     from ipwhois.exceptions import (
-        IPDefinedError,
         ASNRegistryError,
+        IPDefinedError,
         WhoisLookupError,
         WhoisRateLimitError,
     )
+
     HAS_IPWHOIS = True
 except ImportError:
     HAS_IPWHOIS = False
@@ -148,23 +150,20 @@ class WhoisLookupCheck(BaseCheck):
                 asn_info = await self._asn_lookup(ip)
                 if asn_info:
                     whois_data["asn"][ip] = asn_info
-                    self._generate_asn_findings(
-                        result, ip, ip_to_hosts.get(ip, []), asn_info
-                    )
+                    self._generate_asn_findings(result, ip, ip_to_hosts.get(ip, []), asn_info)
                 result.targets_checked += 1
 
                 # Rate limiting between lookups
                 await asyncio.sleep(1.0 / self.requests_per_second)
         else:
             result.errors.append(
-                "ipwhois not installed — ASN lookups skipped. "
-                "Install with: pip install ipwhois"
+                "ipwhois not installed — ASN lookups skipped. Install with: pip install ipwhois"
             )
 
         result.outputs["whois_data"] = whois_data
         return result
 
-    async def _domain_whois(self, domain: str) -> Optional[dict[str, Any]]:
+    async def _domain_whois(self, domain: str) -> dict[str, Any] | None:
         """Query WHOIS for domain registration data."""
         loop = asyncio.get_event_loop()
         try:
@@ -172,11 +171,11 @@ class WhoisLookupCheck(BaseCheck):
                 loop.run_in_executor(None, self._sync_domain_whois, domain),
                 timeout=self.WHOIS_TIMEOUT,
             )
-        except (asyncio.TimeoutError, Exception) as exc:
+        except (TimeoutError, Exception) as exc:
             logger.debug(f"Domain WHOIS failed for {domain}: {exc}")
             return None
 
-    def _sync_domain_whois(self, domain: str) -> Optional[dict[str, Any]]:
+    def _sync_domain_whois(self, domain: str) -> dict[str, Any] | None:
         """Synchronous WHOIS query via socket (port 43)."""
         # Determine TLD and WHOIS server
         parts = domain.rsplit(".", 1)
@@ -190,9 +189,7 @@ class WhoisLookupCheck(BaseCheck):
             whois_server = "whois.iana.org"
 
         try:
-            with socket.create_connection(
-                (whois_server, 43), timeout=self.WHOIS_TIMEOUT
-            ) as sock:
+            with socket.create_connection((whois_server, 43), timeout=self.WHOIS_TIMEOUT) as sock:
                 sock.sendall(f"{domain}\r\n".encode())
 
                 response = b""
@@ -210,7 +207,7 @@ class WhoisLookupCheck(BaseCheck):
             text = response.decode("utf-8", errors="replace")
             return self._parse_whois_response(text, domain)
 
-        except (socket.error, OSError) as exc:
+        except OSError as exc:
             logger.debug(f"WHOIS socket error for {domain}: {exc}")
             return None
 
@@ -231,22 +228,39 @@ class WhoisLookupCheck(BaseCheck):
         # Field mapping: WHOIS field names vary by registrar/TLD
         field_map = {
             "registrar": [
-                "Registrar:", "registrar:", "Registrar Name:",
-                "registrar name:", "Sponsoring Registrar:",
+                "Registrar:",
+                "registrar:",
+                "Registrar Name:",
+                "registrar name:",
+                "Sponsoring Registrar:",
             ],
             "created": [
-                "Creation Date:", "created:", "Created Date:",
-                "Registration Date:", "Registered on:", "created date:",
-                "Domain Registration Date:", "Creation date:",
+                "Creation Date:",
+                "created:",
+                "Created Date:",
+                "Registration Date:",
+                "Registered on:",
+                "created date:",
+                "Domain Registration Date:",
+                "Creation date:",
             ],
             "expires": [
-                "Registry Expiry Date:", "Expiration Date:", "expires:",
-                "Expiry Date:", "Expiry date:", "paid-till:",
-                "Domain Expiration Date:", "Registrar Registration Expiration Date:",
+                "Registry Expiry Date:",
+                "Expiration Date:",
+                "expires:",
+                "Expiry Date:",
+                "Expiry date:",
+                "paid-till:",
+                "Domain Expiration Date:",
+                "Registrar Registration Expiration Date:",
             ],
             "updated": [
-                "Updated Date:", "Last Updated:", "updated:",
-                "Last Modified:", "changed:", "last-update:",
+                "Updated Date:",
+                "Last Updated:",
+                "updated:",
+                "Last Modified:",
+                "changed:",
+                "last-update:",
             ],
         }
 
@@ -260,7 +274,7 @@ class WhoisLookupCheck(BaseCheck):
             for field, prefixes in field_map.items():
                 for prefix in prefixes:
                     if stripped.lower().startswith(prefix.lower()):
-                        value = stripped[len(prefix):].strip()
+                        value = stripped[len(prefix) :].strip()
                         if value and not info[field]:
                             info[field] = value
                         break
@@ -299,7 +313,7 @@ class WhoisLookupCheck(BaseCheck):
 
         return info
 
-    async def _asn_lookup(self, ip: str) -> Optional[dict[str, Any]]:
+    async def _asn_lookup(self, ip: str) -> dict[str, Any] | None:
         """Look up ASN/network data for an IP via RDAP."""
         if not HAS_IPWHOIS:
             return None
@@ -310,11 +324,11 @@ class WhoisLookupCheck(BaseCheck):
                 loop.run_in_executor(None, self._sync_asn_lookup, ip),
                 timeout=self.RDAP_TIMEOUT,
             )
-        except (asyncio.TimeoutError, Exception) as exc:
+        except (TimeoutError, Exception) as exc:
             logger.debug(f"ASN lookup failed for {ip}: {exc}")
             return None
 
-    def _sync_asn_lookup(self, ip: str) -> Optional[dict[str, Any]]:
+    def _sync_asn_lookup(self, ip: str) -> dict[str, Any] | None:
         """Synchronous ASN lookup via ipwhois RDAP."""
         try:
             obj = IPWhois(ip)
@@ -345,10 +359,8 @@ class WhoisLookupCheck(BaseCheck):
 
             # Convert ASN to int if possible
             if info["asn"]:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     info["asn"] = int(info["asn"])
-                except (ValueError, TypeError):
-                    pass
 
             return info
 
@@ -387,53 +399,59 @@ class WhoisLookupCheck(BaseCheck):
         if nameservers:
             evidence_parts.append(f"NS: {ns_str}")
 
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"Domain registrar: {registrar or 'unknown'}",
-            description=(
-                f"WHOIS registration data for {domain}. "
-                f"Registrar: {registrar}. Created: {created}. Expires: {expires}. "
-                f"Nameservers: {ns_str}."
-            ),
-            severity="info",
-            evidence=" | ".join(evidence_parts),
-            host=domain,
-            discriminator="registration",
-            raw_data=info,
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"Domain registrar: {registrar or 'unknown'}",
+                description=(
+                    f"WHOIS registration data for {domain}. "
+                    f"Registrar: {registrar}. Created: {created}. Expires: {expires}. "
+                    f"Nameservers: {ns_str}."
+                ),
+                severity="info",
+                evidence=" | ".join(evidence_parts),
+                host=domain,
+                discriminator="registration",
+                raw_data=info,
+            )
+        )
 
         # Low: recently registered domain
         if created and created != "unknown":
             days_old = self._domain_age_days(created)
             if days_old is not None and 0 <= days_old <= RECENT_REGISTRATION_DAYS:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Domain registered within last {RECENT_REGISTRATION_DAYS} days",
-                    description=(
-                        f"{domain} was registered approximately {days_old} days ago "
-                        f"(created: {created}). Recently-registered domains hosting "
-                        f"services may indicate phishing, shadow IT, or a new project."
-                    ),
-                    severity="low",
-                    evidence=f"Domain: {domain} | Created: {created} | Age: ~{days_old} days",
-                    host=domain,
-                    discriminator="recent-registration",
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Domain registered within last {RECENT_REGISTRATION_DAYS} days",
+                        description=(
+                            f"{domain} was registered approximately {days_old} days ago "
+                            f"(created: {created}). Recently-registered domains hosting "
+                            f"services may indicate phishing, shadow IT, or a new project."
+                        ),
+                        severity="low",
+                        evidence=f"Domain: {domain} | Created: {created} | Age: ~{days_old} days",
+                        host=domain,
+                        discriminator="recent-registration",
+                    )
+                )
 
         # Info: WHOIS data redacted (GDPR)
         if info.get("redacted"):
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"WHOIS data redacted (privacy/GDPR): {domain}",
-                description=(
-                    f"WHOIS registrant data for {domain} is redacted for privacy. "
-                    f"This is common under GDPR and does not indicate a problem."
-                ),
-                severity="info",
-                evidence=f"Domain: {domain} | Redacted: True",
-                host=domain,
-                discriminator="redacted",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"WHOIS data redacted (privacy/GDPR): {domain}",
+                    description=(
+                        f"WHOIS registrant data for {domain} is redacted for privacy. "
+                        f"This is common under GDPR and does not indicate a problem."
+                    ),
+                    severity="info",
+                    evidence=f"Domain: {domain} | Redacted: True",
+                    host=domain,
+                    discriminator="redacted",
+                )
+            )
 
     def _generate_asn_findings(
         self,
@@ -445,18 +463,20 @@ class WhoisLookupCheck(BaseCheck):
         """Generate findings from ASN/RDAP data."""
         if info.get("private"):
             host_label = hostnames[0] if hostnames else ip
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Private/reserved IP: {ip}",
-                description=(
-                    f"IP {ip} ({', '.join(hostnames)}) is in a private or "
-                    f"reserved address range."
-                ),
-                severity="info",
-                evidence=f"IP: {ip} | Hosts: {', '.join(hostnames)} | Private: True",
-                host=host_label,
-                discriminator=f"private-{ip}",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Private/reserved IP: {ip}",
+                    description=(
+                        f"IP {ip} ({', '.join(hostnames)}) is in a private or "
+                        f"reserved address range."
+                    ),
+                    severity="info",
+                    evidence=f"IP: {ip} | Hosts: {', '.join(hostnames)} | Private: True",
+                    host=host_label,
+                    discriminator=f"private-{ip}",
+                )
+            )
             return
 
         asn = info.get("asn")
@@ -468,26 +488,28 @@ class WhoisLookupCheck(BaseCheck):
 
         asn_str = f"AS{asn}" if asn else "unknown ASN"
 
-        result.findings.append(build_finding(
-            check_name=self.name,
-            title=f"IP {ip} belongs to {asn_str} ({asn_desc})",
-            description=(
-                f"ASN/network data for {ip} ({', '.join(hostnames)}). "
-                f"Network: {network_name} ({cidr}). "
-                f"ASN: {asn_str} — {asn_desc}. Country: {asn_country}."
-            ),
-            severity="info",
-            evidence=(
-                f"IP: {ip} | ASN: {asn_str} | Org: {asn_desc} | "
-                f"Network: {network_name} ({cidr}) | Country: {asn_country}"
-            ),
-            host=host_label,
-            discriminator=f"asn-{ip}",
-            raw_data=info,
-        ))
+        result.findings.append(
+            build_finding(
+                check_name=self.name,
+                title=f"IP {ip} belongs to {asn_str} ({asn_desc})",
+                description=(
+                    f"ASN/network data for {ip} ({', '.join(hostnames)}). "
+                    f"Network: {network_name} ({cidr}). "
+                    f"ASN: {asn_str} — {asn_desc}. Country: {asn_country}."
+                ),
+                severity="info",
+                evidence=(
+                    f"IP: {ip} | ASN: {asn_str} | Org: {asn_desc} | "
+                    f"Network: {network_name} ({cidr}) | Country: {asn_country}"
+                ),
+                host=host_label,
+                discriminator=f"asn-{ip}",
+                raw_data=info,
+            )
+        )
 
     @staticmethod
-    def _domain_age_days(created_str: str) -> Optional[int]:
+    def _domain_age_days(created_str: str) -> int | None:
         """Parse a creation date string and return domain age in days."""
         # Common WHOIS date formats
         formats = [
@@ -505,8 +527,8 @@ class WhoisLookupCheck(BaseCheck):
             try:
                 dt = datetime.strptime(created_str.strip(), fmt)
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                now = datetime.now(timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
+                now = datetime.now(UTC)
                 return (now - dt).days
             except ValueError:
                 continue

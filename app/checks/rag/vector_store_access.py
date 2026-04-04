@@ -19,10 +19,9 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Per-store probes: (path, method, body_or_none, description)
 STORE_PROBES = {
@@ -30,34 +29,42 @@ STORE_PROBES = {
         ("/api/v1/collections", "GET", None, "list_collections"),
         ("/api/v1/collections/{id}/count", "GET", None, "document_count"),
         ("/api/v1/collections/{id}/get", "GET", None, "dump_documents"),
-        ("/api/v1/collections/{id}/query", "POST",
-         {"query_embeddings": [[0.0] * 3], "n_results": 2}, "arbitrary_query"),
+        (
+            "/api/v1/collections/{id}/query",
+            "POST",
+            {"query_embeddings": [[0.0] * 3], "n_results": 2},
+            "arbitrary_query",
+        ),
     ],
     "qdrant": [
         ("/collections", "GET", None, "list_collections"),
         ("/collections/{name}", "GET", None, "collection_info"),
-        ("/collections/{name}/points/scroll", "POST",
-         {"limit": 5}, "enumerate_points"),
-        ("/collections/{name}/points/search", "POST",
-         {"vector": [0.0] * 3, "limit": 2}, "arbitrary_search"),
+        ("/collections/{name}/points/scroll", "POST", {"limit": 5}, "enumerate_points"),
+        (
+            "/collections/{name}/points/search",
+            "POST",
+            {"vector": [0.0] * 3, "limit": 2},
+            "arbitrary_search",
+        ),
     ],
     "weaviate": [
         ("/v1/schema", "GET", None, "full_schema"),
         ("/v1/objects", "GET", None, "list_objects"),
-        ("/v1/graphql", "POST",
-         {"query": "{ Aggregate { __typename } }"}, "graphql_query"),
+        ("/v1/graphql", "POST", {"query": "{ Aggregate { __typename } }"}, "graphql_query"),
     ],
     "pinecone": [
         ("/describe_index_stats", "POST", {}, "index_stats"),
-        ("/query", "POST",
-         {"vector": [0.0] * 3, "topK": 2}, "arbitrary_query"),
+        ("/query", "POST", {"vector": [0.0] * 3, "topK": 2}, "arbitrary_query"),
         ("/vectors/list", "GET", None, "list_vectors"),
     ],
     "milvus": [
         ("/api/v1/collections", "GET", None, "list_collections"),
-        ("/api/v1/entities/query", "POST",
-         {"collection_name": "test", "expr": "id > 0",
-          "limit": 5}, "entity_query"),
+        (
+            "/api/v1/entities/query",
+            "POST",
+            {"collection_name": "test", "expr": "id > 0", "limit": 5},
+            "entity_query",
+        ),
     ],
 }
 
@@ -96,7 +103,10 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
         # Build store→base_url mapping from rag_endpoints
         store_urls: dict[str, str] = {}
         for ep in rag_endpoints:
-            if ep.get("endpoint_type") == "vector_store" and ep.get("service", {}).get("host") == service.host:
+            if (
+                ep.get("endpoint_type") == "vector_store"
+                and ep.get("service", {}).get("host") == service.host
+            ):
                 store_urls.setdefault(ep["store_type"], ep.get("url", service.url))
 
         cfg = HttpConfig(timeout_seconds=10.0, verify_ssl=False)
@@ -116,9 +126,7 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
                         base_url = "/".join(parts[:3])
 
                     # First, discover collection names for template paths
-                    collections = await self._discover_collections(
-                        client, store_type, base_url
-                    )
+                    collections = await self._discover_collections(client, store_type, base_url)
 
                     store_result = await self._probe_store(
                         client, store_type, base_url, probes, collections
@@ -128,19 +136,21 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
                         accessible.append(store_result)
                         severity = self._determine_severity(store_result)
 
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Vector store directly accessible: {store_type}",
-                            description=self._build_description(store_result),
-                            severity=severity,
-                            evidence=self._build_evidence(store_result),
-                            host=service.host,
-                            discriminator=f"store-access-{store_type}",
-                            target=service,
-                            target_url=base_url,
-                            raw_data=store_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Vector store directly accessible: {store_type}",
+                                description=self._build_description(store_result),
+                                severity=severity,
+                                evidence=self._build_evidence(store_result),
+                                host=service.host,
+                                discriminator=f"store-access-{store_type}",
+                                target=service,
+                                target_url=base_url,
+                                raw_data=store_result,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -157,7 +167,10 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
         return result
 
     async def _discover_collections(
-        self, client: AsyncHttpClient, store_type: str, base_url: str,
+        self,
+        client: AsyncHttpClient,
+        store_type: str,
+        base_url: str,
     ) -> list[str]:
         """Try to list collection/index names for template substitution."""
         names: list[str] = []
@@ -167,7 +180,9 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
                 if not resp.error and resp.status_code == 200:
                     data = json.loads(resp.body or "[]")
                     if isinstance(data, list):
-                        names = [c.get("name", c.get("id", "")) for c in data[:10] if isinstance(c, dict)]
+                        names = [
+                            c.get("name", c.get("id", "")) for c in data[:10] if isinstance(c, dict)
+                        ]
             elif store_type == "qdrant":
                 resp = await client.get(f"{base_url}/collections")
                 if not resp.error and resp.status_code == 200:
@@ -212,7 +227,8 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
                         resp = await client.get(url)
                     else:
                         resp = await client.post(
-                            url, json=body or {},
+                            url,
+                            json=body or {},
                             headers={"Content-Type": "application/json"},
                         )
 
@@ -221,22 +237,26 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
 
                     if resp.status_code in (200, 201):
                         preview = (resp.body or "")[:500]
-                        accessible_ops.append({
-                            "operation": op_name,
-                            "path": path,
-                            "status": resp.status_code,
-                            "preview": preview,
-                        })
+                        accessible_ops.append(
+                            {
+                                "operation": op_name,
+                                "path": path,
+                                "status": resp.status_code,
+                                "preview": preview,
+                            }
+                        )
                         # Try to count documents
                         doc_count += self._extract_count(resp.body, op_name)
                         break  # One success per probe type
                     elif resp.status_code == 401:
-                        accessible_ops.append({
-                            "operation": op_name,
-                            "path": path,
-                            "status": 401,
-                            "auth_required": True,
-                        })
+                        accessible_ops.append(
+                            {
+                                "operation": op_name,
+                                "path": path,
+                                "status": 401,
+                                "auth_required": True,
+                            }
+                        )
                         break
                 except Exception:
                     continue
@@ -249,7 +269,10 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
         }
 
     def _resolve_paths(
-        self, path_tmpl: str, collections: list[str], store_type: str,
+        self,
+        path_tmpl: str,
+        collections: list[str],
+        store_type: str,
     ) -> list[str]:
         """Expand template paths with discovered collection names."""
         if "{id}" not in path_tmpl and "{name}" not in path_tmpl:
@@ -270,8 +293,7 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
         try:
             data = json.loads(body)
             if isinstance(data, dict):
-                for key in ("count", "total", "totalVectorCount",
-                            "vectors_count", "point_count"):
+                for key in ("count", "total", "totalVectorCount", "vectors_count", "point_count"):
                     if key in data:
                         return int(data[key])
                 # Nested result
@@ -299,9 +321,17 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
         op_names = {o["operation"] for o in success_ops}
 
         # Full dump = critical
-        if "dump_documents" in op_names or "enumerate_points" in op_names or "list_objects" in op_names:
+        if (
+            "dump_documents" in op_names
+            or "enumerate_points" in op_names
+            or "list_objects" in op_names
+        ):
             return "critical"
-        if "arbitrary_query" in op_names or "arbitrary_search" in op_names or "graphql_query" in op_names:
+        if (
+            "arbitrary_query" in op_names
+            or "arbitrary_search" in op_names
+            or "graphql_query" in op_names
+        ):
             return "high"
         if "list_collections" in op_names or "collection_info" in op_names:
             return "medium"
@@ -315,9 +345,7 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
             f"{len(success_ops)} operation(s) permitted without authentication."
         ]
         if store_result["collections"]:
-            parts.append(
-                f"Collections: {', '.join(store_result['collections'][:5])}."
-            )
+            parts.append(f"Collections: {', '.join(store_result['collections'][:5])}.")
         if store_result["doc_count"]:
             parts.append(f"Approximately {store_result['doc_count']} documents.")
         return " ".join(parts)

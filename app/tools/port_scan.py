@@ -7,17 +7,13 @@ Real network port scanning using python-nmap.
 import asyncio
 import socket
 from datetime import datetime
-from typing import Optional
 
 from app.checks.network.port_profiles import resolve_ports
 from app.models import RawEvidence
 
 
 async def port_scan(
-    host: str,
-    ports: Optional[list[int]] = None,
-    profile: Optional[str] = None,
-    timeout: float = 5.0
+    host: str, ports: list[int] | None = None, profile: str | None = None, timeout: float = 5.0
 ) -> dict:
     """
     Scan ports on a target host.
@@ -35,7 +31,7 @@ async def port_scan(
     """
     if ports is None:
         ports = resolve_ports(profile=profile)
-    
+
     results = {
         "host": host,
         "scan_time": datetime.utcnow().isoformat(),
@@ -44,7 +40,7 @@ async def port_scan(
         "closed_ports": [],
         "filtered_ports": [],
     }
-    
+
     async def check_port(port: int) -> tuple[int, str]:
         """Check if a single port is open."""
         try:
@@ -53,20 +49,17 @@ async def port_scan(
                 ip = socket.gethostbyname(host)
             except socket.gaierror:
                 return port, "filtered"
-            
+
             # Try to connect
             loop = asyncio.get_event_loop()
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.setblocking(False)
-            
+
             try:
-                await asyncio.wait_for(
-                    loop.sock_connect(sock, (ip, port)),
-                    timeout=timeout
-                )
+                await asyncio.wait_for(loop.sock_connect(sock, (ip, port)), timeout=timeout)
                 sock.close()
                 return port, "open"
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 sock.close()
                 return port, "filtered"
             except ConnectionRefusedError:
@@ -75,14 +68,14 @@ async def port_scan(
             except OSError:
                 sock.close()
                 return port, "filtered"
-                
-        except Exception as e:
+
+        except Exception:
             return port, "error"
-    
+
     # Scan all ports concurrently
     tasks = [check_port(port) for port in ports]
     port_results = await asyncio.gather(*tasks)
-    
+
     for port, status in port_results:
         if status == "open":
             results["open_ports"].append(port)
@@ -90,9 +83,9 @@ async def port_scan(
             results["closed_ports"].append(port)
         else:
             results["filtered_ports"].append(port)
-    
+
     results["open_ports"].sort()
-    
+
     return results
 
 

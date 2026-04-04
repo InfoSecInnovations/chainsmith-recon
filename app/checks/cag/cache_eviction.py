@@ -14,14 +14,11 @@ References:
   OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 """
 
-import json
-import time
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Cache management endpoints to probe
 EVICTION_ENDPOINTS = [
@@ -72,8 +69,7 @@ class CacheEvictionCheck(ServiceIteratingCheck):
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
-            ep for ep in cag_endpoints
-            if ep.get("service", {}).get("host") == service.host
+            ep for ep in cag_endpoints if ep.get("service", {}).get("host") == service.host
         ]
 
         if not service_endpoints:
@@ -86,48 +82,48 @@ class CacheEvictionCheck(ServiceIteratingCheck):
             async with AsyncHttpClient(cfg) as client:
                 # Test bulk eviction endpoints
                 for ep_def in EVICTION_ENDPOINTS:
-                    probe_result = await self._probe_eviction_endpoint(
-                        client, service, ep_def
-                    )
+                    probe_result = await self._probe_eviction_endpoint(client, service, ep_def)
                     if probe_result:
                         eviction_results.append(probe_result)
 
                         severity = self._determine_severity(probe_result)
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Cache eviction endpoint: {ep_def['method']} {ep_def['path']}",
-                            description=self._build_description(probe_result),
-                            severity=severity,
-                            evidence=self._build_evidence(probe_result),
-                            host=service.host,
-                            discriminator=f"eviction-{ep_def['action']}",
-                            target=service,
-                            target_url=service.with_path(ep_def["path"]),
-                            raw_data=probe_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Cache eviction endpoint: {ep_def['method']} {ep_def['path']}",
+                                description=self._build_description(probe_result),
+                                severity=severity,
+                                evidence=self._build_evidence(probe_result),
+                                host=service.host,
+                                discriminator=f"eviction-{ep_def['action']}",
+                                target=service,
+                                target_url=service.with_path(ep_def["path"]),
+                                raw_data=probe_result,
+                                references=self.references,
+                            )
+                        )
 
                 # Test key-specific eviction
                 test_key = "chainsmith_eviction_test"
                 for ep_def in KEY_EVICTION_ENDPOINTS:
-                    probe_result = await self._probe_key_eviction(
-                        client, service, ep_def, test_key
-                    )
+                    probe_result = await self._probe_key_eviction(client, service, ep_def, test_key)
                     if probe_result:
                         eviction_results.append(probe_result)
 
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Key-specific cache eviction: {ep_def['action']}",
-                            description=self._build_description(probe_result),
-                            severity="high" if probe_result.get("accessible") else "medium",
-                            evidence=self._build_evidence(probe_result),
-                            host=service.host,
-                            discriminator=f"eviction-key-{ep_def['action']}",
-                            target=service,
-                            raw_data=probe_result,
-                            references=self.references,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Key-specific cache eviction: {ep_def['action']}",
+                                description=self._build_description(probe_result),
+                                severity="high" if probe_result.get("accessible") else "medium",
+                                evidence=self._build_evidence(probe_result),
+                                host=service.host,
+                                discriminator=f"eviction-key-{ep_def['action']}",
+                                target=service,
+                                raw_data=probe_result,
+                                references=self.references,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -180,8 +176,7 @@ class CacheEvictionCheck(ServiceIteratingCheck):
             return None
 
     async def _probe_key_eviction(
-        self, client: AsyncHttpClient, service: Service,
-        ep_def: dict, test_key: str
+        self, client: AsyncHttpClient, service: Service, ep_def: dict, test_key: str
     ) -> dict | None:
         """Probe key-specific eviction endpoint."""
         path = ep_def["path"].replace("{key}", test_key)

@@ -8,10 +8,10 @@ returning 200, this check fetches and analyzes their content for sensitive data.
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class DebugEndpointCheck(ServiceIteratingCheck):
@@ -33,32 +33,68 @@ class DebugEndpointCheck(ServiceIteratingCheck):
 
     # Debug paths to probe (may overlap with path_probe but this check analyzes content)
     DEBUG_PATHS = [
-        "/debug", "/__debug__/", "/actuator", "/actuator/env",
-        "/actuator/configprops", "/actuator/mappings", "/actuator/beans",
-        "/server-status", "/server-info", "/.well-known/health",
-        "/health", "/healthcheck", "/elmah.axd",
-        "/phpinfo.php", "/_profiler", "/trace",
+        "/debug",
+        "/__debug__/",
+        "/actuator",
+        "/actuator/env",
+        "/actuator/configprops",
+        "/actuator/mappings",
+        "/actuator/beans",
+        "/server-status",
+        "/server-info",
+        "/.well-known/health",
+        "/health",
+        "/healthcheck",
+        "/elmah.axd",
+        "/phpinfo.php",
+        "/_profiler",
+        "/trace",
     ]
 
     # Spring Boot Actuator sub-endpoints
     ACTUATOR_ENDPOINTS = [
-        "/actuator/env", "/actuator/configprops", "/actuator/mappings",
-        "/actuator/beans", "/actuator/info", "/actuator/metrics",
-        "/actuator/loggers", "/actuator/threaddump",
+        "/actuator/env",
+        "/actuator/configprops",
+        "/actuator/mappings",
+        "/actuator/beans",
+        "/actuator/info",
+        "/actuator/metrics",
+        "/actuator/loggers",
+        "/actuator/threaddump",
     ]
 
     # Sensitive data patterns
     SENSITIVE_PATTERNS = [
-        ("environment_variables", re.compile(r"(?:password|secret|key|token|credential|api_key)\s*[=:]\s*\S+", re.I)),
-        ("connection_string", re.compile(r"(?:DATABASE_URL|MONGO_URI|REDIS_URL|jdbc:|mongodb://|postgres://|mysql://)", re.I)),
-        ("internal_ip", re.compile(r"\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b")),
-        ("stack_trace", re.compile(r"(?:Traceback|at\s+\w+\.\w+\(|Exception in|Error:.*at\s+line)", re.I)),
+        (
+            "environment_variables",
+            re.compile(r"(?:password|secret|key|token|credential|api_key)\s*[=:]\s*\S+", re.I),
+        ),
+        (
+            "connection_string",
+            re.compile(
+                r"(?:DATABASE_URL|MONGO_URI|REDIS_URL|jdbc:|mongodb://|postgres://|mysql://)", re.I
+            ),
+        ),
+        (
+            "internal_ip",
+            re.compile(
+                r"\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b"
+            ),
+        ),
+        (
+            "stack_trace",
+            re.compile(r"(?:Traceback|at\s+\w+\.\w+\(|Exception in|Error:.*at\s+line)", re.I),
+        ),
     ]
 
     # Framework-specific debug signatures
     FRAMEWORK_SIGNATURES = {
-        "django_debug": re.compile(r"You're seeing this error because you have DEBUG\s*=\s*True", re.I),
-        "werkzeug_debugger": re.compile(r"Werkzeug\s+Debug(?:ger)?|The debugger caught an exception", re.I),
+        "django_debug": re.compile(
+            r"You're seeing this error because you have DEBUG\s*=\s*True", re.I
+        ),
+        "werkzeug_debugger": re.compile(
+            r"Werkzeug\s+Debug(?:ger)?|The debugger caught an exception", re.I
+        ),
         "spring_whitelabel": re.compile(r"Whitelabel Error Page", re.I),
         "express_error": re.compile(r"Cannot GET /|at Layer\.handle", re.I),
         "laravel_ignition": re.compile(r"Ignition|laravel.*exception", re.I),
@@ -73,9 +109,22 @@ class DebugEndpointCheck(ServiceIteratingCheck):
         accessible = self._get_accessible_paths(service, context)
         for p in accessible:
             p_lower = p.lower()
-            if any(kw in p_lower for kw in ["debug", "actuator", "status", "health", "phpinfo", "profiler", "trace"]):
-                if p not in paths_to_check:
-                    paths_to_check.append(p)
+            if (
+                any(
+                    kw in p_lower
+                    for kw in [
+                        "debug",
+                        "actuator",
+                        "status",
+                        "health",
+                        "phpinfo",
+                        "profiler",
+                        "trace",
+                    ]
+                )
+                and p not in paths_to_check
+            ):
+                paths_to_check.append(p)
 
         cfg = HttpConfig(timeout_seconds=10.0, verify_ssl=False)
         try:
@@ -97,18 +146,20 @@ class DebugEndpointCheck(ServiceIteratingCheck):
                         actuator_found = True
                         actuator_endpoints = await self._enumerate_actuator(client, service)
                         if actuator_endpoints:
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Spring Boot Actuator exposed: {service.host}",
-                                description=f"{len(actuator_endpoints)} actuator endpoints accessible",
-                                severity="high",
-                                evidence=f"Accessible endpoints: {', '.join(actuator_endpoints[:10])}",
-                                host=service.host,
-                                discriminator="actuator-exposed",
-                                target=service,
-                                target_url=url,
-                                raw_data={"endpoints": actuator_endpoints},
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Spring Boot Actuator exposed: {service.host}",
+                                    description=f"{len(actuator_endpoints)} actuator endpoints accessible",
+                                    severity="high",
+                                    evidence=f"Accessible endpoints: {', '.join(actuator_endpoints[:10])}",
+                                    host=service.host,
+                                    discriminator="actuator-exposed",
+                                    target=service,
+                                    target_url=url,
+                                    raw_data={"endpoints": actuator_endpoints},
+                                )
+                            )
                         continue
 
                     # Check for framework debug modes
@@ -119,73 +170,83 @@ class DebugEndpointCheck(ServiceIteratingCheck):
 
                     if framework == "werkzeug_debugger":
                         # Werkzeug debugger = potential RCE
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Werkzeug debugger exposed: {service.host}{path}",
-                            description="Interactive debugger detected — potential remote code execution",
-                            severity="critical",
-                            evidence=fmt_status_evidence(url, 200, body[:200]),
-                            host=service.host,
-                            discriminator=f"werkzeug-debugger-{path.replace('/', '-').strip('-')}",
-                            target=service,
-                            target_url=url,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Werkzeug debugger exposed: {service.host}{path}",
+                                description="Interactive debugger detected — potential remote code execution",
+                                severity="critical",
+                                evidence=fmt_status_evidence(url, 200, body[:200]),
+                                host=service.host,
+                                discriminator=f"werkzeug-debugger-{path.replace('/', '-').strip('-')}",
+                                target=service,
+                                target_url=url,
+                            )
+                        )
                     elif framework == "django_debug":
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Django DEBUG=True: {service.host}",
-                            description="Django debug mode enabled — detailed error pages with source code",
-                            severity="high",
-                            evidence=fmt_status_evidence(url, 200, body[:200]),
-                            host=service.host,
-                            discriminator="django-debug",
-                            target=service,
-                            target_url=url,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Django DEBUG=True: {service.host}",
+                                description="Django debug mode enabled — detailed error pages with source code",
+                                severity="high",
+                                evidence=fmt_status_evidence(url, 200, body[:200]),
+                                host=service.host,
+                                discriminator="django-debug",
+                                target=service,
+                                target_url=url,
+                            )
+                        )
                     elif sensitive:
                         # Categorize by what was found
-                        categories = list(set(s[0] for s in sensitive))
+                        categories = list({s[0] for s in sensitive})
                         has_env = "environment_variables" in categories
                         severity = "critical" if has_env else "high"
 
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Debug endpoint leaks sensitive data: {service.host}{path}",
-                            description=f"Sensitive data categories: {', '.join(categories)}",
-                            severity=severity,
-                            evidence=f"GET {url} -> 200 | Sensitive patterns: {', '.join(categories)}",
-                            host=service.host,
-                            discriminator=f"sensitive-{path.replace('/', '-').strip('-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data={"categories": categories, "path": path},
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Debug endpoint leaks sensitive data: {service.host}{path}",
+                                description=f"Sensitive data categories: {', '.join(categories)}",
+                                severity=severity,
+                                evidence=f"GET {url} -> 200 | Sensitive patterns: {', '.join(categories)}",
+                                host=service.host,
+                                discriminator=f"sensitive-{path.replace('/', '-').strip('-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data={"categories": categories, "path": path},
+                            )
+                        )
                     elif framework:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Framework identified from debug page: {framework} at {service.host}{path}",
-                            description=f"Debug/error page reveals framework: {framework}",
-                            severity="low",
-                            evidence=fmt_status_evidence(url, 200, body[:200]),
-                            host=service.host,
-                            discriminator=f"framework-{framework}",
-                            target=service,
-                            target_url=url,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Framework identified from debug page: {framework} at {service.host}{path}",
+                                description=f"Debug/error page reveals framework: {framework}",
+                                severity="low",
+                                evidence=fmt_status_evidence(url, 200, body[:200]),
+                                host=service.host,
+                                discriminator=f"framework-{framework}",
+                                target=service,
+                                target_url=url,
+                            )
+                        )
                     elif path in ("/health", "/healthcheck", "/.well-known/health"):
                         # Verbose health endpoints
                         if len(body) > 100:
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Verbose health endpoint: {service.host}{path}",
-                                description=f"Health endpoint returns detailed info ({len(body)} bytes)",
-                                severity="medium",
-                                evidence=fmt_status_evidence(url, 200, body[:200]),
-                                host=service.host,
-                                discriminator=f"verbose-health-{path.replace('/', '-').strip('-')}",
-                                target=service,
-                                target_url=url,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Verbose health endpoint: {service.host}{path}",
+                                    description=f"Health endpoint returns detailed info ({len(body)} bytes)",
+                                    severity="medium",
+                                    evidence=fmt_status_evidence(url, 200, body[:200]),
+                                    host=service.host,
+                                    discriminator=f"verbose-health-{path.replace('/', '-').strip('-')}",
+                                    target=service,
+                                    target_url=url,
+                                )
+                            )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")

@@ -10,7 +10,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from app.engine.scanner import get_check_info, AVAILABLE_CHECKS
+from app.engine.scanner import AVAILABLE_CHECKS, get_check_info
 from app.scenarios import get_scenario_manager
 
 logger = logging.getLogger(__name__)
@@ -31,11 +31,11 @@ async def get_available_checks():
     if mgr.is_active:
         simulations = mgr.get_simulations()
         # Build merged list: real checks + simulated overlays
-        merged = dict(AVAILABLE_CHECKS)          # copy real checks
+        merged = dict(AVAILABLE_CHECKS)  # copy real checks
         for sim in simulations:
             info = get_check_info(sim)
             info["simulated"] = True
-            merged[sim.name] = info               # replace real with sim
+            merged[sim.name] = info  # replace real with sim
         return {
             "checks": list(merged.values()),
             "scenario": mgr.active.name,

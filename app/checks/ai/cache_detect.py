@@ -7,10 +7,10 @@ Send identical requests and compare responses. If responses are identical
 
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.lib.ai_helpers import extract_response_text, format_chat_request_with_extra
 from app.lib.findings import build_finding
-from app.lib.ai_helpers import format_chat_request_with_extra, extract_response_text
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
 
@@ -18,7 +18,9 @@ class ResponseCachingCheck(BaseCheck):
     """Detect response caching by comparing identical requests."""
 
     name = "response_caching"
-    description = "Detect response caching by comparing identical requests for content and timing patterns"
+    description = (
+        "Detect response caching by comparing identical requests for content and timing patterns"
+    )
     intrusive = False
 
     conditions = [CheckCondition("chat_endpoints", "truthy")]
@@ -39,8 +41,13 @@ class ResponseCachingCheck(BaseCheck):
 
     # Cache-related headers to look for
     CACHE_HEADERS = [
-        "x-cache", "x-cache-hit", "age", "cache-control",
-        "cf-cache-status", "x-varnish", "x-proxy-cache",
+        "x-cache",
+        "x-cache-hit",
+        "age",
+        "cache-control",
+        "cf-cache-status",
+        "x-varnish",
+        "x-proxy-cache",
         "x-fastly-request-id",
     ]
 
@@ -65,7 +72,10 @@ class ResponseCachingCheck(BaseCheck):
         return result
 
     async def _test_caching(
-        self, url: str, service: Service, api_format: str,
+        self,
+        url: str,
+        service: Service,
+        api_format: str,
     ) -> CheckResult:
         result = CheckResult(success=True)
         host = service.host
@@ -83,10 +93,13 @@ class ResponseCachingCheck(BaseCheck):
                     await self._rate_limit()
 
                     body = format_chat_request_with_extra(
-                        self.TEST_PROMPT, api_format, temperature=0,
+                        self.TEST_PROMPT,
+                        api_format,
+                        temperature=0,
                     )
                     resp = await client.post(
-                        url, json=body,
+                        url,
+                        json=body,
                         headers={"Content-Type": "application/json"},
                     )
 
@@ -109,10 +122,13 @@ class ResponseCachingCheck(BaseCheck):
                 if len(responses_text) >= 2 and len(set(responses_text)) == 1:
                     await self._rate_limit()
                     body_hot = format_chat_request_with_extra(
-                        self.TEST_PROMPT, api_format, temperature=2.0,
+                        self.TEST_PROMPT,
+                        api_format,
+                        temperature=2.0,
                     )
                     resp_hot = await client.post(
-                        url, json=body_hot,
+                        url,
+                        json=body_hot,
                         headers={"Content-Type": "application/json"},
                     )
 
@@ -135,7 +151,9 @@ class ResponseCachingCheck(BaseCheck):
         cache_info = {
             "identical_responses": len(set(responses_text)) == 1,
             "cache_headers": cache_headers_found,
-            "avg_response_ms": sum(response_times) / len(response_times) if response_times else None,
+            "avg_response_ms": sum(response_times) / len(response_times)
+            if response_times
+            else None,
             "temp_override_works": temp_override_works,
         }
 
@@ -144,57 +162,73 @@ class ResponseCachingCheck(BaseCheck):
 
         if cache_headers_found:
             header_str = ", ".join(f"{k}: {v}" for k, v in cache_headers_found.items())
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Cache headers present: {header_str[:80]}",
-                description="Response includes cache-related headers indicating proxy/CDN caching",
-                severity="low",
-                evidence=f"Headers: {header_str}",
-                host=host, discriminator="cache-headers",
-                target=service, target_url=url,
-                raw_data=cache_info,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Cache headers present: {header_str[:80]}",
+                    description="Response includes cache-related headers indicating proxy/CDN caching",
+                    severity="low",
+                    evidence=f"Headers: {header_str}",
+                    host=host,
+                    discriminator="cache-headers",
+                    target=service,
+                    target_url=url,
+                    raw_data=cache_info,
+                )
+            )
 
         if all_identical and not temp_override_works:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Response caching detected: identical responses override temperature parameter",
-                description=(
-                    "Identical responses returned for same prompt regardless of temperature, "
-                    "suggesting HTTP-level or semantic caching. "
-                    "Content filter bypass risk if cached responses predate filter updates."
-                ),
-                severity="medium",
-                evidence=(
-                    f"Responses: {self.REPEAT_COUNT}/{self.REPEAT_COUNT} identical, "
-                    f"temperature=2.0 produced same output"
-                ),
-                host=host, discriminator="caching-detected",
-                target=service, target_url=url,
-                raw_data=cache_info,
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Response caching detected: identical responses override temperature parameter",
+                    description=(
+                        "Identical responses returned for same prompt regardless of temperature, "
+                        "suggesting HTTP-level or semantic caching. "
+                        "Content filter bypass risk if cached responses predate filter updates."
+                    ),
+                    severity="medium",
+                    evidence=(
+                        f"Responses: {self.REPEAT_COUNT}/{self.REPEAT_COUNT} identical, "
+                        f"temperature=2.0 produced same output"
+                    ),
+                    host=host,
+                    discriminator="caching-detected",
+                    target=service,
+                    target_url=url,
+                    raw_data=cache_info,
+                    references=self.references,
+                )
+            )
         elif all_identical:
             # Identical at temp=0 but different at temp=2.0 — deterministic, not cached
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="No caching detected (deterministic at temperature=0, varies at temperature=2.0)",
-                description="Responses are deterministic at low temperature but vary with high temperature, as expected",
-                severity="info",
-                evidence=f"Responses: {self.REPEAT_COUNT}/{self.REPEAT_COUNT} identical at temp=0, different at temp=2.0",
-                host=host, discriminator="no-cache",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="No caching detected (deterministic at temperature=0, varies at temperature=2.0)",
+                    description="Responses are deterministic at low temperature but vary with high temperature, as expected",
+                    severity="info",
+                    evidence=f"Responses: {self.REPEAT_COUNT}/{self.REPEAT_COUNT} identical at temp=0, different at temp=2.0",
+                    host=host,
+                    discriminator="no-cache",
+                    target=service,
+                    target_url=url,
+                )
+            )
         else:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="No caching detected (responses vary as expected)",
-                description="Responses vary across identical requests, indicating no caching",
-                severity="info",
-                evidence=f"Unique responses: {len(set(responses_text))}/{len(responses_text)}",
-                host=host, discriminator="no-cache",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="No caching detected (responses vary as expected)",
+                    description="Responses vary across identical requests, indicating no caching",
+                    severity="info",
+                    evidence=f"Unique responses: {len(set(responses_text))}/{len(responses_text)}",
+                    host=host,
+                    discriminator="no-cache",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
         result.outputs[f"cache_detection_{service.port}"] = cache_info
         return result

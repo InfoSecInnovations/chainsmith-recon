@@ -15,10 +15,9 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Notifications to test (client→server direction)
 NOTIFICATION_TESTS = [
@@ -132,59 +131,63 @@ class MCPNotificationInjectionCheck(BaseCheck):
 
                         if accepted:
                             server_status["accepted"].append(test["method"])
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=test["title"],
-                                description=test["description"],
-                                severity=test["severity"],
-                                evidence=(
-                                    f"URL: {server_url}\n"
-                                    f"Method: {test['method']}\n"
-                                    f"Status: accepted"
-                                ),
-                                host=host,
-                                discriminator=f"notif-{test['method'].replace('/', '-')}",
-                                raw_data={"method": test["method"], "accepted": True},
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=test["title"],
+                                    description=test["description"],
+                                    severity=test["severity"],
+                                    evidence=(
+                                        f"URL: {server_url}\n"
+                                        f"Method: {test['method']}\n"
+                                        f"Status: accepted"
+                                    ),
+                                    host=host,
+                                    discriminator=f"notif-{test['method'].replace('/', '-')}",
+                                    raw_data={"method": test["method"], "accepted": True},
+                                )
+                            )
                         else:
                             server_status["rejected"].append(test["method"])
 
                     # Test custom/non-standard notifications
                     for method in CUSTOM_NOTIFICATIONS:
-                        accepted = await self._send_notification(
-                            client, server_url, method, {}
-                        )
+                        accepted = await self._send_notification(client, server_url, method, {})
 
                         if accepted:
                             server_status["custom_accepted"].append(method)
 
                     if server_status["custom_accepted"]:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Server accepts arbitrary custom notification methods",
-                            description=(
-                                f"The MCP server accepted custom notification methods: "
-                                f"{', '.join(server_status['custom_accepted'])}. "
-                                "This indicates loose method validation."
-                            ),
-                            severity="low",
-                            evidence=f"Custom methods accepted: {', '.join(server_status['custom_accepted'])}",
-                            host=host,
-                            discriminator="custom-notif",
-                            raw_data={"custom_accepted": server_status["custom_accepted"]},
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Server accepts arbitrary custom notification methods",
+                                description=(
+                                    f"The MCP server accepted custom notification methods: "
+                                    f"{', '.join(server_status['custom_accepted'])}. "
+                                    "This indicates loose method validation."
+                                ),
+                                severity="low",
+                                evidence=f"Custom methods accepted: {', '.join(server_status['custom_accepted'])}",
+                                host=host,
+                                discriminator="custom-notif",
+                                raw_data={"custom_accepted": server_status["custom_accepted"]},
+                            )
+                        )
 
                     # If nothing was accepted, report clean
                     if not server_status["accepted"] and not server_status["custom_accepted"]:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title="Server rejects unsolicited client notifications",
-                            description="The MCP server properly rejects notification injection attempts.",
-                            severity="info",
-                            evidence=f"URL: {server_url}\nMethods tested: {len(NOTIFICATION_TESTS) + len(CUSTOM_NOTIFICATIONS)}",
-                            host=host,
-                            discriminator="notif-clean",
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title="Server rejects unsolicited client notifications",
+                                description="The MCP server properly rejects notification injection attempts.",
+                                severity="info",
+                                evidence=f"URL: {server_url}\nMethods tested: {len(NOTIFICATION_TESTS) + len(CUSTOM_NOTIFICATIONS)}",
+                                host=host,
+                                discriminator="notif-clean",
+                            )
+                        )
 
             except Exception as e:
                 result.errors.append(f"Notification test on {server_url}: {e}")
@@ -196,9 +199,7 @@ class MCPNotificationInjectionCheck(BaseCheck):
 
         return result
 
-    async def _send_notification(
-        self, client, server_url: str, method: str, params: dict
-    ) -> bool:
+    async def _send_notification(self, client, server_url: str, method: str, params: dict) -> bool:
         """
         Send a JSON-RPC notification (no id field) and check if accepted.
 

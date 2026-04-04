@@ -6,10 +6,10 @@ Find chat/completion and embedding endpoints on services.
 
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.lib.ai_helpers import fmt_endpoint_probe_evidence
 from app.lib.findings import build_finding
-from app.lib.ai_helpers import format_chat_request, fmt_endpoint_probe_evidence
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class LLMEndpointCheck(ServiceIteratingCheck):
@@ -30,12 +30,25 @@ class LLMEndpointCheck(ServiceIteratingCheck):
     techniques = ["endpoint discovery", "API enumeration"]
 
     CHAT_PATHS = [
-        "/v1/chat/completions", "/v1/completions", "/chat/completions", "/completions",
-        "/v1/messages", "/messages",
-        "/api/generate", "/api/chat",
-        "/chat", "/inference", "/predict", "/api/inference", "/api/predict",
-        "/invoke", "/stream", "/batch",
-        "/generate", "/v1/generate", "/generate_stream",
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/chat/completions",
+        "/completions",
+        "/v1/messages",
+        "/messages",
+        "/api/generate",
+        "/api/chat",
+        "/chat",
+        "/inference",
+        "/predict",
+        "/api/inference",
+        "/api/predict",
+        "/invoke",
+        "/stream",
+        "/batch",
+        "/generate",
+        "/v1/generate",
+        "/generate_stream",
     ]
 
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
@@ -63,26 +76,32 @@ class LLMEndpointCheck(ServiceIteratingCheck):
 
                     api_format = self._detect_api_format(path)
 
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"LLM endpoint: {path}",
-                        description=f"Chat/completion endpoint discovered ({api_format} format)",
-                        severity="info",
-                        evidence=fmt_endpoint_probe_evidence(path, post_resp.status_code, api_format),
-                        host=service.host,
-                        discriminator=f"chat-{path.strip('/').replace('/', '-')}",
-                        target=service,
-                        target_url=url,
-                        raw_data={"api_format": api_format},
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"LLM endpoint: {path}",
+                            description=f"Chat/completion endpoint discovered ({api_format} format)",
+                            severity="info",
+                            evidence=fmt_endpoint_probe_evidence(
+                                path, post_resp.status_code, api_format
+                            ),
+                            host=service.host,
+                            discriminator=f"chat-{path.strip('/').replace('/', '-')}",
+                            target=service,
+                            target_url=url,
+                            raw_data={"api_format": api_format},
+                        )
+                    )
 
-                    chat_endpoints.append({
-                        "url": url,
-                        "path": path,
-                        "service": service.to_dict(),
-                        "api_format": api_format,
-                        "status_code": post_resp.status_code,
-                    })
+                    chat_endpoints.append(
+                        {
+                            "url": url,
+                            "path": path,
+                            "service": service.to_dict(),
+                            "api_format": api_format,
+                            "status_code": post_resp.status_code,
+                        }
+                    )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -125,9 +144,18 @@ class EmbeddingEndpointCheck(ServiceIteratingCheck):
     techniques = ["endpoint discovery", "embedding extraction"]
 
     EMBEDDING_PATHS = [
-        "/v1/embeddings", "/embeddings",
-        "/api/embeddings", "/api/embed", "/embed", "/encode", "/api/encode",
-        "/api/vectors", "/vectors", "/similarity", "/search", "/api/search",
+        "/v1/embeddings",
+        "/embeddings",
+        "/api/embeddings",
+        "/api/embed",
+        "/embed",
+        "/encode",
+        "/api/encode",
+        "/api/vectors",
+        "/vectors",
+        "/similarity",
+        "/search",
+        "/api/search",
         "/feature-extraction",
     ]
 
@@ -150,21 +178,27 @@ class EmbeddingEndpointCheck(ServiceIteratingCheck):
                     if resp.error or resp.status_code in (404, 405):
                         continue
 
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"Embedding endpoint: {path}",
-                        description="Embedding/vector endpoint discovered",
-                        severity="info",
-                        evidence=fmt_endpoint_probe_evidence(path, resp.status_code),
-                        host=service.host,
-                        discriminator=f"embed-{path.strip('/').replace('/', '-')}",
-                        target=service,
-                        target_url=url,
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"Embedding endpoint: {path}",
+                            description="Embedding/vector endpoint discovered",
+                            severity="info",
+                            evidence=fmt_endpoint_probe_evidence(path, resp.status_code),
+                            host=service.host,
+                            discriminator=f"embed-{path.strip('/').replace('/', '-')}",
+                            target=service,
+                            target_url=url,
+                        )
+                    )
 
-                    embedding_endpoints.append({
-                        "url": url, "path": path, "service": service.to_dict(),
-                    })
+                    embedding_endpoints.append(
+                        {
+                            "url": url,
+                            "path": path,
+                            "service": service.to_dict(),
+                        }
+                    )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")

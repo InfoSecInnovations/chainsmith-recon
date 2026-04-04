@@ -11,7 +11,7 @@ The CheckLauncher handles HOW to run them.
 
 Usage:
     from app.check_resolver import resolve_checks
-    
+
     checks = resolve_checks(
         techniques=["dns_enumeration", "port_scan"],  # Optional filter
         scenario_name="fakobanko"  # Optional scenario
@@ -19,16 +19,15 @@ Usage:
 """
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 def resolve_checks(
-    techniques: Optional[list[str]] = None,
-    scenario_name: Optional[str] = None,
-    check_names: Optional[list[str]] = None,
-    suites: Optional[list[str]] = None,
+    techniques: list[str] | None = None,
+    scenario_name: str | None = None,
+    check_names: list[str] | None = None,
+    suites: list[str] | None = None,
 ) -> list:
     """
     Build the list of checks to run.
@@ -71,77 +70,144 @@ def resolve_checks(
 
 def get_real_checks() -> list:
     """Get all real check instances."""
-    from app.checks.network import (
-        DnsEnumerationCheck, WildcardDnsCheck, DnsRecordCheck, GeoIpCheck,
-        ReverseDnsCheck, PortScanCheck, TlsAnalysisCheck, ServiceProbeCheck,
-        HttpMethodEnumCheck, BannerGrabCheck,
-        WhoisLookupCheck, TracerouteCheck, IPv6DiscoveryCheck,
-    )
-    from app.checks.web import (
-        HeaderAnalysisCheck, RobotsTxtCheck, PathProbeCheck,
-        OpenAPICheck, CorsCheck,
-        WebDAVCheck, VCSExposureCheck, ConfigExposureCheck,
-        DirectoryListingCheck, DefaultCredsCheck, DebugEndpointCheck,
-        CookieSecurityCheck, AuthDetectionCheck, WAFDetectionCheck,
-        SitemapCheck, RedirectChainCheck, ErrorPageCheck, SSRFIndicatorCheck,
-        FaviconCheck, HTTP2DetectionCheck, HSTSPreloadCheck,
-        SRICheck, MassAssignmentCheck,
-    )
-    from app.checks.mcp import (
-        MCPDiscoveryCheck, MCPToolEnumerationCheck,
-        MCPAuthCheck, WebSocketTransportCheck,
-        ToolChainAnalysisCheck, ShadowToolDetectionCheck,
-        ToolSchemaLeakageCheck, MCPServerFingerprintCheck,
-        TransportSecurityCheck, MCPNotificationInjectionCheck,
-        MCPToolInvocationCheck, MCPResourceTraversalCheck,
-        ResourceTemplateInjectionCheck, MCPPromptInjectionCheck,
-        MCPSamplingAbuseCheck, MCPProtocolVersionCheck,
-        ToolRateLimitCheck, UndeclaredCapabilityCheck,
+    from app.checks.agent import (
+        AgentCallbackInjectionCheck,
+        AgentContextOverflowCheck,
+        AgentCrossInjectionCheck,
+        AgentDiscoveryCheck,
+        AgentFrameworkExploitsCheck,
+        AgentFrameworkVersionCheck,
+        AgentGoalInjectionCheck,
+        AgentLoopDetectionCheck,
+        AgentMemoryExtractionCheck,
+        AgentMemoryPoisoningCheck,
+        AgentMultiAgentDetectionCheck,
+        AgentPrivilegeEscalationCheck,
+        AgentReflectionAbuseCheck,
+        AgentStateManipulationCheck,
+        AgentStreamingInjectionCheck,
+        AgentToolAbuseCheck,
+        AgentTrustChainCheck,
     )
     from app.checks.ai import (
-        LLMEndpointCheck, EmbeddingEndpointCheck, ModelInfoCheck,
-        AIFrameworkFingerprintCheck, AIErrorLeakageCheck,
-        ToolDiscoveryCheck, PromptLeakageCheck,
-        RateLimitCheck, ContentFilterCheck, ContextWindowCheck,
-        JailbreakTestingCheck, MultiTurnInjectionCheck,
-        InputFormatInjectionCheck, ModelEnumerationCheck,
-        TokenCostExhaustionCheck, SystemPromptInjectionCheck,
-        OutputFormatManipulationCheck, APIParameterInjectionCheck,
-    )
-    from app.checks.agent import (
-        AgentDiscoveryCheck, AgentGoalInjectionCheck,
-        AgentMultiAgentDetectionCheck, AgentFrameworkVersionCheck,
-        AgentMemoryExtractionCheck, AgentToolAbuseCheck,
-        AgentPrivilegeEscalationCheck, AgentLoopDetectionCheck,
-        AgentCallbackInjectionCheck, AgentStreamingInjectionCheck,
-        AgentFrameworkExploitsCheck, AgentMemoryPoisoningCheck,
-        AgentContextOverflowCheck, AgentReflectionAbuseCheck,
-        AgentStateManipulationCheck, AgentTrustChainCheck,
-        AgentCrossInjectionCheck,
-    )
-    from app.checks.rag import (
-        RAGDiscoveryCheck, RAGIndirectInjectionCheck,
-        RAGVectorStoreAccessCheck, RAGAuthBypassCheck,
-        RAGCollectionEnumerationCheck, RAGEmbeddingFingerprintCheck,
-        RAGDocumentExfiltrationCheck, RAGRetrievalManipulationCheck,
-        RAGSourceAttributionCheck, RAGCachePoisoningCheck,
-        RAGCorpusPoisoningCheck, RAGMetadataInjectionCheck,
-        RAGChunkBoundaryCheck, RAGMultimodalInjectionCheck,
-        RAGFusionRerankerCheck, RAGCrossCollectionCheck,
-        RAGAdversarialEmbeddingCheck,
+        AIErrorLeakageCheck,
+        AIFrameworkFingerprintCheck,
+        APIParameterInjectionCheck,
+        ContentFilterCheck,
+        ContextWindowCheck,
+        EmbeddingEndpointCheck,
+        InputFormatInjectionCheck,
+        JailbreakTestingCheck,
+        LLMEndpointCheck,
+        ModelEnumerationCheck,
+        ModelInfoCheck,
+        MultiTurnInjectionCheck,
+        OutputFormatManipulationCheck,
+        PromptLeakageCheck,
+        RateLimitCheck,
+        SystemPromptInjectionCheck,
+        TokenCostExhaustionCheck,
+        ToolDiscoveryCheck,
     )
     from app.checks.cag import (
-        CAGDiscoveryCheck, CAGCacheProbeCheck,
-        CacheEvictionCheck, CacheWarmingCheck,
-        TTLMappingCheck, MultiLayerCacheCheck,
-        CacheQuotaCheck, ProviderCachingCheck,
-        CrossUserLeakageCheck, CacheKeyReverseCheck,
-        SemanticThresholdCheck, SideChannelCheck,
-        StaleContextCheck, CachePoisoningCheck,
-        InjectionPersistenceCheck, SerializationCheck,
+        CacheEvictionCheck,
+        CacheKeyReverseCheck,
+        CachePoisoningCheck,
+        CacheQuotaCheck,
+        CacheWarmingCheck,
+        CAGCacheProbeCheck,
+        CAGDiscoveryCheck,
+        CrossUserLeakageCheck,
         DistributedCacheCheck,
+        InjectionPersistenceCheck,
+        MultiLayerCacheCheck,
+        ProviderCachingCheck,
+        SemanticThresholdCheck,
+        SerializationCheck,
+        SideChannelCheck,
+        StaleContextCheck,
+        TTLMappingCheck,
     )
-    
+    from app.checks.mcp import (
+        MCPAuthCheck,
+        MCPDiscoveryCheck,
+        MCPNotificationInjectionCheck,
+        MCPPromptInjectionCheck,
+        MCPProtocolVersionCheck,
+        MCPResourceTraversalCheck,
+        MCPSamplingAbuseCheck,
+        MCPServerFingerprintCheck,
+        MCPToolEnumerationCheck,
+        MCPToolInvocationCheck,
+        ResourceTemplateInjectionCheck,
+        ShadowToolDetectionCheck,
+        ToolChainAnalysisCheck,
+        ToolRateLimitCheck,
+        ToolSchemaLeakageCheck,
+        TransportSecurityCheck,
+        UndeclaredCapabilityCheck,
+        WebSocketTransportCheck,
+    )
+    from app.checks.network import (
+        BannerGrabCheck,
+        DnsEnumerationCheck,
+        DnsRecordCheck,
+        GeoIpCheck,
+        HttpMethodEnumCheck,
+        IPv6DiscoveryCheck,
+        PortScanCheck,
+        ReverseDnsCheck,
+        ServiceProbeCheck,
+        TlsAnalysisCheck,
+        TracerouteCheck,
+        WhoisLookupCheck,
+        WildcardDnsCheck,
+    )
+    from app.checks.rag import (
+        RAGAdversarialEmbeddingCheck,
+        RAGAuthBypassCheck,
+        RAGCachePoisoningCheck,
+        RAGChunkBoundaryCheck,
+        RAGCollectionEnumerationCheck,
+        RAGCorpusPoisoningCheck,
+        RAGCrossCollectionCheck,
+        RAGDiscoveryCheck,
+        RAGDocumentExfiltrationCheck,
+        RAGEmbeddingFingerprintCheck,
+        RAGFusionRerankerCheck,
+        RAGIndirectInjectionCheck,
+        RAGMetadataInjectionCheck,
+        RAGMultimodalInjectionCheck,
+        RAGRetrievalManipulationCheck,
+        RAGSourceAttributionCheck,
+        RAGVectorStoreAccessCheck,
+    )
+    from app.checks.web import (
+        AuthDetectionCheck,
+        ConfigExposureCheck,
+        CookieSecurityCheck,
+        CorsCheck,
+        DebugEndpointCheck,
+        DefaultCredsCheck,
+        DirectoryListingCheck,
+        ErrorPageCheck,
+        FaviconCheck,
+        HeaderAnalysisCheck,
+        HSTSPreloadCheck,
+        HTTP2DetectionCheck,
+        MassAssignmentCheck,
+        OpenAPICheck,
+        PathProbeCheck,
+        RedirectChainCheck,
+        RobotsTxtCheck,
+        SitemapCheck,
+        SRICheck,
+        SSRFIndicatorCheck,
+        VCSExposureCheck,
+        WAFDetectionCheck,
+        WebDAVCheck,
+    )
+
     # Instantiate all checks in dependency order
     checks = [
         # Network Phase 1 (no dependencies, can run in parallel)
@@ -149,22 +215,18 @@ def get_real_checks() -> list:
         WildcardDnsCheck(),
         DnsRecordCheck(),
         WhoisLookupCheck(),
-
         # Network Phase 2 (depends on dns_enumeration)
         GeoIpCheck(),
         ReverseDnsCheck(),
         IPv6DiscoveryCheck(),
         PortScanCheck(),
-
         # Network Phase 4 (depends on services/port_scan)
         TlsAnalysisCheck(),
         ServiceProbeCheck(),
         BannerGrabCheck(),
-
         # Network Phase 5 (depends on service_probe)
         HttpMethodEnumCheck(),
         TracerouteCheck(),
-        
         # Web Phase 1 (depends on services)
         HeaderAnalysisCheck(),
         CookieSecurityCheck(),
@@ -174,13 +236,11 @@ def get_real_checks() -> list:
         AuthDetectionCheck(),
         FaviconCheck(),
         HTTP2DetectionCheck(),
-
         # Web Phase 2 (depends on Phase 1)
         PathProbeCheck(),
         SitemapCheck(),
         ErrorPageCheck(),
         OpenAPICheck(),
-
         # Web critical findings (Phase 6a — depends on services, some use path_probe output)
         WebDAVCheck(),
         VCSExposureCheck(),
@@ -188,20 +248,17 @@ def get_real_checks() -> list:
         DirectoryListingCheck(),
         DefaultCredsCheck(),
         DebugEndpointCheck(),
-
         # Web Phase 4 (depends on Phase 2-3)
         RedirectChainCheck(),
         SSRFIndicatorCheck(),
         MassAssignmentCheck(),
         HSTSPreloadCheck(),
         SRICheck(),
-        
         # AI discovery (depends on services)
         LLMEndpointCheck(),
         EmbeddingEndpointCheck(),
         ModelInfoCheck(),
         AIFrameworkFingerprintCheck(),
-        
         # AI Phase 2 (depends on chat_endpoints)
         AIErrorLeakageCheck(),
         ContentFilterCheck(),
@@ -210,22 +267,18 @@ def get_real_checks() -> list:
         ModelEnumerationCheck(),
         APIParameterInjectionCheck(),
         SystemPromptInjectionCheck(),
-
         # AI Phase 3 (depends on Phase 2 results)
         ToolDiscoveryCheck(),
         PromptLeakageCheck(),
         OutputFormatManipulationCheck(),
-
         # AI Phase 4 (uses filter/tool knowledge from Phase 2-3)
         JailbreakTestingCheck(),
         MultiTurnInjectionCheck(),
         InputFormatInjectionCheck(),
         TokenCostExhaustionCheck(),
-
         # MCP Phase 1 (depends on services — discovery)
         MCPDiscoveryCheck(),
         WebSocketTransportCheck(),
-
         # MCP Phase 2 (depends on mcp_servers)
         MCPToolEnumerationCheck(),
         MCPAuthCheck(),
@@ -233,7 +286,6 @@ def get_real_checks() -> list:
         MCPServerFingerprintCheck(),
         UndeclaredCapabilityCheck(),
         MCPProtocolVersionCheck(),
-
         # MCP Phase 3 (depends on Phase 2 — tool data + server connections)
         ShadowToolDetectionCheck(),
         ToolSchemaLeakageCheck(),
@@ -241,23 +293,18 @@ def get_real_checks() -> list:
         MCPNotificationInjectionCheck(),
         MCPSamplingAbuseCheck(),
         ToolRateLimitCheck(),
-
         # MCP Phase 4 (active probing — requires tool invocation)
         MCPToolInvocationCheck(),
         MCPResourceTraversalCheck(),
         ResourceTemplateInjectionCheck(),
-
         # MCP Phase 5 (cross-suite — depends on MCP + AI suite)
         MCPPromptInjectionCheck(),
-
         # Agent Phase 1 (depends on services — discovery)
         AgentDiscoveryCheck(),
-
         # Agent Phase 2 (depends on agent_endpoints)
         AgentMultiAgentDetectionCheck(),
         AgentFrameworkVersionCheck(),
         AgentMemoryExtractionCheck(),
-
         # Agent Phase 3 (depends on Phase 2 — active probing)
         AgentGoalInjectionCheck(),
         AgentToolAbuseCheck(),
@@ -265,49 +312,40 @@ def get_real_checks() -> list:
         AgentLoopDetectionCheck(),
         AgentCallbackInjectionCheck(),
         AgentStreamingInjectionCheck(),
-
         # Agent Phase 4 (depends on Phase 2-3 — framework-specific)
         AgentFrameworkExploitsCheck(),
         AgentMemoryPoisoningCheck(),
         AgentContextOverflowCheck(),
         AgentReflectionAbuseCheck(),
         AgentStateManipulationCheck(),
-
         # Agent Phase 5 (depends on multi-agent detection)
         AgentTrustChainCheck(),
         AgentCrossInjectionCheck(),
-
         # RAG Phase 1 (depends on services — discovery)
         RAGDiscoveryCheck(),
-
         # RAG Phase 2 (depends on rag_endpoints / vector_stores)
         RAGVectorStoreAccessCheck(),
         RAGAuthBypassCheck(),
         RAGCollectionEnumerationCheck(),
         RAGEmbeddingFingerprintCheck(),
-
         # RAG Phase 3 (depends on Phase 1-2 — read-only probing)
         RAGIndirectInjectionCheck(),
         RAGDocumentExfiltrationCheck(),
         RAGRetrievalManipulationCheck(),
         RAGSourceAttributionCheck(),
         RAGCachePoisoningCheck(),
-
         # RAG Phase 4 (depends on Phase 2-3 — write/intrusive)
         RAGCorpusPoisoningCheck(),
         RAGMetadataInjectionCheck(),
         RAGChunkBoundaryCheck(),
         RAGMultimodalInjectionCheck(),
-
         # RAG Phase 5 (depends on Phase 3-4 — advanced)
         RAGFusionRerankerCheck(),
         RAGCrossCollectionCheck(),
         RAGAdversarialEmbeddingCheck(),
-
         # CAG Phase 1 (depends on services — discovery)
         CAGDiscoveryCheck(),
         CAGCacheProbeCheck(),
-
         # CAG Phase 2 (depends on cag_endpoints — infrastructure analysis)
         CacheEvictionCheck(),
         CacheWarmingCheck(),
@@ -315,23 +353,20 @@ def get_real_checks() -> list:
         MultiLayerCacheCheck(),
         CacheQuotaCheck(),
         ProviderCachingCheck(),
-
         # CAG Phase 3 (depends on Phase 1-2 — deep probing)
         CrossUserLeakageCheck(),
         CacheKeyReverseCheck(),
         SemanticThresholdCheck(),
         SideChannelCheck(),
         StaleContextCheck(),
-
         # CAG Phase 4 (active exploitation — intrusive)
         CachePoisoningCheck(),
         InjectionPersistenceCheck(),
-
         # CAG Phase 5 (advanced — infrastructure-dependent)
         SerializationCheck(),
         DistributedCacheCheck(),
     ]
-    
+
     logger.info(f"Loaded {len(checks)} real checks")
     return checks
 
@@ -339,21 +374,21 @@ def get_real_checks() -> list:
 def apply_scenario(real_checks: list, scenario_name: str) -> list:
     """
     Apply scenario simulations to check list.
-    
+
     Simulations replace real checks with the same name.
     Real checks without a simulation are kept as-is.
-    
+
     Args:
         real_checks: List of real check instances
         scenario_name: Name of scenario to load
-    
+
     Returns:
         Hybrid list with simulations where available
     """
-    from app.scenarios import get_scenario_manager, ScenarioLoadError
-    
+    from app.scenarios import ScenarioLoadError, get_scenario_manager
+
     mgr = get_scenario_manager()
-    
+
     # Load scenario if not already active
     if not mgr.is_active or mgr.active.name != scenario_name:
         try:
@@ -362,13 +397,15 @@ def apply_scenario(real_checks: list, scenario_name: str) -> list:
         except ScenarioLoadError as e:
             logger.warning(f"Could not load scenario '{scenario_name}': {e}")
             return real_checks
-    
+
     # Get simulations
     simulations = mgr.get_simulations()
     sim_by_name = {s.name: s for s in simulations}
-    
-    logger.info(f"Scenario '{scenario_name}' has {len(simulations)} simulations: {list(sim_by_name.keys())}")
-    
+
+    logger.info(
+        f"Scenario '{scenario_name}' has {len(simulations)} simulations: {list(sim_by_name.keys())}"
+    )
+
     # Build hybrid list
     result = []
     for check in real_checks:
@@ -378,18 +415,18 @@ def apply_scenario(real_checks: list, scenario_name: str) -> list:
         else:
             logger.info(f"  {check.name}: using real check")
             result.append(check)
-    
+
     return result
 
 
 def filter_by_techniques(checks: list, techniques: list[str]) -> list:
     """
     Filter checks to only those in the techniques list.
-    
+
     Args:
         checks: Full list of checks
         techniques: Names of checks to keep
-    
+
     Returns:
         Filtered list
     """
@@ -419,22 +456,65 @@ def infer_suite(check_name: str) -> str:
         "agent": ["agent"],
         "rag": ["rag"],
         "cag": ["cag"],
-        "network": ["dns", "wildcard_dns", "geoip", "reverse_dns", "port_scan",
-                    "tls_analysis", "service_probe", "http_method_enum",
-                    "banner_grab", "whois_lookup", "traceroute",
-                    "ipv6_discovery"],
-        "web": ["header", "robots", "path", "openapi", "cors",
-                "webdav", "vcs_exposure", "config_exposure", "directory_listing",
-                "default_creds", "debug_endpoints",
-                "cookie_security", "auth_detection", "waf_detection",
-                "sitemap", "redirect_chain", "error_page", "ssrf_indicator",
-                "favicon", "http2_detection", "hsts_preload", "sri_check",
-                "mass_assignment"],
-        "ai": ["llm", "embedding", "model_info", "fingerprint", "error",
-                "tool_discovery", "prompt", "rate_limit", "filter", "context",
-                "jailbreak", "multi_turn", "input_format", "model_enum",
-                "token_cost", "system_prompt_injection", "output_format",
-                "api_parameter"],
+        "network": [
+            "dns",
+            "wildcard_dns",
+            "geoip",
+            "reverse_dns",
+            "port_scan",
+            "tls_analysis",
+            "service_probe",
+            "http_method_enum",
+            "banner_grab",
+            "whois_lookup",
+            "traceroute",
+            "ipv6_discovery",
+        ],
+        "web": [
+            "header",
+            "robots",
+            "path",
+            "openapi",
+            "cors",
+            "webdav",
+            "vcs_exposure",
+            "config_exposure",
+            "directory_listing",
+            "default_creds",
+            "debug_endpoints",
+            "cookie_security",
+            "auth_detection",
+            "waf_detection",
+            "sitemap",
+            "redirect_chain",
+            "error_page",
+            "ssrf_indicator",
+            "favicon",
+            "http2_detection",
+            "hsts_preload",
+            "sri_check",
+            "mass_assignment",
+        ],
+        "ai": [
+            "llm",
+            "embedding",
+            "model_info",
+            "fingerprint",
+            "error",
+            "tool_discovery",
+            "prompt",
+            "rate_limit",
+            "filter",
+            "context",
+            "jailbreak",
+            "multi_turn",
+            "input_format",
+            "model_enum",
+            "token_cost",
+            "system_prompt_injection",
+            "output_format",
+            "api_parameter",
+        ],
     }
     for suite, patterns in suite_patterns.items():
         if any(p in name_lower for p in patterns):

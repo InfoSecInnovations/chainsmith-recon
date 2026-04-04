@@ -6,10 +6,10 @@ Probe for common paths, admin interfaces, and sensitive endpoints.
 
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding, make_finding_id_hashed
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_endpoint_evidence
+from app.lib.findings import make_finding_id_hashed
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import extract_headers_dict
 
 
@@ -33,29 +33,67 @@ class PathProbeCheck(ServiceIteratingCheck):
 
     COMMON_PATHS = [
         # Admin
-        "/admin", "/admin/", "/administrator", "/admin.php",
-        "/wp-admin", "/manager", "/console", "/dashboard",
+        "/admin",
+        "/admin/",
+        "/administrator",
+        "/admin.php",
+        "/wp-admin",
+        "/manager",
+        "/console",
+        "/dashboard",
         # Config/Debug
-        "/.env", "/config.json", "/config.yaml", "/settings.json",
-        "/debug", "/phpinfo.php", "/server-status", "/health",
+        "/.env",
+        "/config.json",
+        "/config.yaml",
+        "/settings.json",
+        "/debug",
+        "/phpinfo.php",
+        "/server-status",
+        "/health",
         # Git/VCS
-        "/.git/config", "/.git/HEAD", "/.svn/entries",
+        "/.git/config",
+        "/.git/HEAD",
+        "/.svn/entries",
         # Backups
-        "/backup", "/backup.sql", "/db.sql", "/database.sql",
+        "/backup",
+        "/backup.sql",
+        "/db.sql",
+        "/database.sql",
         # API
-        "/api", "/api/v1", "/api/v2", "/graphql",
+        "/api",
+        "/api/v1",
+        "/api/v2",
+        "/graphql",
         # AI/ML specific
-        "/model", "/models", "/inference", "/predict",
-        "/v1/models", "/api/models", "/embeddings",
+        "/model",
+        "/models",
+        "/inference",
+        "/predict",
+        "/v1/models",
+        "/api/models",
+        "/embeddings",
         # Metrics/monitoring
-        "/metrics", "/prometheus", "/actuator", "/actuator/health",
+        "/metrics",
+        "/prometheus",
+        "/actuator",
+        "/actuator/health",
         # Common
-        "/.well-known/", "/static/", "/assets/",
+        "/.well-known/",
+        "/static/",
+        "/assets/",
     ]
 
     # Paths that warrant higher severity
     HIGH_SEVERITY_PATTERNS = [".env", ".git", "backup.sql", "db.sql", "database.sql"]
-    MEDIUM_SEVERITY_PATTERNS = ["config", "backup", "admin", "debug", "model", "inference", "predict"]
+    MEDIUM_SEVERITY_PATTERNS = [
+        "config",
+        "backup",
+        "admin",
+        "debug",
+        "model",
+        "inference",
+        "predict",
+    ]
 
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
@@ -88,50 +126,65 @@ class PathProbeCheck(ServiceIteratingCheck):
                             severity = "medium"
 
                         # Use hashed ID since many paths may hit the same host
-                        finding_id = make_finding_id_hashed(self.name, service.host, "accessible", path)
+                        finding_id = make_finding_id_hashed(
+                            self.name, service.host, "accessible", path
+                        )
                         from app.checks.base import Finding
-                        result.findings.append(Finding(
-                            id=finding_id,
-                            title=f"Accessible path: {path}",
-                            description=f"Path {path} returned HTTP 200",
-                            severity=severity,
-                            evidence=fmt_endpoint_evidence(url, resp.status_code, content_type),
-                            target=service,
-                            target_url=url,
-                            check_name=self.name,
-                        ))
+
+                        result.findings.append(
+                            Finding(
+                                id=finding_id,
+                                title=f"Accessible path: {path}",
+                                description=f"Path {path} returned HTTP 200",
+                                severity=severity,
+                                evidence=fmt_endpoint_evidence(url, resp.status_code, content_type),
+                                target=service,
+                                target_url=url,
+                                check_name=self.name,
+                            )
+                        )
 
                     elif resp.status_code == 403:
                         forbidden.append(path)
                         path_lower = path.lower()
                         if any(s in path_lower for s in ["admin", "config", "internal", "debug"]):
-                            finding_id = make_finding_id_hashed(self.name, service.host, "forbidden", path)
+                            finding_id = make_finding_id_hashed(
+                                self.name, service.host, "forbidden", path
+                            )
                             from app.checks.base import Finding
-                            result.findings.append(Finding(
-                                id=finding_id,
-                                title=f"Protected path exists: {path}",
-                                description=f"Path {path} exists but is forbidden — potential authorization bypass target",
-                                severity="low",
-                                evidence=fmt_endpoint_evidence(url, 403),
-                                target=service,
-                                target_url=url,
-                                check_name=self.name,
-                            ))
+
+                            result.findings.append(
+                                Finding(
+                                    id=finding_id,
+                                    title=f"Protected path exists: {path}",
+                                    description=f"Path {path} exists but is forbidden — potential authorization bypass target",
+                                    severity="low",
+                                    evidence=fmt_endpoint_evidence(url, 403),
+                                    target=service,
+                                    target_url=url,
+                                    check_name=self.name,
+                                )
+                            )
 
                     elif resp.status_code in (301, 302, 307, 308):
                         location = extract_headers_dict(resp.headers).get("location", "")
-                        finding_id = make_finding_id_hashed(self.name, service.host, "redirect", path)
+                        finding_id = make_finding_id_hashed(
+                            self.name, service.host, "redirect", path
+                        )
                         from app.checks.base import Finding
-                        result.findings.append(Finding(
-                            id=finding_id,
-                            title=f"Redirect at {path}",
-                            description=f"Path redirects to {location}",
-                            severity="info",
-                            evidence=f"GET {path} -> {resp.status_code} Location: {location}",
-                            target=service,
-                            target_url=url,
-                            check_name=self.name,
-                        ))
+
+                        result.findings.append(
+                            Finding(
+                                id=finding_id,
+                                title=f"Redirect at {path}",
+                                description=f"Path redirects to {location}",
+                                severity="info",
+                                evidence=f"GET {path} -> {resp.status_code} Location: {location}",
+                                target=service,
+                                target_url=url,
+                                check_name=self.name,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")

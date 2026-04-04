@@ -16,11 +16,10 @@ References:
 import json
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.findings import build_finding
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import cap_response
-
+from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Canary phrases that indicate the LLM followed injected instructions
 CANARY_PHRASES = [
@@ -32,8 +31,16 @@ CANARY_PHRASES = [
 
 # Tools that return text content from external sources (high injection risk)
 TEXT_TOOL_PATTERNS = [
-    "fetch", "browse", "search", "read", "get_url", "http",
-    "scrape", "crawl", "download", "load",
+    "fetch",
+    "browse",
+    "search",
+    "read",
+    "get_url",
+    "http",
+    "scrape",
+    "crawl",
+    "download",
+    "load",
 ]
 
 
@@ -58,7 +65,9 @@ class MCPPromptInjectionCheck(BaseCheck):
     timeout_seconds = 120.0
     intrusive = True
 
-    reason = "Tool results flow into LLM context as trusted content — the primary MCP exploit vector"
+    reason = (
+        "Tool results flow into LLM context as trusted content — the primary MCP exploit vector"
+    )
     references = [
         "OWASP LLM Top 10 - LLM01 Prompt Injection",
         "MITRE ATLAS - AML.T0051 LLM Plugin Compromise",
@@ -90,15 +99,17 @@ class MCPPromptInjectionCheck(BaseCheck):
         text_tools = self._identify_text_tools(mcp_tools)
 
         if not text_tools:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="No text-returning MCP tools found for injection testing",
-                description="No MCP tools were identified that return external text content.",
-                severity="info",
-                evidence=f"Tools analyzed: {len(mcp_tools)}",
-                host=host,
-                discriminator="no-text-tools",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="No text-returning MCP tools found for injection testing",
+                    description="No MCP tools were identified that return external text content.",
+                    severity="info",
+                    evidence=f"Tools analyzed: {len(mcp_tools)}",
+                    host=host,
+                    discriminator="no-text-tools",
+                )
+            )
             return result
 
         # Step 2: Check if tools return unfiltered content
@@ -113,34 +124,36 @@ class MCPPromptInjectionCheck(BaseCheck):
             try:
                 async with AsyncHttpClient(cfg) as client:
                     # Test: invoke tool and check if response contains unfiltered content
-                    unfiltered = await self._test_unfiltered_content(
-                        client, server_url, tool, host
+                    unfiltered = await self._test_unfiltered_content(client, server_url, tool, host)
+
+                    injection_results.append(
+                        {
+                            "tool": tool_name,
+                            "returns_external_content": unfiltered.get("returns_content", False),
+                            "content_filtered": unfiltered.get("filtered", None),
+                        }
                     )
 
-                    injection_results.append({
-                        "tool": tool_name,
-                        "returns_external_content": unfiltered.get("returns_content", False),
-                        "content_filtered": unfiltered.get("filtered", None),
-                    })
-
                     if unfiltered.get("returns_content") and not unfiltered.get("filtered"):
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Tool returns unfiltered external content: {tool_name}",
-                            description=(
-                                f"Tool '{tool_name}' returns external content without sanitization. "
-                                "Content flowing into the LLM context could contain injection payloads."
-                            ),
-                            severity="high",
-                            evidence=(
-                                f"Tool: {tool_name}\n"
-                                f"Content type: {unfiltered.get('content_type', 'unknown')}\n"
-                                f"Preview: {cap_response(unfiltered.get('preview', ''))[:200]}"
-                            ),
-                            host=host,
-                            discriminator=f"unfiltered-{tool_name}",
-                            raw_data=unfiltered,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Tool returns unfiltered external content: {tool_name}",
+                                description=(
+                                    f"Tool '{tool_name}' returns external content without sanitization. "
+                                    "Content flowing into the LLM context could contain injection payloads."
+                                ),
+                                severity="high",
+                                evidence=(
+                                    f"Tool: {tool_name}\n"
+                                    f"Content type: {unfiltered.get('content_type', 'unknown')}\n"
+                                    f"Preview: {cap_response(unfiltered.get('preview', ''))[:200]}"
+                                ),
+                                host=host,
+                                discriminator=f"unfiltered-{tool_name}",
+                                raw_data=unfiltered,
+                            )
+                        )
 
                     # Test: check if tool result content appears in LLM responses
                     if chat_endpoints and unfiltered.get("returns_content"):
@@ -149,38 +162,44 @@ class MCPPromptInjectionCheck(BaseCheck):
                         )
 
                         if influence.get("influenced"):
-                            result.findings.append(build_finding(
-                                check_name=self.name,
-                                title=f"Tool result injection: LLM influenced by content from {tool_name}",
-                                description=(
-                                    f"Content returned by tool '{tool_name}' influenced the LLM's "
-                                    "response, indicating that tool results are included in the "
-                                    "LLM context without adequate filtering."
-                                ),
-                                severity="critical",
-                                evidence=(
-                                    f"Tool: {tool_name}\n"
-                                    f"Influence type: {influence.get('type', 'unknown')}\n"
-                                    f"Evidence: {influence.get('evidence', '')[:300]}"
-                                ),
-                                host=host,
-                                discriminator=f"injection-{tool_name}",
-                                raw_data=influence,
-                            ))
+                            result.findings.append(
+                                build_finding(
+                                    check_name=self.name,
+                                    title=f"Tool result injection: LLM influenced by content from {tool_name}",
+                                    description=(
+                                        f"Content returned by tool '{tool_name}' influenced the LLM's "
+                                        "response, indicating that tool results are included in the "
+                                        "LLM context without adequate filtering."
+                                    ),
+                                    severity="critical",
+                                    evidence=(
+                                        f"Tool: {tool_name}\n"
+                                        f"Influence type: {influence.get('type', 'unknown')}\n"
+                                        f"Evidence: {influence.get('evidence', '')[:300]}"
+                                    ),
+                                    host=host,
+                                    discriminator=f"injection-{tool_name}",
+                                    raw_data=influence,
+                                )
+                            )
 
             except Exception as e:
                 result.errors.append(f"Prompt injection test for {tool_name}: {e}")
 
-        if not any(f.severity in ("high", "critical") for f in result.findings if f.check_name == self.name):
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Tool results appear sanitized before LLM processing",
-                description="No evidence that tool results can inject into the LLM context.",
-                severity="info",
-                evidence=f"Text tools tested: {len(text_tools)}",
-                host=host,
-                discriminator="injection-safe",
-            ))
+        if not any(
+            f.severity in ("high", "critical") for f in result.findings if f.check_name == self.name
+        ):
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Tool results appear sanitized before LLM processing",
+                    description="No evidence that tool results can inject into the LLM context.",
+                    severity="info",
+                    evidence=f"Text tools tested: {len(text_tools)}",
+                    host=host,
+                    discriminator="injection-safe",
+                )
+            )
 
         if injection_results:
             result.outputs["mcp_injection_results"] = injection_results
@@ -240,10 +259,17 @@ class MCPPromptInjectionCheck(BaseCheck):
 
         if content and len(content) > 20:
             # Check if content looks like external HTML/text
-            is_external = any(kw in content.lower() for kw in [
-                "<html", "<body", "<p>", "<!doctype",
-                "http://", "https://",
-            ])
+            is_external = any(
+                kw in content.lower()
+                for kw in [
+                    "<html",
+                    "<body",
+                    "<p>",
+                    "<!doctype",
+                    "http://",
+                    "https://",
+                ]
+            )
             return {
                 "returns_content": True,
                 "filtered": False,  # Simple heuristic — real filtering detection is complex
@@ -254,8 +280,7 @@ class MCPPromptInjectionCheck(BaseCheck):
         return {"returns_content": False}
 
     async def _test_llm_influence(
-        self, client, server_url: str, tool: dict,
-        chat_endpoints: list, host: str
+        self, client, server_url: str, tool: dict, chat_endpoints: list, host: str
     ) -> dict:
         """
         Test if tool result content can influence LLM behavior.

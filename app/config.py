@@ -29,14 +29,15 @@ Config file (chainsmith.yaml) example:
 
 from __future__ import annotations
 
+import contextlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 # Optional YAML support - graceful degradation if pyyaml not installed
 try:
     import yaml as _yaml
+
     _YAML_AVAILABLE = True
 except ImportError:
     _YAML_AVAILABLE = False
@@ -44,19 +45,32 @@ except ImportError:
 
 # ── Sub-configs ───────────────────────────────────────────────────
 
+
 @dataclass
 class ScopeConfig:
     in_scope_domains: list[str] = field(default_factory=list)
     out_of_scope_domains: list[str] = field(default_factory=list)
     in_scope_ports: list[int] = field(default_factory=list)  # Empty = no restriction (use profile)
     port_profile: str = "lab"  # "web", "ai", "full", "lab"
-    allowed_techniques: list[str] = field(default_factory=lambda: [
-        "port_scan", "header_grab", "robots_fetch", "directory_enum",
-        "chatbot_probe", "prompt_extract", "error_trigger",
-    ])
-    forbidden_techniques: list[str] = field(default_factory=lambda: [
-        "dos", "data_exfiltration", "credential_stuffing", "sql_injection",
-    ])
+    allowed_techniques: list[str] = field(
+        default_factory=lambda: [
+            "port_scan",
+            "header_grab",
+            "robots_fetch",
+            "directory_enum",
+            "chatbot_probe",
+            "prompt_extract",
+            "error_trigger",
+        ]
+    )
+    forbidden_techniques: list[str] = field(
+        default_factory=lambda: [
+            "dos",
+            "data_exfiltration",
+            "credential_stuffing",
+            "sql_injection",
+        ]
+    )
 
 
 @dataclass
@@ -70,11 +84,19 @@ class LiteLLMConfig:
 
 @dataclass
 class StorageConfig:
-    backend: str = "sqlite"                          # sqlite or postgresql
-    db_path: Path = Path("./data/chainsmith.db")     # SQLite file path
-    postgresql_url: str = ""                         # PostgreSQL connection string
-    auto_persist: bool = True                        # Write scan results to DB automatically
-    retention_days: int = 365                        # Auto-delete scans older than this (0 = forever)
+    backend: str = "sqlite"  # sqlite or postgresql
+    db_path: Path = Path("./data/chainsmith.db")  # SQLite file path
+    postgresql_url: str = ""  # PostgreSQL connection string
+    auto_persist: bool = True  # Write scan results to DB automatically
+    retention_days: int = 365  # Auto-delete scans older than this (0 = forever)
+
+
+@dataclass
+class ScanAdvisorConfig:
+    enabled: bool = False
+    mode: str = "post_scan"  # post_scan (phase 1) or between_iterations (phase 2)
+    auto_seed_urls: bool = False  # allow advisor to suggest context injection
+    require_approval: bool = True  # user must approve each recommendation
 
 
 @dataclass
@@ -88,12 +110,13 @@ class SwarmConfig:
 
 @dataclass
 class PathsConfig:
-    db_path: Path = Path("/data/recon.sqlite")       # Legacy - prefer storage.db_path
+    db_path: Path = Path("/data/recon.sqlite")  # Legacy - prefer storage.db_path
     attack_patterns: Path = Path("/app/data/attack_patterns.json")
     hallucinations: Path = Path("/app/data/hallucinations.json")
 
 
 # ── Main config ───────────────────────────────────────────────────
+
 
 @dataclass
 class ChainsmithConfig:
@@ -103,12 +126,14 @@ class ChainsmithConfig:
     All fields have sensible defaults. Override via YAML file or
     CHAINSMITH_* environment variables.
     """
+
     target_domain: str = ""
     scope: ScopeConfig = field(default_factory=ScopeConfig)
     litellm: LiteLLMConfig = field(default_factory=LiteLLMConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     swarm: SwarmConfig = field(default_factory=SwarmConfig)
+    scan_advisor: ScanAdvisorConfig = field(default_factory=ScanAdvisorConfig)
 
     # Raw seed URLs (optional - scanner can discover these itself)
     seed_urls: list[str] = field(default_factory=list)
@@ -122,6 +147,7 @@ class ChainsmithConfig:
 
 
 # ── Loader ────────────────────────────────────────────────────────
+
 
 def _load_yaml_file(path: Path) -> dict:
     """Load a YAML config file. Returns empty dict on any failure."""
@@ -220,6 +246,18 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
         if "max_agents" in sw:
             swc.max_agents = int(sw["max_agents"])
 
+    if "scan_advisor" in data and isinstance(data["scan_advisor"], dict):
+        sa = data["scan_advisor"]
+        sac = cfg.scan_advisor
+        if "enabled" in sa:
+            sac.enabled = bool(sa["enabled"])
+        if "mode" in sa:
+            sac.mode = str(sa["mode"])
+        if "auto_seed_urls" in sa:
+            sac.auto_seed_urls = bool(sa["auto_seed_urls"])
+        if "require_approval" in sa:
+            sac.require_approval = bool(sa["require_approval"])
+
 
 def _apply_env(cfg: ChainsmithConfig) -> None:
     """Apply CHAINSMITH_* environment variable overrides."""
@@ -234,10 +272,8 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     if v := env.get("CHAINSMITH_OUT_OF_SCOPE_DOMAINS"):
         cfg.scope.out_of_scope_domains = [d.strip() for d in v.split(",") if d.strip()]
     if v := env.get("CHAINSMITH_IN_SCOPE_PORTS"):
-        try:
+        with contextlib.suppress(ValueError):
             cfg.scope.in_scope_ports = [int(p.strip()) for p in v.split(",") if p.strip()]
-        except ValueError:
-            pass
     if v := env.get("CHAINSMITH_PORT_PROFILE"):
         cfg.scope.port_profile = v
 
@@ -254,7 +290,9 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
         cfg.litellm.model_verifier = v
     if v := env.get("LITELLM_MODEL_CHAINSMITH") or env.get("CHAINSMITH_LITELLM_MODEL_CHAINSMITH"):
         cfg.litellm.model_chainsmith = v
-    if v := env.get("LITELLM_MODEL_CHAINSMITH_FALLBACK") or env.get("CHAINSMITH_LITELLM_MODEL_CHAINSMITH_FALLBACK"):
+    if v := env.get("LITELLM_MODEL_CHAINSMITH_FALLBACK") or env.get(
+        "CHAINSMITH_LITELLM_MODEL_CHAINSMITH_FALLBACK"
+    ):
         cfg.litellm.model_chainsmith_fallback = v
 
     # Paths overrides (backward-compatible names kept)
@@ -275,27 +313,31 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     if v := env.get("CHAINSMITH_STORAGE_AUTO_PERSIST"):
         cfg.storage.auto_persist = v.lower() in ("true", "1", "yes")
     if v := env.get("CHAINSMITH_STORAGE_RETENTION_DAYS"):
-        try:
+        with contextlib.suppress(ValueError):
             cfg.storage.retention_days = int(v)
-        except ValueError:
-            pass
+
+    # Scan advisor overrides
+    if v := env.get("CHAINSMITH_SCAN_ADVISOR_ENABLED"):
+        cfg.scan_advisor.enabled = v.lower() in ("true", "1", "yes")
+    if v := env.get("CHAINSMITH_SCAN_ADVISOR_MODE"):
+        cfg.scan_advisor.mode = v
+    if v := env.get("CHAINSMITH_SCAN_ADVISOR_AUTO_SEED_URLS"):
+        cfg.scan_advisor.auto_seed_urls = v.lower() in ("true", "1", "yes")
+    if v := env.get("CHAINSMITH_SCAN_ADVISOR_REQUIRE_APPROVAL"):
+        cfg.scan_advisor.require_approval = v.lower() in ("true", "1", "yes")
 
     # Swarm overrides
     if v := env.get("CHAINSMITH_SWARM_ENABLED"):
         cfg.swarm.enabled = v.lower() in ("true", "1", "yes")
     if v := env.get("CHAINSMITH_SWARM_DEFAULT_RATE_LIMIT"):
-        try:
+        with contextlib.suppress(ValueError):
             cfg.swarm.default_rate_limit = float(v)
-        except ValueError:
-            pass
     if v := env.get("CHAINSMITH_SWARM_TASK_TIMEOUT"):
-        try:
+        with contextlib.suppress(ValueError):
             cfg.swarm.task_timeout_seconds = int(v)
-        except ValueError:
-            pass
 
 
-def load_config(config_path: Optional[Path] = None) -> ChainsmithConfig:
+def load_config(config_path: Path | None = None) -> ChainsmithConfig:
     """
     Build a ChainsmithConfig from the layered sources:
       defaults → YAML file → env vars
@@ -319,7 +361,7 @@ def load_config(config_path: Optional[Path] = None) -> ChainsmithConfig:
 
 # ── Module-level cached instance ─────────────────────────────────
 
-_config: Optional[ChainsmithConfig] = None
+_config: ChainsmithConfig | None = None
 
 
 def get_config(reload: bool = False) -> ChainsmithConfig:
@@ -334,25 +376,26 @@ def get_config(reload: bool = False) -> ChainsmithConfig:
 # These are derived lazily so they don't break imports in existing code
 # that does `from app.config import LITELLM_BASE_URL` etc.
 
+
 def __getattr__(name: str):
     """Lazy backward-compat shim for old-style module-level access."""
     _compat = {
-        "RECON_DB_PATH":                     lambda c: c.paths.db_path,
-        "LITELLM_BASE_URL":                  lambda c: c.litellm.base_url,
-        "LITELLM_MODEL_SCOUT":               lambda c: c.litellm.model_scout,
-        "LITELLM_MODEL_VERIFIER":            lambda c: c.litellm.model_verifier,
-        "LITELLM_MODEL_CHAINSMITH":          lambda c: c.litellm.model_chainsmith,
+        "RECON_DB_PATH": lambda c: c.paths.db_path,
+        "LITELLM_BASE_URL": lambda c: c.litellm.base_url,
+        "LITELLM_MODEL_SCOUT": lambda c: c.litellm.model_scout,
+        "LITELLM_MODEL_VERIFIER": lambda c: c.litellm.model_verifier,
+        "LITELLM_MODEL_CHAINSMITH": lambda c: c.litellm.model_chainsmith,
         "LITELLM_MODEL_CHAINSMITH_FALLBACK": lambda c: c.litellm.model_chainsmith_fallback,
-        "TARGET_DOMAIN":                     lambda c: c.target_domain,
-        "DEFAULT_SCOPE":                     lambda c: {
-            "in_scope_domains":    c.scope.in_scope_domains,
+        "TARGET_DOMAIN": lambda c: c.target_domain,
+        "DEFAULT_SCOPE": lambda c: {
+            "in_scope_domains": c.scope.in_scope_domains,
             "out_of_scope_domains": c.scope.out_of_scope_domains,
-            "in_scope_ports":      c.scope.in_scope_ports,
-            "allowed_techniques":  c.scope.allowed_techniques,
+            "in_scope_ports": c.scope.in_scope_ports,
+            "allowed_techniques": c.scope.allowed_techniques,
             "forbidden_techniques": c.scope.forbidden_techniques,
         },
         "ATTACK_PATTERNS_PATH": lambda c: c.paths.attack_patterns,
-        "HALLUCINATIONS_PATH":  lambda c: c.paths.hallucinations,
+        "HALLUCINATIONS_PATH": lambda c: c.paths.hallucinations,
     }
     if name in _compat:
         return _compat[name](get_config())

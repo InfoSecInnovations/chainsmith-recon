@@ -6,10 +6,10 @@ Estimate context window limits and token handling behavior.
 
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.lib.ai_helpers import fmt_context_evidence, format_chat_request
 from app.lib.findings import build_finding
-from app.lib.ai_helpers import format_chat_request, fmt_context_evidence
+from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
 
@@ -32,8 +32,8 @@ class ContextWindowCheck(BaseCheck):
     techniques = ["context probing", "token estimation"]
 
     TEST_SIZES = [
-        (100,  "A" * 400),
-        (500,  "word " * 500),
+        (100, "A" * 400),
+        (500, "word " * 500),
         (2000, "test " * 2000),
         (4000, "data " * 4000),
     ]
@@ -96,23 +96,26 @@ class ContextWindowCheck(BaseCheck):
             return result
 
         if ctx_info["max_successful"] > 0:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Context window: ~{ctx_info['max_successful']}+ tokens",
-                description=(
-                    f"Successfully processed ~{ctx_info['max_successful']} tokens"
-                    + (f", failed at ~{ctx_info['failed_at']}" if ctx_info["failed_at"] else "")
-                ),
-                severity="info",
-                evidence=fmt_context_evidence(
-                    ctx_info["max_successful"],
-                    ctx_info["failed_at"],
-                    ctx_info["error_type"],
-                ),
-                host=service.host,
-                discriminator="context-window",
-                target=service, target_url=url,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Context window: ~{ctx_info['max_successful']}+ tokens",
+                    description=(
+                        f"Successfully processed ~{ctx_info['max_successful']} tokens"
+                        + (f", failed at ~{ctx_info['failed_at']}" if ctx_info["failed_at"] else "")
+                    ),
+                    severity="info",
+                    evidence=fmt_context_evidence(
+                        ctx_info["max_successful"],
+                        ctx_info["failed_at"],
+                        ctx_info["error_type"],
+                    ),
+                    host=service.host,
+                    discriminator="context-window",
+                    target=service,
+                    target_url=url,
+                )
+            )
 
         result.outputs[f"context_{service.port}"] = ctx_info
         return result

@@ -9,13 +9,13 @@ References:
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 """
 
+import contextlib
 import json
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Metadata fields to test with injection payloads
 METADATA_INJECTION_TESTS = [
@@ -53,8 +53,16 @@ METADATA_INJECTION_TESTS = [
 
 # Metadata fields commonly passed to LLM context
 OBSERVABLE_METADATA_FIELDS = [
-    "source", "author", "title", "date", "category",
-    "permissions", "tags", "filename", "url", "description",
+    "source",
+    "author",
+    "title",
+    "date",
+    "category",
+    "permissions",
+    "tags",
+    "filename",
+    "url",
+    "description",
 ]
 
 
@@ -93,7 +101,8 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
         accessible_stores = context.get("accessible_stores", [])
 
         service_rag = [
-            ep for ep in rag_endpoints
+            ep
+            for ep in rag_endpoints
             if ep.get("service", {}).get("host") == service.host
             and ep.get("endpoint_type") == "rag_query"
         ]
@@ -101,9 +110,7 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
             return result
 
         # Determine write capability
-        has_ingestion = any(
-            ep.get("writable") for ep in (ingestion_endpoints or [])
-        )
+        has_ingestion = any(ep.get("writable") for ep in (ingestion_endpoints or []))
         has_store_write = any(
             any(op.get("status") == 200 for op in s.get("accessible_ops", []))
             for s in (accessible_stores or [])
@@ -123,63 +130,70 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
                     )
                 else:
                     # Passive: analyze existing responses for metadata presence
-                    injection_results = await self._passive_metadata_analysis(
-                        client, query_url
-                    )
+                    injection_results = await self._passive_metadata_analysis(client, query_url)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
         # Generate findings
         injected = [r for r in injection_results if r.get("injection_followed")]
-        visible = [r for r in injection_results if r.get("metadata_visible") and not r.get("injection_followed")]
+        visible = [
+            r
+            for r in injection_results
+            if r.get("metadata_visible") and not r.get("injection_followed")
+        ]
 
         if injected:
             for inj in injected:
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=f"Metadata injection: LLM followed instructions in '{inj['field']}' field",
-                    description=(
-                        f"Injection payload in metadata field '{inj['field']}' was processed "
-                        f"by the LLM and its instructions were followed."
-                    ),
-                    severity="high",
-                    evidence=f"Field: {inj['field']}\nIndicator: {inj.get('indicator', 'N/A')}",
-                    host=service.host,
-                    discriminator=f"meta-inject-{inj['field']}",
-                    target=service,
-                    raw_data=inj,
-                    references=self.references,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=f"Metadata injection: LLM followed instructions in '{inj['field']}' field",
+                        description=(
+                            f"Injection payload in metadata field '{inj['field']}' was processed "
+                            f"by the LLM and its instructions were followed."
+                        ),
+                        severity="high",
+                        evidence=f"Field: {inj['field']}\nIndicator: {inj.get('indicator', 'N/A')}",
+                        host=service.host,
+                        discriminator=f"meta-inject-{inj['field']}",
+                        target=service,
+                        raw_data=inj,
+                        references=self.references,
+                    )
+                )
 
         if visible and not injected:
             fields = [r["field"] for r in visible]
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Metadata included in LLM context",
-                description=(
-                    f"Document metadata fields visible in model response: "
-                    f"{', '.join(fields)}."
-                ),
-                severity="medium",
-                evidence=f"Visible fields: {', '.join(fields)}",
-                host=service.host,
-                discriminator="meta-visible",
-                target=service,
-                raw_data={"visible_fields": fields},
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Metadata included in LLM context",
+                    description=(
+                        f"Document metadata fields visible in model response: {', '.join(fields)}."
+                    ),
+                    severity="medium",
+                    evidence=f"Visible fields: {', '.join(fields)}",
+                    host=service.host,
+                    discriminator="meta-visible",
+                    target=service,
+                    raw_data={"visible_fields": fields},
+                )
+            )
 
         if not injected and not visible:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Metadata not accessible through RAG queries",
-                description="No metadata field content detected in RAG responses.",
-                severity="info",
-                evidence="No metadata indicators in responses",
-                host=service.host,
-                discriminator="meta-not-accessible",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Metadata not accessible through RAG queries",
+                    description="No metadata field content detected in RAG responses.",
+                    severity="info",
+                    evidence="No metadata indicators in responses",
+                    host=service.host,
+                    discriminator="meta-not-accessible",
+                    target=service,
+                )
+            )
 
         if injection_results:
             result.outputs["metadata_injection_results"] = injection_results
@@ -210,13 +224,14 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
         for test in METADATA_INJECTION_TESTS[:3]:  # Limit active tests
             # Inject document with poisoned metadata
             doc = {
-                "documents": [f"Normal document about general topics."],
+                "documents": ["Normal document about general topics."],
                 "ids": [f"chainsmith-meta-test-{test['field']}"],
                 "metadatas": [{test["field"]: test["value"]}],
             }
 
             resp = await client.post(
-                ingest_url, json=doc,
+                ingest_url,
+                json=doc,
                 headers={"Content-Type": "application/json"},
             )
             if resp.error or resp.status_code >= 400:
@@ -230,7 +245,8 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
                 "k": 10,
             }
             query_resp = await client.post(
-                query_url, json=query_body,
+                query_url,
+                json=query_body,
                 headers={"Content-Type": "application/json"},
             )
 
@@ -248,15 +264,15 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
             # Cleanup
             cleanup_id = f"chainsmith-meta-test-{test['field']}"
             for path in [f"/documents/{cleanup_id}", f"/api/documents/{cleanup_id}"]:
-                try:
+                with contextlib.suppress(Exception):
                     await client.delete(f"{base_url}{path}")
-                except Exception:
-                    pass
 
         return results
 
     async def _passive_metadata_analysis(
-        self, client: AsyncHttpClient, query_url: str,
+        self,
+        client: AsyncHttpClient,
+        query_url: str,
     ) -> list[dict]:
         """Analyze existing RAG responses for metadata field presence."""
         results = []
@@ -268,7 +284,8 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
             "k": 5,
         }
         resp = await client.post(
-            query_url, json=query_body,
+            query_url,
+            json=query_body,
             headers={"Content-Type": "application/json"},
         )
         if resp.error or resp.status_code >= 400:
@@ -289,11 +306,13 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
                                 meta = item.get("metadata", item)
                                 for field in OBSERVABLE_METADATA_FIELDS:
                                     if field in meta:
-                                        results.append({
-                                            "field": field,
-                                            "metadata_visible": True,
-                                            "injection_followed": False,
-                                        })
+                                        results.append(
+                                            {
+                                                "field": field,
+                                                "metadata_visible": True,
+                                                "injection_followed": False,
+                                            }
+                                        )
         except json.JSONDecodeError:
             pass
 
@@ -301,10 +320,12 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
         for field in OBSERVABLE_METADATA_FIELDS:
             if f"{field}:" in resp_lower or f'"{field}"' in resp_lower:
                 if not any(r["field"] == field for r in results):
-                    results.append({
-                        "field": field,
-                        "metadata_visible": True,
-                        "injection_followed": False,
-                    })
+                    results.append(
+                        {
+                            "field": field,
+                            "metadata_visible": True,
+                            "injection_followed": False,
+                        }
+                    )
 
         return results

@@ -20,10 +20,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.checks.base import Service
-from app.checks.cag.discovery import CAGDiscoveryCheck
 from app.checks.cag.cache_probe import CAGCacheProbeCheck
+from app.checks.cag.discovery import CAGDiscoveryCheck
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test Fixtures
@@ -99,7 +98,7 @@ class TestCAGDiscoveryCheck:
     async def test_discovers_gptcache(self, check, sample_service):
         """Test GPTCache discovery."""
         mock_client = AsyncMock()
-        
+
         async def mock_get(url, **kwargs):
             if "/cache" in url and "/cache/" not in url:
                 return make_response(
@@ -108,7 +107,7 @@ class TestCAGDiscoveryCheck:
                     body='{"cache_status": "ready", "gptcache": true}',
                 )
             return make_response(status_code=404)
-        
+
         mock_client.get = mock_get
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -125,16 +124,16 @@ class TestCAGDiscoveryCheck:
     async def test_discovers_semantic_cache(self, check, sample_service):
         """Test semantic cache discovery."""
         mock_client = AsyncMock()
-        
+
         async def mock_get(url, **kwargs):
             if "/semantic-cache" in url:
                 return make_response(
                     status_code=200,
                     headers={"x-semantic-cache": "enabled"},
-                    body='{}',
+                    body="{}",
                 )
             return make_response(status_code=404)
-        
+
         mock_client.get = mock_get
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -151,7 +150,7 @@ class TestCAGDiscoveryCheck:
     async def test_detects_cache_headers(self, check, sample_service):
         """Test cache header detection."""
         mock_client = AsyncMock()
-        
+
         async def mock_get(url, **kwargs):
             if "/cache/stats" in url:
                 return make_response(
@@ -160,7 +159,7 @@ class TestCAGDiscoveryCheck:
                     body='{"cached": true, "ttl": 3600}',
                 )
             return make_response(status_code=404)
-        
+
         mock_client.get = mock_get
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -177,12 +176,12 @@ class TestCAGDiscoveryCheck:
     async def test_detects_auth_required(self, check, sample_service):
         """Test auth requirement detection."""
         mock_client = AsyncMock()
-        
+
         async def mock_get(url, **kwargs):
             if "/cache" in url:
                 return make_response(status_code=401)
             return make_response(status_code=404)
-        
+
         mock_client.get = mock_get
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -231,8 +230,9 @@ class TestCAGCacheProbeCheck:
     async def test_detects_cross_session_leak(self, check, sample_service, cag_endpoint_context):
         """Test detection of cross-session cache leakage."""
         mock_client = AsyncMock()
-        
+
         call_count = 0
+
         async def mock_post(url, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -243,7 +243,7 @@ class TestCAGCacheProbeCheck:
                     body='{"answer": "Based on earlier context from previous conversation..."}',
                 )
             return make_response(status_code=200, body='{"answer": "ok"}')
-        
+
         mock_client.post = mock_post
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -260,12 +260,14 @@ class TestCAGCacheProbeCheck:
     async def test_timing_analysis(self, check, sample_service, cag_endpoint_context):
         """Test cache timing analysis."""
         mock_client = AsyncMock()
-        
+
         # Simulate caching - first request slower than subsequent
-        mock_client.post = AsyncMock(return_value=make_response(
-            status_code=200,
-            body='{"answer": "cached response"}',
-        ))
+        mock_client.post = AsyncMock(
+            return_value=make_response(
+                status_code=200,
+                body='{"answer": "cached response"}',
+            )
+        )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
@@ -283,7 +285,7 @@ class TestCAGCacheProbeCheck:
     async def test_context_id_enumeration(self, check, sample_service, cag_endpoint_context):
         """Test context ID enumeration detection."""
         mock_client = AsyncMock()
-        
+
         async def mock_get(url, **kwargs):
             headers = kwargs.get("headers", {})
             ctx_id = headers.get("X-Context-Id", "")
@@ -293,9 +295,9 @@ class TestCAGCacheProbeCheck:
                     body='{"context": "sensitive data for this context"}',
                 )
             return make_response(status_code=404)
-        
+
         mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=200, body='{}'))
+        mock_client.post = AsyncMock(return_value=make_response(status_code=200, body="{}"))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
 
@@ -308,11 +310,13 @@ class TestCAGCacheProbeCheck:
     async def test_secure_cache(self, check, sample_service, cag_endpoint_context):
         """Test against secure cache system."""
         mock_client = AsyncMock()
-        
-        mock_client.post = AsyncMock(return_value=make_response(
-            status_code=200,
-            body='{"answer": "This is a fresh response."}',
-        ))
+
+        mock_client.post = AsyncMock(
+            return_value=make_response(
+                status_code=200,
+                body='{"answer": "This is a fresh response."}',
+            )
+        )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()
@@ -329,7 +333,7 @@ class TestCAGCacheProbeCheck:
     async def test_no_cag_endpoints_skips(self, check, sample_service):
         """Test check skips when no CAG endpoints in context."""
         result = await check.check_service(sample_service, {})
-        
+
         assert result.success
         assert len(result.findings) == 0
 
@@ -337,10 +341,12 @@ class TestCAGCacheProbeCheck:
     async def test_handles_errors_gracefully(self, check, sample_service, cag_endpoint_context):
         """Test graceful handling of request errors."""
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=make_response(
-            status_code=500,
-            error="Internal Server Error",
-        ))
+        mock_client.post = AsyncMock(
+            return_value=make_response(
+                status_code=500,
+                error="Internal Server Error",
+            )
+        )
         mock_client.get = AsyncMock(return_value=make_response(status_code=500))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock()

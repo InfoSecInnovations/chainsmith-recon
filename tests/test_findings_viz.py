@@ -12,7 +12,6 @@ Covers:
 
 from pathlib import Path
 
-
 STATIC_DIR = Path(__file__).parent.parent / "static"
 FINDINGS_HTML = STATIC_DIR / "findings.html"
 VIZ_CSS = STATIC_DIR / "css" / "viz.css"
@@ -88,7 +87,9 @@ class TestHeatmapJavaScript:
 
     def test_build_heatmap_data_exposed_on_window(self):
         content = _all_viz_content()
-        assert "window.buildHeatmapData" in content, "buildHeatmapData should be exposed on window for testing"
+        assert "window.buildHeatmapData" in content, (
+            "buildHeatmapData should be exposed on window for testing"
+        )
 
     def test_heatmap_sev_colors_defined(self):
         content = _all_viz_content()
@@ -139,7 +140,18 @@ class TestHeatmapDataLogic:
     SUITE_PATTERNS = {
         "network": ["dns", "service_probe", "port"],
         "web": ["header", "robots", "path", "openapi", "cors", "content"],
-        "ai": ["llm", "embedding", "model", "fingerprint", "error", "tool", "prompt", "rate", "filter", "context"],
+        "ai": [
+            "llm",
+            "embedding",
+            "model",
+            "fingerprint",
+            "error",
+            "tool",
+            "prompt",
+            "rate",
+            "filter",
+            "context",
+        ],
         "mcp": ["mcp"],
         "agent": ["agent", "goal"],
         "rag": ["rag", "indirect"],
@@ -150,6 +162,7 @@ class TestHeatmapDataLogic:
     def normalize_host(name):
         import re
         from urllib.parse import urlparse
+
         if re.match(r"^https?://", name, re.IGNORECASE):
             try:
                 return urlparse(name).hostname or name
@@ -192,8 +205,12 @@ class TestHeatmapDataLogic:
             cell["count"] += 1
             cell["findings"].append(f)
 
-            sev_idx = sev_order.index(f["severity"]) if f["severity"] in sev_order else len(sev_order)
-            worst_idx = sev_order.index(cell["worst"]) if cell["worst"] in sev_order else len(sev_order)
+            sev_idx = (
+                sev_order.index(f["severity"]) if f["severity"] in sev_order else len(sev_order)
+            )
+            worst_idx = (
+                sev_order.index(cell["worst"]) if cell["worst"] in sev_order else len(sev_order)
+            )
             if sev_idx < worst_idx:
                 cell["worst"] = f["severity"]
 
@@ -267,7 +284,9 @@ class TestHeatmapDataLogic:
         assert result["suites"].index("web") < result["suites"].index("custom")
 
     def test_fallback_host_from_target_url(self):
-        findings = [{"target_url": "http://test.io/path", "suite": "web", "severity": "info", "title": "T"}]
+        findings = [
+            {"target_url": "http://test.io/path", "suite": "web", "severity": "info", "title": "T"}
+        ]
         result = self.build_heatmap_data(findings)
         assert "test.io" in result["hosts"]
 
@@ -289,7 +308,9 @@ class TestHeatmapDataLogic:
             {"host": "example.com", "suite": "network", "severity": "info", "title": "C"},
         ]
         result = self.build_heatmap_data(findings)
-        assert result["hosts"] == ["example.com"], "All port variants should merge into one host row"
+        assert result["hosts"] == ["example.com"], (
+            "All port variants should merge into one host row"
+        )
         assert result["matrix"]["example.com"]["web"]["count"] == 2
         assert result["matrix"]["example.com"]["web"]["worst"] == "high"
         assert result["matrix"]["example.com"]["network"]["count"] == 1
@@ -297,9 +318,24 @@ class TestHeatmapDataLogic:
     def test_url_hosts_are_normalized_to_hostname(self):
         """Full URLs like http://api.example.com/foo collapse to api.example.com."""
         findings = [
-            {"host": "http://api.example.com/login", "suite": "web", "severity": "high", "title": "A"},
-            {"host": "http://api.example.com/admin", "suite": "web", "severity": "low", "title": "B"},
-            {"host": "http://api.example.com:8080/other", "suite": "ai", "severity": "info", "title": "C"},
+            {
+                "host": "http://api.example.com/login",
+                "suite": "web",
+                "severity": "high",
+                "title": "A",
+            },
+            {
+                "host": "http://api.example.com/admin",
+                "suite": "web",
+                "severity": "low",
+                "title": "B",
+            },
+            {
+                "host": "http://api.example.com:8080/other",
+                "suite": "ai",
+                "severity": "info",
+                "title": "C",
+            },
         ]
         result = self.build_heatmap_data(findings)
         assert result["hosts"] == ["api.example.com"], "URL paths should collapse to hostname"
@@ -403,7 +439,9 @@ class TestRadarJavaScript:
 
     def test_build_radar_data_exposed_on_window(self):
         content = _all_viz_content()
-        assert "window.buildRadarData" in content, "buildRadarData should be exposed on window for testing"
+        assert "window.buildRadarData" in content, (
+            "buildRadarData should be exposed on window for testing"
+        )
 
     def test_radar_risk_weights_defined(self):
         content = _all_viz_content()
@@ -429,7 +467,9 @@ class TestRadarJavaScript:
 
     def test_radar_risk_weights_exposed_on_window(self):
         content = _all_viz_content()
-        assert "window.RADAR_RISK_WEIGHTS" in content, "RADAR_RISK_WEIGHTS should be exposed on window"
+        assert "window.RADAR_RISK_WEIGHTS" in content, (
+            "RADAR_RISK_WEIGHTS should be exposed on window"
+        )
 
 
 class TestRadarDataLogic:
@@ -441,7 +481,18 @@ class TestRadarDataLogic:
     SUITE_PATTERNS = {
         "network": ["dns", "service_probe", "port"],
         "web": ["header", "robots", "path", "openapi", "cors", "content"],
-        "ai": ["llm", "embedding", "model", "fingerprint", "error", "tool", "prompt", "rate", "filter", "context"],
+        "ai": [
+            "llm",
+            "embedding",
+            "model",
+            "fingerprint",
+            "error",
+            "tool",
+            "prompt",
+            "rate",
+            "filter",
+            "context",
+        ],
         "mcp": ["mcp"],
         "agent": ["agent", "goal"],
         "rag": ["rag", "indirect"],
@@ -546,8 +597,9 @@ class TestRadarDataLogic:
         for sev, expected_weight in self.RISK_WEIGHTS.items():
             findings = [{"suite": "web", "severity": sev, "title": "T"}]
             result = self.build_radar_data(findings)
-            assert result["scores"]["web"]["score"] == expected_weight, \
+            assert result["scores"]["web"]["score"] == expected_weight, (
                 f"{sev} should have weight {expected_weight}"
+            )
 
     def test_breakdown_counts_per_severity(self):
         findings = [
@@ -646,7 +698,9 @@ class TestCoverageJavaScript:
 
     def test_build_coverage_data_exposed_on_window(self):
         content = _all_viz_content()
-        assert "window.buildCoverageData" in content, "buildCoverageData should be exposed on window"
+        assert "window.buildCoverageData" in content, (
+            "buildCoverageData should be exposed on window"
+        )
 
     def test_coverage_status_colors_defined(self):
         content = _all_viz_content()
@@ -669,7 +723,9 @@ class TestCoverageJavaScript:
 
     def test_coverage_status_colors_exposed_on_window(self):
         content = _all_viz_content()
-        assert "window.COVERAGE_STATUS_COLORS" in content, "COVERAGE_STATUS_COLORS should be exposed on window"
+        assert "window.COVERAGE_STATUS_COLORS" in content, (
+            "COVERAGE_STATUS_COLORS should be exposed on window"
+        )
 
 
 class TestCoverageDataLogic:
@@ -678,7 +734,18 @@ class TestCoverageDataLogic:
     SUITE_PATTERNS = {
         "network": ["dns", "service_probe", "port"],
         "web": ["header", "robots", "path", "openapi", "cors", "content"],
-        "ai": ["llm", "embedding", "model", "fingerprint", "error", "tool", "prompt", "rate", "filter", "context"],
+        "ai": [
+            "llm",
+            "embedding",
+            "model",
+            "fingerprint",
+            "error",
+            "tool",
+            "prompt",
+            "rate",
+            "filter",
+            "context",
+        ],
         "mcp": ["mcp"],
         "agent": ["agent", "goal"],
         "rag": ["rag", "indirect"],
@@ -689,6 +756,7 @@ class TestCoverageDataLogic:
     def normalize_host(name):
         import re
         from urllib.parse import urlparse
+
         if re.match(r"^https?://", name, re.IGNORECASE):
             try:
                 return urlparse(name).hostname or name
@@ -702,7 +770,7 @@ class TestCoverageDataLogic:
         checks = []
         check_status_map = {}
 
-        for cs in (check_statuses or []):
+        for cs in check_statuses or []:
             name = cs.get("name") or cs.get("check_name")
             if not name:
                 continue
@@ -890,10 +958,23 @@ class TestCoverageDataLogic:
 
     def test_host_normalization_in_coverage(self):
         findings = [
-            {"host": "http://api.example.com/path", "check_name": "check_a", "severity": "info", "title": "A"},
-            {"host": "api.example.com:8080", "check_name": "check_b", "severity": "low", "title": "B"},
+            {
+                "host": "http://api.example.com/path",
+                "check_name": "check_a",
+                "severity": "info",
+                "title": "A",
+            },
+            {
+                "host": "api.example.com:8080",
+                "check_name": "check_b",
+                "severity": "low",
+                "title": "B",
+            },
         ]
-        checks = [{"name": "check_a", "status": "completed"}, {"name": "check_b", "status": "completed"}]
+        checks = [
+            {"name": "check_a", "status": "completed"},
+            {"name": "check_b", "status": "completed"},
+        ]
         result = self.build_coverage_data(findings, checks)
         assert "api.example.com" in result["hosts"]
         assert result["isGlobal"] is True  # Both normalize to same host
@@ -989,7 +1070,9 @@ class TestTimelineJavaScript:
 
     def test_build_timeline_data_exposed_on_window(self):
         content = _all_viz_content()
-        assert "window.buildTimelineData" in content, "buildTimelineData should be exposed on window"
+        assert "window.buildTimelineData" in content, (
+            "buildTimelineData should be exposed on window"
+        )
 
     def test_timeline_sev_colors_defined(self):
         content = _all_viz_content()
@@ -997,7 +1080,9 @@ class TestTimelineJavaScript:
 
     def test_timeline_sev_colors_exposed_on_window(self):
         content = _all_viz_content()
-        assert "window.TIMELINE_SEV_COLORS" in content, "TIMELINE_SEV_COLORS should be exposed on window"
+        assert "window.TIMELINE_SEV_COLORS" in content, (
+            "TIMELINE_SEV_COLORS should be exposed on window"
+        )
 
     def test_timeline_sev_radii_defined(self):
         content = _all_viz_content()
@@ -1005,7 +1090,9 @@ class TestTimelineJavaScript:
 
     def test_timeline_sev_radii_exposed_on_window(self):
         content = _all_viz_content()
-        assert "window.TIMELINE_SEV_RADII" in content, "TIMELINE_SEV_RADII should be exposed on window"
+        assert "window.TIMELINE_SEV_RADII" in content, (
+            "TIMELINE_SEV_RADII should be exposed on window"
+        )
 
     def test_timeline_severity_color_values(self):
         """All severity colors from the spec are present in timeline constants."""
@@ -1034,7 +1121,18 @@ class TestTimelineDataLogic:
     SUITE_PATTERNS = {
         "network": ["dns", "service_probe", "port"],
         "web": ["header", "robots", "path", "openapi", "cors", "content"],
-        "ai": ["llm", "embedding", "model", "fingerprint", "error", "tool", "prompt", "rate", "filter", "context"],
+        "ai": [
+            "llm",
+            "embedding",
+            "model",
+            "fingerprint",
+            "error",
+            "tool",
+            "prompt",
+            "rate",
+            "filter",
+            "context",
+        ],
         "mcp": ["mcp"],
         "agent": ["agent", "goal"],
         "rag": ["rag", "indirect"],
@@ -1045,6 +1143,7 @@ class TestTimelineDataLogic:
     def normalize_host(name):
         import re
         from urllib.parse import urlparse
+
         if re.match(r"^https?://", name, re.IGNORECASE):
             try:
                 return urlparse(name).hostname or name
@@ -1157,7 +1256,12 @@ class TestTimelineDataLogic:
 
     def test_host_normalization(self):
         findings = [
-            {"host": "http://api.example.com/path", "suite": "web", "severity": "high", "title": "A"},
+            {
+                "host": "http://api.example.com/path",
+                "suite": "web",
+                "severity": "high",
+                "title": "A",
+            },
             {"host": "api.example.com:8080", "suite": "web", "severity": "low", "title": "B"},
         ]
         result = self.build_timeline_data(findings, "host")

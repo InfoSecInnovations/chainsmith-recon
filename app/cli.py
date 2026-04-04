@@ -16,17 +16,16 @@ Usage:
     chainsmith serve [--host HOST] [--port PORT]
 """
 
+import contextlib
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 import click
 
-from app.cli_client import ChainsmithClient, ChainsmithAPIError
+from app.cli_client import ChainsmithAPIError, ChainsmithClient
 from app.cli_formatters import (
     SUITE_COLORS,
-    format_finding_terminal,
     findings_to_json,
     findings_to_markdown,
     findings_to_sarif,
@@ -37,7 +36,6 @@ from app.cli_formatters import (
 )
 from app.cli_server import ServerManager
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLI Group
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -45,10 +43,8 @@ from app.cli_server import ServerManager
 
 @click.group()
 @click.version_option(version="1.3.0", prog_name="chainsmith")
-@click.option("--server", default="127.0.0.1:8000",
-              help="API server address (host:port)")
-@click.option("--profile",
-              help="Activate a scan behavior profile (e.g., aggressive, stealth)")
+@click.option("--server", default="127.0.0.1:8000", help="API server address (host:port)")
+@click.option("--profile", help="Activate a scan behavior profile (e.g., aggressive, stealth)")
 @click.pass_context
 def cli(ctx, server: str, profile: str):
     """Chainsmith Recon - AI Reconnaissance Framework
@@ -94,31 +90,61 @@ def _handle_api_error(e: ChainsmithAPIError):
 @click.argument("target")
 @click.option("--exclude", "-e", multiple=True, help="Exclude domains from scope")
 @click.option("--checks", "-c", multiple=True, help="Run specific checks (by name)")
-@click.option("--suite", "-s", multiple=True,
-              help="Run checks from suite (network, web, ai, mcp, agent, rag, cag)")
+@click.option(
+    "--suite",
+    "-s",
+    multiple=True,
+    help="Run checks from suite (network, web, ai, mcp, agent, rag, cag)",
+)
 @click.option("--scenario", help="Load a scenario instead of live scanning")
 @click.option("--parallel", is_flag=True, help="Run checks in parallel within phases")
 @click.option("--plan", is_flag=True, help="Show execution plan and exit (don't run)")
 @click.option("--dry-run", is_flag=True, help="Validate configuration without running checks")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
-@click.option("--format", "-f", "fmt",
-              type=click.Choice(["json", "yaml", "md", "sarif", "text"]),
-              default="text", help="Output format")
+@click.option(
+    "--format",
+    "-f",
+    "fmt",
+    type=click.Choice(["json", "yaml", "md", "sarif", "text"]),
+    default="text",
+    help="Output format",
+)
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 @click.option("--quiet", "-q", is_flag=True, help="Quiet mode (only findings)")
 @click.option("--no-color", is_flag=True, help="Disable colored output")
 @click.option("--no-llm", is_flag=True, help="Disable LLM-based chain analysis")
-@click.option("--provider",
-              type=click.Choice(["openai", "anthropic", "litellm", "none"]),
-              help="LLM provider override")
-@click.option("--port-profile", type=click.Choice(["web", "ai", "full", "lab"]),
-              help="Port scan profile (web, ai, full, lab)")
+@click.option(
+    "--provider",
+    type=click.Choice(["openai", "anthropic", "litellm", "none"]),
+    help="LLM provider override",
+)
+@click.option(
+    "--port-profile",
+    type=click.Choice(["web", "ai", "full", "lab"]),
+    help="Port scan profile (web, ai, full, lab)",
+)
 @click.option("--engagement", help="Link scan to an engagement ID")
 @click.pass_context
-def scan(ctx, target: str, exclude: tuple, checks: tuple, suite: tuple,
-         scenario: str, parallel: bool, plan: bool, dry_run: bool,
-         output: str, fmt: str, verbose: bool, quiet: bool, no_color: bool,
-         no_llm: bool, provider: str, port_profile: str, engagement: str):
+def scan(
+    ctx,
+    target: str,
+    exclude: tuple,
+    checks: tuple,
+    suite: tuple,
+    scenario: str,
+    parallel: bool,
+    plan: bool,
+    dry_run: bool,
+    output: str,
+    fmt: str,
+    verbose: bool,
+    quiet: bool,
+    no_color: bool,
+    no_llm: bool,
+    provider: str,
+    port_profile: str,
+    engagement: str,
+):
     """Run reconnaissance scan against a target.
 
     TARGET is the base domain to scan (e.g., example.com, *.example.com).
@@ -145,6 +171,7 @@ def scan(ctx, target: str, exclude: tuple, checks: tuple, suite: tuple,
     profile_name = ctx.obj.get("profile")
     if profile_name:
         from app.preferences import BUILTIN_PROFILES, load_profile_store
+
         store = load_profile_store()
         if not (store.profiles.get(profile_name) or BUILTIN_PROFILES.get(profile_name)):
             click.echo(click.style(f"Unknown profile: {profile_name}", fg="red"), err=True)
@@ -154,9 +181,11 @@ def scan(ctx, target: str, exclude: tuple, checks: tuple, suite: tuple,
     # Configure LLM env before starting server
     if no_llm or provider == "none":
         import os
+
         os.environ["CHAINSMITH_LLM_PROVIDER"] = "none"
     elif provider:
         import os
+
         os.environ["CHAINSMITH_LLM_PROVIDER"] = provider
 
     def style(text, **kwargs):
@@ -234,9 +263,12 @@ def scan(ctx, target: str, exclude: tuple, checks: tuple, suite: tuple,
             return
 
         # 5. Start scan with optional check/suite filters
-        client.start_scan(checks=scan_checks, suites=scan_suites,
-                          engagement_id=engagement if engagement else None,
-                          port_profile=port_profile if port_profile else None)
+        client.start_scan(
+            checks=scan_checks,
+            suites=scan_suites,
+            engagement_id=engagement if engagement else None,
+            port_profile=port_profile if port_profile else None,
+        )
 
         # 6. Poll until complete
         last_check = None
@@ -261,8 +293,7 @@ def scan(ctx, target: str, exclude: tuple, checks: tuple, suite: tuple,
             click.echo()  # newline after progress
 
         if result.get("status") == "error":
-            click.echo(style(f"Scan error: {result.get('error', 'unknown')}", fg="red"),
-                       err=True)
+            click.echo(style(f"Scan error: {result.get('error', 'unknown')}", fg="red"), err=True)
             sys.exit(1)
 
         # 7. Get findings
@@ -288,13 +319,12 @@ def scan(ctx, target: str, exclude: tuple, checks: tuple, suite: tuple,
 
 
 @cli.command("list-checks")
-@click.option("--suite", "-s",
-              help="Filter by suite (network, web, ai, mcp, agent, rag, cag)")
+@click.option("--suite", "-s", help="Filter by suite (network, web, ai, mcp, agent, rag, cag)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed info")
 @click.option("--deps", is_flag=True, help="Show dependencies")
 @click.pass_context
-def list_checks(ctx, suite: Optional[str], as_json: bool, verbose: bool, deps: bool):
+def list_checks(ctx, suite: str | None, as_json: bool, verbose: bool, deps: bool):
     """List available checks.
 
     Examples:
@@ -324,8 +354,7 @@ def list_checks(ctx, suite: Optional[str], as_json: bool, verbose: bool, deps: b
             if not all_checks:
                 # Check if suite name is valid by looking at what suites exist
                 click.echo(click.style(f"Unknown suite: {suite}", fg="red"), err=True)
-                all_suites = sorted({c.get("suite", "other")
-                                     for c in resp.get("checks", [])})
+                all_suites = sorted({c.get("suite", "other") for c in resp.get("checks", [])})
                 click.echo(f"Available suites: {', '.join(all_suites)}")
                 sys.exit(1)
             suites_to_show = [suite]
@@ -385,11 +414,13 @@ def list_suites(ctx, as_json: bool):
 
         suite_data = []
         for s in suite_order:
-            suite_data.append({
-                "name": s,
-                "checks": len(suites_map[s]),
-                "check_names": suites_map[s],
-            })
+            suite_data.append(
+                {
+                    "name": s,
+                    "checks": len(suites_map[s]),
+                    "check_names": suites_map[s],
+                }
+            )
 
         if as_json:
             click.echo(json.dumps(suite_data, indent=2))
@@ -401,8 +432,7 @@ def list_suites(ctx, as_json: bool):
         for s in suite_data:
             color = SUITE_COLORS.get(s["name"], "white")
             click.echo(
-                click.style(f"{s['name']}", fg=color, bold=True)
-                + f" ({s['checks']} checks)"
+                click.style(f"{s['name']}", fg=color, bold=True) + f" ({s['checks']} checks)"
             )
 
             if s["check_names"]:
@@ -548,13 +578,19 @@ def scenarios_info(ctx, name: str):
 
 
 @cli.command()
-@click.option("--format", "-f", "fmt",
-              type=click.Choice(["json", "md", "sarif"]),
-              default="json", help="Output format")
+@click.option(
+    "--format",
+    "-f",
+    "fmt",
+    type=click.Choice(["json", "md", "sarif"]),
+    default="json",
+    help="Output format",
+)
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
-@click.option("--input", "-i", "input_file", type=click.Path(exists=True),
-              help="Input JSON findings file")
-def export(fmt: str, output: Optional[str], input_file: Optional[str]):
+@click.option(
+    "--input", "-i", "input_file", type=click.Path(exists=True), help="Input JSON findings file"
+)
+def export(fmt: str, output: str | None, input_file: str | None):
     """Export findings to various formats.
 
     Reads findings from stdin (JSON) or a file, and exports to the specified format.
@@ -622,7 +658,7 @@ def prefs():
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.argument("key", required=False)
 @click.pass_context
-def prefs_show(ctx, advanced: bool, as_json: bool, key: Optional[str]):
+def prefs_show(ctx, advanced: bool, as_json: bool, key: str | None):
     """Show current preferences.
 
     If KEY is provided, show only that preference.
@@ -676,9 +712,7 @@ def prefs_show(ctx, advanced: bool, as_json: bool, key: Optional[str]):
                             if v is None:
                                 val_str = click.style("null", fg="yellow")
                             elif isinstance(v, bool):
-                                val_str = click.style(
-                                    str(v).lower(), fg="green" if v else "red"
-                                )
+                                val_str = click.style(str(v).lower(), fg="green" if v else "red")
                             else:
                                 val_str = str(v)
                             click.echo(f"  {k} = {val_str}")
@@ -717,10 +751,13 @@ def prefs_set(ctx, key: str, value: str):
         # Parse key into nested dict for the API
         parts = key.split(".")
         if len(parts) < 2:
-            click.echo(click.style(
-                "Key must be in section.name format (e.g. network.timeout_seconds)",
-                fg="red",
-            ), err=True)
+            click.echo(
+                click.style(
+                    "Key must be in section.name format (e.g. network.timeout_seconds)",
+                    fg="red",
+                ),
+                err=True,
+            )
             sys.exit(1)
 
         # Auto-convert value types
@@ -735,10 +772,8 @@ def prefs_set(ctx, key: str, value: str):
             try:
                 parsed_value = int(value)
             except ValueError:
-                try:
+                with contextlib.suppress(ValueError):
                     parsed_value = float(value)
-                except ValueError:
-                    pass
 
         # Build nested update dict
         section = parts[0]
@@ -757,7 +792,7 @@ def prefs_set(ctx, key: str, value: str):
 @click.option("--all", "reset_all", is_flag=True, help="Reset all preferences to defaults")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation for --all")
 @click.pass_context
-def prefs_reset(ctx, key: Optional[str], reset_all: bool, yes: bool):
+def prefs_reset(ctx, key: str | None, reset_all: bool, yes: bool):
     """Reset preference(s) to default value.
 
     Examples:
@@ -772,10 +807,9 @@ def prefs_reset(ctx, key: Optional[str], reset_all: bool, yes: bool):
         click.echo("Specify a KEY to reset, or use --all to reset everything.", err=True)
         sys.exit(1)
 
-    if reset_all and not yes:
-        if not click.confirm("Reset all preferences to defaults?"):
-            click.echo("Cancelled.")
-            return
+    if reset_all and not yes and not click.confirm("Reset all preferences to defaults?"):
+        click.echo("Cancelled.")
+        return
 
     try:
         client = _get_client(ctx)
@@ -1056,10 +1090,13 @@ def profile_delete(ctx, name: str, yes: bool):
         prefs_resp = client.get_preferences()
         active_name = prefs_resp.get("active_profile", "default")
         if name == active_name:
-            click.echo(click.style(
-                "Cannot delete active profile. Switch to another profile first.",
-                fg="red",
-            ), err=True)
+            click.echo(
+                click.style(
+                    "Cannot delete active profile. Switch to another profile first.",
+                    fg="red",
+                ),
+                err=True,
+            )
             sys.exit(1)
 
         # Confirm
@@ -1068,10 +1105,9 @@ def profile_delete(ctx, name: str, yes: bool):
         else:
             msg = f"Delete profile '{name}'?"
 
-        if not yes:
-            if not click.confirm(msg):
-                click.echo("Cancelled.")
-                return
+        if not yes and not click.confirm(msg):
+            click.echo("Cancelled.")
+            return
 
         resp = client.delete_profile(name)
 
@@ -1097,10 +1133,9 @@ def profile_reset(ctx, name: str, yes: bool):
 
         chainsmith prefs profile reset my-profile --yes
     """
-    if not yes:
-        if not click.confirm(f"Reset profile '{name}'?"):
-            click.echo("Cancelled.")
-            return
+    if not yes and not click.confirm(f"Reset profile '{name}'?"):
+        click.echo("Cancelled.")
+        return
 
     try:
         client = _get_client(ctx)
@@ -1164,7 +1199,7 @@ def scans_group():
 @click.option("--limit", "-n", default=20, help="Max results")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def scans_list(ctx, target: Optional[str], limit: int, as_json: bool):
+def scans_list(ctx, target: str | None, limit: int, as_json: bool):
     """List historical scans.
 
     Examples:
@@ -1193,11 +1228,15 @@ def scans_list(ctx, target: Optional[str], limit: int, as_json: bool):
             click.echo("No scans found.")
             return
 
-        click.echo(click.style(f"Scan History ({resp.get('total', 0)} total)", fg="cyan", bold=True))
+        click.echo(
+            click.style(f"Scan History ({resp.get('total', 0)} total)", fg="cyan", bold=True)
+        )
         click.echo()
 
         for s in scans:
-            status_color = {"complete": "green", "error": "red", "running": "yellow"}.get(s["status"], "white")
+            status_color = {"complete": "green", "error": "red", "running": "yellow"}.get(
+                s["status"], "white"
+            )
             click.echo(
                 f"  {click.style(s['id'], bold=True)}  "
                 f"{s['target_domain']}  "
@@ -1241,9 +1280,9 @@ def scans_show(ctx, scan_id: str, as_json: bool):
         click.echo(f"  Duration: {scan.get('duration_ms', 'N/A')}ms")
         click.echo(f"  Findings: {scan.get('findings_count', 0)}")
         click.echo(f"  Checks:   {scan.get('checks_completed', 0)}/{scan.get('checks_total', 0)}")
-        if scan.get('engagement_id'):
+        if scan.get("engagement_id"):
             click.echo(f"  Engagement: {scan['engagement_id']}")
-        if scan.get('error_message'):
+        if scan.get("error_message"):
             click.echo(click.style(f"  Error: {scan['error_message']}", fg="red"))
 
     except ChainsmithAPIError as e:
@@ -1279,8 +1318,12 @@ def scans_compare(ctx, scan_a: str, scan_b: str, as_json: bool):
         click.echo(f"  A: {scan_a}")
         click.echo(f"  B: {scan_b}")
         click.echo()
-        click.echo(f"  {click.style(str(result.get('new_count', 0)), fg='green')} new findings in B")
-        click.echo(f"  {click.style(str(result.get('resolved_count', 0)), fg='blue')} resolved (in A, not B)")
+        click.echo(
+            f"  {click.style(str(result.get('new_count', 0)), fg='green')} new findings in B"
+        )
+        click.echo(
+            f"  {click.style(str(result.get('resolved_count', 0)), fg='blue')} resolved (in A, not B)"
+        )
         click.echo(f"  {result.get('recurring_count', 0)} recurring")
 
         new_findings = result.get("new_findings", [])
@@ -1312,10 +1355,9 @@ def scans_delete(ctx, scan_id: str, yes: bool):
 
         chainsmith scans delete abc123 --yes
     """
-    if not yes:
-        if not click.confirm(f"Delete scan '{scan_id}' and all its data?"):
-            click.echo("Cancelled.")
-            return
+    if not yes and not click.confirm(f"Delete scan '{scan_id}' and all its data?"):
+        click.echo("Cancelled.")
+        return
 
     try:
         client = _get_client(ctx)
@@ -1365,7 +1407,13 @@ def scans_trend(ctx, target: str, as_json: bool):
         click.echo()
 
         for dp in data_points:
-            risk_color = "red" if dp.get("risk_score", 0) > 50 else "yellow" if dp.get("risk_score", 0) > 20 else "green"
+            risk_color = (
+                "red"
+                if dp.get("risk_score", 0) > 50
+                else "yellow"
+                if dp.get("risk_score", 0) > 20
+                else "green"
+            )
             click.echo(
                 f"  {dp.get('date', '')[:10]}  "
                 f"scan {dp['scan_id'][:8]}  "
@@ -1427,14 +1475,18 @@ def engagements_list(ctx, as_json: bool):
 
         if not engagements:
             click.echo("No engagements found.")
-            click.echo("Create one with: chainsmith engagements create --name 'My Pentest' --target example.com")
+            click.echo(
+                "Create one with: chainsmith engagements create --name 'My Pentest' --target example.com"
+            )
             return
 
         click.echo(click.style(f"Engagements ({resp.get('total', 0)})", fg="cyan", bold=True))
         click.echo()
 
         for e in engagements:
-            status_color = {"active": "green", "completed": "blue", "archived": "white"}.get(e["status"], "white")
+            status_color = {"active": "green", "completed": "blue", "archived": "white"}.get(
+                e["status"], "white"
+            )
             click.echo(
                 f"  {click.style(e['id'], bold=True)}  "
                 f"{e['name']}  "
@@ -1471,14 +1523,16 @@ def engagements_create(ctx, name: str, target: str, description: str, client: st
 
     try:
         eng = client_obj.create_engagement(
-            name=name, target_domain=target,
-            description=description, client_name=client,
+            name=name,
+            target_domain=target,
+            description=description,
+            client_name=client,
         )
         click.echo(click.style(f"Created engagement: {eng['id']}", fg="green"))
         click.echo(f"  Name:   {eng['name']}")
         click.echo(f"  Target: {eng['target_domain']}")
         click.echo()
-        click.echo(f"Run a scan in this engagement:")
+        click.echo("Run a scan in this engagement:")
         click.echo(f"  chainsmith scan {target} --engagement {eng['id']}")
 
     except ChainsmithAPIError as e:
@@ -1545,10 +1599,11 @@ def engagements_delete(ctx, engagement_id: str, yes: bool):
 
         chainsmith engagements delete abc123 --yes
     """
-    if not yes:
-        if not click.confirm(f"Delete engagement '{engagement_id}'? (Scans will be unlinked, not deleted)"):
-            click.echo("Cancelled.")
-            return
+    if not yes and not click.confirm(
+        f"Delete engagement '{engagement_id}'? (Scans will be unlinked, not deleted)"
+    ):
+        click.echo("Cancelled.")
+        return
 
     try:
         client = _get_client(ctx)
@@ -1594,11 +1649,19 @@ def engagements_trend(ctx, engagement_id: str, as_json: bool):
             click.echo(f"No completed scans found for engagement '{engagement_id}'.")
             return
 
-        click.echo(click.style(f"Engagement Trend ({len(data_points)} scans)", fg="cyan", bold=True))
+        click.echo(
+            click.style(f"Engagement Trend ({len(data_points)} scans)", fg="cyan", bold=True)
+        )
         click.echo()
 
         for dp in data_points:
-            risk_color = "red" if dp.get("risk_score", 0) > 50 else "yellow" if dp.get("risk_score", 0) > 20 else "green"
+            risk_color = (
+                "red"
+                if dp.get("risk_score", 0) > 50
+                else "yellow"
+                if dp.get("risk_score", 0) > 20
+                else "green"
+            )
             click.echo(
                 f"  {dp.get('date', '')[:10]}  "
                 f"scan {dp['scan_id'][:8]}  "
@@ -1711,8 +1774,13 @@ def findings_reopen(ctx, fingerprint: str):
 
 
 @findings_group.command("overrides")
-@click.option("--status", "-s", type=click.Choice(["accepted", "false_positive"]),
-              default=None, help="Filter by override status")
+@click.option(
+    "--status",
+    "-s",
+    type=click.Choice(["accepted", "false_positive"]),
+    default=None,
+    help="Filter by override status",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.pass_context
 def findings_overrides(ctx, status: str, as_json: bool):
@@ -1742,11 +1810,15 @@ def findings_overrides(ctx, status: str, as_json: bool):
             click.echo("No overrides found.")
             return
 
-        click.echo(click.style(f"Finding Overrides ({resp.get('total', 0)} total)", fg="cyan", bold=True))
+        click.echo(
+            click.style(f"Finding Overrides ({resp.get('total', 0)} total)", fg="cyan", bold=True)
+        )
         click.echo()
 
         for o in overrides:
-            status_color = {"accepted": "yellow", "false_positive": "magenta"}.get(o["status"], "white")
+            status_color = {"accepted": "yellow", "false_positive": "magenta"}.get(
+                o["status"], "white"
+            )
             click.echo(
                 f"  {click.style(o['fingerprint'], bold=True)}  "
                 f"{click.style(o['status'], fg=status_color)}  "
@@ -1763,7 +1835,7 @@ def findings_overrides(ctx, status: str, as_json: bool):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _write_report(result: dict, fmt: str, output: Optional[str]):
+def _write_report(result: dict, fmt: str, output: str | None):
     """Write report output to file or terminal. Handles binary PDF content."""
     content = result.get("content", "")
     if fmt == "pdf":
@@ -1786,11 +1858,17 @@ def report_group():
 
 @report_group.command("technical")
 @click.option("--scan", "scan_id", required=True, help="Scan ID to report on")
-@click.option("--format", "-f", "fmt", type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
-              default="md", help="Output format")
+@click.option(
+    "--format",
+    "-f",
+    "fmt",
+    type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
+    default="md",
+    help="Output format",
+)
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.pass_context
-def report_technical(ctx, scan_id: str, fmt: str, output: Optional[str]):
+def report_technical(ctx, scan_id: str, fmt: str, output: str | None):
     """Generate a technical report for a scan.
 
     Examples:
@@ -1815,11 +1893,17 @@ def report_technical(ctx, scan_id: str, fmt: str, output: Optional[str]):
 @report_group.command("delta")
 @click.option("--scan-a", required=True, help="Baseline scan ID")
 @click.option("--scan-b", required=True, help="Comparison scan ID")
-@click.option("--format", "-f", "fmt", type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
-              default="md", help="Output format")
+@click.option(
+    "--format",
+    "-f",
+    "fmt",
+    type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
+    default="md",
+    help="Output format",
+)
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.pass_context
-def report_delta(ctx, scan_a: str, scan_b: str, fmt: str, output: Optional[str]):
+def report_delta(ctx, scan_a: str, scan_b: str, fmt: str, output: str | None):
     """Generate a delta (comparison) report between two scans.
 
     Examples:
@@ -1844,12 +1928,18 @@ def report_delta(ctx, scan_a: str, scan_b: str, fmt: str, output: Optional[str])
 
 @report_group.command("executive")
 @click.option("--scan", "scan_id", required=True, help="Scan ID to report on")
-@click.option("--format", "-f", "fmt", type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
-              default="md", help="Output format")
+@click.option(
+    "--format",
+    "-f",
+    "fmt",
+    type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
+    default="md",
+    help="Output format",
+)
 @click.option("--engagement", "engagement_id", default=None, help="Engagement ID for context")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.pass_context
-def report_executive(ctx, scan_id: str, fmt: str, engagement_id: Optional[str], output: Optional[str]):
+def report_executive(ctx, scan_id: str, fmt: str, engagement_id: str | None, output: str | None):
     """Generate an executive summary report for a scan.
 
     Examples:
@@ -1873,12 +1963,18 @@ def report_executive(ctx, scan_id: str, fmt: str, engagement_id: Optional[str], 
 
 @report_group.command("compliance")
 @click.option("--scan", "scan_id", required=True, help="Scan ID to report on")
-@click.option("--format", "-f", "fmt", type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
-              default="md", help="Output format")
+@click.option(
+    "--format",
+    "-f",
+    "fmt",
+    type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
+    default="md",
+    help="Output format",
+)
 @click.option("--engagement", "engagement_id", default=None, help="Engagement ID for context")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.pass_context
-def report_compliance(ctx, scan_id: str, fmt: str, engagement_id: Optional[str], output: Optional[str]):
+def report_compliance(ctx, scan_id: str, fmt: str, engagement_id: str | None, output: str | None):
     """Generate a compliance report for a scan.
 
     Examples:
@@ -1903,11 +1999,17 @@ def report_compliance(ctx, scan_id: str, fmt: str, engagement_id: Optional[str],
 @report_group.command("trend")
 @click.option("--target", default=None, help="Target domain for trend")
 @click.option("--engagement", "engagement_id", default=None, help="Engagement ID for trend")
-@click.option("--format", "-f", "fmt", type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
-              default="md", help="Output format")
+@click.option(
+    "--format",
+    "-f",
+    "fmt",
+    type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
+    default="md",
+    help="Output format",
+)
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.pass_context
-def report_trend(ctx, target: Optional[str], engagement_id: Optional[str], fmt: str, output: Optional[str]):
+def report_trend(ctx, target: str | None, engagement_id: str | None, fmt: str, output: str | None):
     """Generate a trend report across multiple scans.
 
     Examples:
@@ -1959,9 +2061,9 @@ def serve(host: str, port: int, reload: bool, coordinator: bool):
     try:
         import uvicorn
     except ImportError:
-        click.echo(click.style(
-            "uvicorn not installed. Run: pip install uvicorn", fg="red"
-        ), err=True)
+        click.echo(
+            click.style("uvicorn not installed. Run: pip install uvicorn", fg="red"), err=True
+        )
         sys.exit(1)
 
     if coordinator:
@@ -2004,6 +2106,7 @@ def swarm_generate_key(name: str):
         chainsmith swarm generate-key --name "agent-dmz-01"
     """
     import asyncio
+
     from app.config import get_config
     from app.db import init_db
     from app.swarm.auth import create_api_key
@@ -2031,6 +2134,7 @@ def swarm_generate_key(name: str):
 def swarm_list_keys():
     """List all swarm API keys."""
     import asyncio
+
     from app.config import get_config
     from app.db import init_db
     from app.swarm.auth import list_api_keys
@@ -2066,6 +2170,7 @@ def swarm_list_keys():
 def swarm_revoke_key(key_id: str):
     """Revoke a swarm API key by ID."""
     import asyncio
+
     from app.config import get_config
     from app.db import init_db
     from app.swarm.auth import revoke_api_key
@@ -2102,6 +2207,7 @@ def swarm_agent(coordinator: str, key: str, name: str, suites: tuple, max_concur
         chainsmith swarm agent --coordinator http://10.0.0.1:8000 --key abc123 --name dmz-01 --suites network --suites web
     """
     import asyncio
+
     from app.swarm.agent import SwarmAgent
 
     click.echo(click.style("Chainsmith Swarm Agent", fg="cyan", bold=True))

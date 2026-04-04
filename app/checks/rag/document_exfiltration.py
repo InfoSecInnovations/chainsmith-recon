@@ -18,10 +18,9 @@ References:
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
-
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Phase 1: Broad discovery queries
 DISCOVERY_QUERIES = [
@@ -86,7 +85,8 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
 
         rag_endpoints = context.get("rag_endpoints", [])
         service_endpoints = [
-            ep for ep in rag_endpoints
+            ep
+            for ep in rag_endpoints
             if ep.get("service", {}).get("host") == service.host
             and ep.get("endpoint_type") == "rag_query"
         ]
@@ -115,7 +115,7 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
                         unique_docs.update(doc_ids)
 
                 # Phase 2: Targeted sensitive probing
-                for category, query in SENSITIVE_QUERIES:
+                for _category, query in SENSITIVE_QUERIES:
                     resp_text = await self._query_rag(client, url, query, ep)
                     if resp_text:
                         cats = self._detect_sensitive(resp_text)
@@ -128,81 +128,95 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
             result.errors.append(f"{service.url}: {e}")
 
         # Generate findings based on what was detected
-        cred_cats = all_categories & {"api_key", "password", "bearer_token", "aws_key", "private_key"}
+        cred_cats = all_categories & {
+            "api_key",
+            "password",
+            "bearer_token",
+            "aws_key",
+            "private_key",
+        }
         pii_cats = all_categories & {"email", "phone", "ssn"}
         infra_cats = all_categories & {"ip_address"}
 
         if cred_cats:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="RAG returns credentials in retrieved documents",
-                description=(
-                    f"Credential patterns detected in RAG responses: "
-                    f"{', '.join(sorted(cred_cats))}. "
-                    f"{len(unique_docs)} unique document(s) retrieved."
-                ),
-                severity="critical",
-                evidence=f"Credential types: {', '.join(sorted(cred_cats))}\nUnique docs: {len(unique_docs)}",
-                host=service.host,
-                discriminator="exfil-credentials",
-                target=service,
-                raw_data={"categories": sorted(cred_cats), "doc_count": len(unique_docs)},
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="RAG returns credentials in retrieved documents",
+                    description=(
+                        f"Credential patterns detected in RAG responses: "
+                        f"{', '.join(sorted(cred_cats))}. "
+                        f"{len(unique_docs)} unique document(s) retrieved."
+                    ),
+                    severity="critical",
+                    evidence=f"Credential types: {', '.join(sorted(cred_cats))}\nUnique docs: {len(unique_docs)}",
+                    host=service.host,
+                    discriminator="exfil-credentials",
+                    target=service,
+                    raw_data={"categories": sorted(cred_cats), "doc_count": len(unique_docs)},
+                    references=self.references,
+                )
+            )
 
         if pii_cats:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"RAG exposes PII in {len(unique_docs)} retrieved documents",
-                description=(
-                    f"PII patterns detected: {', '.join(sorted(pii_cats))}."
-                ),
-                severity="critical",
-                evidence=f"PII types: {', '.join(sorted(pii_cats))}",
-                host=service.host,
-                discriminator="exfil-pii",
-                target=service,
-                raw_data={"categories": sorted(pii_cats)},
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"RAG exposes PII in {len(unique_docs)} retrieved documents",
+                    description=(f"PII patterns detected: {', '.join(sorted(pii_cats))}."),
+                    severity="critical",
+                    evidence=f"PII types: {', '.join(sorted(pii_cats))}",
+                    host=service.host,
+                    discriminator="exfil-pii",
+                    target=service,
+                    raw_data={"categories": sorted(pii_cats)},
+                    references=self.references,
+                )
+            )
 
         if infra_cats:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Knowledge base contains internal infrastructure details",
-                description="Private IP addresses found in retrieved documents.",
-                severity="high",
-                evidence="Internal IP patterns detected in responses",
-                host=service.host,
-                discriminator="exfil-infra",
-                target=service,
-                raw_data={"categories": sorted(infra_cats)},
-                references=self.references,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Knowledge base contains internal infrastructure details",
+                    description="Private IP addresses found in retrieved documents.",
+                    severity="high",
+                    evidence="Internal IP patterns detected in responses",
+                    host=service.host,
+                    discriminator="exfil-infra",
+                    target=service,
+                    raw_data={"categories": sorted(infra_cats)},
+                    references=self.references,
+                )
+            )
 
         if raw_chunks_detected:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="RAG returns raw document chunks with metadata",
-                description="No output filtering detected — raw chunks returned.",
-                severity="medium",
-                evidence="Raw document chunks with metadata detected in responses",
-                host=service.host,
-                discriminator="exfil-raw-chunks",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="RAG returns raw document chunks with metadata",
+                    description="No output filtering detected — raw chunks returned.",
+                    severity="medium",
+                    evidence="Raw document chunks with metadata detected in responses",
+                    host=service.host,
+                    discriminator="exfil-raw-chunks",
+                    target=service,
+                )
+            )
 
         if not all_categories and not raw_chunks_detected:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Knowledge base content appears non-sensitive",
-                description="No sensitive content patterns detected in RAG responses.",
-                severity="low",
-                evidence=f"Queried {len(DISCOVERY_QUERIES) + len(SENSITIVE_QUERIES)} topics, no sensitive patterns",
-                host=service.host,
-                discriminator="exfil-clean",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Knowledge base content appears non-sensitive",
+                    description="No sensitive content patterns detected in RAG responses.",
+                    severity="low",
+                    evidence=f"Queried {len(DISCOVERY_QUERIES) + len(SENSITIVE_QUERIES)} topics, no sensitive patterns",
+                    host=service.host,
+                    discriminator="exfil-clean",
+                    target=service,
+                )
+            )
 
         if all_categories:
             result.outputs["sensitive_content_categories"] = sorted(all_categories)
@@ -210,7 +224,11 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
         return result
 
     async def _query_rag(
-        self, client: AsyncHttpClient, url: str, query: str, endpoint: dict,
+        self,
+        client: AsyncHttpClient,
+        url: str,
+        query: str,
+        endpoint: dict,
     ) -> str:
         """Send a query to the RAG and return response text."""
         body = {
@@ -222,7 +240,8 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
             "top_k": 5,
         }
         resp = await client.post(
-            url, json=body,
+            url,
+            json=body,
             headers={"Content-Type": "application/json"},
         )
         if resp.error or resp.status_code >= 400:
@@ -239,8 +258,15 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
 
     def _is_raw_chunk(self, text: str) -> bool:
         """Detect if response contains raw document chunks with metadata."""
-        indicators = ["metadata", "source:", "chunk_id", "page_content",
-                       "document_id", "embedding", "score:"]
+        indicators = [
+            "metadata",
+            "source:",
+            "chunk_id",
+            "page_content",
+            "document_id",
+            "embedding",
+            "score:",
+        ]
         text_lower = text.lower()
         return sum(1 for i in indicators if i in text_lower) >= 2
 

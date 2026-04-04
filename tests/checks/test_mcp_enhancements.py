@@ -14,44 +14,47 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.checks.base import Service
-from app.lib.http import HttpResponse
 
 # Wave 1
 from app.checks.mcp.auth_check import MCPAuthCheck
-from app.checks.mcp.websocket_transport import WebSocketTransportCheck
-from app.checks.mcp.tool_chain_analysis import ToolChainAnalysisCheck
-from app.checks.mcp.shadow_tool_detection import ShadowToolDetectionCheck
+
+# Safety framework
+from app.checks.mcp.invocation_safety import (
+    build_probe_payload,
+    build_safe_payload,
+    cap_response,
+    classify_tool_probe_type,
+    is_payload_safe,
+)
+from app.checks.mcp.notification_injection import MCPNotificationInjectionCheck
+
+# Wave 4
+from app.checks.mcp.prompt_injection import MCPPromptInjectionCheck
+from app.checks.mcp.protocol_version import MCPProtocolVersionCheck
+from app.checks.mcp.rate_limit import ToolRateLimitCheck
+from app.checks.mcp.resource_traversal import MCPResourceTraversalCheck
+
+# Wave 5
+from app.checks.mcp.sampling_abuse import MCPSamplingAbuseCheck
 
 # Wave 2
 from app.checks.mcp.schema_leakage import ToolSchemaLeakageCheck
 from app.checks.mcp.server_fingerprint import MCPServerFingerprintCheck
-from app.checks.mcp.transport_security import TransportSecurityCheck
-from app.checks.mcp.notification_injection import MCPNotificationInjectionCheck
+from app.checks.mcp.shadow_tool_detection import ShadowToolDetectionCheck
+from app.checks.mcp.template_injection import ResourceTemplateInjectionCheck
+from app.checks.mcp.tool_chain_analysis import ToolChainAnalysisCheck
 
 # Wave 3
 from app.checks.mcp.tool_invocation import MCPToolInvocationCheck
-from app.checks.mcp.resource_traversal import MCPResourceTraversalCheck
-from app.checks.mcp.template_injection import ResourceTemplateInjectionCheck
-
-# Wave 4
-from app.checks.mcp.prompt_injection import MCPPromptInjectionCheck
-
-# Wave 5
-from app.checks.mcp.sampling_abuse import MCPSamplingAbuseCheck
-from app.checks.mcp.protocol_version import MCPProtocolVersionCheck
-from app.checks.mcp.rate_limit import ToolRateLimitCheck
+from app.checks.mcp.transport_security import TransportSecurityCheck
 from app.checks.mcp.undeclared_capabilities import UndeclaredCapabilityCheck
-
-# Safety framework
-from app.checks.mcp.invocation_safety import (
-    build_safe_payload, build_probe_payload, is_payload_safe,
-    cap_response, classify_tool_probe_type,
-)
-
+from app.checks.mcp.websocket_transport import WebSocketTransportCheck
+from app.lib.http import HttpResponse
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared Fixtures
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def sample_service():
@@ -170,6 +173,7 @@ def mock_client_factory():
 # Wave 1: MCPAuthCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestMCPAuthCheck:
     @pytest.fixture
     def check(self):
@@ -210,21 +214,26 @@ class TestMCPAuthCheck:
     async def test_cors_open(self, check, mcp_server_context):
         mock = mock_client_factory()
         mock.post = AsyncMock(return_value=make_response(status_code=401))
-        mock.options = AsyncMock(return_value=make_response(
-            headers={"Access-Control-Allow-Origin": "*"}
-        ))
+        mock.options = AsyncMock(
+            return_value=make_response(headers={"Access-Control-Allow-Origin": "*"})
+        )
 
         with patch("app.checks.mcp.auth_check.AsyncHttpClient", return_value=mock):
             result = await check.run(mcp_server_context)
 
         assert result.success
-        cors = [f for f in result.findings if "cors" in f.title.lower() or "cross-origin" in f.title.lower()]
+        cors = [
+            f
+            for f in result.findings
+            if "cors" in f.title.lower() or "cross-origin" in f.title.lower()
+        ]
         assert len(cors) > 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Wave 1: WebSocketTransportCheck
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestWebSocketTransportCheck:
     @pytest.fixture
@@ -269,16 +278,20 @@ class TestWebSocketTransportCheck:
     @pytest.mark.asyncio
     async def test_ws_auth_bypass(self, check):
         """WS discovered when HTTP requires auth → high severity."""
-        svc = Service(url="http://test:8080", host="test", port=8080, scheme="http", service_type="ai")
+        svc = Service(
+            url="http://test:8080", host="test", port=8080, scheme="http", service_type="ai"
+        )
         ctx = {
-            "mcp_servers": [{
-                "url": "http://test:8080/mcp",
-                "path": "/mcp",
-                "transport": "http",
-                "capabilities": ["tools"],
-                "auth_required": True,
-                "service": svc.to_dict(),
-            }]
+            "mcp_servers": [
+                {
+                    "url": "http://test:8080/mcp",
+                    "path": "/mcp",
+                    "transport": "http",
+                    "capabilities": ["tools"],
+                    "auth_required": True,
+                    "service": svc.to_dict(),
+                }
+            ]
         }
         mock = mock_client_factory()
 
@@ -300,6 +313,7 @@ class TestWebSocketTransportCheck:
 # Wave 1: ToolChainAnalysisCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestToolChainAnalysisCheck:
     @pytest.fixture
     def check(self):
@@ -316,7 +330,9 @@ class TestToolChainAnalysisCheck:
         assert result.success
         assert "mcp_dangerous_chains" in result.outputs
         chains = result.outputs["mcp_dangerous_chains"]
-        assert any("exfil" in c["chain_name"].lower() or "read" in c["chain_name"].lower() for c in chains)
+        assert any(
+            "exfil" in c["chain_name"].lower() or "read" in c["chain_name"].lower() for c in chains
+        )
 
     @pytest.mark.asyncio
     async def test_detects_rce_chain(self, check, mcp_tools_context):
@@ -342,6 +358,7 @@ class TestToolChainAnalysisCheck:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Wave 1: ShadowToolDetectionCheck
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestShadowToolDetectionCheck:
     @pytest.fixture
@@ -389,12 +406,15 @@ class TestShadowToolDetectionCheck:
             result = await check.run(mcp_tools_context)
 
         high = [f for f in result.findings if f.severity == "high"]
-        assert any("list_changed" in f.title.lower() or "re-registration" in f.title.lower() for f in high)
+        assert any(
+            "list_changed" in f.title.lower() or "re-registration" in f.title.lower() for f in high
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Wave 2: ToolSchemaLeakageCheck
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestToolSchemaLeakageCheck:
     @pytest.fixture
@@ -408,17 +428,22 @@ class TestToolSchemaLeakageCheck:
     @pytest.mark.asyncio
     async def test_detects_sensitive_defaults(self, check):
         ctx = {
-            "mcp_tools": [{
-                "name": "db_query",
-                "description": "Query database",
-                "input_schema": {
-                    "properties": {
-                        "db_host": {"type": "string", "default": "prod-db.internal:5432"},
-                        "table": {"type": "string", "enum": ["users", "transactions", "api_keys"]},
+            "mcp_tools": [
+                {
+                    "name": "db_query",
+                    "description": "Query database",
+                    "input_schema": {
+                        "properties": {
+                            "db_host": {"type": "string", "default": "prod-db.internal:5432"},
+                            "table": {
+                                "type": "string",
+                                "enum": ["users", "transactions", "api_keys"],
+                            },
+                        },
                     },
-                },
-                "service_host": "test",
-            }]
+                    "service_host": "test",
+                }
+            ]
         }
         result = await check.run(ctx)
         assert result.success
@@ -429,17 +454,19 @@ class TestToolSchemaLeakageCheck:
     @pytest.mark.asyncio
     async def test_detects_sensitive_param_names(self, check):
         ctx = {
-            "mcp_tools": [{
-                "name": "admin_tool",
-                "description": "Admin tool",
-                "input_schema": {
-                    "properties": {
-                        "api_key": {"type": "string"},
-                        "bucket_name": {"type": "string"},
+            "mcp_tools": [
+                {
+                    "name": "admin_tool",
+                    "description": "Admin tool",
+                    "input_schema": {
+                        "properties": {
+                            "api_key": {"type": "string"},
+                            "bucket_name": {"type": "string"},
+                        },
                     },
-                },
-                "service_host": "test",
-            }]
+                    "service_host": "test",
+                }
+            ]
         }
         result = await check.run(ctx)
         low = [f for f in result.findings if f.severity == "low"]
@@ -448,12 +475,14 @@ class TestToolSchemaLeakageCheck:
     @pytest.mark.asyncio
     async def test_no_leaks(self, check):
         ctx = {
-            "mcp_tools": [{
-                "name": "get_time",
-                "description": "Get time",
-                "input_schema": {"properties": {"format": {"type": "string"}}},
-                "service_host": "test",
-            }]
+            "mcp_tools": [
+                {
+                    "name": "get_time",
+                    "description": "Get time",
+                    "input_schema": {"properties": {"format": {"type": "string"}}},
+                    "service_host": "test",
+                }
+            ]
         }
         result = await check.run(ctx)
         info = [f for f in result.findings if f.severity == "info"]
@@ -463,6 +492,7 @@ class TestToolSchemaLeakageCheck:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Wave 2: MCPServerFingerprintCheck
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestMCPServerFingerprintCheck:
     @pytest.fixture
@@ -485,22 +515,28 @@ class TestMCPServerFingerprintCheck:
 
     @pytest.mark.asyncio
     async def test_fingerprint_from_error(self, check):
-        svc = Service(url="http://test:8080", host="test", port=8080, scheme="http", service_type="ai")
+        svc = Service(
+            url="http://test:8080", host="test", port=8080, scheme="http", service_type="ai"
+        )
         ctx = {
-            "mcp_servers": [{
-                "url": "http://test:8080/mcp",
-                "path": "/mcp",
-                "transport": "http",
-                "capabilities": [],
-                "auth_required": False,
-                "server_info": {},
-                "service": svc.to_dict(),
-            }]
+            "mcp_servers": [
+                {
+                    "url": "http://test:8080/mcp",
+                    "path": "/mcp",
+                    "transport": "http",
+                    "capabilities": [],
+                    "auth_required": False,
+                    "server_info": {},
+                    "service": svc.to_dict(),
+                }
+            ]
         }
         mock = mock_client_factory()
-        mock.post = AsyncMock(return_value=make_response(
-            body='{"error": "McpError: method not found", "code": -32601}'
-        ))
+        mock.post = AsyncMock(
+            return_value=make_response(
+                body='{"error": "McpError: method not found", "code": -32601}'
+            )
+        )
 
         with patch("app.checks.mcp.server_fingerprint.AsyncHttpClient", return_value=mock):
             result = await check.run(ctx)
@@ -511,6 +547,7 @@ class TestMCPServerFingerprintCheck:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Wave 2: TransportSecurityCheck
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestTransportSecurityCheck:
     @pytest.fixture
@@ -537,9 +574,9 @@ class TestTransportSecurityCheck:
     @pytest.mark.asyncio
     async def test_cors_wildcard(self, check, mcp_server_context):
         mock = mock_client_factory()
-        mock.options = AsyncMock(return_value=make_response(
-            headers={"Access-Control-Allow-Origin": "*"}
-        ))
+        mock.options = AsyncMock(
+            return_value=make_response(headers={"Access-Control-Allow-Origin": "*"})
+        )
         mock.post = AsyncMock(return_value=make_response(status_code=401))
         mock.get = AsyncMock(return_value=make_response(status_code=404))
 
@@ -553,6 +590,7 @@ class TestTransportSecurityCheck:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Wave 2: MCPNotificationInjectionCheck
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestMCPNotificationInjectionCheck:
     @pytest.fixture
@@ -592,6 +630,7 @@ class TestMCPNotificationInjectionCheck:
 # Wave 3: MCPToolInvocationCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestMCPToolInvocationCheck:
     @pytest.fixture
     def check(self):
@@ -604,10 +643,12 @@ class TestMCPToolInvocationCheck:
     @pytest.mark.asyncio
     async def test_exec_tool_detected(self, check, mcp_tools_context):
         mock = mock_client_factory()
-        exec_body = json.dumps({
-            "jsonrpc": "2.0",
-            "result": {"content": [{"type": "text", "text": "chainsmith-probe\nroot"}]},
-        })
+        exec_body = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "result": {"content": [{"type": "text", "text": "chainsmith-probe\nroot"}]},
+            }
+        )
         mock.post = AsyncMock(return_value=make_response(body=exec_body))
 
         with patch("app.checks.mcp.tool_invocation.AsyncHttpClient", return_value=mock):
@@ -634,6 +675,7 @@ class TestMCPToolInvocationCheck:
 # Wave 3: MCPResourceTraversalCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestMCPResourceTraversalCheck:
     @pytest.fixture
     def check(self):
@@ -652,10 +694,14 @@ class TestMCPResourceTraversalCheck:
             params = body.get("params", {})
             uri = params.get("uri", "")
             if "passwd" in uri:
-                return make_response(body=json.dumps({
-                    "jsonrpc": "2.0",
-                    "result": {"contents": [{"text": "root:x:0:0:root:/root:/bin/bash"}]},
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "result": {"contents": [{"text": "root:x:0:0:root:/root:/bin/bash"}]},
+                        }
+                    )
+                )
             return make_response(body=json.dumps({"jsonrpc": "2.0", "result": {}}))
 
         mock.post = mock_post
@@ -670,7 +716,9 @@ class TestMCPResourceTraversalCheck:
     @pytest.mark.asyncio
     async def test_traversal_blocked(self, check, mcp_server_context):
         mock = mock_client_factory()
-        error_body = json.dumps({"jsonrpc": "2.0", "error": {"code": -1, "message": "Access denied"}})
+        error_body = json.dumps(
+            {"jsonrpc": "2.0", "error": {"code": -1, "message": "Access denied"}}
+        )
         mock.post = AsyncMock(return_value=make_response(body=error_body))
 
         with patch("app.checks.mcp.resource_traversal.AsyncHttpClient", return_value=mock):
@@ -684,6 +732,7 @@ class TestMCPResourceTraversalCheck:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Wave 3: ResourceTemplateInjectionCheck
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestResourceTemplateInjectionCheck:
     @pytest.fixture
@@ -706,19 +755,29 @@ class TestResourceTemplateInjectionCheck:
             method = body.get("method", "")
 
             if method == "resources/templates/list":
-                return make_response(body=json.dumps({
-                    "jsonrpc": "2.0",
-                    "result": {"resourceTemplates": [
-                        {"uriTemplate": "db://query/{table}", "name": "db_query"},
-                    ]},
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "result": {
+                                "resourceTemplates": [
+                                    {"uriTemplate": "db://query/{table}", "name": "db_query"},
+                                ]
+                            },
+                        }
+                    )
+                )
             elif method == "resources/read":
                 uri = body.get("params", {}).get("uri", "")
                 if "OR" in uri or "SELECT" in uri or "UNION" in uri:
-                    return make_response(body=json.dumps({
-                        "jsonrpc": "2.0",
-                        "error": {"code": -1, "message": "SQL syntax error near 'OR'"},
-                    }))
+                    return make_response(
+                        body=json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "error": {"code": -1, "message": "SQL syntax error near 'OR'"},
+                            }
+                        )
+                    )
                 return make_response(body=json.dumps({"jsonrpc": "2.0", "result": {}}))
 
             return make_response(status_code=404)
@@ -736,9 +795,11 @@ class TestResourceTemplateInjectionCheck:
     @pytest.mark.asyncio
     async def test_no_templates(self, check, mcp_server_context):
         mock = mock_client_factory()
-        mock.post = AsyncMock(return_value=make_response(
-            body=json.dumps({"jsonrpc": "2.0", "result": {"resourceTemplates": []}})
-        ))
+        mock.post = AsyncMock(
+            return_value=make_response(
+                body=json.dumps({"jsonrpc": "2.0", "result": {"resourceTemplates": []}})
+            )
+        )
 
         with patch("app.checks.mcp.template_injection.AsyncHttpClient", return_value=mock):
             result = await check.run(mcp_server_context)
@@ -749,6 +810,7 @@ class TestResourceTemplateInjectionCheck:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Wave 4: MCPPromptInjectionCheck
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestMCPPromptInjectionCheck:
     @pytest.fixture
@@ -762,8 +824,12 @@ class TestMCPPromptInjectionCheck:
     async def test_no_text_tools(self, check):
         ctx = {
             "mcp_tools": [
-                {"name": "get_time", "description": "Get time", "service_host": "test",
-                 "server_url": "http://test/mcp"},
+                {
+                    "name": "get_time",
+                    "description": "Get time",
+                    "service_host": "test",
+                    "server_url": "http://test/mcp",
+                },
             ],
             "mcp_servers": [{"url": "http://test/mcp", "service": {"host": "test"}}],
         }
@@ -775,10 +841,16 @@ class TestMCPPromptInjectionCheck:
     @pytest.mark.asyncio
     async def test_unfiltered_content_detected(self, check, mcp_tools_context):
         mock = mock_client_factory()
-        html_body = json.dumps({
-            "jsonrpc": "2.0",
-            "result": {"content": [{"type": "text", "text": "<html><body><p>Hello world</p></body></html>"}]},
-        })
+        html_body = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "result": {
+                    "content": [
+                        {"type": "text", "text": "<html><body><p>Hello world</p></body></html>"}
+                    ]
+                },
+            }
+        )
         mock.post = AsyncMock(return_value=make_response(body=html_body))
 
         with patch("app.checks.mcp.prompt_injection.AsyncHttpClient", return_value=mock):
@@ -793,6 +865,7 @@ class TestMCPPromptInjectionCheck:
 # Wave 5: MCPSamplingAbuseCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestMCPSamplingAbuseCheck:
     @pytest.fixture
     def check(self):
@@ -804,10 +877,12 @@ class TestMCPSamplingAbuseCheck:
     @pytest.mark.asyncio
     async def test_sampling_exposed(self, check, mcp_server_context):
         mock = mock_client_factory()
-        sampling_body = json.dumps({
-            "jsonrpc": "2.0",
-            "result": {"content": {"type": "text", "text": "Hello! How can I help?"}},
-        })
+        sampling_body = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "result": {"content": {"type": "text", "text": "Hello! How can I help?"}},
+            }
+        )
         mock.post = AsyncMock(return_value=make_response(body=sampling_body))
 
         with patch("app.checks.mcp.sampling_abuse.AsyncHttpClient", return_value=mock):
@@ -832,6 +907,7 @@ class TestMCPSamplingAbuseCheck:
 # Wave 5: MCPProtocolVersionCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestMCPProtocolVersionCheck:
     @pytest.fixture
     def check(self):
@@ -847,13 +923,17 @@ class TestMCPProtocolVersionCheck:
         async def mock_post(url, **kwargs):
             body = kwargs.get("json", {})
             version = body.get("params", {}).get("protocolVersion", "")
-            return make_response(body=json.dumps({
-                "jsonrpc": "2.0",
-                "result": {
-                    "protocolVersion": version,
-                    "capabilities": {"tools": {}} if version >= "2024-11-05" else {},
-                },
-            }))
+            return make_response(
+                body=json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "result": {
+                            "protocolVersion": version,
+                            "capabilities": {"tools": {}} if version >= "2024-11-05" else {},
+                        },
+                    }
+                )
+            )
 
         mock.post = mock_post
 
@@ -870,6 +950,7 @@ class TestMCPProtocolVersionCheck:
 # Wave 5: ToolRateLimitCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestToolRateLimitCheck:
     @pytest.fixture
     def check(self):
@@ -881,9 +962,11 @@ class TestToolRateLimitCheck:
     @pytest.mark.asyncio
     async def test_no_rate_limit(self, check, mcp_tools_context):
         mock = mock_client_factory()
-        mock.post = AsyncMock(return_value=make_response(
-            body=json.dumps({"jsonrpc": "2.0", "result": {"content": [{"text": "ok"}]}})
-        ))
+        mock.post = AsyncMock(
+            return_value=make_response(
+                body=json.dumps({"jsonrpc": "2.0", "result": {"content": [{"text": "ok"}]}})
+            )
+        )
 
         with patch("app.checks.mcp.rate_limit.AsyncHttpClient", return_value=mock):
             result = await check.run(mcp_tools_context)
@@ -918,6 +1001,7 @@ class TestToolRateLimitCheck:
 # Wave 5: UndeclaredCapabilityCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestUndeclaredCapabilityCheck:
     @pytest.fixture
     def check(self):
@@ -929,16 +1013,20 @@ class TestUndeclaredCapabilityCheck:
     @pytest.mark.asyncio
     async def test_undeclared_tools_accessible(self, check):
         """Server declares resources but tools/list also works."""
-        svc = Service(url="http://test:8080", host="test", port=8080, scheme="http", service_type="ai")
+        svc = Service(
+            url="http://test:8080", host="test", port=8080, scheme="http", service_type="ai"
+        )
         ctx = {
-            "mcp_servers": [{
-                "url": "http://test:8080/mcp",
-                "path": "/mcp",
-                "transport": "http",
-                "capabilities": ["resources"],  # Only resources declared
-                "auth_required": False,
-                "service": svc.to_dict(),
-            }]
+            "mcp_servers": [
+                {
+                    "url": "http://test:8080/mcp",
+                    "path": "/mcp",
+                    "transport": "http",
+                    "capabilities": ["resources"],  # Only resources declared
+                    "auth_required": False,
+                    "service": svc.to_dict(),
+                }
+            ]
         }
         mock = mock_client_factory()
 
@@ -946,10 +1034,14 @@ class TestUndeclaredCapabilityCheck:
             body = kwargs.get("json", {})
             method = body.get("method", "")
             if method == "tools/list":
-                return make_response(body=json.dumps({
-                    "jsonrpc": "2.0",
-                    "result": {"tools": [{"name": "hidden_tool"}]},
-                }))
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "result": {"tools": [{"name": "hidden_tool"}]},
+                        }
+                    )
+                )
             return make_response(body=json.dumps({"jsonrpc": "2.0", "error": {"code": -32601}}))
 
         mock.post = mock_post
@@ -964,9 +1056,13 @@ class TestUndeclaredCapabilityCheck:
     @pytest.mark.asyncio
     async def test_all_rejected(self, check, mcp_server_context):
         mock = mock_client_factory()
-        mock.post = AsyncMock(return_value=make_response(
-            body=json.dumps({"jsonrpc": "2.0", "error": {"code": -32601, "message": "Not found"}})
-        ))
+        mock.post = AsyncMock(
+            return_value=make_response(
+                body=json.dumps(
+                    {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Not found"}}
+                )
+            )
+        )
 
         with patch("app.checks.mcp.undeclared_capabilities.AsyncHttpClient", return_value=mock):
             result = await check.run(mcp_server_context)
@@ -979,6 +1075,7 @@ class TestUndeclaredCapabilityCheck:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Invocation Safety Framework
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 class TestInvocationSafety:
     def test_build_safe_payload(self):
@@ -1017,7 +1114,10 @@ class TestInvocationSafety:
     def test_build_probe_payload_exec(self):
         tool = {
             "name": "exec",
-            "input_schema": {"properties": {"command": {"type": "string"}}, "required": ["command"]},
+            "input_schema": {
+                "properties": {"command": {"type": "string"}},
+                "required": ["command"],
+            },
         }
         payload = build_probe_payload(tool, "exec")
         assert "chainsmith-probe" in payload.get("command", "")

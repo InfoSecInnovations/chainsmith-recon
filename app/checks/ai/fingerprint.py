@@ -7,10 +7,10 @@ Identify the AI/ML framework powering a service.
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.parsing import safe_json, extract_headers_dict
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.parsing import extract_headers_dict
 
 
 class AIFrameworkFingerprintCheck(ServiceIteratingCheck):
@@ -128,24 +128,28 @@ class AIFrameworkFingerprintCheck(ServiceIteratingCheck):
                 best_score = confidence_scores[best]["score"]
 
                 if best_score >= 3:
-                    confidence = "high" if best_score >= 6 else "medium" if best_score >= 4 else "low"
+                    confidence = (
+                        "high" if best_score >= 6 else "medium" if best_score >= 4 else "low"
+                    )
 
-                    result.findings.append(build_finding(
-                        check_name=self.name,
-                        title=f"AI framework identified: {best}",
-                        description=f"Service appears to be running {best} ({confidence} confidence)",
-                        severity="medium",
-                        evidence=f"Matches: {', '.join(confidence_scores[best]['matches'][:5])}",
-                        host=service.host,
-                        discriminator=f"framework-{best}",
-                        target=service,
-                        raw_data={
-                            "framework": best,
-                            "confidence": confidence,
-                            "score": best_score,
-                            "all_scores": confidence_scores,
-                        },
-                    ))
+                    result.findings.append(
+                        build_finding(
+                            check_name=self.name,
+                            title=f"AI framework identified: {best}",
+                            description=f"Service appears to be running {best} ({confidence} confidence)",
+                            severity="medium",
+                            evidence=f"Matches: {', '.join(confidence_scores[best]['matches'][:5])}",
+                            host=service.host,
+                            discriminator=f"framework-{best}",
+                            target=service,
+                            raw_data={
+                                "framework": best,
+                                "confidence": confidence,
+                                "score": best_score,
+                                "all_scores": confidence_scores,
+                            },
+                        )
+                    )
 
                     result.outputs[f"ai_framework_{service.port}"] = {
                         "framework": best,
@@ -167,8 +171,15 @@ class AIFrameworkFingerprintCheck(ServiceIteratingCheck):
             evidence["body"] = resp.body[:5000]
 
         test_endpoints = [
-            "/v1/models", "/api/tags", "/info", "/health", "/docs",
-            "/invoke", "/generate", "/_stcore/health", "/v2/health",
+            "/v1/models",
+            "/api/tags",
+            "/info",
+            "/health",
+            "/docs",
+            "/invoke",
+            "/generate",
+            "/_stcore/health",
+            "/v2/health",
         ]
         for endpoint in test_endpoints:
             resp = await client.get(service.with_path(endpoint))

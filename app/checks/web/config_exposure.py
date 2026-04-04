@@ -9,9 +9,9 @@ Secret values are NEVER stored — only redacted evidence.
 import re
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 
 class ConfigExposureCheck(ServiceIteratingCheck):
@@ -33,39 +33,97 @@ class ConfigExposureCheck(ServiceIteratingCheck):
 
     # Config file paths to check (if path_probe found them accessible)
     CONFIG_PATHS = [
-        "/.env", "/.env.local", "/.env.production", "/.env.development",
-        "/config.json", "/config.yaml", "/config.yml", "/config.toml",
-        "/settings.json", "/settings.yaml",
-        "/appsettings.json", "/application.properties", "/application.yml",
-        "/.aws/credentials", "/wp-config.php",
+        "/.env",
+        "/.env.local",
+        "/.env.production",
+        "/.env.development",
+        "/config.json",
+        "/config.yaml",
+        "/config.yml",
+        "/config.toml",
+        "/settings.json",
+        "/settings.yaml",
+        "/appsettings.json",
+        "/application.properties",
+        "/application.yml",
+        "/.aws/credentials",
+        "/wp-config.php",
     ]
 
     # Secret patterns: (name, regex, severity)
     SECRET_PATTERNS = [
         # LLM provider keys
-        ("OPENAI_API_KEY", re.compile(r"(?:OPENAI_API_KEY|openai[_-]?key)\s*[=:]\s*\S+", re.I), "critical"),
-        ("ANTHROPIC_API_KEY", re.compile(r"(?:ANTHROPIC_API_KEY|anthropic[_-]?key)\s*[=:]\s*\S+", re.I), "critical"),
-        ("HUGGINGFACE_TOKEN", re.compile(r"(?:HUGGING_?FACE[_-]?TOKEN|HF_TOKEN)\s*[=:]\s*\S+", re.I), "critical"),
+        (
+            "OPENAI_API_KEY",
+            re.compile(r"(?:OPENAI_API_KEY|openai[_-]?key)\s*[=:]\s*\S+", re.I),
+            "critical",
+        ),
+        (
+            "ANTHROPIC_API_KEY",
+            re.compile(r"(?:ANTHROPIC_API_KEY|anthropic[_-]?key)\s*[=:]\s*\S+", re.I),
+            "critical",
+        ),
+        (
+            "HUGGINGFACE_TOKEN",
+            re.compile(r"(?:HUGGING_?FACE[_-]?TOKEN|HF_TOKEN)\s*[=:]\s*\S+", re.I),
+            "critical",
+        ),
         # Cloud credentials
-        ("AWS_SECRET_ACCESS_KEY", re.compile(r"AWS_SECRET_ACCESS_KEY\s*[=:]\s*\S+", re.I), "critical"),
+        (
+            "AWS_SECRET_ACCESS_KEY",
+            re.compile(r"AWS_SECRET_ACCESS_KEY\s*[=:]\s*\S+", re.I),
+            "critical",
+        ),
         ("AWS_ACCESS_KEY_ID", re.compile(r"AWS_ACCESS_KEY_ID\s*[=:]\s*\S+", re.I), "critical"),
-        ("AZURE_KEY", re.compile(r"(?:AZURE[_-]?(?:KEY|SECRET|TOKEN))\s*[=:]\s*\S+", re.I), "critical"),
-        ("GCP_KEY", re.compile(r"(?:GOOGLE[_-]?(?:API[_-]?KEY|APPLICATION[_-]?CREDENTIALS))\s*[=:]\s*\S+", re.I), "critical"),
+        (
+            "AZURE_KEY",
+            re.compile(r"(?:AZURE[_-]?(?:KEY|SECRET|TOKEN))\s*[=:]\s*\S+", re.I),
+            "critical",
+        ),
+        (
+            "GCP_KEY",
+            re.compile(
+                r"(?:GOOGLE[_-]?(?:API[_-]?KEY|APPLICATION[_-]?CREDENTIALS))\s*[=:]\s*\S+", re.I
+            ),
+            "critical",
+        ),
         # Database credentials
-        ("DATABASE_URL", re.compile(r"(?:DATABASE_URL|DB_URL|MONGO_URI|REDIS_URL)\s*[=:]\s*\S+", re.I), "critical"),
-        ("DB_PASSWORD", re.compile(r"(?:DB_PASS(?:WORD)?|DATABASE_PASS(?:WORD)?)\s*[=:]\s*\S+", re.I), "critical"),
+        (
+            "DATABASE_URL",
+            re.compile(r"(?:DATABASE_URL|DB_URL|MONGO_URI|REDIS_URL)\s*[=:]\s*\S+", re.I),
+            "critical",
+        ),
+        (
+            "DB_PASSWORD",
+            re.compile(r"(?:DB_PASS(?:WORD)?|DATABASE_PASS(?:WORD)?)\s*[=:]\s*\S+", re.I),
+            "critical",
+        ),
         # Secrets / tokens
-        ("JWT_SECRET", re.compile(r"(?:JWT_SECRET|SESSION_SECRET|SECRET_KEY|APP_SECRET)\s*[=:]\s*\S+", re.I), "critical"),
+        (
+            "JWT_SECRET",
+            re.compile(r"(?:JWT_SECRET|SESSION_SECRET|SECRET_KEY|APP_SECRET)\s*[=:]\s*\S+", re.I),
+            "critical",
+        ),
         ("PRIVATE_KEY", re.compile(r"(?:PRIVATE_KEY|RSA_KEY)\s*[=:]\s*\S+", re.I), "critical"),
         # Generic long secret values (KEY=<20+ chars>)
-        ("GENERIC_SECRET", re.compile(r"[A-Z_]{3,}(?:KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)\s*[=:]\s*\S{20,}", re.I), "high"),
+        (
+            "GENERIC_SECRET",
+            re.compile(
+                r"[A-Z_]{3,}(?:KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)\s*[=:]\s*\S{20,}", re.I
+            ),
+            "high",
+        ),
     ]
 
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
 
         accessible = self._get_accessible_paths(service, context)
-        config_paths = [p for p in accessible if any(p.endswith(c.lstrip("/")) or p == c for c in self.CONFIG_PATHS)]
+        config_paths = [
+            p
+            for p in accessible
+            if any(p.endswith(c.lstrip("/")) or p == c for c in self.CONFIG_PATHS)
+        ]
 
         if not config_paths:
             # Also try probing common config paths directly
@@ -90,36 +148,42 @@ class ConfigExposureCheck(ServiceIteratingCheck):
                     if secrets_found:
                         # Group by severity
                         secret_names = [s[0] for s in secrets_found]
-                        max_severity = "critical" if any(s[2] == "critical" for s in secrets_found) else "high"
+                        max_severity = (
+                            "critical" if any(s[2] == "critical" for s in secrets_found) else "high"
+                        )
 
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Configuration file contains secrets: {path} at {service.host}",
-                            description=f"{len(secrets_found)} secret pattern(s) detected in {path}",
-                            severity=max_severity,
-                            evidence=f"Secrets detected (redacted): {', '.join(secret_names[:10])}",
-                            host=service.host,
-                            discriminator=f"secrets-{path.replace('/', '-').strip('-')}",
-                            target=service,
-                            target_url=url,
-                            raw_data={
-                                "path": path,
-                                "secret_types": secret_names,
-                                "count": len(secrets_found),
-                            },
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Configuration file contains secrets: {path} at {service.host}",
+                                description=f"{len(secrets_found)} secret pattern(s) detected in {path}",
+                                severity=max_severity,
+                                evidence=f"Secrets detected (redacted): {', '.join(secret_names[:10])}",
+                                host=service.host,
+                                discriminator=f"secrets-{path.replace('/', '-').strip('-')}",
+                                target=service,
+                                target_url=url,
+                                raw_data={
+                                    "path": path,
+                                    "secret_types": secret_names,
+                                    "count": len(secrets_found),
+                                },
+                            )
+                        )
                     else:
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Configuration file accessible: {path} at {service.host}",
-                            description=f"Config file {path} is publicly accessible (no secrets detected but internal config exposed)",
-                            severity="high",
-                            evidence=f"GET {url} -> 200 ({len(resp.body)} bytes, no secret patterns matched)",
-                            host=service.host,
-                            discriminator=f"config-accessible-{path.replace('/', '-').strip('-')}",
-                            target=service,
-                            target_url=url,
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Configuration file accessible: {path} at {service.host}",
+                                description=f"Config file {path} is publicly accessible (no secrets detected but internal config exposed)",
+                                severity="high",
+                                evidence=f"GET {url} -> 200 ({len(resp.body)} bytes, no secret patterns matched)",
+                                host=service.host,
+                                discriminator=f"config-accessible-{path.replace('/', '-').strip('-')}",
+                                target=service,
+                                target_url=url,
+                            )
+                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")

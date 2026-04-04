@@ -12,9 +12,6 @@ Endpoints for managing engagements (groups of related scans).
 """
 
 import logging
-from typing import Optional
-
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -33,28 +30,26 @@ _trend_repo = TrendRepository()
 class EngagementCreateInput(BaseModel):
     name: str
     target_domain: str
-    description: Optional[str] = None
-    client_name: Optional[str] = None
+    description: str | None = None
+    client_name: str | None = None
 
 
 class EngagementUpdateInput(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    client_name: Optional[str] = None
-    status: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
+    client_name: str | None = None
+    status: str | None = None
 
 
 @router.get("/api/v1/engagements")
 @router.get("/api/engagements")
 async def list_engagements(
-    status: Optional[str] = Query(None, description="Filter by status"),
+    status: str | None = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
     """List engagements."""
-    return await _engagement_repo.list_engagements(
-        status=status, limit=limit, offset=offset
-    )
+    return await _engagement_repo.list_engagements(status=status, limit=limit, offset=offset)
 
 
 @router.post("/api/v1/engagements", status_code=201)
@@ -123,9 +118,9 @@ async def get_engagement_scans(
 @router.get("/api/engagements/{engagement_id}/trend")
 async def get_engagement_trend(
     engagement_id: str,
-    since: Optional[str] = None,
-    until: Optional[str] = None,
-    last_n: Optional[int] = None,
+    since: str | None = None,
+    until: str | None = None,
+    last_n: int | None = None,
 ):
     """Get trend data for all completed scans in an engagement.
 
@@ -138,5 +133,8 @@ async def get_engagement_trend(
     if eng is None:
         raise HTTPException(404, f"Engagement '{engagement_id}' not found")
     return await _trend_repo.get_engagement_trend(
-        engagement_id, since=since, until=until, last_n=last_n,
+        engagement_id,
+        since=since,
+        until=until,
+        last_n=last_n,
     )

@@ -6,11 +6,11 @@ Discover endpoints that expose model information, versions, and configuration.
 
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.lib.evidence import fmt_endpoint_evidence
+from app.lib.findings import make_finding_id_hashed
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
-from app.lib.findings import build_finding, make_finding_id_hashed
-from app.lib.evidence import fmt_endpoint_evidence
 
 
 class ModelInfoCheck(ServiceIteratingCheck):
@@ -30,18 +30,38 @@ class ModelInfoCheck(ServiceIteratingCheck):
     techniques = ["API enumeration", "model fingerprinting", "configuration discovery"]
 
     MODEL_PATHS = [
-        "/v1/models", "/models", "/model/info", "/model-info",
-        "/api/models", "/api/v1/models",
-        "/api/tags", "/api/show",
-        "/internal/model-admin", "/debug/model", "/admin/models",
-        "/health", "/version", "/info",
-        "/config", "/api/config", "/settings",
+        "/v1/models",
+        "/models",
+        "/model/info",
+        "/model-info",
+        "/api/models",
+        "/api/v1/models",
+        "/api/tags",
+        "/api/show",
+        "/internal/model-admin",
+        "/debug/model",
+        "/admin/models",
+        "/health",
+        "/version",
+        "/info",
+        "/config",
+        "/api/config",
+        "/settings",
     ]
 
     SENSITIVE_FIELDS = [
-        "api_key", "secret", "token", "password", "credential",
-        "system_prompt", "base_prompt", "instruction",
-        "internal", "private", "cost", "billing",
+        "api_key",
+        "secret",
+        "token",
+        "password",
+        "credential",
+        "system_prompt",
+        "base_prompt",
+        "instruction",
+        "internal",
+        "private",
+        "cost",
+        "billing",
     ]
 
     HIGH_SEVERITY_PATH_KEYWORDS = ["internal", "admin", "debug"]
@@ -91,23 +111,28 @@ class ModelInfoCheck(ServiceIteratingCheck):
                     if model_details.get("model_id"):
                         evidence += f" | Model: {model_details['model_id']}"
 
-                    finding_id = make_finding_id_hashed(self.name, service.host, "info-endpoint", path)
+                    finding_id = make_finding_id_hashed(
+                        self.name, service.host, "info-endpoint", path
+                    )
                     from app.checks.base import Finding
-                    result.findings.append(Finding(
-                        id=finding_id,
-                        title=f"Model info endpoint: {path}",
-                        description="Endpoint exposes model information and configuration",
-                        severity=severity,
-                        evidence=evidence,
-                        target=service,
-                        target_url=url,
-                        check_name=self.name,
-                        raw_data={
-                            "model_details": model_details,
-                            "sensitive_fields": sensitive_found,
-                            "response_preview": resp.body[:500],
-                        },
-                    ))
+
+                    result.findings.append(
+                        Finding(
+                            id=finding_id,
+                            title=f"Model info endpoint: {path}",
+                            description="Endpoint exposes model information and configuration",
+                            severity=severity,
+                            evidence=evidence,
+                            target=service,
+                            target_url=url,
+                            check_name=self.name,
+                            raw_data={
+                                "model_details": model_details,
+                                "sensitive_fields": sensitive_found,
+                                "response_preview": resp.body[:500],
+                            },
+                        )
+                    )
 
                     result.outputs[f"model_info_{service.port}"] = model_details
 

@@ -145,6 +145,12 @@ ignore = [
     "B008",   # function call in default argument
     "B905",   # zip without strict=
     "SIM108", # ternary operator
+    "SIM102", # collapsible if statements (readability preference)
+    "SIM117", # combine with statements (readability preference)
+    "SIM116", # dict instead of if-elif (readability preference)
+    "ARG001", # unused function arguments (common in callbacks/interfaces)
+    "ARG002", # unused method arguments (common in overrides)
+    "ARG005", # unused lambda arguments (common in callbacks)
 ]
 
 [tool.ruff.lint.isort]

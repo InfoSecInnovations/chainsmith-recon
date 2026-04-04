@@ -16,81 +16,68 @@ import re
 import uuid
 from typing import Any
 
-from app.checks.base import ServiceIteratingCheck, CheckResult, CheckCondition, Service
-from app.lib.http import AsyncHttpClient, HttpConfig
+from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.findings import build_finding
+from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
 
 # Framework signatures: (pattern, framework_name, is_debug_mode, severity)
 FRAMEWORK_SIGNATURES = [
     # Django
-    (re.compile(r"You're seeing this error because you have\s+DEBUG\s*=\s*True", re.I),
-     "Django", True, "medium"),
-    (re.compile(r"Django Version:", re.I),
-     "Django", True, "medium"),
-    (re.compile(r"Using the URLconf defined in\s+\S+\.urls", re.I),
-     "Django", True, "medium"),
-
+    (
+        re.compile(r"You're seeing this error because you have\s+DEBUG\s*=\s*True", re.I),
+        "Django",
+        True,
+        "medium",
+    ),
+    (re.compile(r"Django Version:", re.I), "Django", True, "medium"),
+    (re.compile(r"Using the URLconf defined in\s+\S+\.urls", re.I), "Django", True, "medium"),
     # Flask / Werkzeug
-    (re.compile(r"Werkzeug\s+Debugger", re.I),
-     "Werkzeug/Flask", True, "high"),
-    (re.compile(r"<title>.*Werkzeug.*</title>", re.I),
-     "Werkzeug/Flask", True, "high"),
-    (re.compile(r"The debugger caught an exception", re.I),
-     "Werkzeug/Flask", True, "high"),
-    (re.compile(r'class="traceback"', re.I),
-     "Flask", False, "low"),
-
+    (re.compile(r"Werkzeug\s+Debugger", re.I), "Werkzeug/Flask", True, "high"),
+    (re.compile(r"<title>.*Werkzeug.*</title>", re.I), "Werkzeug/Flask", True, "high"),
+    (re.compile(r"The debugger caught an exception", re.I), "Werkzeug/Flask", True, "high"),
+    (re.compile(r'class="traceback"', re.I), "Flask", False, "low"),
     # Spring Boot
-    (re.compile(r"Whitelabel Error Page", re.I),
-     "Spring Boot", False, "low"),
-    (re.compile(r"This application has no explicit mapping for /error", re.I),
-     "Spring Boot", False, "low"),
-
+    (re.compile(r"Whitelabel Error Page", re.I), "Spring Boot", False, "low"),
+    (
+        re.compile(r"This application has no explicit mapping for /error", re.I),
+        "Spring Boot",
+        False,
+        "low",
+    ),
     # Express.js
-    (re.compile(r"Cannot (GET|POST|PUT|DELETE|PATCH) /\S+", re.I),
-     "Express.js", False, "low"),
-    (re.compile(r"ReferenceError:.*at\s+\S+\.js:\d+", re.I),
-     "Express.js/Node.js", True, "medium"),
-
+    (re.compile(r"Cannot (GET|POST|PUT|DELETE|PATCH) /\S+", re.I), "Express.js", False, "low"),
+    (re.compile(r"ReferenceError:.*at\s+\S+\.js:\d+", re.I), "Express.js/Node.js", True, "medium"),
     # ASP.NET
-    (re.compile(r"Server Error in '/' Application", re.I),
-     "ASP.NET", False, "low"),
-    (re.compile(r"ASP\.NET.*Version Information", re.I),
-     "ASP.NET", True, "medium"),
-    (re.compile(r"<title>.*Runtime Error.*</title>", re.I),
-     "ASP.NET", False, "low"),
-
+    (re.compile(r"Server Error in '/' Application", re.I), "ASP.NET", False, "low"),
+    (re.compile(r"ASP\.NET.*Version Information", re.I), "ASP.NET", True, "medium"),
+    (re.compile(r"<title>.*Runtime Error.*</title>", re.I), "ASP.NET", False, "low"),
     # Laravel
-    (re.compile(r"Ignition\s", re.I),
-     "Laravel", True, "medium"),
-    (re.compile(r"laravel.*exception", re.I),
-     "Laravel", True, "medium"),
-    (re.compile(r"Symfony\\Component\\HttpKernel\\Exception", re.I),
-     "Laravel/Symfony", True, "medium"),
-
+    (re.compile(r"Ignition\s", re.I), "Laravel", True, "medium"),
+    (re.compile(r"laravel.*exception", re.I), "Laravel", True, "medium"),
+    (
+        re.compile(r"Symfony\\Component\\HttpKernel\\Exception", re.I),
+        "Laravel/Symfony",
+        True,
+        "medium",
+    ),
     # FastAPI
-    (re.compile(r'"detail"\s*:\s*"(Not Found|Method Not Allowed)"', re.I),
-     "FastAPI", False, "info"),
-
+    (
+        re.compile(r'"detail"\s*:\s*"(Not Found|Method Not Allowed)"', re.I),
+        "FastAPI",
+        False,
+        "info",
+    ),
     # Ruby on Rails
-    (re.compile(r"Action\s*Controller::RoutingError", re.I),
-     "Ruby on Rails", True, "medium"),
-    (re.compile(r"Rails\.root:", re.I),
-     "Ruby on Rails", True, "medium"),
-
+    (re.compile(r"Action\s*Controller::RoutingError", re.I), "Ruby on Rails", True, "medium"),
+    (re.compile(r"Rails\.root:", re.I), "Ruby on Rails", True, "medium"),
     # Tomcat
-    (re.compile(r"Apache Tomcat/\d+", re.I),
-     "Apache Tomcat", False, "low"),
-
+    (re.compile(r"Apache Tomcat/\d+", re.I), "Apache Tomcat", False, "low"),
     # nginx
-    (re.compile(r"<center>nginx/[\d.]+</center>", re.I),
-     "nginx", False, "info"),
-
+    (re.compile(r"<center>nginx/[\d.]+</center>", re.I), "nginx", False, "info"),
     # Apache
-    (re.compile(r"Apache/[\d.]+ .* Server at", re.I),
-     "Apache HTTPD", False, "info"),
+    (re.compile(r"Apache/[\d.]+ .* Server at", re.I), "Apache HTTPD", False, "info"),
 ]
 
 # Patterns indicating a stack trace in the response
@@ -134,26 +121,32 @@ class ErrorPageCheck(ServiceIteratingCheck):
                 await self._rate_limit()
                 resp_404 = await client.get(service.with_path(random_path))
                 if not resp_404.error and resp_404.body:
-                    self._analyze_body(resp_404.body, resp_404.status_code, service, result, detected_frameworks)
+                    self._analyze_body(
+                        resp_404.body, resp_404.status_code, service, result, detected_frameworks
+                    )
                     if self._has_stack_trace(resp_404.body):
                         debug_detected = True
-                        result.findings.append(build_finding(
-                            check_name=self.name,
-                            title=f"Stack trace in 404 response: {service.host}",
-                            description="Error response contains a stack trace, leaking internal code structure",
-                            severity="low",
-                            evidence=f"GET {random_path} -> HTTP {resp_404.status_code} | Stack trace detected in response body",
-                            host=service.host,
-                            discriminator="stack-trace-404",
-                            target=service,
-                            references=["CWE-209"],
-                        ))
+                        result.findings.append(
+                            build_finding(
+                                check_name=self.name,
+                                title=f"Stack trace in 404 response: {service.host}",
+                                description="Error response contains a stack trace, leaking internal code structure",
+                                severity="low",
+                                evidence=f"GET {random_path} -> HTTP {resp_404.status_code} | Stack trace detected in response body",
+                                host=service.host,
+                                discriminator="stack-trace-404",
+                                target=service,
+                                references=["CWE-209"],
+                            )
+                        )
 
                 # 2. Trigger 405 with POST to root
                 await self._rate_limit()
                 resp_405 = await client.post(service.url)
                 if not resp_405.error and resp_405.body:
-                    self._analyze_body(resp_405.body, resp_405.status_code, service, result, detected_frameworks)
+                    self._analyze_body(
+                        resp_405.body, resp_405.status_code, service, result, detected_frameworks
+                    )
 
                 # 3. Trigger 500 with malformed JSON to common API paths
                 api_paths = self._get_api_paths(context)
@@ -165,7 +158,13 @@ class ErrorPageCheck(ServiceIteratingCheck):
                         data="{invalid json{{{",
                     )
                     if not resp_500.error and resp_500.body:
-                        self._analyze_body(resp_500.body, resp_500.status_code, service, result, detected_frameworks)
+                        self._analyze_body(
+                            resp_500.body,
+                            resp_500.status_code,
+                            service,
+                            result,
+                            detected_frameworks,
+                        )
                         if self._has_stack_trace(resp_500.body):
                             debug_detected = True
 
@@ -174,16 +173,18 @@ class ErrorPageCheck(ServiceIteratingCheck):
 
         # If no framework was identified but we got responses
         if not detected_frameworks and not debug_detected:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title=f"Custom error pages (framework not identified): {service.host}",
-                description="Error pages do not reveal framework identity",
-                severity="info",
-                evidence="No known framework signatures detected in error responses",
-                host=service.host,
-                discriminator="custom-errors",
-                target=service,
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title=f"Custom error pages (framework not identified): {service.host}",
+                    description="Error pages do not reveal framework identity",
+                    severity="info",
+                    evidence="No known framework signatures detected in error responses",
+                    host=service.host,
+                    discriminator="custom-errors",
+                    target=service,
+                )
+            )
 
         result.outputs["error_page_info"] = {
             "frameworks": detected_frameworks,
@@ -218,22 +219,26 @@ class ErrorPageCheck(ServiceIteratingCheck):
                     # Werkzeug debugger is especially dangerous (RCE)
                     if "werkzeug" in framework.lower():
                         severity = "high"
-                        description += ". Werkzeug interactive debugger may allow remote code execution"
+                        description += (
+                            ". Werkzeug interactive debugger may allow remote code execution"
+                        )
                 else:
                     title = f"Framework identified from error page: {framework}"
                     description = f"{framework} identified from error response signatures"
 
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=title,
-                    description=description,
-                    severity=severity,
-                    evidence=f"HTTP {status_code} response matched: {match.group(0)[:150]}",
-                    host=service.host,
-                    discriminator=f"framework-{framework.lower().replace('/', '-').replace(' ', '-')}",
-                    target=service,
-                    references=["CWE-209"] if is_debug else [],
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=title,
+                        description=description,
+                        severity=severity,
+                        evidence=f"HTTP {status_code} response matched: {match.group(0)[:150]}",
+                        host=service.host,
+                        discriminator=f"framework-{framework.lower().replace('/', '-').replace(' ', '-')}",
+                        target=service,
+                        references=["CWE-209"] if is_debug else [],
+                    )
+                )
 
     def _has_stack_trace(self, body: str) -> bool:
         """Check if response body contains a stack trace."""

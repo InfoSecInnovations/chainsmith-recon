@@ -12,7 +12,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.scenarios import get_scenario_manager, ScenarioLoadError
+from app.scenarios import ScenarioLoadError, get_scenario_manager
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,7 @@ router = APIRouter()
 
 class ScenarioLoadRequest(BaseModel):
     """Request to load a scenario."""
+
     name: str
 
 
@@ -46,9 +47,9 @@ async def load_scenario_endpoint(req: ScenarioLoadRequest):
             "simulation_count": len(mgr.get_simulations()),
         }
     except ScenarioLoadError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load scenario: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load scenario: {e}") from e
 
 
 @router.post("/api/v1/scenarios/clear")

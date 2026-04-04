@@ -16,9 +16,8 @@ References:
 import re
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckResult, CheckCondition
+from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.lib.findings import build_finding
-
 
 # Patterns that indicate sensitive defaults
 SENSITIVE_DEFAULT_PATTERNS = [
@@ -131,25 +130,29 @@ class ToolSchemaLeakageCheck(BaseCheck):
             for param_name, param_def in props.items():
                 param_lower = param_name.lower()
                 if param_lower in SENSITIVE_PARAM_NAMES:
-                    leaks.append({
-                        "type": "sensitive_param",
-                        "param": param_name,
-                        "detail": SENSITIVE_PARAM_NAMES[param_lower],
-                        "tool": tool_name,
-                    })
+                    leaks.append(
+                        {
+                            "type": "sensitive_param",
+                            "param": param_name,
+                            "detail": SENSITIVE_PARAM_NAMES[param_lower],
+                            "tool": tool_name,
+                        }
+                    )
 
                 # Check default values
                 default = param_def.get("default")
                 if default and isinstance(default, str):
                     for pattern, desc in SENSITIVE_DEFAULT_PATTERNS:
                         if re.search(pattern, default):
-                            leaks.append({
-                                "type": "sensitive_default",
-                                "param": param_name,
-                                "default": default,
-                                "detail": desc,
-                                "tool": tool_name,
-                            })
+                            leaks.append(
+                                {
+                                    "type": "sensitive_default",
+                                    "param": param_name,
+                                    "default": default,
+                                    "detail": desc,
+                                    "tool": tool_name,
+                                }
+                            )
                             break
 
                 # Check enum values
@@ -157,73 +160,94 @@ class ToolSchemaLeakageCheck(BaseCheck):
                 if enum_values and len(enum_values) > 1:
                     # Check if enum values look like internal structure
                     internal_hints = [
-                        v for v in enum_values
-                        if isinstance(v, str) and any(
-                            kw in v.lower() for kw in
-                            ["prod", "staging", "internal", "admin", "users",
-                             "transactions", "api_keys", "secrets", "credentials"]
+                        v
+                        for v in enum_values
+                        if isinstance(v, str)
+                        and any(
+                            kw in v.lower()
+                            for kw in [
+                                "prod",
+                                "staging",
+                                "internal",
+                                "admin",
+                                "users",
+                                "transactions",
+                                "api_keys",
+                                "secrets",
+                                "credentials",
+                            ]
                         )
                     ]
                     if internal_hints:
-                        leaks.append({
-                            "type": "sensitive_enum",
-                            "param": param_name,
-                            "values": enum_values[:10],
-                            "hints": internal_hints,
-                            "tool": tool_name,
-                        })
+                        leaks.append(
+                            {
+                                "type": "sensitive_enum",
+                                "param": param_name,
+                                "values": enum_values[:10],
+                                "hints": internal_hints,
+                                "tool": tool_name,
+                            }
+                        )
 
                 # Check param descriptions
                 param_desc = param_def.get("description", "")
                 if param_desc:
                     for pattern, desc in SENSITIVE_DESC_PATTERNS:
                         if re.search(pattern, param_desc, re.IGNORECASE):
-                            leaks.append({
-                                "type": "sensitive_param_desc",
-                                "param": param_name,
-                                "description": param_desc[:200],
-                                "detail": desc,
-                                "tool": tool_name,
-                            })
+                            leaks.append(
+                                {
+                                    "type": "sensitive_param_desc",
+                                    "param": param_name,
+                                    "description": param_desc[:200],
+                                    "detail": desc,
+                                    "tool": tool_name,
+                                }
+                            )
                             break
 
             # Check tool description
             if description:
                 for pattern, desc in SENSITIVE_DESC_PATTERNS:
                     if re.search(pattern, description, re.IGNORECASE):
-                        leaks.append({
-                            "type": "sensitive_tool_desc",
-                            "description": description[:200],
-                            "detail": desc,
-                            "tool": tool_name,
-                        })
+                        leaks.append(
+                            {
+                                "type": "sensitive_tool_desc",
+                                "description": description[:200],
+                                "detail": desc,
+                                "tool": tool_name,
+                            }
+                        )
 
             # Generate findings for this tool's leaks
             for leak in leaks:
                 all_leaks.append(leak)
                 severity, title, desc_text, evidence = self._leak_to_finding(leak)
 
-                result.findings.append(build_finding(
-                    check_name=self.name,
-                    title=title,
-                    description=desc_text,
-                    severity=severity,
-                    evidence=evidence,
-                    host=host,
-                    discriminator=f"leak-{tool_name}-{leak['type']}-{leak.get('param', 'desc')}",
-                    raw_data=leak,
-                ))
+                result.findings.append(
+                    build_finding(
+                        check_name=self.name,
+                        title=title,
+                        description=desc_text,
+                        severity=severity,
+                        evidence=evidence,
+                        host=host,
+                        discriminator=f"leak-{tool_name}-{leak['type']}-{leak.get('param', 'desc')}",
+                        raw_data=leak,
+                    )
+                )
 
         if not all_leaks:
-            result.findings.append(build_finding(
-                check_name=self.name,
-                title="Tool schemas contain no sensitive information",
-                description="No information leakage detected in MCP tool schemas.",
-                severity="info",
-                evidence=f"Tools analyzed: {len(mcp_tools)}",
-                host=host,
-                discriminator="no-leaks",
-            ))
+            result.findings.append(
+                build_finding(
+                    check_name=self.name,
+                    title="Tool schemas contain no sensitive information",
+                    description="No information leakage detected in MCP tool schemas.",
+                    severity="info",
+                    evidence=f"Tools analyzed: {len(mcp_tools)}",
+                    host=host,
+                    discriminator="no-leaks",
+                )
+            )
 
         if all_leaks:
             result.outputs["mcp_schema_leaks"] = all_leaks
