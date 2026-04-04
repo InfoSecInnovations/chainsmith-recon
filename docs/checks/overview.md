@@ -1,6 +1,6 @@
 # Check Reference
 
-Chainsmith includes 88 checks organized into 7 suites.
+Chainsmith includes 123 checks organized into 7 suites.
 
 ## Suite Execution Order
 
@@ -20,25 +20,44 @@ Within each suite, checks with dependencies wait for their requirements.
 | [web](web.md) | 23 | No | HTTP analysis |
 | [ai](ai.md) | 28 | No | LLM/ML endpoints |
 | [mcp](mcp.md) | 18 | No | MCP servers |
-| [agent](agent.md) | 2 | No | AI agents |
-| [rag](rag.md) | 2 | No | RAG systems |
-| [cag](cag.md) | 2 | No | Cache systems |
+| [agent](agent.md) | 17 | No | AI agents |
+| [rag](rag.md) | 17 | No | RAG systems |
+| [cag](cag.md) | 17 | No | Cache systems |
 
 ## Dependency Flow
 
 ```
-dns_enumeration ──┬──► service_probe ──┬──► header_analysis
-                  │                    ├──► robots_txt
+dns_enumeration ──┬──► service_probe ──┬──► header_analysis ──► ... (23 web checks)
+                  │                    │
                   │                    ├──► llm_endpoint_discovery ──┬──► prompt_leakage
                   │                    │                             ├──► jailbreak_testing
-                  │                    │                             ├──► auth_bypass
-                  │                    │                             ├──► model_behavior_fingerprint
-                  │                    │                             └──► ... (25 more AI checks)
-                  │                    ├──► embedding_endpoint_discovery ──► embedding_extraction
+                  │                    │                             └──► ... (28 AI checks total)
+                  │                    │
                   │                    ├──► mcp_discovery ──► mcp_tool_enumeration
-                  │                    ├──► agent_discovery ──► agent_goal_injection
-                  │                    ├──► rag_discovery ──► rag_indirect_injection
+                  │                    │                      ├──► mcp_auth_check
+                  │                    │                      ├──► shadow_tool_detection
+                  │                    │                      ├──► tool_chain_analysis
+                  │                    │                      ├──► mcp_tool_invocation
+                  │                    │                      └──► ... (18 MCP checks total)
+                  │                    │
+                  │                    ├──► agent_discovery ──► agent_multi_agent_detection
+                  │                    │                      ├──► agent_framework_version
+                  │                    │                      ├──► agent_goal_injection
+                  │                    │                      ├──► agent_tool_abuse
+                  │                    │                      ├──► agent_trust_chain
+                  │                    │                      └──► ... (17 agent checks total)
+                  │                    │
+                  │                    ├──► rag_discovery ──► rag_vector_store_access
+                  │                    │                    ├──► rag_indirect_injection
+                  │                    │                    ├──► rag_corpus_poisoning
+                  │                    │                    ├──► rag_cross_collection
+                  │                    │                    └──► ... (17 RAG checks total)
+                  │                    │
                   │                    └──► cag_discovery ──► cag_cache_probe
+                  │                                        ├──► cag_cross_user_leakage
+                  │                                        ├──► cag_cache_poisoning
+                  │                                        ├──► cag_injection_persistence
+                  │                                        └──► ... (17 CAG checks total)
 ```
 
 ## Check Anatomy
