@@ -490,7 +490,19 @@ class TestTrendReportSARIF:
 
 class TestTargetedExport:
     @pytest.fixture
-    async def scan_with_fingerprints(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def targeted_db(self, tmp_path):
+        """Dedicated DB fixture for targeted export tests."""
+        db_path = tmp_path / "targeted.db"
+        await init_db(backend="sqlite", db_path=db_path)
+        yield db_path
+        await close_db()
+
+    @pytest.fixture
+    async def scan_with_fingerprints(self, targeted_db):
+        scan_repo = ScanRepository()
+        finding_repo = FindingRepository()
+        chain_repo = ChainRepository()
+        check_log_repo = CheckLogRepository()
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
         # Get fingerprints
         from sqlalchemy import select
@@ -550,7 +562,7 @@ class TestTargetedExport:
         assert "# Critical Findings Only" in result["content"]
 
     @pytest.mark.asyncio
-    async def test_no_findings_raises(self, db):
+    async def test_no_findings_raises(self, targeted_db):
         with pytest.raises(ValueError, match="No findings found"):
             await generate_targeted_export(["nonexistent-fp"], "md")
 

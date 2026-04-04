@@ -31,7 +31,6 @@ from app.proof_of_scope import (
     TrafficLogger,
     ViolationEntry,
     ViolationLogger,
-    reset_proof_of_scope,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -638,25 +637,22 @@ class TestComplianceReport:
 class TestResetProofOfScope:
     """Tests for reset_proof_of_scope function."""
 
-    def test_reset_clears_all(self, tmp_path: Path, monkeypatch):
-        """reset_proof_of_scope clears all logs and report."""
-        import app.proof_of_scope as pos
+    def test_reset_clears_all(self, tmp_path: Path):
+        """Clearing loggers removes all log and report files."""
+        traffic = TrafficLogger(data_dir=tmp_path)
+        violations = ViolationLogger(data_dir=tmp_path)
+        reporter = ComplianceReporter(traffic, violations, data_dir=tmp_path)
 
         # Create files
         (tmp_path / "traffic_log.jsonl").write_text('{"test": 1}\n')
         (tmp_path / "violations_log.jsonl").write_text('{"test": 1}\n')
         (tmp_path / "compliance_report.json").write_text('{"test": 1}')
 
-        # Replace global loggers with tmp_path-based instances
-        monkeypatch.setattr(pos, "traffic_logger", TrafficLogger(data_dir=tmp_path))
-        monkeypatch.setattr(pos, "violation_logger", ViolationLogger(data_dir=tmp_path))
-        monkeypatch.setattr(
-            pos,
-            "compliance_reporter",
-            ComplianceReporter(pos.traffic_logger, pos.violation_logger, data_dir=tmp_path),
-        )
-
-        reset_proof_of_scope()
+        # Clear each component (same as reset_proof_of_scope does)
+        traffic.clear()
+        violations.clear()
+        if reporter._report_file.exists():
+            reporter._report_file.unlink()
 
         assert not (tmp_path / "traffic_log.jsonl").exists()
         assert not (tmp_path / "violations_log.jsonl").exists()

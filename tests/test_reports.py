@@ -1040,6 +1040,8 @@ PDF_MAGIC = b"%PDF"
 
 
 class TestTechnicalReportPDF:
+    xhtml2pdf = pytest.importorskip("xhtml2pdf")
+
     @pytest.mark.asyncio
     async def test_pdf_output(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -1059,6 +1061,8 @@ class TestTechnicalReportPDF:
 
 
 class TestDeltaReportPDF:
+    xhtml2pdf = pytest.importorskip("xhtml2pdf")
+
     @pytest.fixture
     async def two_scans(self, db, scan_repo, finding_repo):
         await scan_repo.create_scan(scan_id="dp-a", session_id="s1", target_domain="pdf.com")
@@ -1109,6 +1113,8 @@ class TestDeltaReportPDF:
 
 
 class TestExecutiveReportPDF:
+    xhtml2pdf = pytest.importorskip("xhtml2pdf")
+
     @pytest.mark.asyncio
     async def test_pdf_output(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -1122,6 +1128,8 @@ class TestExecutiveReportPDF:
 
 
 class TestComplianceReportPDF:
+    xhtml2pdf = pytest.importorskip("xhtml2pdf")
+
     @pytest.mark.asyncio
     async def test_pdf_output(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
@@ -1135,6 +1143,8 @@ class TestComplianceReportPDF:
 
 
 class TestTrendReportPDF:
+    xhtml2pdf = pytest.importorskip("xhtml2pdf")
+
     @pytest.fixture
     async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
         await _create_populated_scan(

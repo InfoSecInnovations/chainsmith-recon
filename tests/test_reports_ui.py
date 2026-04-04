@@ -320,10 +320,8 @@ class TestReportGenerationFromUI:
     @pytest.mark.asyncio
     async def test_pdf_format_technical(self, seeded_db):
         """PDF format produces bytes output."""
-        try:
-            result = await generate_technical_report("scan-001", "pdf")
-            assert result["format"] == "pdf"
-            assert isinstance(result["content"], bytes)
-            assert result["filename"].endswith(".pdf")
-        except ImportError:
-            pytest.skip("xhtml2pdf not installed")
+        pytest.importorskip("xhtml2pdf")
+        result = await generate_technical_report("scan-001", "pdf")
+        assert result["format"] == "pdf"
+        assert isinstance(result["content"], bytes)
+        assert result["filename"].endswith(".pdf")
