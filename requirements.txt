@@ -9,7 +9,6 @@ click>=8.1.0
 sqlalchemy>=2.0
 alembic>=1.13.0
 aiosqlite>=0.20.0
-xhtml2pdf>=0.2.11
 dnspython>=2.6.0
 ipwhois>=1.2.0
 geoip2>=4.8.0
