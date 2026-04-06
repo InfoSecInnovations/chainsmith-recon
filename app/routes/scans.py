@@ -47,7 +47,6 @@ _trend_repo = TrendRepository()
 
 
 @router.get("/api/v1/scans")
-@router.get("/api/scans")
 async def list_scans(
     target: str | None = Query(None, description="Filter by target domain"),
     status: str | None = Query(None, description="Filter by status"),
@@ -66,7 +65,6 @@ async def list_scans(
 
 
 @router.get("/api/v1/scans/{scan_id}")
-@router.get("/api/scans/{scan_id}")
 async def get_scan(scan_id: str):
     """Get details of a historical scan."""
     scan = await _scan_repo.get_scan(scan_id)
@@ -76,7 +74,6 @@ async def get_scan(scan_id: str):
 
 
 @router.get("/api/v1/scans/{scan_id}/findings")
-@router.get("/api/scans/{scan_id}/findings")
 async def get_scan_findings(
     scan_id: str,
     severity: str | None = Query(None, description="Filter by severity"),
@@ -92,7 +89,6 @@ async def get_scan_findings(
 
 
 @router.get("/api/v1/scans/{scan_id}/findings/by-host")
-@router.get("/api/scans/{scan_id}/findings/by-host")
 async def get_scan_findings_by_host(scan_id: str):
     """Get findings from a historical scan grouped by host."""
     scan = await _scan_repo.get_scan(scan_id)
@@ -104,7 +100,6 @@ async def get_scan_findings_by_host(scan_id: str):
 
 
 @router.get("/api/v1/scans/{scan_id}/chains")
-@router.get("/api/scans/{scan_id}/chains")
 async def get_scan_chains(scan_id: str):
     """Get attack chains from a historical scan."""
     scan = await _scan_repo.get_scan(scan_id)
@@ -123,7 +118,6 @@ async def get_scan_chains(scan_id: str):
 
 
 @router.get("/api/v1/scans/{scan_id}/log")
-@router.get("/api/scans/{scan_id}/log")
 async def get_scan_log(scan_id: str):
     """Get check execution log from a historical scan."""
     scan = await _scan_repo.get_scan(scan_id)
@@ -135,7 +129,6 @@ async def get_scan_log(scan_id: str):
 
 
 @router.delete("/api/v1/scans/{scan_id}")
-@router.delete("/api/scans/{scan_id}")
 async def delete_scan(scan_id: str):
     """Delete a historical scan and all its associated data."""
     deleted = await _scan_repo.delete_scan(scan_id)
@@ -145,7 +138,6 @@ async def delete_scan(scan_id: str):
 
 
 @router.get("/api/v1/scans/{scan_a_id}/compare/{scan_b_id}")
-@router.get("/api/scans/{scan_a_id}/compare/{scan_b_id}")
 async def compare_scans(scan_a_id: str, scan_b_id: str):
     """Compare two scans by finding fingerprints."""
     # Verify both scans exist
@@ -160,7 +152,6 @@ async def compare_scans(scan_a_id: str, scan_b_id: str):
 
 
 @router.get("/api/v1/targets/{domain}/trend")
-@router.get("/api/targets/{domain}/trend")
 async def get_target_trend(
     domain: str,
     since: str | None = None,
@@ -183,7 +174,6 @@ async def get_target_trend(
 
 
 @router.get("/api/v1/findings/{fingerprint}/history")
-@router.get("/api/findings/{fingerprint}/history")
 async def get_finding_history(fingerprint: str):
     """Get the status history of a finding across scans, including any manual override."""
     history = await _comparison_repo.get_finding_history(fingerprint)
@@ -200,7 +190,6 @@ class FindingOverrideInput(BaseModel):
 
 
 @router.get("/api/v1/findings/overrides")
-@router.get("/api/findings/overrides")
 async def list_finding_overrides(
     status: str | None = Query(None, description="Filter by status (accepted, false_positive)"),
 ):
@@ -209,7 +198,6 @@ async def list_finding_overrides(
 
 
 @router.put("/api/v1/findings/{fingerprint}/override")
-@router.put("/api/findings/{fingerprint}/override")
 async def set_finding_override(fingerprint: str, body: FindingOverrideInput):
     """Set a manual override on a finding (accepted risk or false positive)."""
     if body.status not in ("accepted", "false_positive"):
@@ -224,7 +212,6 @@ async def set_finding_override(fingerprint: str, body: FindingOverrideInput):
 
 
 @router.delete("/api/v1/findings/{fingerprint}/override")
-@router.delete("/api/findings/{fingerprint}/override")
 async def remove_finding_override(fingerprint: str):
     """Remove a finding override (reopen the finding)."""
     removed = await _override_repo.remove_override(fingerprint)
@@ -237,7 +224,6 @@ async def remove_finding_override(fingerprint: str):
 
 
 @router.get("/api/v1/scans/{scan_id}/severity-overrides")
-@router.get("/api/scans/{scan_id}/severity-overrides")
 async def list_scan_severity_overrides(scan_id: str):
     """List all severity overrides for a scan."""
     from app.customizations import get_scan_overrides_raw
@@ -246,7 +232,6 @@ async def list_scan_severity_overrides(scan_id: str):
 
 
 @router.put("/api/v1/scans/{scan_id}/severity-overrides")
-@router.put("/api/scans/{scan_id}/severity-overrides")
 async def set_scan_severity_override(scan_id: str, body: ScanSeverityOverrideInput):
     """Add or update a severity override for findings in a scan.
 
@@ -274,7 +259,6 @@ async def set_scan_severity_override(scan_id: str, body: ScanSeverityOverrideInp
 
 
 @router.delete("/api/v1/scans/{scan_id}/severity-overrides")
-@router.delete("/api/scans/{scan_id}/severity-overrides")
 async def delete_scan_severity_override(scan_id: str, body: ScanSeverityOverrideDeleteInput):
     """Remove a severity override from a scan by scope."""
     scope = body.scope.model_dump(exclude_none=True)
@@ -290,7 +274,6 @@ async def delete_scan_severity_override(scan_id: str, body: ScanSeverityOverride
 
 
 @router.post("/api/v1/scans/{scan_id}/severity-overrides/preview")
-@router.post("/api/scans/{scan_id}/severity-overrides/preview")
 async def preview_scan_severity_override(scan_id: str, body: ScanSeverityOverrideInput):
     """Preview which findings would be affected by an override without persisting.
 
@@ -317,7 +300,6 @@ async def preview_scan_severity_override(scan_id: str, body: ScanSeverityOverrid
 
 
 @router.get("/api/v1/capabilities")
-@router.get("/api/capabilities")
 async def get_capabilities():
     """Return server capabilities (e.g. which optional features are available)."""
     pdf_available = False
@@ -386,7 +368,6 @@ class TrendReportInput(BaseModel):
 
 
 @router.post("/api/v1/reports/technical")
-@router.post("/api/reports/technical")
 async def generate_technical_report_endpoint(body: TechnicalReportInput):
     """Generate a technical report for a historical scan."""
     from app.reports import generate_technical_report
@@ -401,7 +382,6 @@ async def generate_technical_report_endpoint(body: TechnicalReportInput):
 
 
 @router.post("/api/v1/reports/delta")
-@router.post("/api/reports/delta")
 async def generate_delta_report_endpoint(body: DeltaReportInput):
     """Generate a delta (comparison) report between two scans."""
     from app.reports import generate_delta_report
@@ -416,7 +396,6 @@ async def generate_delta_report_endpoint(body: DeltaReportInput):
 
 
 @router.post("/api/v1/reports/executive")
-@router.post("/api/reports/executive")
 async def generate_executive_report_endpoint(body: ExecutiveReportInput):
     """Generate an executive summary report for a scan."""
     from app.reports import generate_executive_report
@@ -431,7 +410,6 @@ async def generate_executive_report_endpoint(body: ExecutiveReportInput):
 
 
 @router.post("/api/v1/reports/compliance")
-@router.post("/api/reports/compliance")
 async def generate_compliance_report_endpoint(body: ComplianceReportInput):
     """Generate a compliance report for a scan."""
     from app.reports import generate_compliance_report
@@ -446,7 +424,6 @@ async def generate_compliance_report_endpoint(body: ComplianceReportInput):
 
 
 @router.post("/api/v1/reports/trend")
-@router.post("/api/reports/trend")
 async def generate_trend_report_endpoint(body: TrendReportInput):
     """Generate a trend report across multiple scans."""
     from app.reports import generate_trend_report
@@ -470,7 +447,6 @@ class TargetedExportInput(BaseModel):
 
 
 @router.post("/api/v1/reports/targeted")
-@router.post("/api/reports/targeted")
 async def generate_targeted_export_endpoint(body: TargetedExportInput):
     """Generate a report from a curated set of findings identified by fingerprint."""
     from app.reports import generate_targeted_export

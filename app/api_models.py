@@ -90,7 +90,6 @@ class ScanSettings(BaseModel):
     parallel: bool = False
     rate_limit: float = 10.0
     default_techniques: list[str] = []
-    verification_level: str = "none"  # none, sample, half, all
 
 
 # ─── Status/Info Models ───────────────────────────────────────
@@ -132,16 +131,6 @@ class FindingDetail(BaseModel):
     check_name: str | None = None
     host: str | None = None
 
-
-class AttackChain(BaseModel):
-    """Attack chain combining multiple findings."""
-
-    id: str
-    title: str
-    description: str
-    severity: str
-    findings: list[str]  # Finding IDs
-    exploitation_steps: list[str]
 
 
 class ChainStatus(BaseModel):

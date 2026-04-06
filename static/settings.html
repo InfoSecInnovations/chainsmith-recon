@@ -823,7 +823,7 @@
                 if (confirm('Reset all settings to defaults for this profile?')) {
                     try {
                         const name = document.getElementById('profile-select').value;
-                        await fetch(`/api/profiles/${name}/reset`, { method: 'POST' });
+                        await fetch(`/api/v1/profiles/${name}/reset`, { method: 'POST' });
                         await loadPreferences();
                         await updateProfileInfo();
                         showStatus('Settings reset to defaults', 'success');

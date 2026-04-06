@@ -81,7 +81,6 @@ class ProfileUpdateInput(BaseModel):
 
 
 @router.get("/api/v1/preferences")
-@router.get("/api/preferences")
 async def get_preferences_endpoint():
     """Get the active profile's resolved preferences."""
     store = get_profile_store(reload=True)
@@ -93,7 +92,6 @@ async def get_preferences_endpoint():
 
 
 @router.put("/api/v1/preferences")
-@router.put("/api/preferences")
 async def update_preferences_endpoint(updates: PreferencesUpdateInput):
     """Update preferences in the active profile."""
     store = get_profile_store(reload=True)
@@ -131,7 +129,6 @@ async def update_preferences_endpoint(updates: PreferencesUpdateInput):
 
 
 @router.get("/api/v1/profiles")
-@router.get("/api/profiles")
 async def list_profiles_endpoint():
     """List all available profiles."""
     profiles = list_profiles_internal()
@@ -142,7 +139,6 @@ async def list_profiles_endpoint():
 
 
 @router.get("/api/v1/profiles/{name}")
-@router.get("/api/profiles/{name}")
 async def get_profile_endpoint(name: str):
     """Get a specific profile by name."""
     profile = get_profile_internal(name)
@@ -159,7 +155,6 @@ async def get_profile_endpoint(name: str):
 
 
 @router.post("/api/v1/profiles")
-@router.post("/api/profiles")
 async def create_profile_endpoint(input: ProfileCreateInput):
     """Create a new profile."""
     try:
@@ -179,7 +174,6 @@ async def create_profile_endpoint(input: ProfileCreateInput):
 
 
 @router.put("/api/v1/profiles/{name}")
-@router.put("/api/profiles/{name}")
 async def update_profile_endpoint(name: str, input: ProfileUpdateInput):
     """Update an existing profile."""
     profile = get_profile_internal(name)
@@ -203,7 +197,6 @@ async def update_profile_endpoint(name: str, input: ProfileUpdateInput):
 
 
 @router.delete("/api/v1/profiles/{name}")
-@router.delete("/api/profiles/{name}")
 async def delete_profile_endpoint(name: str):
     """Delete a profile. Built-in profiles are reset instead of deleted."""
     profile = get_profile_internal(name)
@@ -226,7 +219,6 @@ async def delete_profile_endpoint(name: str):
 
 
 @router.put("/api/v1/profiles/{name}/activate")
-@router.put("/api/profiles/{name}/activate")
 async def activate_profile_endpoint(name: str):
     """Set a profile as the active profile."""
     profile = get_profile_internal(name)
@@ -247,7 +239,6 @@ async def activate_profile_endpoint(name: str):
 
 
 @router.post("/api/v1/profiles/{name}/reset")
-@router.post("/api/profiles/{name}/reset")
 async def reset_profile_endpoint(name: str):
     """Reset a profile to its default state."""
     profile = get_profile_internal(name)
@@ -265,7 +256,6 @@ async def reset_profile_endpoint(name: str):
 
 
 @router.get("/api/v1/profiles/{name}/resolve")
-@router.get("/api/profiles/{name}/resolve")
 async def resolve_profile_endpoint(name: str):
     """
     Resolve a profile to full preferences without activating it.

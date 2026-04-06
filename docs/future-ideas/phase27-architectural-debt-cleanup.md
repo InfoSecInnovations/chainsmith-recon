@@ -186,23 +186,18 @@ related routers:
 
 ## Prioritization
 
-| Item | Effort | Impact | Do first? |
-|------|--------|--------|-----------|
-| 1. Delete dead scanners | Minutes | Noise reduction | Yes |
-| 2. Fix or remove verification | Small | Correctness | Yes |
-| 3. Consolidate AttackChain | Small | Prevent drift | Yes |
-| 4. Unify Finding models | Medium | Maintainability | Yes |
-| 5. Remove route doubling | Small | API clarity | Yes |
-| 6. Fix global state | Large | Correctness | Plan first |
-| 7. Unify LLM client usage | Small | Consistency | Yes |
-| 8. Fix state.py import | Minutes | Correctness | Yes |
-| 9. Simplify adjudicator | Medium | Complexity reduction | After validation |
-| 10. Merge route files | Medium | Cognitive load | After items 1-5 |
-
-Items 1, 2, 3, 5, 7, and 8 are mechanical — they can be done in a single
-pass with no design decisions. Item 6 requires a decision about the
-concurrency model. Item 9 requires real-world usage data. Item 10 is
-cosmetic and can wait.
+| Item | Effort | Impact | Status |
+|------|--------|--------|--------|
+| 1. Delete dead scanners | Minutes | Noise reduction | **Done** (previously deleted) |
+| 2. Fix or remove verification | Small | Correctness | **Done** — removed no-op; verification is a future feature |
+| 3. Consolidate AttackChain | Small | Prevent drift | **Done** — removed unused duplicate from api_models.py |
+| 4. Unify Finding models | Medium | Maintainability | **Deferred** — future session |
+| 5. Remove route doubling | Small | API clarity | **Done** — kept /api/v1/, removed unversioned /api/ |
+| 6. Fix global state | Large | Correctness | **Deferred** — future session, needs concurrency decision |
+| 7. Unify LLM client usage | Small | Consistency | **Done** — chainsmith.py now uses get_llm_client() |
+| 8. Fix state.py import | Minutes | Correctness | **Done** — updated to CheckLauncher |
+| 9. Simplify adjudicator | Medium | Complexity reduction | **Deferred** — future session, needs usage data |
+| 10. Merge route files | Medium | Cognitive load | **Deferred** — future session |
 
 
 ## Dependencies

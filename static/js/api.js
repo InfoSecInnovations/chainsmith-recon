@@ -213,20 +213,20 @@ const api = {
     async getCurrentScenario() { return (await fetch('/api/v1/scenarios/current')).json(); },
 
     // ─── Profiles ────────────────────────────────────────────────
-    async getProfiles() { return (await fetch('/api/profiles')).json(); },
-    async getProfile(name) { return (await fetch(`/api/profiles/${name}`)).json(); },
-    async getPreferences() { return (await fetch('/api/preferences')).json(); },
+    async getProfiles() { return (await fetch('/api/v1/profiles')).json(); },
+    async getProfile(name) { return (await fetch(`/api/v1/profiles/${name}`)).json(); },
+    async getPreferences() { return (await fetch('/api/v1/preferences')).json(); },
     async updatePreferences(prefs) {
-        return (await fetch('/api/preferences', {
+        return (await fetch('/api/v1/preferences', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(prefs)
         })).json();
     },
     async activateProfile(name) {
-        return (await fetch(`/api/profiles/${name}/activate`, { method: 'PUT' })).json();
+        return (await fetch(`/api/v1/profiles/${name}/activate`, { method: 'PUT' })).json();
     },
-    async resolveProfile(name) { return (await fetch(`/api/profiles/${name}/resolve`)).json(); }
+    async resolveProfile(name) { return (await fetch(`/api/v1/profiles/${name}/resolve`)).json(); }
 };
 
 // ─── Theme Management ──────────────────────────────────────────

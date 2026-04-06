@@ -42,7 +42,6 @@ class EngagementUpdateInput(BaseModel):
 
 
 @router.get("/api/v1/engagements")
-@router.get("/api/engagements")
 async def list_engagements(
     status: str | None = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=200),
@@ -53,7 +52,6 @@ async def list_engagements(
 
 
 @router.post("/api/v1/engagements", status_code=201)
-@router.post("/api/engagements", status_code=201)
 async def create_engagement(body: EngagementCreateInput):
     """Create a new engagement."""
     return await _engagement_repo.create_engagement(
@@ -65,7 +63,6 @@ async def create_engagement(body: EngagementCreateInput):
 
 
 @router.get("/api/v1/engagements/{engagement_id}")
-@router.get("/api/engagements/{engagement_id}")
 async def get_engagement(engagement_id: str):
     """Get engagement details."""
     eng = await _engagement_repo.get_engagement(engagement_id)
@@ -75,7 +72,6 @@ async def get_engagement(engagement_id: str):
 
 
 @router.put("/api/v1/engagements/{engagement_id}")
-@router.put("/api/engagements/{engagement_id}")
 async def update_engagement(engagement_id: str, body: EngagementUpdateInput):
     """Update an engagement."""
     eng = await _engagement_repo.update_engagement(
@@ -91,7 +87,6 @@ async def update_engagement(engagement_id: str, body: EngagementUpdateInput):
 
 
 @router.delete("/api/v1/engagements/{engagement_id}")
-@router.delete("/api/engagements/{engagement_id}")
 async def delete_engagement(engagement_id: str):
     """Delete an engagement (scans are unlinked, not deleted)."""
     deleted = await _engagement_repo.delete_engagement(engagement_id)
@@ -101,7 +96,6 @@ async def delete_engagement(engagement_id: str):
 
 
 @router.get("/api/v1/engagements/{engagement_id}/scans")
-@router.get("/api/engagements/{engagement_id}/scans")
 async def get_engagement_scans(
     engagement_id: str,
     limit: int = Query(50, ge=1, le=200),
@@ -115,7 +109,6 @@ async def get_engagement_scans(
 
 
 @router.get("/api/v1/engagements/{engagement_id}/trend")
-@router.get("/api/engagements/{engagement_id}/trend")
 async def get_engagement_trend(
     engagement_id: str,
     since: str | None = None,

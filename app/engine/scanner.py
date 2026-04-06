@@ -227,16 +227,3 @@ def _run_scan_advisor(state: "AppState", launcher=None) -> None:
     except Exception as e:
         logger.warning(f"Scan advisor failed (non-fatal): {e}")
 
-
-# ─── Verification (placeholder) ───────────────────────────────
-
-
-async def run_verification(state: "AppState"):
-    """
-    Run verification on findings.
-
-    Placeholder — currently marks findings as verified without re-testing.
-    """
-    state.phase = "verifying"
-    state.phase = "done"
-    state.status = "complete"

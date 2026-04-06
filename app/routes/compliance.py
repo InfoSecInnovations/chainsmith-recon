@@ -25,7 +25,6 @@ router = APIRouter()
 
 
 @router.get("/api/v1/compliance/traffic")
-@router.get("/api/compliance/traffic")
 async def get_traffic_log(limit: int = 100):
     """Get traffic log entries."""
     entries = traffic_logger.get_entries(limit=limit)
@@ -36,7 +35,6 @@ async def get_traffic_log(limit: int = 100):
 
 
 @router.get("/api/v1/compliance/violations")
-@router.get("/api/compliance/violations")
 async def get_violations():
     """Get scope violation log."""
     violations = violation_logger.get_violations()
@@ -47,7 +45,6 @@ async def get_violations():
 
 
 @router.post("/api/v1/compliance/report")
-@router.post("/api/compliance/report")
 async def generate_compliance_report():
     """Generate a compliance report."""
     if not state.target:
@@ -64,7 +61,6 @@ async def generate_compliance_report():
 
 
 @router.get("/api/v1/compliance/report")
-@router.get("/api/compliance/report")
 async def get_compliance_report():
     """Get the latest compliance report."""
     report = compliance_reporter.get_latest_report()
@@ -88,7 +84,6 @@ def _count_by_severity(findings: list) -> dict:
 
 
 @router.post("/api/v1/export")
-@router.post("/api/export")
 async def export_report():
     """Export full scan report (findings + chains + compliance)."""
     if not state.target:

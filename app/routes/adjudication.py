@@ -29,7 +29,6 @@ _adjudication_repo = AdjudicationRepository()
 
 
 @router.post("/api/v1/adjudicate", status_code=202)
-@router.post("/api/adjudicate", status_code=202)
 async def start_adjudication(body: AdjudicateRequest = AdjudicateRequest()):
     """Start severity adjudication on verified findings.
 
@@ -55,7 +54,6 @@ async def start_adjudication(body: AdjudicateRequest = AdjudicateRequest()):
 
 
 @router.get("/api/v1/adjudication")
-@router.get("/api/adjudication")
 async def get_adjudication_status(
     scan_id: str | None = Query(None, description="Historical scan ID"),
 ):
@@ -91,7 +89,6 @@ async def get_adjudication_status(
 
 
 @router.get("/api/v1/adjudication/{finding_id}")
-@router.get("/api/adjudication/{finding_id}")
 async def get_finding_adjudication(
     finding_id: str,
     scan_id: str | None = Query(None, description="Historical scan ID"),

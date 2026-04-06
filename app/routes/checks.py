@@ -19,7 +19,6 @@ router = APIRouter()
 
 
 @router.get("/api/v1/checks")
-@router.get("/api/checks")
 async def get_available_checks():
     """Get info about all available checks (reflects scenario mode).
 
@@ -45,7 +44,6 @@ async def get_available_checks():
 
 
 @router.get("/api/v1/checks/{check_name}")
-@router.get("/api/checks/{check_name}")
 async def get_check_details(check_name: str):
     """Get detailed info about a specific check."""
     mgr = get_scenario_manager()

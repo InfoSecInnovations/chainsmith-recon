@@ -27,7 +27,6 @@ router = APIRouter()
 
 
 @router.post("/api/v1/scan", status_code=202)
-@router.post("/api/scan", status_code=202)
 async def start_scan(body: ScanStartInput = ScanStartInput()):
     """Start the web reconnaissance scan.
 
@@ -38,7 +37,7 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     if not state.target:
         raise HTTPException(400, "Scope not set. POST to /api/scope first.")
 
-    if state.status == "running" or state.status == "verifying":
+    if state.status == "running":
         raise HTTPException(409, "Scan already running.")
 
     state.status = "running"
@@ -49,8 +48,6 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     state.current_check = None
     state.check_statuses = {}
     state.check_log = []
-    state.verified_count = 0
-    state.verification_total = 0
     state.engagement_id = body.engagement_id
 
     # Launch scan in background with optional filters
@@ -68,7 +65,6 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
 
 
 @router.get("/api/v1/scan")
-@router.get("/api/scan")
 async def get_scan_status():
     """Get scan status with progress."""
     return ScanStatus(
@@ -83,7 +79,6 @@ async def get_scan_status():
 
 
 @router.get("/api/v1/scan/checks")
-@router.get("/api/scan/checks")
 async def get_check_statuses():
     """Get status of all checks that are registered for the current scan."""
     mgr = get_scenario_manager()
@@ -189,7 +184,6 @@ def _infer_suite(check_name: str) -> str:
 
 
 @router.get("/api/v1/scan/log")
-@router.get("/api/scan/log")
 async def get_check_log():
     """Get history of check executions."""
     return {"log": state.check_log}

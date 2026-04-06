@@ -6,7 +6,7 @@ Centralized state management for the Chainsmith scan engine.
 
 import uuid
 
-from app.checks import CheckRunner
+from app.check_launcher import CheckLauncher
 from app.proof_of_scope import ProofOfScopeSettings, ScopeChecker, reset_proof_of_scope
 
 
@@ -28,9 +28,9 @@ class AppState:
         self.techniques: list[str] = []
         self.findings: list[dict] = []
         self.status: str = "idle"
-        self.phase: str = "idle"  # idle, scanning, verifying, done
+        self.phase: str = "idle"  # idle, scanning, done
         self.error_message: str | None = None
-        self.runner: CheckRunner | None = None
+        self.runner: CheckLauncher | None = None
 
         # Progress tracking
         self.checks_total: int = 0
@@ -38,10 +38,6 @@ class AppState:
         self.current_check: str | None = None
         self.check_statuses: dict[str, str] = {}  # name -> status
         self.check_log: list[dict] = []  # History of check executions
-
-        # Verification tracking
-        self.verified_count: int = 0
-        self.verification_total: int = 0
 
         # Chain analysis
         self.chains: list[dict] = []
@@ -54,7 +50,6 @@ class AppState:
             "parallel": False,
             "rate_limit": 10.0,
             "default_techniques": [],
-            "verification_level": "none",  # none, sample, half, all
         }
 
         # Engagement link

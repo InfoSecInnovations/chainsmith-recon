@@ -37,14 +37,12 @@ router = APIRouter()
 
 
 @router.get("/api/v1/customizations/severity-overrides")
-@router.get("/api/customizations/severity-overrides")
 async def get_severity_overrides():
     """Get the current pre-run severity override configuration."""
     return get_severity_overrides_raw()
 
 
 @router.put("/api/v1/customizations/severity-overrides")
-@router.put("/api/customizations/severity-overrides")
 async def put_severity_overrides(body: PreRunSeverityOverridesInput):
     """Replace the entire pre-run severity override configuration."""
     data = {}
@@ -60,7 +58,6 @@ async def put_severity_overrides(body: PreRunSeverityOverridesInput):
 
 
 @router.put("/api/v1/customizations/severity-overrides/check/{check_name}")
-@router.put("/api/customizations/severity-overrides/check/{check_name}")
 async def put_check_level_override(check_name: str, body: PreRunCheckOverrideInput):
     """Set or update a check-level severity override."""
     try:
@@ -71,7 +68,6 @@ async def put_check_level_override(check_name: str, body: PreRunCheckOverrideInp
 
 
 @router.delete("/api/v1/customizations/severity-overrides/check/{check_name}")
-@router.delete("/api/customizations/severity-overrides/check/{check_name}")
 async def delete_check_level_override(check_name: str):
     """Remove a check-level severity override."""
     removed = remove_check_level_override(check_name)
@@ -84,7 +80,6 @@ async def delete_check_level_override(check_name: str):
 
 
 @router.put("/api/v1/customizations/severity-overrides/check/{check_name}/title")
-@router.put("/api/customizations/severity-overrides/check/{check_name}/title")
 async def put_check_title_override(check_name: str, body: PreRunTitleOverrideInput):
     """Set or update a check+title severity override."""
     try:
@@ -95,7 +90,6 @@ async def put_check_title_override(check_name: str, body: PreRunTitleOverrideInp
 
 
 @router.delete("/api/v1/customizations/severity-overrides/check/{check_name}/title/{title:path}")
-@router.delete("/api/customizations/severity-overrides/check/{check_name}/title/{title:path}")
 async def delete_check_title_override(check_name: str, title: str):
     """Remove a check+title severity override."""
     removed = remove_check_title_override(check_name, title)
@@ -108,7 +102,6 @@ async def delete_check_title_override(check_name: str, title: str):
 
 
 @router.post("/api/v1/customizations/severity-overrides/reload")
-@router.post("/api/customizations/severity-overrides/reload")
 async def reload_overrides():
     """Reload severity overrides from disk (useful after manual file edits)."""
     config = reload_severity_overrides()

@@ -643,7 +643,7 @@
             try {
                 if (editingProfile) {
                     // Update existing profile
-                    await fetch(`/api/profiles/${editingProfile}`, {
+                    await fetch(`/api/v1/profiles/${editingProfile}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ description: desc })
@@ -651,7 +651,7 @@
                     showStatus('Profile updated', 'success');
                 } else {
                     // Create new profile
-                    const res = await fetch('/api/profiles', {
+                    const res = await fetch('/api/v1/profiles', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ name, description: desc, base })
@@ -698,7 +698,7 @@
             if (!deletingProfile) return;
 
             try {
-                await fetch(`/api/profiles/${deletingProfile}`, { method: 'DELETE' });
+                await fetch(`/api/v1/profiles/${deletingProfile}`, { method: 'DELETE' });
                 const profile = profiles.find(p => p.name === deletingProfile);
                 const action = profile?.built_in ? 'reset' : 'deleted';
                 showStatus(`Profile ${action}: ${deletingProfile}`, 'success');

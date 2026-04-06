@@ -32,7 +32,6 @@ router = APIRouter()
 
 
 @router.post("/api/v1/reset")
-@router.post("/api/reset")
 async def reset():
     """Reset all state."""
     state.reset()
@@ -44,7 +43,6 @@ async def reset():
 
 
 @router.post("/api/v1/scope")
-@router.post("/api/scope")
 async def set_scope(scope: ExtendedScopeInput):
     """Set the scan scope with optional engagement window and proof settings."""
     state.target = scope.target
@@ -149,7 +147,6 @@ async def set_scope(scope: ExtendedScopeInput):
 
 
 @router.get("/api/v1/scope")
-@router.get("/api/scope")
 async def get_scope():
     """Get current scope including engagement window status."""
     window = state.proof_settings.engagement_window
@@ -193,7 +190,6 @@ async def get_scope():
 
 
 @router.get("/api/v1/scope/window-check")
-@router.get("/api/scope/window-check")
 async def check_engagement_window():
     """Check if current time is within engagement window."""
     window = state.proof_settings.engagement_window
@@ -212,25 +208,21 @@ async def check_engagement_window():
 
 
 @router.get("/api/v1/settings")
-@router.get("/api/settings")
 async def get_settings():
     """Get current settings."""
     return {
         "parallel": state.settings["parallel"],
         "rate_limit": state.settings["rate_limit"],
         "default_techniques": state.settings["default_techniques"],
-        "verification_level": state.settings["verification_level"],
     }
 
 
 @router.post("/api/v1/settings")
-@router.post("/api/settings")
 async def update_settings(settings: ScanSettings):
     """Update scan settings."""
     state.settings["parallel"] = settings.parallel
     state.settings["rate_limit"] = settings.rate_limit
     state.settings["default_techniques"] = settings.default_techniques
-    state.settings["verification_level"] = settings.verification_level
 
     logger.info(f"Settings updated: {state.settings}")
     return {"status": "ok", "settings": state.settings}

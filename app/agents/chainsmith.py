@@ -10,9 +10,8 @@ import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 
-from openai import AsyncOpenAI
-
-from app.config import ATTACK_PATTERNS_PATH, LITELLM_BASE_URL
+from app.config import ATTACK_PATTERNS_PATH
+from app.lib.llm import get_llm_client
 from app.models import (
     AgentEvent,
     AgentType,
@@ -47,7 +46,7 @@ class ChainsmithAgent:
             "techniques": True,  # Always true - we use safe defaults
         }
 
-        self.client = AsyncOpenAI(base_url=LITELLM_BASE_URL, api_key="not-needed")
+        self.client = get_llm_client()
 
     def _load_patterns(self) -> list[dict]:
         """Load attack patterns from knowledge base."""

@@ -28,7 +28,6 @@ _chain_repo = ChainRepository()
 
 
 @router.post("/api/v1/chains/analyze", status_code=202)
-@router.post("/api/chains/analyze", status_code=202)
 async def analyze_chains():
     """Start chain analysis (rule-based + LLM)."""
     if len(state.findings) == 0:
@@ -51,7 +50,6 @@ async def analyze_chains():
 
 
 @router.get("/api/v1/chains")
-@router.get("/api/chains")
 async def get_chains(
     scan_id: str | None = Query(None, description="Historical scan ID"),
 ):
@@ -85,7 +83,6 @@ async def get_chains(
 
 
 @router.post("/api/v1/chains/retry", status_code=202)
-@router.post("/api/chains/retry", status_code=202)
 async def retry_chain_analysis():
     """Re-run LLM chain analysis only (keeps existing rule-based chains)."""
     if len(state.findings) == 0:
@@ -107,7 +104,6 @@ async def retry_chain_analysis():
 
 
 @router.get("/api/v1/chains/{chain_id}")
-@router.get("/api/chains/{chain_id}")
 async def get_chain_detail(chain_id: str):
     """Get details of a specific chain."""
     chain = next((c for c in state.chains if c["id"] == chain_id), None)

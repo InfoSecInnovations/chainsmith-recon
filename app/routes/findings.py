@@ -26,7 +26,6 @@ _finding_repo = FindingRepository()
 
 
 @router.get("/api/v1/findings")
-@router.get("/api/findings")
 async def get_findings(
     scan_id: str | None = Query(None, description="Historical scan ID"),
     severity: str | None = Query(None, description="Filter by severity"),
@@ -41,7 +40,6 @@ async def get_findings(
 
 
 @router.get("/api/v1/findings/by-host")
-@router.get("/api/findings/by-host")
 async def get_findings_by_host(
     scan_id: str | None = Query(None, description="Historical scan ID"),
 ):
@@ -94,7 +92,6 @@ async def get_findings_by_host(
 
 
 @router.get("/api/v1/findings/{finding_id}")
-@router.get("/api/findings/{finding_id}")
 async def get_finding_detail(finding_id: str):
     """Get detailed info about a specific finding."""
     finding = next((f for f in state.findings if f["id"] == finding_id), None)
