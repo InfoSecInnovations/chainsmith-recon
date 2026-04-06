@@ -86,7 +86,7 @@ The agent does NOT depend on:
 
 - `app/routes/` — No server/API layer
 - `app/engine/chains.py` — No chain analysis
-- `app/agents/` — No LLM agents (verifier, chainsmith, scout)
+- `app/agents/` — No LLM agents (verifier, chainsmith)
 - `app/preferences.py` — Preferences are coordinator-side
 - `static/` — No UI
 

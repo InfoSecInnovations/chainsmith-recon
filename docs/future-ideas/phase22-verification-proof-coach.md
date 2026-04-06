@@ -21,7 +21,7 @@ evidence_quality: direct_observation | inferred | claimed_no_proof
   returned 200, CVE exists in NVD).
 - `inferred` — evidence is consistent but not conclusive (version string in
   header matches known-vulnerable range, but no direct probe).
-- `claimed_no_proof` — Scout reported a finding with no verifiable evidence
+- `claimed_no_proof` — ScanAdvisor reported a finding with no verifiable evidence
   attached.
 
 Proof Advisor keys off this field to decide how much reproduction guidance
@@ -34,7 +34,7 @@ so downstream agents (Proof Advisor, Adjudicator) and the operator get more
 signal without changing the Verifier's role.
 
 Before: `"CVE-2021-41773 confirmed in NVD"`
-After:  `"CVE-2021-41773 exists in NVD. Published 2021-10-05, CVSS 7.5. Affects Apache 2.4.49-2.4.50. Scout's claimed version (2.4.49) falls within the affected range."`
+After:  `"CVE-2021-41773 exists in NVD. Published 2021-10-05, CVSS 7.5. Affects Apache 2.4.49-2.4.50. ScanAdvisor's claimed version (2.4.49) falls within the affected range."`
 
 ### No new responsibilities
 
@@ -71,7 +71,7 @@ It never discovers new things. It works with what Verifier already stamped.
 ### Pipeline position
 
 ```
-Scout -> Verifier -> Proof Advisor -> Chainsmith
+ScanAdvisor -> Verifier -> Proof Advisor -> Chainsmith
 ```
 
 ### Triggering
@@ -116,7 +116,7 @@ the operator *prove the finding exists*. They complement each other:
   present, and here's what your report evidence section should include."
 
 If both are active, Proof Advisor should consume the Adjudicator's
-`adjudicated_severity` rather than Scout's original severity for its
+`adjudicated_severity` rather than ScanAdvisor's original severity for its
 rationale section.
 
 
@@ -129,7 +129,7 @@ context.
 ### What it answers
 
 - "What is a CORS misconfiguration and why does it matter?"
-- "Why did Scout run HeaderAnalysis before ChatEndpointDiscovery?"
+- "Why did ScanAdvisor run HeaderAnalysis before ChatEndpointDiscovery?"
 - "What does it mean that Verifier rejected F-004?"
 - "Explain this attack chain like I'm presenting to a non-technical stakeholder"
 - "What's the difference between verified and hallucination?"
@@ -172,7 +172,7 @@ not streamed continuously.
 
 ```python
 class AgentType(str, Enum):
-    SCOUT = "scout"
+    SCAN_ADVISOR = "scan_advisor"
     VERIFIER = "verifier"
     CHAINSMITH = "chainsmith"
     GUARDIAN = "guardian"

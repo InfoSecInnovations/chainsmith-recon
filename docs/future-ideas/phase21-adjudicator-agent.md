@@ -3,7 +3,7 @@
 ## Overview
 
 A new agent that challenges and debates the risk criticality of findings and
-attack chains. The current pipeline (Scout -> Verifier -> Chainsmith) validates
+attack chains. The current pipeline (ScanAdvisor -> Verifier -> Chainsmith) validates
 whether findings *exist* but never questions whether the assigned severity is
 *accurate*. The Adjudicator fills that gap by introducing adversarial reasoning
 about risk ratings.
@@ -11,7 +11,7 @@ about risk ratings.
 ## Motivation
 
 - A verified finding is not necessarily an exploitable one.
-- Severity labels assigned by Scout are static and context-free.
+- Severity labels assigned by ScanAdvisor are static and context-free.
 - Chain severity multipliers (from `attack_patterns.json`) are pattern-based
   and don't account for target-specific context (e.g., internal-only services,
   VPN-protected assets).
@@ -74,7 +74,7 @@ The approach is configurable at three levels (highest priority wins):
 
 ## Output Model
 
-Rather than overwriting Scout's original severity, the Adjudicator should
+Rather than overwriting ScanAdvisor's original severity, the Adjudicator should
 produce a separate `adjudicated_risk` field:
 
 ```
@@ -177,4 +177,4 @@ SEVERITY_ADJUSTED
 All LLM calls are handled via the existing `get_llm_client()` path, resolved
 from `--profile` in `chainsmith.sh`. A `model_adjudicator` field will be added
 to `LiteLLMConfig` in `app/config.py` for per-agent model overrides, consistent
-with `model_scout`, `model_verifier`, and `model_chainsmith`.
+with `model_verifier` and `model_chainsmith`.
