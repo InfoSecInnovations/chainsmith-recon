@@ -1,10 +1,3 @@
-import pytest
-
-
-pytestmark = pytest.mark.integration
-
-pytestmark = pytest.mark.integration
-
 """
 Tests for Phase 4g: Report Generation UI.
 
@@ -30,6 +23,8 @@ from app.reports import (
     generate_technical_report,
     generate_trend_report,
 )
+
+pytestmark = pytest.mark.integration
 
 # --- Fixtures ----------------------------------------------------------------
 

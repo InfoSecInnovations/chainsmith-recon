@@ -11,7 +11,6 @@ from app.scenarios import (
     load_scenario_file,
 )
 
-
 pytestmark = pytest.mark.unit
 
 

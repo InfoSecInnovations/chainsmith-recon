@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.proof_of_scope import (
-    ComplianceReport,
     EngagementWindow,
     ProofOfScopeSettings,
     ScopeStatus,
@@ -13,7 +12,6 @@ from app.proof_of_scope import (
     TrafficEntryType,
     ViolationEntry,
 )
-
 
 pytestmark = pytest.mark.unit
 

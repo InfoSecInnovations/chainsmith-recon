@@ -29,8 +29,6 @@ from app.preferences import (
     set_value,
 )
 
-
-
 pytestmark = pytest.mark.unit
 
 @pytest.fixture

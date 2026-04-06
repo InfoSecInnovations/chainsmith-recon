@@ -14,7 +14,6 @@ from app.db.repositories import (
     ScanRepository,
 )
 
-
 pytestmark = pytest.mark.integration
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────

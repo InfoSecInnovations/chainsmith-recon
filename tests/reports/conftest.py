@@ -16,7 +16,6 @@ from app.db.repositories import (
     TrendRepository,
 )
 
-
 # --- Shared path constants for viz tests ------------------------------------
 
 STATIC_DIR = Path(__file__).parent.parent.parent / "static"

@@ -8,7 +8,6 @@ from app.checks.base import Service
 from app.checks.web.error_page import ErrorPageCheck
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
 # ═══════════════════════════════════════════════════════════════════════════════

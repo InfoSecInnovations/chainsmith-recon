@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.checks.network.geoip import HOSTING_ASNS, RESIDENTIAL_ASNS, GeoIpCheck
 
 

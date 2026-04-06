@@ -10,7 +10,6 @@ from app.checks.web.hsts_preload import HSTSPreloadCheck
 from app.checks.web.sri_check import SRICheck
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
 # ═══════════════════════════════════════════════════════════════════════════════

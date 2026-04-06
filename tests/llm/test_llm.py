@@ -27,7 +27,6 @@ from app.lib.llm import (
     reset_llm_client,
 )
 
-
 pytestmark = pytest.mark.unit
 
 # ═══════════════════════════════════════════════════════════════════════════════

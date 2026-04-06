@@ -21,7 +21,6 @@ from app.preferences import (
     save_profile_store,
 )
 
-
 pytestmark = pytest.mark.integration
 
 # ═══════════════════════════════════════════════════════════════════════════════

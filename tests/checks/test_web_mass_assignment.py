@@ -9,7 +9,6 @@ from app.checks.base import Service
 from app.checks.web.mass_assignment import MassAssignmentCheck
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
 # ═══════════════════════════════════════════════════════════════════════════════

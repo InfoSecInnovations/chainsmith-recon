@@ -20,7 +20,6 @@ from app.checks.mcp.tool_invocation import MCPToolInvocationCheck
 from app.checks.mcp.undeclared_capabilities import UndeclaredCapabilityCheck
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared Fixtures
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -14,7 +14,6 @@ Three approaches available:
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 
 from app.lib.llm import LLMResponse, get_llm_client
 from app.models import (
@@ -525,6 +524,6 @@ class AdjudicatorAgent:
         if cleaned.startswith("```"):
             lines = cleaned.split("\n")
             # Remove first line (```json) and last line (```)
-            lines = [l for l in lines if not l.strip().startswith("```")]
+            lines = [line for line in lines if not line.strip().startswith("```")]
             cleaned = "\n".join(lines)
         return cleaned.strip()

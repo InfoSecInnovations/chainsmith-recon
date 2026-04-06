@@ -1,7 +1,6 @@
 """Tests for database engine lifecycle, fingerprinting, and storage configuration."""
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import func, select
@@ -9,7 +8,6 @@ from sqlalchemy import func, select
 from app.db.engine import close_db, get_session, init_db
 from app.db.models import Chain, CheckLog, Finding, Scan
 from app.db.repositories import _generate_fingerprint
-
 
 pytestmark = pytest.mark.integration
 

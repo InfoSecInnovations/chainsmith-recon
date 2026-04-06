@@ -8,7 +8,6 @@ from app.reports import generate_executive_report
 
 from .conftest import PDF_MAGIC, _create_populated_scan
 
-
 pytestmark = pytest.mark.integration
 
 

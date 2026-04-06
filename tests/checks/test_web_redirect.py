@@ -8,7 +8,6 @@ from app.checks.base import Service
 from app.checks.web.redirect_chain import RedirectChainCheck
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
 # ═══════════════════════════════════════════════════════════════════════════════

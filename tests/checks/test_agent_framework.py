@@ -13,7 +13,6 @@ from app.checks.agent.state_manipulation import AgentStateManipulationCheck
 from app.checks.base import Service
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
 # ═══════════════════════════════════════════════════════════════════════════════

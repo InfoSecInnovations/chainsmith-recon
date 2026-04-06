@@ -12,13 +12,11 @@ from app.proof_of_scope import (
     ProofOfScopeSettings,
     ScopeChecker,
     ScopeStatus,
-    TrafficEntry,
     TrafficEntryType,
     TrafficLogger,
     ViolationEntry,
     ViolationLogger,
 )
-
 
 pytestmark = pytest.mark.unit
 

@@ -3,9 +3,6 @@
 import socket
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
-from app.checks.base import Service
 from app.checks.network.dns_enumeration import DEFAULT_WORDLIST, DnsEnumerationCheck
 
 

@@ -4,8 +4,6 @@ tests/test_preferences_api.py - Tests for preferences and profiles REST API endp
 
 import pytest
 
-
-
 pytestmark = pytest.mark.unit
 
 @pytest.fixture

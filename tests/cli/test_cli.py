@@ -24,7 +24,6 @@ from app.cli_formatters import (
     format_finding_terminal,
 )
 
-
 pytestmark = pytest.mark.unit
 
 # ═══════════════════════════════════════════════════════════════════════════════

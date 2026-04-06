@@ -1,20 +1,20 @@
 {
-  "session_id": "ccd762b4",
+  "session_id": "85d7be3e",
   "scenario": "fakobanko",
-  "created_at": "2026-03-31T20:39:31.823058",
+  "created_at": "2026-04-06T14:51:50.236099",
   "selected_chains": [
     {
-      "id": "model_info_disclosure",
-      "chain_name": "Model Architecture Intelligence",
-      "description": "Model serving endpoint leaks architecture details",
-      "severity": "medium",
+      "id": "tool_abuse_surface",
+      "chain_name": "Agent Tool Abuse",
+      "description": "Exposed tool schemas enable unauthorized actions",
+      "severity": "critical",
       "required_services": [
-        "ml"
+        "chat",
+        "agent"
       ],
       "required_findings": [
-        "model_info_endpoint",
-        "framework_fingerprint",
-        "model_config_exposed"
+        "tool_chain_exposed",
+        "chatbot_tool_leak"
       ]
     },
     {
@@ -33,11 +33,14 @@
     }
   ],
   "active_services": [
+    "agent",
+    "chat",
     "ml",
     "vector"
   ],
   "extra_findings": [
-    "jwt_shared_secret",
-    "employee_directory_exposed"
+    "resource_list_exposed",
+    "version_mismatch",
+    "jwt_shared_secret"
   ]
 }

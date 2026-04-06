@@ -6,7 +6,6 @@ import pytest
 
 from app.checks.base import Service
 
-
 # ═══════════════════════════════════════════════════════════════════
 # HTTP Method Enumeration Check Tests
 # ═══════════════════════════════════════════════════════════════════

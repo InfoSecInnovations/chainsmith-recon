@@ -9,7 +9,6 @@ from app.checks.agent.trust_chain import AgentTrustChainCheck
 from app.checks.base import Service
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -27,7 +27,6 @@ from app.config import (
     load_config,
 )
 
-
 pytestmark = pytest.mark.unit
 
 # ═══════════════════════════════════════════════════════════════════════════════

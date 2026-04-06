@@ -11,7 +11,6 @@ from app.checks.agent.multi_agent_detection import AgentMultiAgentDetectionCheck
 from app.checks.base import Service
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
 # ═══════════════════════════════════════════════════════════════════════════════

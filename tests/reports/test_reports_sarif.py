@@ -31,7 +31,6 @@ from app.reports import (
     generate_trend_report,
 )
 
-
 pytestmark = pytest.mark.integration
 
 # --- Fixtures ----------------------------------------------------------------

@@ -1,8 +1,7 @@
 """Tests for WhoisLookupCheck: WHOIS domain registration, parsing, ASN/RDAP lookup, and findings."""
 
-import socket
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 

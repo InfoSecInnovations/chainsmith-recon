@@ -16,7 +16,6 @@ from app.checks.mcp.template_injection import ResourceTemplateInjectionCheck
 from app.checks.mcp.websocket_transport import WebSocketTransportCheck
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared Fixtures
 # ═══════════════════════════════════════════════════════════════════════════════

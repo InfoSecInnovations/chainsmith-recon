@@ -4,8 +4,6 @@ from unittest.mock import patch
 
 import pytest
 
-from app.checks.base import Service
-
 
 class TestReverseDnsCheckInit:
     """Test ReverseDnsCheck metadata and initialization."""

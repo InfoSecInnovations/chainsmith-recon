@@ -14,7 +14,6 @@ Covers:
 
 import json
 from datetime import datetime
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -33,7 +32,6 @@ from app.models import (
     OperatorAssetContext,
     OperatorContext,
 )
-
 
 pytestmark = pytest.mark.unit
 
@@ -558,7 +556,7 @@ class TestAdjudicatedRiskModel:
         assert risk.adjudicated_by == AgentType.ADJUDICATOR
 
     def test_confidence_bounds(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             AdjudicatedRisk(
                 finding_id="F-001",
                 original_severity=FindingSeverity.HIGH,

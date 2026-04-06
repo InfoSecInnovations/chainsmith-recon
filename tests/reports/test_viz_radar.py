@@ -4,7 +4,6 @@ import pytest
 
 from .conftest import _all_viz_content
 
-
 pytestmark = pytest.mark.unit
 
 

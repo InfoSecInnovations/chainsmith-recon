@@ -23,7 +23,6 @@ from app.preferences import (
     resolve_on_critical,
 )
 
-
 pytestmark = pytest.mark.unit
 
 # ─── Fixtures ────────────────────────────────────────────────────────────

@@ -1,6 +1,5 @@
 """Tests for TracerouteCheck: TCP-based network path tracing, CDN detection, and hop probing."""
 
-import socket
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

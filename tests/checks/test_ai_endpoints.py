@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.checks.ai.endpoints import EmbeddingEndpointCheck, LLMEndpointCheck
-from app.checks.ai.prompt_leak import PromptLeakageCheck
 from app.checks.base import Service
 from app.lib.http import HttpResponse
 

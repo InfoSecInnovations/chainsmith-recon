@@ -13,8 +13,6 @@ from click.testing import CliRunner
 from app.cli import cli
 from app.cli_client import ChainsmithAPIError
 
-
-
 pytestmark = pytest.mark.unit
 
 @pytest.fixture

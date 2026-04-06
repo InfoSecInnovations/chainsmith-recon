@@ -8,7 +8,6 @@ from app.checks.base import Service
 from app.checks.web.ssrf_indicator import SSRFIndicatorCheck
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers
 # ═══════════════════════════════════════════════════════════════════════════════

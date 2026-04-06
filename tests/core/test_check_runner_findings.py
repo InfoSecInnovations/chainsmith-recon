@@ -3,10 +3,10 @@
 import asyncio
 from typing import Any
 
+import pytest
+
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Finding, Service
 from app.checks.runner import CheckRunner
-
-import pytest
 
 pytestmark = pytest.mark.unit
 

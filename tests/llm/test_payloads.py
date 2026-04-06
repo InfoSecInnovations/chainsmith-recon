@@ -19,7 +19,6 @@ from app.lib.payloads import (
     get_payloads_for_check,
 )
 
-
 pytestmark = pytest.mark.unit
 
 # ═══════════════════════════════════════════════════════════════════════════════

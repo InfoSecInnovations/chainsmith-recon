@@ -12,13 +12,13 @@ Covers:
 - Disabled advisor returns empty list
 """
 
+import pytest
+
 from app.scan_advisor import (
     ScanAdvisor,
     ScanAdvisorConfig,
     ScanAdvisorRecommendation,
 )
-
-import pytest
 
 pytestmark = pytest.mark.unit
 

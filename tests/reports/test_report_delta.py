@@ -8,7 +8,6 @@ from app.reports import generate_delta_report
 
 from .conftest import PDF_MAGIC
 
-
 pytestmark = pytest.mark.integration
 
 

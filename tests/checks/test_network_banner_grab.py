@@ -1,11 +1,10 @@
 """Tests for BannerGrabCheck: non-HTTP banner grabbing, service identification, Redis auth probing."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from app.checks.base import Service
-
 
 # ═══════════════════════════════════════════════════════════════════
 # Banner Grabbing Check Tests

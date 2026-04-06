@@ -7,7 +7,6 @@ belong here. Domain-specific fixtures live in subdirectory conftest.py files.
 
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 

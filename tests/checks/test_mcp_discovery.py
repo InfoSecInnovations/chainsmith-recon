@@ -11,7 +11,6 @@ from app.checks.mcp.server_fingerprint import MCPServerFingerprintCheck
 from app.checks.mcp.transport_security import TransportSecurityCheck
 from app.lib.http import HttpResponse
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared Fixtures
 # ═══════════════════════════════════════════════════════════════════════════════

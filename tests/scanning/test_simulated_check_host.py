@@ -11,7 +11,6 @@ from app.checks.simulator.simulated_check import (
     load_simulated_checks_from_dir,
 )
 
-
 pytestmark = pytest.mark.unit
 
 # ═══════════════════════════════════════════════════════════════════════════════

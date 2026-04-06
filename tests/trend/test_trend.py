@@ -19,7 +19,6 @@ from app.db.repositories import (
     TrendRepository,
 )
 
-
 pytestmark = pytest.mark.unit
 
 # --- Fixtures ----------------------------------------------------------------

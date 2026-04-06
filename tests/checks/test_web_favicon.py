@@ -1,6 +1,5 @@
 """Tests for FaviconCheck and HTTP2DetectionCheck."""
 
-import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -9,7 +8,6 @@ from app.checks.base import Service
 from app.checks.web.favicon import FaviconCheck
 from app.checks.web.http2_detection import HTTP2DetectionCheck
 from app.lib.http import HttpResponse
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fixtures & Helpers

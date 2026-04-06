@@ -13,6 +13,8 @@ Covers:
 import asyncio
 from typing import Any
 
+import pytest
+
 from app.checks.base import (
     BaseCheck,
     CheckCondition,
@@ -23,8 +25,6 @@ from app.checks.base import (
     ServiceIteratingCheck,
     Severity,
 )
-
-import pytest
 
 pytestmark = pytest.mark.unit
 
