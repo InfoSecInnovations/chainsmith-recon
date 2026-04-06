@@ -98,6 +98,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests",
     "network: marks tests requiring network access",
+    "unit: pure logic, no I/O",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

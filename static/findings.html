@@ -543,6 +543,9 @@
                     document.querySelectorAll('.viz-panel').forEach(p => p.classList.remove('active'));
                     tab.classList.add('active');
                     document.getElementById('panel-' + tab.dataset.viz).classList.add('active');
+
+                    // Re-render size-dependent visualizations now that the panel is visible
+                    if (findings.length && tab.dataset.viz === 'treemap') Viz.renderTreemap();
                 });
             });
         }
