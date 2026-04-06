@@ -117,20 +117,24 @@ async def run_adjudication(
         findings = []
         for f in state.findings:
             if isinstance(f, dict):
-                findings.append(Finding(
-                    id=f.get("id", "unknown"),
-                    finding_type=f.get("check_name", f.get("finding_type", "unknown")),
-                    title=f.get("title", ""),
-                    description=f.get("description", ""),
-                    severity=f.get("severity", "info"),
-                    status=f.get("verification_status", f.get("status", "pending")),
-                    confidence=f.get("confidence", 0.5),
-                    discovered_by=f.get("discovered_by", "scout"),
-                    discovered_at=f.get("discovered_at", f.get("created_at", "2000-01-01T00:00:00")),
-                    target_url=f.get("target_url"),
-                    target_service=f.get("host"),
-                    evidence_summary=f.get("evidence"),
-                ))
+                findings.append(
+                    Finding(
+                        id=f.get("id", "unknown"),
+                        finding_type=f.get("check_name", f.get("finding_type", "unknown")),
+                        title=f.get("title", ""),
+                        description=f.get("description", ""),
+                        severity=f.get("severity", "info"),
+                        status=f.get("verification_status", f.get("status", "pending")),
+                        confidence=f.get("confidence", 0.5),
+                        discovered_by=f.get("discovered_by", "scout"),
+                        discovered_at=f.get(
+                            "discovered_at", f.get("created_at", "2000-01-01T00:00:00")
+                        ),
+                        target_url=f.get("target_url"),
+                        target_service=f.get("host"),
+                        evidence_summary=f.get("evidence"),
+                    )
+                )
             else:
                 findings.append(f)
 

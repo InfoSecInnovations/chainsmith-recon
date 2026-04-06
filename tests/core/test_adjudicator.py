@@ -144,7 +144,6 @@ def sample_operator_context():
 
 
 class TestAgentInstantiation:
-
     @patch("app.agents.adjudicator.get_llm_client")
     def test_default_approach_is_auto(self, mock_get):
         mock_get.return_value = MagicMock()
@@ -171,7 +170,6 @@ class TestAgentInstantiation:
 
 
 class TestAutoTiering:
-
     @patch("app.agents.adjudicator.get_llm_client")
     def test_critical_uses_adversarial(self, mock_get):
         mock_get.return_value = MagicMock()
@@ -221,7 +219,6 @@ class TestAutoTiering:
 
 
 class TestStructuredChallenge:
-
     @pytest.mark.asyncio
     @patch("app.agents.adjudicator.get_llm_client")
     async def test_severity_adjusted(self, mock_get, mock_llm_client):
@@ -273,14 +270,21 @@ class TestStructuredChallenge:
 
 
 class TestAdversarialDebate:
-
     @pytest.mark.asyncio
     @patch("app.agents.adjudicator.get_llm_client")
     async def test_three_llm_calls(self, mock_get, mock_llm_client):
         mock_get.return_value = mock_llm_client
 
-        prosecution = {"argument": "This is critical", "suggested_severity": "critical", "key_factors": ["exposed"]}
-        defense = {"argument": "This is overstated", "suggested_severity": "low", "key_factors": ["vpn"]}
+        prosecution = {
+            "argument": "This is critical",
+            "suggested_severity": "critical",
+            "key_factors": ["exposed"],
+        }
+        defense = {
+            "argument": "This is overstated",
+            "suggested_severity": "low",
+            "key_factors": ["vpn"],
+        }
         verdict = _challenge_response("medium", 0.9)
 
         mock_llm_client.chat.side_effect = [
@@ -305,7 +309,6 @@ class TestAdversarialDebate:
 
 
 class TestEvidenceRubric:
-
     @pytest.mark.asyncio
     @patch("app.agents.adjudicator.get_llm_client")
     async def test_rubric_scoring(self, mock_get, mock_llm_client):
@@ -327,7 +330,6 @@ class TestEvidenceRubric:
 
 
 class TestOperatorContext:
-
     @patch("app.agents.adjudicator.get_llm_client")
     def test_match_exact_domain(self, mock_get, sample_operator_context):
         mock_get.return_value = MagicMock()
@@ -366,7 +368,6 @@ class TestOperatorContext:
 
 
 class TestOperatorContextLoading:
-
     @patch("app.engine.adjudication.get_config")
     def test_missing_file_returns_none(self, mock_config):
         mock_config.return_value = MagicMock()
@@ -412,7 +413,6 @@ class TestOperatorContextLoading:
 
 
 class TestEventEmission:
-
     @pytest.mark.asyncio
     @patch("app.agents.adjudicator.get_llm_client")
     async def test_emits_start_and_complete(self, mock_get, mock_llm_client):
@@ -475,7 +475,6 @@ class TestEventEmission:
 
 
 class TestEdgeCases:
-
     @pytest.mark.asyncio
     @patch("app.agents.adjudicator.get_llm_client")
     async def test_no_verified_findings(self, mock_get):
@@ -541,7 +540,6 @@ class TestEdgeCases:
 
 
 class TestAdjudicatedRiskModel:
-
     def test_valid_model(self):
         risk = AdjudicatedRisk(
             finding_id="F-001",
@@ -573,7 +571,6 @@ class TestAdjudicatedRiskModel:
 
 
 class TestApproachResolution:
-
     @patch("app.engine.adjudication.get_config")
     def test_api_param_wins(self, mock_config):
         mock_config.return_value = MagicMock()
@@ -609,7 +606,6 @@ class TestApproachResolution:
 
 
 class TestJsonCleaning:
-
     @patch("app.agents.adjudicator.get_llm_client")
     def test_strips_markdown_fences(self, mock_get):
         mock_get.return_value = MagicMock()

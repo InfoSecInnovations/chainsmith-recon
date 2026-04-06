@@ -6,6 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
+
 @pytest.fixture
 def prefs_env(tmp_path, monkeypatch):
     """Set up isolated preferences environment."""
@@ -130,7 +131,8 @@ class TestProfileDelete:
 
     def test_delete_builtin_resets(self, client):
         client.put(
-            "/api/v1/profiles/aggressive", json={"overrides": {"network": {"timeout_seconds": 999.0}}}
+            "/api/v1/profiles/aggressive",
+            json={"overrides": {"network": {"timeout_seconds": 999.0}}},
         )
         response = client.delete("/api/v1/profiles/aggressive")
         assert response.status_code == 200

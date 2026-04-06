@@ -380,9 +380,7 @@ class AdjudicatorAgent:
 
         return "\n".join(parts)
 
-    async def _run_structured_challenge(
-        self, finding: Finding, context: str
-    ) -> AdjudicatedRisk:
+    async def _run_structured_challenge(self, finding: Finding, context: str) -> AdjudicatedRisk:
         """Single LLM call — devil's advocate challenge."""
         response = await self.client.chat(
             prompt=f"Evaluate this finding:\n\n{context}",
@@ -392,9 +390,7 @@ class AdjudicatorAgent:
             finding, response, AdjudicationApproach.STRUCTURED_CHALLENGE
         )
 
-    async def _run_adversarial_debate(
-        self, finding: Finding, context: str
-    ) -> AdjudicatedRisk:
+    async def _run_adversarial_debate(self, finding: Finding, context: str) -> AdjudicatedRisk:
         """Three LLM calls — prosecutor, defender, judge."""
         # Call 1: Prosecutor argues to maintain/raise
         prosecution = await self.client.chat(
@@ -422,9 +418,7 @@ class AdjudicatorAgent:
             finding, verdict, AdjudicationApproach.ADVERSARIAL_DEBATE
         )
 
-    async def _run_evidence_rubric(
-        self, finding: Finding, context: str
-    ) -> AdjudicatedRisk:
+    async def _run_evidence_rubric(self, finding: Finding, context: str) -> AdjudicatedRisk:
         """Single LLM call — structured rubric scoring."""
         response = await self.client.chat(
             prompt=f"Score this finding using the rubric:\n\n{context}",

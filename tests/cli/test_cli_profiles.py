@@ -15,6 +15,7 @@ from app.cli_client import ChainsmithAPIError
 
 pytestmark = pytest.mark.unit
 
+
 @pytest.fixture
 def runner():
     """CLI runner."""

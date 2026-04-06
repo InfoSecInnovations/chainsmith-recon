@@ -31,6 +31,7 @@ from app.preferences import (
 
 pytestmark = pytest.mark.unit
 
+
 @pytest.fixture
 def temp_prefs_path(tmp_path: Path) -> Path:
     return tmp_path / "preferences.yaml"

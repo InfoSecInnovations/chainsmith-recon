@@ -132,7 +132,6 @@ class FindingDetail(BaseModel):
     host: str | None = None
 
 
-
 class ChainStatus(BaseModel):
     """Chain analysis status."""
 

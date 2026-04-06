@@ -226,4 +226,3 @@ def _run_scan_advisor(state: "AppState", launcher=None) -> None:
 
     except Exception as e:
         logger.warning(f"Scan advisor failed (non-fatal): {e}")
-

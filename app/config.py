@@ -112,7 +112,9 @@ class SwarmConfig:
 @dataclass
 class AdjudicatorConfig:
     enabled: bool = True
-    default_approach: str = "auto"  # structured_challenge, adversarial_debate, evidence_rubric, auto
+    default_approach: str = (
+        "auto"  # structured_challenge, adversarial_debate, evidence_rubric, auto
+    )
     context_file: str = "~/.chainsmith/adjudicator_context.yaml"
 
 
@@ -315,9 +317,7 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
         "CHAINSMITH_LITELLM_MODEL_CHAINSMITH_FALLBACK"
     ):
         cfg.litellm.model_chainsmith_fallback = v
-    if v := env.get("LITELLM_MODEL_ADJUDICATOR") or env.get(
-        "CHAINSMITH_LITELLM_MODEL_ADJUDICATOR"
-    ):
+    if v := env.get("LITELLM_MODEL_ADJUDICATOR") or env.get("CHAINSMITH_LITELLM_MODEL_ADJUDICATOR"):
         cfg.litellm.model_adjudicator = v
 
     # Paths overrides (backward-compatible names kept)
