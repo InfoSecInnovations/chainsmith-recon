@@ -15,6 +15,7 @@ from sqlalchemy import delete, func, select
 
 from app.db.engine import get_session
 from app.db.models import (
+    AdjudicationResult,
     Chain,
     CheckLog,
     Engagement,
@@ -1264,3 +1265,76 @@ class TrendRepository:
             "total_regressed": total_regressed,
             "mttr_hours": mttr,
         }
+
+
+# ─── Adjudication Repository ────────────────────────────────────────────────
+
+
+class AdjudicationRepository:
+    """Persist and query adjudication results."""
+
+    async def bulk_create(self, scan_id: str, results: list[dict]) -> int:
+        """Insert adjudication results for a scan. Returns count inserted."""
+        if not results:
+            return 0
+
+        rows = []
+        for r in results:
+            rows.append(
+                AdjudicationResult(
+                    id=r.get("id") or uuid.uuid4().hex[:12],
+                    scan_id=scan_id,
+                    finding_id=r["finding_id"],
+                    original_severity=r["original_severity"],
+                    adjudicated_severity=r["adjudicated_severity"],
+                    confidence=r["confidence"],
+                    approach=r["approach_used"],
+                    rationale=r.get("rationale"),
+                    factors=r.get("factors"),
+                    operator_context_used=r.get("operator_context_used"),
+                )
+            )
+
+        async with get_session() as session:
+            session.add_all(rows)
+            await session.commit()
+
+        logger.info(f"Persisted {len(rows)} adjudication results for scan {scan_id}")
+        return len(rows)
+
+    async def get_results(self, scan_id: str) -> list[dict]:
+        """Get all adjudication results for a scan."""
+        async with get_session() as session:
+            result = await session.execute(
+                select(AdjudicationResult).where(AdjudicationResult.scan_id == scan_id)
+            )
+            return [_adjudication_to_dict(r) for r in result.scalars().all()]
+
+    async def get_result_for_finding(self, scan_id: str, finding_id: str) -> dict | None:
+        """Get adjudication result for a specific finding in a scan."""
+        async with get_session() as session:
+            result = await session.execute(
+                select(AdjudicationResult).where(
+                    AdjudicationResult.scan_id == scan_id,
+                    AdjudicationResult.finding_id == finding_id,
+                )
+            )
+            row = result.scalar_one_or_none()
+            return _adjudication_to_dict(row) if row else None
+
+
+def _adjudication_to_dict(r: AdjudicationResult) -> dict:
+    """Convert an AdjudicationResult ORM object to a JSON-safe dict."""
+    return {
+        "id": r.id,
+        "scan_id": r.scan_id,
+        "finding_id": r.finding_id,
+        "original_severity": r.original_severity,
+        "adjudicated_severity": r.adjudicated_severity,
+        "confidence": r.confidence,
+        "approach_used": r.approach,
+        "rationale": r.rationale,
+        "factors": r.factors,
+        "operator_context_used": r.operator_context_used,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    }

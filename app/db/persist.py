@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from app.config import get_config
 from app.db.repositories import (
+    AdjudicationRepository,
     ChainRepository,
     CheckLogRepository,
     ComparisonRepository,
@@ -30,6 +31,7 @@ _finding_repo = FindingRepository()
 _chain_repo = ChainRepository()
 _check_log_repo = CheckLogRepository()
 _comparison_repo = ComparisonRepository()
+_adjudication_repo = AdjudicationRepository()
 
 
 def _is_enabled() -> bool:
@@ -136,5 +138,27 @@ async def on_scan_complete(
         logger.warning(
             "Failed to persist scan results — data is still available in "
             "the current session but will not survive a restart",
+            exc_info=True,
+        )
+
+
+async def on_adjudication_complete(
+    state: "AppState",
+    scan_id: str | None,
+) -> None:
+    """
+    Called when adjudication completes. Persists adjudication results
+    to the database. Fire-and-forget with graceful degradation.
+    """
+    if scan_id is None or not _is_enabled():
+        return
+
+    try:
+        count = await _adjudication_repo.bulk_create(scan_id, state.adjudication_results)
+        logger.info(f"Persisted {count} adjudication results for scan {scan_id}")
+    except Exception:
+        logger.warning(
+            "Failed to persist adjudication results — data is still available "
+            "in the current session but will not survive a restart",
             exc_info=True,
         )

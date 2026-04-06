@@ -80,6 +80,7 @@ class LiteLLMConfig:
     model_verifier: str = "nova-mini"
     model_chainsmith: str = "nova-pro"
     model_chainsmith_fallback: str = "nova-mini"
+    model_adjudicator: str = "nova-pro"
 
 
 @dataclass
@@ -109,6 +110,13 @@ class SwarmConfig:
 
 
 @dataclass
+class AdjudicatorConfig:
+    enabled: bool = True
+    default_approach: str = "auto"  # structured_challenge, adversarial_debate, evidence_rubric, auto
+    context_file: str = "~/.chainsmith/adjudicator_context.yaml"
+
+
+@dataclass
 class PathsConfig:
     db_path: Path = Path("/data/recon.sqlite")  # Legacy - prefer storage.db_path
     attack_patterns: Path = Path("/app/data/attack_patterns.json")
@@ -134,6 +142,7 @@ class ChainsmithConfig:
     storage: StorageConfig = field(default_factory=StorageConfig)
     swarm: SwarmConfig = field(default_factory=SwarmConfig)
     scan_advisor: ScanAdvisorConfig = field(default_factory=ScanAdvisorConfig)
+    adjudicator: AdjudicatorConfig = field(default_factory=AdjudicatorConfig)
 
     # Raw seed URLs (optional - scanner can discover these itself)
     seed_urls: list[str] = field(default_factory=list)
@@ -200,6 +209,8 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
             llm.model_chainsmith = str(ll["model_chainsmith"])
         if "model_chainsmith_fallback" in ll:
             llm.model_chainsmith_fallback = str(ll["model_chainsmith_fallback"])
+        if "model_adjudicator" in ll:
+            llm.model_adjudicator = str(ll["model_adjudicator"])
 
     if "paths" in data and isinstance(data["paths"], dict):
         p = data["paths"]
@@ -258,6 +269,16 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
         if "require_approval" in sa:
             sac.require_approval = bool(sa["require_approval"])
 
+    if "adjudicator" in data and isinstance(data["adjudicator"], dict):
+        adj = data["adjudicator"]
+        adjc = cfg.adjudicator
+        if "enabled" in adj:
+            adjc.enabled = bool(adj["enabled"])
+        if "default_approach" in adj:
+            adjc.default_approach = str(adj["default_approach"])
+        if "context_file" in adj:
+            adjc.context_file = str(adj["context_file"])
+
 
 def _apply_env(cfg: ChainsmithConfig) -> None:
     """Apply CHAINSMITH_* environment variable overrides."""
@@ -294,6 +315,10 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
         "CHAINSMITH_LITELLM_MODEL_CHAINSMITH_FALLBACK"
     ):
         cfg.litellm.model_chainsmith_fallback = v
+    if v := env.get("LITELLM_MODEL_ADJUDICATOR") or env.get(
+        "CHAINSMITH_LITELLM_MODEL_ADJUDICATOR"
+    ):
+        cfg.litellm.model_adjudicator = v
 
     # Paths overrides (backward-compatible names kept)
     if v := env.get("RECON_DB_PATH") or env.get("CHAINSMITH_DB_PATH"):
@@ -335,6 +360,12 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     if v := env.get("CHAINSMITH_SWARM_TASK_TIMEOUT"):
         with contextlib.suppress(ValueError):
             cfg.swarm.task_timeout_seconds = int(v)
+
+    # Adjudicator overrides
+    if v := env.get("CHAINSMITH_ADJUDICATOR_ENABLED"):
+        cfg.adjudicator.enabled = v.lower() in ("true", "1", "yes")
+    if v := env.get("CHAINSMITH_ADJUDICATOR_DEFAULT_APPROACH"):
+        cfg.adjudicator.default_approach = v
 
 
 def load_config(config_path: Path | None = None) -> ChainsmithConfig:
@@ -386,6 +417,7 @@ def __getattr__(name: str):
         "LITELLM_MODEL_VERIFIER": lambda c: c.litellm.model_verifier,
         "LITELLM_MODEL_CHAINSMITH": lambda c: c.litellm.model_chainsmith,
         "LITELLM_MODEL_CHAINSMITH_FALLBACK": lambda c: c.litellm.model_chainsmith_fallback,
+        "LITELLM_MODEL_ADJUDICATOR": lambda c: c.litellm.model_adjudicator,
         "TARGET_DOMAIN": lambda c: c.target_domain,
         "DEFAULT_SCOPE": lambda c: {
             "in_scope_domains": c.scope.in_scope_domains,

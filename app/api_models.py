@@ -75,6 +75,12 @@ class ScanStartInput(BaseModel):
     port_profile: str | None = None  # Port profile: web, ai, full, lab
 
 
+class AdjudicateRequest(BaseModel):
+    """Optional body for POST /api/adjudicate."""
+
+    approach: str | None = None  # structured_challenge, adversarial_debate, evidence_rubric, auto
+
+
 # ─── Settings Models ──────────────────────────────────────────
 
 

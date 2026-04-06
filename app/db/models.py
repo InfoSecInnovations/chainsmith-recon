@@ -164,6 +164,27 @@ class SwarmApiKey(Base):
     last_used_at = Column(DateTime, nullable=True)
 
 
+class AdjudicationResult(Base):
+    __tablename__ = "adjudication_results"
+
+    id = Column(String, primary_key=True)
+    scan_id = Column(String, nullable=False)
+    finding_id = Column(String, nullable=False)
+    original_severity = Column(String, nullable=False)
+    adjudicated_severity = Column(String, nullable=False)
+    confidence = Column(Float, nullable=False)
+    approach = Column(String, nullable=False)
+    rationale = Column(Text, nullable=True)
+    factors = Column(JSON, nullable=True)
+    operator_context_used = Column(JSON, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("idx_adjudication_scan_id", "scan_id"),
+        Index("idx_adjudication_finding_id", "finding_id"),
+    )
+
+
 class ScanComparison(Base):
     __tablename__ = "scan_comparisons"
 

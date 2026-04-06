@@ -13,6 +13,7 @@ Organized by functional area:
 - customizations: User severity override management
 """
 
+from app.routes.adjudication import router as adjudication_router
 from app.routes.advisor import router as advisor_router
 from app.routes.chains import router as chains_router
 from app.routes.checks import router as checks_router
@@ -33,6 +34,7 @@ __all__ = [
     "findings_router",
     "checks_router",
     "chains_router",
+    "adjudication_router",
     "scenarios_router",
     "preferences_router",
     "compliance_router",

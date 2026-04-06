@@ -16,6 +16,7 @@ class AgentType(StrEnum):
     VERIFIER = "verifier"
     CHAINSMITH = "chainsmith"
     GUARDIAN = "guardian"
+    ADJUDICATOR = "adjudicator"
 
 
 class FindingSeverity(StrEnum):
@@ -46,6 +47,10 @@ class EventType(StrEnum):
     SCOPE_VIOLATION = "scope_violation"
     SCOPE_APPROVED = "scope_approved"
     SCOPE_DENIED = "scope_denied"
+    ADJUDICATION_START = "adjudication_start"
+    ADJUDICATION_COMPLETE = "adjudication_complete"
+    SEVERITY_UPHELD = "severity_upheld"
+    SEVERITY_ADJUSTED = "severity_adjusted"
     ERROR = "error"
     INFO = "info"
 
@@ -154,6 +159,53 @@ class Finding(BaseModel):
     # Chain building
     chains_with: list[str] = Field(default_factory=list)
     severity_multiplier: float = 1.0
+
+    # Adjudication (populated by AdjudicatorAgent)
+    adjudicated_risk: "AdjudicatedRisk | None" = None
+
+
+# ─── Adjudication Models ────────────────────────────────────���────
+
+
+class AdjudicationApproach(StrEnum):
+    """Approaches for severity adjudication."""
+
+    STRUCTURED_CHALLENGE = "structured_challenge"
+    ADVERSARIAL_DEBATE = "adversarial_debate"
+    EVIDENCE_RUBRIC = "evidence_rubric"
+    AUTO = "auto"
+
+
+class AdjudicatedRisk(BaseModel):
+    """Result of severity adjudication for a single finding."""
+
+    finding_id: str
+    original_severity: FindingSeverity
+    adjudicated_severity: FindingSeverity
+    confidence: float = Field(ge=0.0, le=1.0)
+    approach_used: AdjudicationApproach
+    rationale: str
+    factors: dict[str, Any] = Field(default_factory=dict)
+    adjudicated_at: datetime = Field(default_factory=datetime.utcnow)
+    adjudicated_by: AgentType = AgentType.ADJUDICATOR
+
+
+class OperatorAssetContext(BaseModel):
+    """Operator-declared context for a specific asset/domain."""
+
+    domain: str
+    exposure: str = "unknown"  # internet-facing, vpn-only, internal, unknown
+    criticality: str = "medium"  # critical, high, medium, low
+    notes: str | None = None
+
+
+class OperatorContext(BaseModel):
+    """Operator context loaded from ~/.chainsmith/adjudicator_context.yaml."""
+
+    assets: list[OperatorAssetContext] = Field(default_factory=list)
+    defaults: dict[str, str] = Field(
+        default_factory=lambda: {"exposure": "unknown", "criticality": "medium"}
+    )
 
 
 # ─── Chain Models ──────────────────────────────────────────────
@@ -314,3 +366,7 @@ class ExportResponse(BaseModel):
 
     report: dict[str, Any]
     generated_at: datetime
+
+
+# Resolve forward reference for Finding.adjudicated_risk
+Finding.model_rebuild()

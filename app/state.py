@@ -63,6 +63,11 @@ class AppState:
         # Scan advisor recommendations (Phase 20)
         self.advisor_recommendations: list[dict] = []
 
+        # Adjudication tracking (Phase 21)
+        self.adjudication_status: str = "idle"  # idle, adjudicating, complete, error
+        self.adjudication_results: list[dict] = []
+        self.adjudication_error: str | None = None
+
         # Proof of scope settings
         self.proof_settings = ProofOfScopeSettings()
         self.scope_checker: ScopeChecker | None = None

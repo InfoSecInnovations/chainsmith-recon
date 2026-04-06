@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_config
 from app.db import close_db, init_db
 from app.routes import (
+    adjudication_router,
     advisor_router,
     chains_router,
     checks_router,
@@ -97,6 +98,7 @@ app.include_router(engagements_router)
 app.include_router(findings_router)
 app.include_router(checks_router)
 app.include_router(chains_router)
+app.include_router(adjudication_router)
 app.include_router(scenarios_router)
 app.include_router(preferences_router)
 app.include_router(compliance_router)
