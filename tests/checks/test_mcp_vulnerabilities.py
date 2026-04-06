@@ -1,12 +1,4 @@
-"""
-Tests for MCP suite enhanced checks (auth, transport, chain analysis,
-schema leakage, fingerprinting, invocation probing, resource traversal,
-template injection, prompt injection, sampling, protocol version, rate
-limiting, undeclared capabilities, shadow tools, notifications, WebSocket).
-
-Covers 16 checks + the invocation safety framework.
-All HTTP calls are mocked.
-"""
+"""Tests for MCP vulnerability checks: auth bypass, injection, traversal, sampling abuse, schema leakage."""
 
 import json
 from unittest.mock import AsyncMock, patch
@@ -14,42 +6,16 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.checks.base import Service
-
-# Wave 1
 from app.checks.mcp.auth_check import MCPAuthCheck
-
-# Safety framework
-from app.checks.mcp.invocation_safety import (
-    build_probe_payload,
-    build_safe_payload,
-    cap_response,
-    classify_tool_probe_type,
-    is_payload_safe,
-)
 from app.checks.mcp.notification_injection import MCPNotificationInjectionCheck
-
-# Wave 4
 from app.checks.mcp.prompt_injection import MCPPromptInjectionCheck
-from app.checks.mcp.protocol_version import MCPProtocolVersionCheck
-from app.checks.mcp.rate_limit import ToolRateLimitCheck
 from app.checks.mcp.resource_traversal import MCPResourceTraversalCheck
-
-# Wave 5
 from app.checks.mcp.sampling_abuse import MCPSamplingAbuseCheck
-
-# Wave 2
 from app.checks.mcp.schema_leakage import ToolSchemaLeakageCheck
-from app.checks.mcp.server_fingerprint import MCPServerFingerprintCheck
-from app.checks.mcp.shadow_tool_detection import ShadowToolDetectionCheck
 from app.checks.mcp.template_injection import ResourceTemplateInjectionCheck
-from app.checks.mcp.tool_chain_analysis import ToolChainAnalysisCheck
-
-# Wave 3
-from app.checks.mcp.tool_invocation import MCPToolInvocationCheck
-from app.checks.mcp.transport_security import TransportSecurityCheck
-from app.checks.mcp.undeclared_capabilities import UndeclaredCapabilityCheck
 from app.checks.mcp.websocket_transport import WebSocketTransportCheck
 from app.lib.http import HttpResponse
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared Fixtures
@@ -170,7 +136,7 @@ def mock_client_factory():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Wave 1: MCPAuthCheck
+# MCPAuthCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -231,7 +197,7 @@ class TestMCPAuthCheck:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Wave 1: WebSocketTransportCheck
+# WebSocketTransportCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -310,109 +276,7 @@ class TestWebSocketTransportCheck:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Wave 1: ToolChainAnalysisCheck
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestToolChainAnalysisCheck:
-    @pytest.fixture
-    def check(self):
-        return ToolChainAnalysisCheck()
-
-    def test_metadata(self, check):
-        assert check.name == "mcp_tool_chain_analysis"
-        assert "mcp_dangerous_chains" in check.produces
-
-    @pytest.mark.asyncio
-    async def test_detects_data_exfil_chain(self, check, mcp_tools_context):
-        """read_file + send_email = data exfil chain."""
-        result = await check.run(mcp_tools_context)
-        assert result.success
-        assert "mcp_dangerous_chains" in result.outputs
-        chains = result.outputs["mcp_dangerous_chains"]
-        assert any(
-            "exfil" in c["chain_name"].lower() or "read" in c["chain_name"].lower() for c in chains
-        )
-
-    @pytest.mark.asyncio
-    async def test_detects_rce_chain(self, check, mcp_tools_context):
-        """read_file + execute_command = file access + code exec."""
-        result = await check.run(mcp_tools_context)
-        critical = [f for f in result.findings if f.severity == "critical"]
-        assert len(critical) > 0
-
-    @pytest.mark.asyncio
-    async def test_no_chains_for_benign_tools(self, check):
-        ctx = {
-            "mcp_tools": [
-                {"name": "get_time", "description": "Get time", "service_host": "test"},
-                {"name": "format_text", "description": "Format text", "service_host": "test"},
-            ]
-        }
-        result = await check.run(ctx)
-        assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
-        assert len(info) > 0
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Wave 1: ShadowToolDetectionCheck
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestShadowToolDetectionCheck:
-    @pytest.fixture
-    def check(self):
-        return ShadowToolDetectionCheck()
-
-    def test_metadata(self, check):
-        assert check.name == "mcp_shadow_tool_detection"
-        assert "mcp_shadow_tool_risk" in check.produces
-
-    @pytest.mark.asyncio
-    async def test_flat_names_flagged(self, check, mcp_tools_context):
-        """Flat tool names should be flagged as medium."""
-        result = await check.run(mcp_tools_context)
-        assert result.success
-        flat_findings = [f for f in result.findings if "flat" in f.title.lower()]
-        assert len(flat_findings) > 0
-
-    @pytest.mark.asyncio
-    async def test_namespaced_tools_safe(self, check):
-        ctx = {
-            "mcp_tools": [
-                {"name": "server/read_file", "description": "Read", "service_host": "test"},
-                {"name": "server/write_file", "description": "Write", "service_host": "test"},
-            ],
-            "mcp_servers": [],
-        }
-        result = await check.run(ctx)
-        info = [f for f in result.findings if f.severity == "info"]
-        assert len(info) > 0
-
-    @pytest.mark.asyncio
-    async def test_collision_candidates_detected(self, check, mcp_tools_context):
-        """read_file, search, send_email should match common names."""
-        result = await check.run(mcp_tools_context)
-        shadow_risk = result.outputs.get("mcp_shadow_tool_risk", {})
-        assert len(shadow_risk.get("collision_candidates", [])) > 0
-
-    @pytest.mark.asyncio
-    async def test_list_changed_notification(self, check, mcp_tools_context):
-        mock = mock_client_factory()
-        mock.post = AsyncMock(return_value=make_response(status_code=200))
-
-        with patch("app.checks.mcp.shadow_tool_detection.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_tools_context)
-
-        high = [f for f in result.findings if f.severity == "high"]
-        assert any(
-            "list_changed" in f.title.lower() or "re-registration" in f.title.lower() for f in high
-        )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Wave 2: ToolSchemaLeakageCheck
+# ToolSchemaLeakageCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -490,105 +354,7 @@ class TestToolSchemaLeakageCheck:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Wave 2: MCPServerFingerprintCheck
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestMCPServerFingerprintCheck:
-    @pytest.fixture
-    def check(self):
-        return MCPServerFingerprintCheck()
-
-    def test_metadata(self, check):
-        assert check.name == "mcp_server_fingerprint"
-
-    @pytest.mark.asyncio
-    async def test_fingerprint_from_server_info(self, check, mcp_server_context):
-        mock = mock_client_factory()
-        mock.post = AsyncMock(return_value=make_response(status_code=404))
-
-        with patch("app.checks.mcp.server_fingerprint.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_server_context)
-
-        assert result.success
-        assert "mcp_server_implementations" in result.outputs
-
-    @pytest.mark.asyncio
-    async def test_fingerprint_from_error(self, check):
-        svc = Service(
-            url="http://test:8080", host="test", port=8080, scheme="http", service_type="ai"
-        )
-        ctx = {
-            "mcp_servers": [
-                {
-                    "url": "http://test:8080/mcp",
-                    "path": "/mcp",
-                    "transport": "http",
-                    "capabilities": [],
-                    "auth_required": False,
-                    "server_info": {},
-                    "service": svc.to_dict(),
-                }
-            ]
-        }
-        mock = mock_client_factory()
-        mock.post = AsyncMock(
-            return_value=make_response(
-                body='{"error": "McpError: method not found", "code": -32601}'
-            )
-        )
-
-        with patch("app.checks.mcp.server_fingerprint.AsyncHttpClient", return_value=mock):
-            result = await check.run(ctx)
-
-        assert result.success
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Wave 2: TransportSecurityCheck
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestTransportSecurityCheck:
-    @pytest.fixture
-    def check(self):
-        return TransportSecurityCheck()
-
-    def test_metadata(self, check):
-        assert check.name == "mcp_transport_security"
-
-    @pytest.mark.asyncio
-    async def test_plain_http_flagged(self, check, mcp_server_context):
-        mock = mock_client_factory()
-        mock.options = AsyncMock(return_value=make_response(status_code=404))
-        mock.post = AsyncMock(return_value=make_response(status_code=401))
-        mock.get = AsyncMock(return_value=make_response(status_code=404))
-
-        with patch("app.checks.mcp.transport_security.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_server_context)
-
-        assert result.success
-        high = [f for f in result.findings if f.severity == "high"]
-        assert any("plain http" in f.title.lower() or "no tls" in f.title.lower() for f in high)
-
-    @pytest.mark.asyncio
-    async def test_cors_wildcard(self, check, mcp_server_context):
-        mock = mock_client_factory()
-        mock.options = AsyncMock(
-            return_value=make_response(headers={"Access-Control-Allow-Origin": "*"})
-        )
-        mock.post = AsyncMock(return_value=make_response(status_code=401))
-        mock.get = AsyncMock(return_value=make_response(status_code=404))
-
-        with patch("app.checks.mcp.transport_security.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_server_context)
-
-        cors = [f for f in result.findings if "cors" in f.title.lower()]
-        assert len(cors) > 0
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Wave 2: MCPNotificationInjectionCheck
+# MCPNotificationInjectionCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -627,52 +393,7 @@ class TestMCPNotificationInjectionCheck:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Wave 3: MCPToolInvocationCheck
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestMCPToolInvocationCheck:
-    @pytest.fixture
-    def check(self):
-        return MCPToolInvocationCheck()
-
-    def test_metadata(self, check):
-        assert check.name == "mcp_tool_invocation"
-        assert check.intrusive is True
-
-    @pytest.mark.asyncio
-    async def test_exec_tool_detected(self, check, mcp_tools_context):
-        mock = mock_client_factory()
-        exec_body = json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "result": {"content": [{"type": "text", "text": "chainsmith-probe\nroot"}]},
-            }
-        )
-        mock.post = AsyncMock(return_value=make_response(body=exec_body))
-
-        with patch("app.checks.mcp.tool_invocation.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_tools_context)
-
-        assert result.success
-        critical = [f for f in result.findings if f.severity == "critical"]
-        assert len(critical) > 0
-
-    @pytest.mark.asyncio
-    async def test_auth_required_tool(self, check, mcp_tools_context):
-        mock = mock_client_factory()
-        mock.post = AsyncMock(return_value=make_response(status_code=403))
-
-        with patch("app.checks.mcp.tool_invocation.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_tools_context)
-
-        assert result.success
-        medium = [f for f in result.findings if f.severity == "medium"]
-        assert len(medium) > 0
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Wave 3: MCPResourceTraversalCheck
+# MCPResourceTraversalCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -730,7 +451,7 @@ class TestMCPResourceTraversalCheck:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Wave 3: ResourceTemplateInjectionCheck
+# ResourceTemplateInjectionCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -808,7 +529,7 @@ class TestResourceTemplateInjectionCheck:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Wave 4: MCPPromptInjectionCheck
+# MCPPromptInjectionCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -862,7 +583,7 @@ class TestMCPPromptInjectionCheck:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Wave 5: MCPSamplingAbuseCheck
+# MCPSamplingAbuseCheck
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -901,244 +622,3 @@ class TestMCPSamplingAbuseCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Wave 5: MCPProtocolVersionCheck
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestMCPProtocolVersionCheck:
-    @pytest.fixture
-    def check(self):
-        return MCPProtocolVersionCheck()
-
-    def test_metadata(self, check):
-        assert check.name == "mcp_protocol_version"
-
-    @pytest.mark.asyncio
-    async def test_downgrade_detected(self, check, mcp_server_context):
-        mock = mock_client_factory()
-
-        async def mock_post(url, **kwargs):
-            body = kwargs.get("json", {})
-            version = body.get("params", {}).get("protocolVersion", "")
-            return make_response(
-                body=json.dumps(
-                    {
-                        "jsonrpc": "2.0",
-                        "result": {
-                            "protocolVersion": version,
-                            "capabilities": {"tools": {}} if version >= "2024-11-05" else {},
-                        },
-                    }
-                )
-            )
-
-        mock.post = mock_post
-
-        with patch("app.checks.mcp.protocol_version.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_server_context)
-
-        assert result.success
-        assert "mcp_protocol_versions" in result.outputs
-        downgrade = [f for f in result.findings if "downgrade" in f.title.lower()]
-        assert len(downgrade) > 0
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Wave 5: ToolRateLimitCheck
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestToolRateLimitCheck:
-    @pytest.fixture
-    def check(self):
-        return ToolRateLimitCheck()
-
-    def test_metadata(self, check):
-        assert check.name == "mcp_tool_rate_limit"
-
-    @pytest.mark.asyncio
-    async def test_no_rate_limit(self, check, mcp_tools_context):
-        mock = mock_client_factory()
-        mock.post = AsyncMock(
-            return_value=make_response(
-                body=json.dumps({"jsonrpc": "2.0", "result": {"content": [{"text": "ok"}]}})
-            )
-        )
-
-        with patch("app.checks.mcp.rate_limit.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_tools_context)
-
-        assert result.success
-        medium = [f for f in result.findings if f.severity == "medium"]
-        assert len(medium) > 0  # No rate limit = medium
-
-    @pytest.mark.asyncio
-    async def test_rate_limit_detected(self, check, mcp_tools_context):
-        mock = mock_client_factory()
-        call_count = 0
-
-        async def mock_post(url, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count > 5:
-                return make_response(status_code=429)
-            return make_response(body=json.dumps({"jsonrpc": "2.0", "result": {}}))
-
-        mock.post = mock_post
-
-        with patch("app.checks.mcp.rate_limit.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_tools_context)
-
-        assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
-        assert len(info) > 0
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Wave 5: UndeclaredCapabilityCheck
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestUndeclaredCapabilityCheck:
-    @pytest.fixture
-    def check(self):
-        return UndeclaredCapabilityCheck()
-
-    def test_metadata(self, check):
-        assert check.name == "mcp_undeclared_capabilities"
-
-    @pytest.mark.asyncio
-    async def test_undeclared_tools_accessible(self, check):
-        """Server declares resources but tools/list also works."""
-        svc = Service(
-            url="http://test:8080", host="test", port=8080, scheme="http", service_type="ai"
-        )
-        ctx = {
-            "mcp_servers": [
-                {
-                    "url": "http://test:8080/mcp",
-                    "path": "/mcp",
-                    "transport": "http",
-                    "capabilities": ["resources"],  # Only resources declared
-                    "auth_required": False,
-                    "service": svc.to_dict(),
-                }
-            ]
-        }
-        mock = mock_client_factory()
-
-        async def mock_post(url, **kwargs):
-            body = kwargs.get("json", {})
-            method = body.get("method", "")
-            if method == "tools/list":
-                return make_response(
-                    body=json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "result": {"tools": [{"name": "hidden_tool"}]},
-                        }
-                    )
-                )
-            return make_response(body=json.dumps({"jsonrpc": "2.0", "error": {"code": -32601}}))
-
-        mock.post = mock_post
-
-        with patch("app.checks.mcp.undeclared_capabilities.AsyncHttpClient", return_value=mock):
-            result = await check.run(ctx)
-
-        assert result.success
-        high = [f for f in result.findings if f.severity == "high"]
-        assert len(high) > 0
-
-    @pytest.mark.asyncio
-    async def test_all_rejected(self, check, mcp_server_context):
-        mock = mock_client_factory()
-        mock.post = AsyncMock(
-            return_value=make_response(
-                body=json.dumps(
-                    {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Not found"}}
-                )
-            )
-        )
-
-        with patch("app.checks.mcp.undeclared_capabilities.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_server_context)
-
-        assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
-        assert len(info) > 0
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Invocation Safety Framework
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestInvocationSafety:
-    def test_build_safe_payload(self):
-        tool = {
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string"},
-                    "count": {"type": "integer", "minimum": 0},
-                },
-                "required": ["path"],
-            }
-        }
-        payload = build_safe_payload(tool)
-        assert "path" in payload
-        assert isinstance(payload["path"], str)
-
-    def test_build_safe_payload_with_enum(self):
-        tool = {
-            "input_schema": {
-                "properties": {"mode": {"type": "string", "enum": ["read", "write"]}},
-                "required": ["mode"],
-            }
-        }
-        payload = build_safe_payload(tool)
-        assert payload.get("mode") == "read"
-
-    def test_build_probe_payload_file(self):
-        tool = {
-            "name": "read_file",
-            "input_schema": {"properties": {"path": {"type": "string"}}, "required": ["path"]},
-        }
-        payload = build_probe_payload(tool, "file")
-        assert "/etc/hostname" in payload.get("path", "")
-
-    def test_build_probe_payload_exec(self):
-        tool = {
-            "name": "exec",
-            "input_schema": {
-                "properties": {"command": {"type": "string"}},
-                "required": ["command"],
-            },
-        }
-        payload = build_probe_payload(tool, "exec")
-        assert "chainsmith-probe" in payload.get("command", "")
-
-    def test_is_payload_safe(self):
-        assert is_payload_safe({"path": "/etc/hostname"}) is True
-        assert is_payload_safe({"command": "echo test"}) is True
-        assert is_payload_safe({"command": "rm -rf /"}) is False
-        assert is_payload_safe({"query": "DROP TABLE users"}) is False
-
-    def test_cap_response(self):
-        short = "hello"
-        assert cap_response(short) == "hello"
-        long_str = "x" * 2000
-        capped = cap_response(long_str)
-        assert len(capped) < 2000
-        assert "truncated" in capped
-
-    def test_classify_tool_probe_type(self):
-        assert classify_tool_probe_type({"name": "read_file", "description": ""}) == "file"
-        assert classify_tool_probe_type({"name": "http_fetch", "description": ""}) == "fetch"
-        assert classify_tool_probe_type({"name": "execute_command", "description": ""}) == "exec"
-        assert classify_tool_probe_type({"name": "sql_query", "description": ""}) == "search"
-        assert classify_tool_probe_type({"name": "get_time", "description": ""}) == "generic"
