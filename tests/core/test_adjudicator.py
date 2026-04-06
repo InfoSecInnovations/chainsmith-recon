@@ -368,31 +368,27 @@ class TestOperatorContext:
 
 
 class TestOperatorContextLoading:
-    @patch("app.engine.adjudication.get_config")
-    def test_missing_file_returns_none(self, mock_config):
-        mock_config.return_value = MagicMock()
-        mock_config.return_value.adjudicator.context_file = "/nonexistent/path.yaml"
-        result = load_operator_context()
+    def _make_config(self, context_file="/nonexistent/path.yaml"):
+        cfg = MagicMock()
+        cfg.adjudicator.context_file = context_file
+        return cfg
+
+    def test_missing_file_returns_none(self):
+        result = load_operator_context(config=self._make_config("/nonexistent/path.yaml"))
         assert result is None
 
     @patch("app.engine.adjudication._YAML_AVAILABLE", False)
-    @patch("app.engine.adjudication.get_config")
-    def test_no_yaml_returns_none(self, mock_config, tmp_path):
+    def test_no_yaml_returns_none(self, tmp_path):
         ctx_file = tmp_path / "context.yaml"
         ctx_file.write_text("assets: []")
-        mock_config.return_value = MagicMock()
-        mock_config.return_value.adjudicator.context_file = str(ctx_file)
-        result = load_operator_context()
+        result = load_operator_context(config=self._make_config(str(ctx_file)))
         assert result is None
 
     @patch("app.engine.adjudication._yaml")
     @patch("app.engine.adjudication._YAML_AVAILABLE", True)
-    @patch("app.engine.adjudication.get_config")
-    def test_valid_file_loads(self, mock_config, mock_yaml, tmp_path):
+    def test_valid_file_loads(self, mock_yaml, tmp_path):
         ctx_file = tmp_path / "context.yaml"
         ctx_file.write_text("placeholder")
-        mock_config.return_value = MagicMock()
-        mock_config.return_value.adjudicator.context_file = str(ctx_file)
 
         mock_yaml.safe_load.return_value = {
             "assets": [
@@ -401,7 +397,7 @@ class TestOperatorContextLoading:
             "defaults": {"exposure": "unknown", "criticality": "medium"},
         }
 
-        result = load_operator_context()
+        result = load_operator_context(config=self._make_config(str(ctx_file)))
         assert result is not None
         assert len(result.assets) == 1
         assert result.assets[0].domain == "api.example.com"
@@ -571,32 +567,25 @@ class TestAdjudicatedRiskModel:
 
 
 class TestApproachResolution:
-    @patch("app.engine.adjudication.get_config")
-    def test_api_param_wins(self, mock_config):
-        mock_config.return_value = MagicMock()
-        mock_config.return_value.adjudicator.default_approach = "auto"
-        result = resolve_approach("adversarial_debate")
+    def _make_config(self, default_approach="auto"):
+        cfg = MagicMock()
+        cfg.adjudicator.default_approach = default_approach
+        return cfg
+
+    def test_api_param_wins(self):
+        result = resolve_approach("adversarial_debate", config=self._make_config("auto"))
         assert result == AdjudicationApproach.ADVERSARIAL_DEBATE
 
-    @patch("app.engine.adjudication.get_config")
-    def test_config_default_used(self, mock_config):
-        mock_config.return_value = MagicMock()
-        mock_config.return_value.adjudicator.default_approach = "evidence_rubric"
-        result = resolve_approach(None)
+    def test_config_default_used(self):
+        result = resolve_approach(None, config=self._make_config("evidence_rubric"))
         assert result == AdjudicationApproach.EVIDENCE_RUBRIC
 
-    @patch("app.engine.adjudication.get_config")
-    def test_invalid_api_param_falls_back(self, mock_config):
-        mock_config.return_value = MagicMock()
-        mock_config.return_value.adjudicator.default_approach = "auto"
-        result = resolve_approach("invalid_approach")
+    def test_invalid_api_param_falls_back(self):
+        result = resolve_approach("invalid_approach", config=self._make_config("auto"))
         assert result == AdjudicationApproach.AUTO
 
-    @patch("app.engine.adjudication.get_config")
-    def test_invalid_config_falls_back_to_auto(self, mock_config):
-        mock_config.return_value = MagicMock()
-        mock_config.return_value.adjudicator.default_approach = "invalid"
-        result = resolve_approach(None)
+    def test_invalid_config_falls_back_to_auto(self):
+        result = resolve_approach(None, config=self._make_config("invalid"))
         assert result == AdjudicationApproach.AUTO
 
 

@@ -14,6 +14,7 @@ from app.config import get_config
 from app.models import AdjudicationApproach, OperatorContext
 
 if TYPE_CHECKING:
+    from app.config import ChainsmithConfig
     from app.state import AppState
 
 # Optional YAML support
@@ -27,14 +28,17 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def load_operator_context() -> OperatorContext | None:
+def load_operator_context(config: "ChainsmithConfig | None" = None) -> OperatorContext | None:
     """
     Load operator context from ~/.chainsmith/adjudicator_context.yaml.
 
     Returns None if file doesn't exist or can't be parsed.
     This is expected and normal — adjudication works without it.
+
+    Args:
+        config: Explicit config to use. Falls back to get_config() if None.
     """
-    cfg = get_config()
+    cfg = config or get_config()
     path = Path(cfg.adjudicator.context_file).expanduser()
 
     if not path.exists():
@@ -65,11 +69,16 @@ def load_operator_context() -> OperatorContext | None:
 
 def resolve_approach(
     api_param: str | None = None,
+    config: "ChainsmithConfig | None" = None,
 ) -> AdjudicationApproach:
     """
     Resolve adjudication approach from layered config.
 
     Priority: api_param > config default_approach > "auto"
+
+    Args:
+        api_param: Explicit approach string from API request.
+        config: Explicit config to use. Falls back to get_config() if None.
     """
     if api_param:
         try:
@@ -77,7 +86,7 @@ def resolve_approach(
         except ValueError:
             logger.warning("Invalid approach '%s', falling back to config", api_param)
 
-    cfg = get_config()
+    cfg = config or get_config()
     try:
         return AdjudicationApproach(cfg.adjudicator.default_approach)
     except ValueError:
