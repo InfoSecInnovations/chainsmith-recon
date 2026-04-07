@@ -42,7 +42,8 @@ happens as part of the rename rather than as a separate pass.
 | DB tables | 3 tables renamed | 3 |
 | DB columns | Columns with "finding" in name | ~15 |
 | DB indexes | Indexes with "finding" in name | ~7 |
-| Migrations | New migration for renames | 1 new |
+| Scenario services | `FindingsConfig`, `is_finding_active()`, `SessionState.active_findings`, env vars | ~30 refs |
+| Migrations | None needed (delete old DB, rebuild) | 0 |
 | API routes | 9 endpoints under `/api/v1/findings/` | 9 |
 | Route file | `app/routes/findings.py` → `app/routes/observations.py` | 1 |
 | CLI commands | `findings` group + subcommands | 4 |
@@ -74,7 +75,7 @@ unified during the rename:
 | Current | Location | Role | After rename |
 |---------|----------|------|-------------|
 | `Finding` (dataclass) | `app/checks/base.py:91` | Runtime check output | `Observation` — becomes the single canonical definition |
-| `Finding` (Pydantic) | `app/models.py:125` | API/agent model | **Merge into canonical** `Observation` or keep as `ObservationDetail` if extra fields are needed |
+| `Finding` (Pydantic) | `app/models.py:125` | API/agent model | `Observation` (orchestration-layer model — same name, different module from the dataclass; distinct by import path) |
 | `Finding` (SQLAlchemy) | `app/db/models.py:66` | DB persistence | `ObservationRecord` (ORM models conventionally use a suffix to distinguish from domain models) |
 | `FindingDetail` | `app/api_models.py:122` | API response schema | `ObservationDetail` (thin response wrapper) |
 
@@ -111,66 +112,30 @@ This is the highest-churn single change (~803 references to
 `run()` method appends to `result.findings`.
 
 
-## Database Migration
+## Database Migration (simplified)
 
-New migration `005_rename_findings_to_observations.py`:
+**No production data exists.** Instead of writing ALTER TABLE/INDEX
+migrations with downgrade paths, we:
 
-### Table renames
+1. Rename all ORM classes and table/column/index names in `app/db/models.py`
+   to use "observation" (done in Wave 1).
+2. Delete the old database file (if any).
+3. Let SQLAlchemy `create_all()` build fresh tables with the new names.
+4. No migration script needed. No downgrade path needed.
 
-```sql
-ALTER TABLE findings RENAME TO observations;
-ALTER TABLE finding_status_history RENAME TO observation_status_history;
-ALTER TABLE finding_overrides RENAME TO observation_overrides;
-```
+### ORM renames in `app/db/models.py`
 
-### Column renames
-
-```sql
--- observations table (formerly findings)
--- No "finding"-named columns in this table — columns are clean.
-
--- observation_status_history (formerly finding_status_history)
--- No "finding"-named columns — uses fingerprint, scan_id, status.
-
--- observation_overrides (formerly finding_overrides)
--- No "finding"-named columns — uses fingerprint, status, reason.
-
--- adjudication_results table
-ALTER TABLE adjudication_results RENAME COLUMN finding_id TO observation_id;
-
--- chains table
--- finding_ids JSON column → observation_ids
--- JSON column rename requires: add new column, copy data, drop old, rename
-ALTER TABLE chains ADD COLUMN observation_ids TEXT;
-UPDATE chains SET observation_ids = finding_ids;
-ALTER TABLE chains DROP COLUMN finding_ids;
-```
-
-### Index renames
-
-```sql
-ALTER INDEX idx_findings_scan_id RENAME TO idx_observations_scan_id;
-ALTER INDEX idx_findings_severity RENAME TO idx_observations_severity;
-ALTER INDEX idx_findings_host RENAME TO idx_observations_host;
-ALTER INDEX idx_findings_fingerprint RENAME TO idx_observations_fingerprint;
-ALTER INDEX idx_finding_overrides_fingerprint RENAME TO idx_observation_overrides_fingerprint;
-ALTER INDEX idx_fsh_fingerprint RENAME TO idx_osh_fingerprint;
-ALTER INDEX idx_fsh_scan_id RENAME TO idx_osh_scan_id;
-```
-
-**Note:** Index rename syntax varies by database engine. If using SQLite
-(which doesn't support `ALTER INDEX`), indexes must be dropped and
-recreated. The migration should detect the engine and use the appropriate
-approach.
-
-### Downgrade
-
-The migration must include a reversible downgrade that restores the
-original names.
-
-**Note:** The `finding_overrides` table is defined in the ORM but has no
-migration file yet. This migration should also handle creating it if it
-doesn't exist, or a separate migration (005a) should create it first.
+| Before | After |
+|--------|-------|
+| `Finding` (class) | `ObservationRecord` |
+| `findings` (table) | `observations` |
+| `FindingStatusHistory` | `ObservationStatusHistory` |
+| `finding_status_history` (table) | `observation_status_history` |
+| `FindingOverride` | `ObservationOverride` |
+| `finding_overrides` (table) | `observation_overrides` |
+| `finding_id` column on `adjudication_results` | `observation_id` |
+| `finding_ids` column on `chains` | `observation_ids` |
+| All `idx_finding*` / `idx_fsh_*` indexes | `idx_observation*` / `idx_osh_*` |
 
 
 ## API Route Changes
@@ -299,20 +264,24 @@ everything else builds on.
    functions: `build_finding` → `build_observation`,
    `make_finding_id` → `make_observation_id`,
    `make_finding_id_hashed` → `make_observation_id_hashed`.
-6. Consolidate the three Finding classes into two (domain + ORM) as
-   part of the rename. If `app/models.py:Finding` and
-   `app/checks/base.py:Finding` can merge, do it now.
+6. The dataclass `Observation` (base.py) and Pydantic `Observation`
+   (models.py) stay as separate classes — they serve different layers.
+   No merge. Both get renamed, distinguished by import path.
 
 **Verify:** `python -c "from app.checks.base import Observation"` works.
 
 ### Wave 2 — Persistence layer
 
-1. `app/db/repositories.py` — Rename `FindingRepository` →
+1. `app/db/models.py` — Rename ORM classes, table names, column names,
+   and index names (see "Database Migration" section above). Already
+   started in Wave 1; this wave finishes the ORM layer.
+2. `app/db/repositories.py` — Rename `FindingRepository` →
    `ObservationRepository`, `FindingOverrideRepository` →
    `ObservationOverrideRepository`. Rename all methods and helper
    functions.
-2. Create migration `005_rename_findings_to_observations.py`.
-3. Run migration against dev database. Verify tables renamed.
+3. Delete old database file(s) if present. Let `create_all()` rebuild.
+4. Delete or skip any migration files that reference old table names
+   (no production data to preserve).
 
 **Verify:** Repository unit tests pass (after updating test references).
 
@@ -339,6 +308,32 @@ len(result.findings)     →  len(result.observations)
 ```
 
 **Verify:** `pytest tests/checks/ -q` passes.
+
+### Wave 3b — Scenario services
+
+The scenario services subsystem uses "finding" to mean "a simulated
+vulnerability the target service can expose." Rename for consistency.
+
+1. `app/scenario_services/common/config.py`:
+   - `FindingsConfig` → `ObservationsConfig`
+   - `RANDOMIZE_FINDINGS` → `RANDOMIZE_OBSERVATIONS`
+   - `is_finding_active()` → `is_observation_active()`
+   - `get_active_findings()` → `get_active_observations()`
+   - `_select_random_findings()` → `_select_random_observations()`
+   - `SessionState.active_findings` → `SessionState.active_observations`
+   - `ScenarioConfig.findings` → `ScenarioConfig.observations`
+   - Update all comments, docstrings, and variable names.
+2. All scenario service files that call `is_finding_active()` or
+   import from this module — update imports and call sites.
+3. `scenario.json` files — rename `"findings"` key to `"observations"`
+   in manifest schemas (if any exist).
+
+**Note:** The env var `RANDOMIZE_FINDINGS` is an external interface.
+Since there are no production deployments, rename it too. If we later
+need backwards compat, handle it then.
+
+**Verify:** Scenario service tests pass (if any). Manual check that
+`is_observation_active()` resolves correctly.
 
 ### Wave 4 — Engine, agents, state, and orchestration
 
@@ -414,28 +409,40 @@ review manually).
 - **Medium risk.** The change is conceptually simple (rename) but
   touches many files. The main risk is missing a reference and breaking
   something silently.
-- **Migration rollback.** The DB migration must include a downgrade path.
+- **No migration risk.** No production data — DB is rebuilt from scratch.
 - **Git rollback.** Each wave is one commit. `git revert` restores any
   wave independently.
 - **Grep is your friend.** After each wave, `grep -ri "finding" <dir>`
   to catch stragglers.
 
 
-## Open Questions
+## Resolved Questions
 
-- [ ] Can the Pydantic `Finding` in `app/models.py` and the dataclass
-      `Finding` in `app/checks/base.py` be merged into a single class?
-      They have overlapping but not identical fields. If not, keep both
-      as `Observation` (base) and `ObservationDetail` (extended).
-- [ ] The `finding_overrides` table has no migration yet. Should
-      migration 005 create it fresh with the new name, or should a
-      separate migration create it under the old name first for
-      existing installs?
-- [ ] Should the API serve a deprecation period with both
-      `/api/v1/findings` and `/api/v1/observations`? Or clean break?
-      (Recommendation: clean break — no external consumers yet.)
-- [ ] The `FindingsConfig` in `app/scenario_services/common/config.py`
-      needs renaming too — confirm this file's role before renaming.
+- [x] **Can the two Finding classes merge?** No. The dataclass
+      (`app/checks/base.py`) is a lightweight check output (id, title,
+      description, severity, evidence, target, check_name). The Pydantic
+      model (`app/models.py`) is a rich domain object with verification,
+      adjudication, hallucination tracking, chain building, and
+      severity_multiplier. They serve different layers. **Decision:** keep
+      both — rename to `Observation` (dataclass) and `ObservationDetail`
+      (Pydantic, replacing the current `FindingDetail` in api_models.py).
+      The Pydantic `Finding` in models.py becomes `Observation` as well
+      (it is the orchestration-layer model, distinct from the check-output
+      dataclass by module, not by name).
+- [x] **Migration strategy?** No production data exists anywhere. No need
+      for ALTER TABLE/INDEX migrations or downgrade paths. Delete the old
+      database and rebuild with new names via `create_all()`. See
+      simplified "Database Migration" section below.
+- [x] **API deprecation period?** Clean break. Product is pre-release
+      with no external consumers.
+- [x] **FindingsConfig role?** This is the scenario services subsystem
+      (`app/scenario_services/common/config.py`). It controls which
+      simulated vulnerabilities target Docker services expose during a
+      session (e.g., `is_finding_active("cors_misconfigured")`). This is
+      a different concept from scanner output, but rename it anyway for
+      consistency — the cognitive overhead of "finding means different
+      things in different subsystems" isn't worth it. Adds a new wave
+      (Wave 3b) for the scenario services rename.
 
 
 ## Success Criteria
