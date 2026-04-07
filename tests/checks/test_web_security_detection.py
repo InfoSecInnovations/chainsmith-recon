@@ -270,7 +270,9 @@ class TestAuthDetectionCheck:
         ):
             result = await check.check_service(service, {})
         oidc_observations = [
-            f for f in result.observations if "oidc" in f.title.lower() or "oauth" in f.title.lower()
+            f
+            for f in result.observations
+            if "oidc" in f.title.lower() or "oauth" in f.title.lower()
         ]
         assert len(oidc_observations) >= 1
         assert result.outputs.get("auth_mechanisms", {}).get("oidc")

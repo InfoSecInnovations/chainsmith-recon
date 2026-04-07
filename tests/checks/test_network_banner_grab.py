@@ -241,7 +241,9 @@ class TestBannerGrabCheckRun:
         with patch.object(check, "_grab_banner", return_value=banner_info):
             result = await check.run({"services": [svc]})
 
-        version_observations = [f for f in result.observations if "version disclosed" in f.title.lower()]
+        version_observations = [
+            f for f in result.observations if "version disclosed" in f.title.lower()
+        ]
         assert len(version_observations) == 1
         assert version_observations[0].severity == "low"
 

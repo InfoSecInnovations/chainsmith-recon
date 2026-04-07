@@ -268,7 +268,9 @@ class TestObservationStatusTracking:
         assert result["previous_scan_id"] is None
 
     @pytest.mark.asyncio
-    async def test_second_scan_status_tracking(self, db, scan_repo, observation_repo, comparison_repo):
+    async def test_second_scan_status_tracking(
+        self, db, scan_repo, observation_repo, comparison_repo
+    ):
         """Second scan correctly identifies new, recurring, and resolved."""
         # Scan 1: observations A, B, C
         await scan_repo.create_scan(
@@ -422,7 +424,9 @@ class TestObservationStatusTracking:
 
         # Get the XSS fingerprint
         async with get_session() as session:
-            result = await session.execute(select(ObservationRecord.fingerprint).where(ObservationRecord.id == "h-a"))
+            result = await session.execute(
+                select(ObservationRecord.fingerprint).where(ObservationRecord.id == "h-a")
+            )
             xss_fp = result.scalar_one()
 
         history = await comparison_repo.get_observation_history(xss_fp)

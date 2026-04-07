@@ -241,7 +241,9 @@ class TestMassAssignmentCheck:
             result = await check.check_service(service, context)
 
         # "role" should NOT be tested since it's a known schema field
-        role_observations = [f for f in result.observations if "'role' accepted and reflected" in f.title]
+        role_observations = [
+            f for f in result.observations if "'role' accepted and reflected" in f.title
+        ]
         assert len(role_observations) == 0
 
     @pytest.mark.asyncio

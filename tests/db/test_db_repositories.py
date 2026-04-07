@@ -233,7 +233,9 @@ class TestObservationRepository:
 
         async with db.session() as session:
             result = await session.execute(
-                select(func.count()).select_from(ObservationRecord).where(ObservationRecord.scan_id == "scan-001")
+                select(func.count())
+                .select_from(ObservationRecord)
+                .where(ObservationRecord.scan_id == "scan-001")
             )
             assert result.scalar() == 3
 
@@ -249,7 +251,9 @@ class TestObservationRepository:
         await observation_repo.bulk_create("scan-001", sample_observations)
 
         async with db.session() as session:
-            result = await session.execute(select(ObservationRecord).where(ObservationRecord.scan_id == "scan-001"))
+            result = await session.execute(
+                select(ObservationRecord).where(ObservationRecord.scan_id == "scan-001")
+            )
             observations = result.scalars().all()
             for f in observations:
                 assert f.fingerprint is not None
@@ -261,7 +265,9 @@ class TestObservationRepository:
         await observation_repo.bulk_create("scan-001", sample_observations)
 
         async with db.session() as session:
-            result = await session.execute(select(ObservationRecord.id).where(ObservationRecord.scan_id == "scan-001"))
+            result = await session.execute(
+                select(ObservationRecord.id).where(ObservationRecord.scan_id == "scan-001")
+            )
             ids = [row[0] for row in result.all()]
             assert len(ids) == len(set(ids))
 
@@ -287,7 +293,9 @@ class TestObservationRepository:
         )
 
         async with db.session() as session:
-            result = await session.execute(select(ObservationRecord).where(ObservationRecord.scan_id == "scan-001"))
+            result = await session.execute(
+                select(ObservationRecord).where(ObservationRecord.scan_id == "scan-001")
+            )
             f = result.scalar_one()
             assert f.title == "Test XSS"
             assert f.description == "Reflected XSS"
@@ -315,7 +323,9 @@ class TestObservationRepository:
         )
 
         async with db.session() as session:
-            result = await session.execute(select(ObservationRecord).where(ObservationRecord.scan_id == "scan-001"))
+            result = await session.execute(
+                select(ObservationRecord).where(ObservationRecord.scan_id == "scan-001")
+            )
             f = result.scalar_one()
             assert f.check_name == "legacy_check_name"
 
@@ -335,7 +345,9 @@ class TestObservationRepository:
         )
 
         async with db.session() as session:
-            result = await session.execute(select(ObservationRecord).where(ObservationRecord.id == "custom-id-123"))
+            result = await session.execute(
+                select(ObservationRecord).where(ObservationRecord.id == "custom-id-123")
+            )
             f = result.scalar_one()
             assert f.id == "custom-id-123"
 

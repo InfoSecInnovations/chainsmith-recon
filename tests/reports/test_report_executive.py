@@ -13,7 +13,9 @@ pytestmark = pytest.mark.integration
 
 class TestExecutiveReportMarkdown:
     @pytest.mark.asyncio
-    async def test_basic_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_basic_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "md")
 
@@ -35,7 +37,9 @@ class TestExecutiveReportMarkdown:
         assert "**Risk Score:** 17" in result["content"]
 
     @pytest.mark.asyncio
-    async def test_top_observations(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_top_observations(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "md")
         content = result["content"]
@@ -43,7 +47,9 @@ class TestExecutiveReportMarkdown:
         assert "XSS in Search" in content
 
     @pytest.mark.asyncio
-    async def test_severity_table(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_severity_table(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "md")
         content = result["content"]
@@ -91,7 +97,9 @@ class TestExecutiveReportMarkdown:
 
 class TestExecutiveReportJSON:
     @pytest.mark.asyncio
-    async def test_json_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_json_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "json")
 
@@ -107,7 +115,9 @@ class TestExecutiveReportJSON:
 
 class TestExecutiveReportHTML:
     @pytest.mark.asyncio
-    async def test_html_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_html_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "html")
 

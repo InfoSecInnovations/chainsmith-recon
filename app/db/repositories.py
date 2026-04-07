@@ -129,8 +129,11 @@ class ScanRepository(_RepositoryBase):
         chain_status, chain_error, chain_llm_analysis.
         """
         allowed = {
-            "adjudication_status", "adjudication_error",
-            "chain_status", "chain_error", "chain_llm_analysis",
+            "adjudication_status",
+            "adjudication_error",
+            "chain_status",
+            "chain_error",
+            "chain_llm_analysis",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
@@ -214,7 +217,9 @@ class ScanRepository(_RepositoryBase):
             )
             await session.execute(delete(CheckLog).where(CheckLog.scan_id == scan_id))
             await session.execute(delete(Chain).where(Chain.scan_id == scan_id))
-            await session.execute(delete(ObservationRecord).where(ObservationRecord.scan_id == scan_id))
+            await session.execute(
+                delete(ObservationRecord).where(ObservationRecord.scan_id == scan_id)
+            )
             await session.execute(delete(Scan).where(Scan.id == scan_id))
             await session.commit()
 
@@ -337,7 +342,9 @@ class ObservationRepository(_RepositoryBase):
         Severity overrides from user customizations are applied.
         """
         async with self._session() as session:
-            result = await session.execute(select(ObservationRecord).where(ObservationRecord.scan_id == scan_id))
+            result = await session.execute(
+                select(ObservationRecord).where(ObservationRecord.scan_id == scan_id)
+            )
             observation_dicts = [_observation_to_dict(f) for f in result.scalars().all()]
 
         # Apply scan-specific severity overrides
@@ -705,7 +712,9 @@ class ComparisonRepository(_RepositoryBase):
                 # No common checks (edge case) — fall back to all fingerprints
                 current_fps = all_current_fps
                 result = await session.execute(
-                    select(ObservationRecord.fingerprint).where(ObservationRecord.scan_id == previous_scan.id)
+                    select(ObservationRecord.fingerprint).where(
+                        ObservationRecord.scan_id == previous_scan.id
+                    )
                 )
                 previous_fps = {row[0] for row in result.all() if row[0]}
 
@@ -840,14 +849,22 @@ class ComparisonRepository(_RepositoryBase):
                 fp_filter_b.append(ObservationRecord.check_name.in_(common_checks))
 
             result_a = await session.execute(
-                select(ObservationRecord.fingerprint, ObservationRecord.title, ObservationRecord.severity).where(*fp_filter_a)
+                select(
+                    ObservationRecord.fingerprint,
+                    ObservationRecord.title,
+                    ObservationRecord.severity,
+                ).where(*fp_filter_a)
             )
             fps_a = {
                 row[0]: {"title": row[1], "severity": row[2]} for row in result_a.all() if row[0]
             }
 
             result_b = await session.execute(
-                select(ObservationRecord.fingerprint, ObservationRecord.title, ObservationRecord.severity).where(*fp_filter_b)
+                select(
+                    ObservationRecord.fingerprint,
+                    ObservationRecord.title,
+                    ObservationRecord.severity,
+                ).where(*fp_filter_b)
             )
             fps_b = {
                 row[0]: {"title": row[1], "severity": row[2]} for row in result_b.all() if row[0]
@@ -858,7 +875,11 @@ class ComparisonRepository(_RepositoryBase):
             fps_b_only = {}
             if b_only_checks:
                 result = await session.execute(
-                    select(ObservationRecord.fingerprint, ObservationRecord.title, ObservationRecord.severity)
+                    select(
+                        ObservationRecord.fingerprint,
+                        ObservationRecord.title,
+                        ObservationRecord.severity,
+                    )
                     .where(ObservationRecord.scan_id == scan_b_id)
                     .where(ObservationRecord.check_name.in_(b_only_checks))
                 )
@@ -1128,14 +1149,18 @@ class TrendRepository(_RepositoryBase):
 
             # Get observations, excluding overridden ones
             result = await session.execute(
-                select(ObservationRecord.severity, ObservationRecord.suite, ObservationRecord.fingerprint).where(
-                    ObservationRecord.scan_id == scan_id
-                )
+                select(
+                    ObservationRecord.severity,
+                    ObservationRecord.suite,
+                    ObservationRecord.fingerprint,
+                ).where(ObservationRecord.scan_id == scan_id)
             )
             all_observations = result.all()
 
         # Filter out overridden observations
-        observations = [(sev, suite, fp) for sev, suite, fp in all_observations if fp not in overridden_fps]
+        observations = [
+            (sev, suite, fp) for sev, suite, fp in all_observations if fp not in overridden_fps
+        ]
 
         # Count by severity
         severity_counts = dict.fromkeys(SEVERITY_LEVELS, 0)
@@ -1438,10 +1463,14 @@ class AdvisorRepository(_RepositoryBase):
 
 def _advisor_rec_to_dict(r: AdvisorRecommendation) -> dict:
     """Convert an AdvisorRecommendation ORM object to a JSON-safe dict."""
-    return r.data if r.data else {
-        "category": r.category,
-        "title": r.title,
-        "description": r.description,
-        "priority": r.priority,
-        "created_at": r.created_at.isoformat() if r.created_at else None,
-    }
+    return (
+        r.data
+        if r.data
+        else {
+            "category": r.category,
+            "title": r.title,
+            "description": r.description,
+            "priority": r.priority,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+    )

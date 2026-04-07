@@ -209,7 +209,9 @@ class TestDebugEndpointCheck:
         ):
             result = await check.check_service(service, {})
 
-        werkzeug = [f for f in result.observations if "Werkzeug" in f.title or "werkzeug" in f.title]
+        werkzeug = [
+            f for f in result.observations if "Werkzeug" in f.title or "werkzeug" in f.title
+        ]
         assert len(werkzeug) >= 1
         assert werkzeug[0].severity == "critical"
 
@@ -227,7 +229,9 @@ class TestDebugEndpointCheck:
         ):
             result = await check.check_service(service, {})
 
-        django = [f for f in result.observations if "Django" in f.title or "django" in f.title.lower()]
+        django = [
+            f for f in result.observations if "Django" in f.title or "django" in f.title.lower()
+        ]
         assert len(django) >= 1
 
     @pytest.mark.asyncio

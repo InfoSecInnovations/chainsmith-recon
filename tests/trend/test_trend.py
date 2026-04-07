@@ -420,7 +420,9 @@ class TestOverrideExclusion:
         from sqlalchemy import select
 
         async with get_session() as session:
-            result = await session.execute(select(ObservationRecord.fingerprint).where(ObservationRecord.title == "FP"))
+            result = await session.execute(
+                select(ObservationRecord.fingerprint).where(ObservationRecord.title == "FP")
+            )
             fp_fingerprint = result.scalar_one()
 
         await override_repo.set_override(fp_fingerprint, "false_positive", reason="Not real")

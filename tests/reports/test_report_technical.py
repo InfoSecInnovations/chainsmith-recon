@@ -17,7 +17,9 @@ pytestmark = pytest.mark.integration
 
 class TestTechnicalReportMarkdown:
     @pytest.mark.asyncio
-    async def test_basic_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_basic_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
 
@@ -31,7 +33,9 @@ class TestTechnicalReportMarkdown:
         assert "**Scan ID:** report-scan" in content
 
     @pytest.mark.asyncio
-    async def test_severity_summary(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_severity_summary(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
         content = result["content"]
@@ -42,7 +46,9 @@ class TestTechnicalReportMarkdown:
         assert "| Info | 1 |" in content
 
     @pytest.mark.asyncio
-    async def test_observations_listed(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_observations_listed(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
         content = result["content"]
@@ -55,7 +61,9 @@ class TestTechnicalReportMarkdown:
         assert "<script>alert(1)</script>" in content
 
     @pytest.mark.asyncio
-    async def test_chains_included(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_chains_included(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
         content = result["content"]
@@ -65,7 +73,9 @@ class TestTechnicalReportMarkdown:
         assert "rule-based" in content
 
     @pytest.mark.asyncio
-    async def test_check_coverage(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_check_coverage(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
         content = result["content"]
@@ -86,7 +96,9 @@ class TestTechnicalReportMarkdown:
 
 class TestTechnicalReportJSON:
     @pytest.mark.asyncio
-    async def test_json_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_json_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "json")
 
@@ -122,7 +134,9 @@ class TestTechnicalReportOverrides:
 
         async with db.session() as session:
             result = await session.execute(
-                select(ObservationRecord.fingerprint).where(ObservationRecord.title == "Missing CSP")
+                select(ObservationRecord.fingerprint).where(
+                    ObservationRecord.title == "Missing CSP"
+                )
             )
             fp = result.scalar_one()
 
@@ -157,7 +171,9 @@ class TestTechnicalReportErrors:
 
 class TestTechnicalReportHTML:
     @pytest.mark.asyncio
-    async def test_html_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_html_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "html")
 

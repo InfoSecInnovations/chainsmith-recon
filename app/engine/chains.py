@@ -172,7 +172,9 @@ CHAIN_PATTERNS = [
         "title": "Debug Endpoint Information Leakage",
         "description": "Debug endpoints may leak sensitive configuration or allow manipulation",
         "severity": "high",
-        "required_observations": [{"check_name": "openapi_discovery", "evidence_contains": "debug"}],
+        "required_observations": [
+            {"check_name": "openapi_discovery", "evidence_contains": "debug"}
+        ],
         "exploitation_steps": [
             "Access discovered debug endpoints",
             "Extract configuration information",
@@ -784,7 +786,10 @@ CHAIN_PATTERNS = [
         "title": "Credential Compromise via Default Credentials",
         "description": "Authentication mechanism identified and default credentials confirmed working",
         "severity": "high",
-        "required_observations": [{"check_name": "auth_detection"}, {"check_name": "default_creds"}],
+        "required_observations": [
+            {"check_name": "auth_detection"},
+            {"check_name": "default_creds"},
+        ],
         "exploitation_steps": [
             "Identify the authentication mechanism in use (Basic, Bearer, OAuth, form)",
             "Confirm default credentials provide valid access to the application",
@@ -823,6 +828,7 @@ async def _update_chain_status_in_db(scan_id: str | None, **fields) -> None:
         return
     try:
         from app.db.repositories import ScanRepository
+
         await ScanRepository().update_scan_status(scan_id, **fields)
     except Exception:
         logger.warning("Failed to persist chain status to DB", exc_info=True)
@@ -834,6 +840,7 @@ async def _load_observations_for_chains(scan_id: str | None) -> list[dict]:
         return []
     try:
         from app.db.repositories import ObservationRepository
+
         return await ObservationRepository().get_observations(scan_id)
     except Exception:
         logger.warning("Failed to load observations from DB for chain analysis", exc_info=True)
@@ -846,6 +853,7 @@ async def _persist_chains(scan_id: str | None, chains: list[dict]) -> None:
         return
     try:
         from app.db.repositories import ChainRepository
+
         await ChainRepository().bulk_create(scan_id, chains)
     except Exception:
         logger.warning("Failed to persist chains to DB", exc_info=True)
@@ -882,6 +890,7 @@ async def run_chain_analysis(state: "AppState", llm_only: bool = False):
             # For retry, load existing rule-based chains from DB
             try:
                 from app.db.repositories import ChainRepository
+
                 existing = await ChainRepository().get_chains(scan_id) if scan_id else []
                 rule_chains = [c for c in existing if c.get("source") == "rule-based"]
                 chains.extend(rule_chains)
@@ -935,9 +944,7 @@ async def run_chain_analysis(state: "AppState", llm_only: bool = False):
     except Exception as e:
         logger.exception(f"Chain analysis error: {e}")
         state.chain_status = "error"
-        await _update_chain_status_in_db(
-            scan_id, chain_status="error", chain_error=str(e)
-        )
+        await _update_chain_status_in_db(scan_id, chain_status="error", chain_error=str(e))
 
 
 def detect_rule_based_chains(observations: list[dict]) -> list[dict]:
@@ -996,9 +1003,7 @@ def match_pattern(pattern: dict, observations: list[dict]) -> list[dict]:
 
             # Check count_gte (minimum count of observations)
             if req.get("count_gte"):
-                count = len(
-                    [f for f in observations if f.get("check_name") == req["check_name"]]
-                )
+                count = len([f for f in observations if f.get("check_name") == req["check_name"]])
                 if count < req["count_gte"]:
                     continue
 

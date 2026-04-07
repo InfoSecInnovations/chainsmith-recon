@@ -199,7 +199,9 @@ class TestOverrideWithHistory:
 
         # Get the fingerprint
         async with get_session() as session:
-            result = await session.execute(select(ObservationRecord.fingerprint).where(ObservationRecord.id == "ov-f1"))
+            result = await session.execute(
+                select(ObservationRecord.fingerprint).where(ObservationRecord.id == "ov-f1")
+            )
             fp = result.scalar_one()
 
         # Set override
@@ -243,7 +245,9 @@ class TestOverrideWithHistory:
         await scan_repo.complete_scan("reopen-scan", status="complete", observations_count=1)
 
         async with get_session() as session:
-            result = await session.execute(select(ObservationRecord.fingerprint).where(ObservationRecord.id == "ro-f1"))
+            result = await session.execute(
+                select(ObservationRecord.fingerprint).where(ObservationRecord.id == "ro-f1")
+            )
             fp = result.scalar_one()
 
         # Accept then reopen

@@ -311,7 +311,9 @@ class ScanAdvisor:
         ran = self.completed | self.failed | self.skipped
 
         # Build set of checks that produced observations
-        checks_with_observations = {o.get("check_name") for o in self.observations if o.get("check_name")}
+        checks_with_observations = {
+            o.get("check_name") for o in self.observations if o.get("check_name")
+        }
 
         for rule in FOLLOW_UP_RULES:
             trigger = rule["trigger_check"]

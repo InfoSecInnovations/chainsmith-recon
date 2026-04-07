@@ -205,7 +205,9 @@ class TestContentFilterCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        filter_observations = [f for f in result.observations if "filtering detected" in f.title.lower()]
+        filter_observations = [
+            f for f in result.observations if "filtering detected" in f.title.lower()
+        ]
         assert len(filter_observations) == 1
 
     async def test_detects_filter_by_response_phrase(self, chat_endpoint_context):
@@ -223,7 +225,9 @@ class TestContentFilterCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        filter_observations = [f for f in result.observations if "filtering detected" in f.title.lower()]
+        filter_observations = [
+            f for f in result.observations if "filtering detected" in f.title.lower()
+        ]
         assert len(filter_observations) == 1
 
     async def test_no_filter_detected(self, chat_endpoint_context):
@@ -241,7 +245,9 @@ class TestContentFilterCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        no_filter_observations = [f for f in result.observations if "No content filtering" in f.title]
+        no_filter_observations = [
+            f for f in result.observations if "No content filtering" in f.title
+        ]
         assert len(no_filter_observations) == 1
 
 

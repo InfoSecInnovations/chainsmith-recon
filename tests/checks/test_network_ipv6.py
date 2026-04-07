@@ -185,7 +185,8 @@ class TestIPv6DiscoveryObservations:
             result = await check.run(context)
             low_observations = [f for f in result.observations if f.severity == "low"]
             assert any(
-                "ula" in f.title.lower() or "unique local" in f.title.lower() for f in low_observations
+                "ula" in f.title.lower() or "unique local" in f.title.lower()
+                for f in low_observations
             )
 
     @pytest.mark.asyncio

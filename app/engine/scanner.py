@@ -131,21 +131,23 @@ async def run_scan(
             state.check_statuses[name] = "running"
             if log_writer:
                 import asyncio
-                asyncio.ensure_future(
-                    log_writer.log_event({"check": name, "event": "started"})
-                )
+
+                asyncio.ensure_future(log_writer.log_event({"check": name, "event": "started"}))
 
         def on_complete(name: str, success: bool, observations_count: int):
             state.checks_completed += 1
             state.check_statuses[name] = "completed" if success else "failed"
             if log_writer:
                 import asyncio
+
                 asyncio.ensure_future(
-                    log_writer.log_event({
-                        "check": name,
-                        "event": "completed" if success else "failed",
-                        "observations": observations_count,
-                    })
+                    log_writer.log_event(
+                        {
+                            "check": name,
+                            "event": "completed" if success else "failed",
+                            "observations": observations_count,
+                        }
+                    )
                 )
 
         # Choose execution backend: swarm or local
@@ -213,9 +215,7 @@ async def run_scan(
 # ─── Scan Advisor ─────────────────────────────────────────────
 
 
-async def _run_scan_advisor(
-    state: "AppState", launcher=None, scan_id: str | None = None
-) -> None:
+async def _run_scan_advisor(state: "AppState", launcher=None, scan_id: str | None = None) -> None:
     """
     Run post-scan advisor analysis if enabled.
 
@@ -256,6 +256,7 @@ async def _run_scan_advisor(
         if scan_id and recommendation_dicts:
             try:
                 from app.db.repositories import AdvisorRepository
+
                 await AdvisorRepository().bulk_create(scan_id, recommendation_dicts)
             except Exception:
                 logger.warning("Failed to persist advisor recommendations to DB", exc_info=True)

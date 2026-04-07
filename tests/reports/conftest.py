@@ -98,7 +98,12 @@ def trend_repo(db):
 
 
 async def _create_populated_scan(
-    scan_repo, observation_repo, chain_repo, check_log_repo, scan_id="report-scan", target="example.com"
+    scan_repo,
+    observation_repo,
+    chain_repo,
+    check_log_repo,
+    scan_id="report-scan",
+    target="example.com",
 ):
     """Create a scan with observations, chains, and log entries."""
     await scan_repo.create_scan(

@@ -165,7 +165,9 @@ class TestTlsAnalysisCheckRun:
                 )
 
         assert result.success is True
-        self_signed_observations = [f for f in result.observations if "self-signed" in f.title.lower()]
+        self_signed_observations = [
+            f for f in result.observations if "self-signed" in f.title.lower()
+        ]
         assert len(self_signed_observations) == 1
         assert self_signed_observations[0].severity == "medium"
 
@@ -245,7 +247,9 @@ class TestTlsAnalysisCheckRun:
                 )
 
         assert result.success is True
-        expiring_observations = [f for f in result.observations if "expires soon" in f.title.lower()]
+        expiring_observations = [
+            f for f in result.observations if "expires soon" in f.title.lower()
+        ]
         assert len(expiring_observations) == 1
         assert expiring_observations[0].severity == "low"
 

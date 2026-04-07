@@ -36,6 +36,7 @@ async def _update_adjudication_status_in_db(scan_id: str | None, **fields) -> No
         return
     try:
         from app.db.repositories import ScanRepository
+
         await ScanRepository().update_scan_status(scan_id, **fields)
     except Exception:
         logger.warning("Failed to persist adjudication status to DB", exc_info=True)
@@ -47,6 +48,7 @@ async def _load_observations_from_db(scan_id: str | None) -> list[dict]:
         return []
     try:
         from app.db.repositories import ObservationRepository
+
         return await ObservationRepository().get_observations(scan_id)
     except Exception:
         logger.warning("Failed to load observations from DB", exc_info=True)
@@ -115,7 +117,8 @@ async def run_adjudication(
         if not cfg.adjudicator.enabled:
             state.adjudication_status = "complete"
             await _update_adjudication_status_in_db(
-                scan_id, adjudication_status="complete",
+                scan_id,
+                adjudication_status="complete",
                 adjudication_error="Adjudicator is disabled in config",
             )
             logger.info("Adjudicator disabled — skipping")

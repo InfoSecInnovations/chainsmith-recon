@@ -30,9 +30,7 @@ class DefaultCredsCheck(ServiceIteratingCheck):
     timeout_seconds = 60.0
     delay_between_targets = 0.5
 
-    reason = (
-        "Admin panels with default credentials supersede all AI-specific observations on the same host"
-    )
+    reason = "Admin panels with default credentials supersede all AI-specific observations on the same host"
     references = ["OWASP WSTG-ATHN-02", "CWE-798", "CWE-1392"]
     techniques = ["default credential testing", "authentication bypass"]
 

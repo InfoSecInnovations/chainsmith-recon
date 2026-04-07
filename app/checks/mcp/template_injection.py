@@ -164,7 +164,8 @@ class ResourceTemplateInjectionCheck(BaseCheck):
 
                     # If templates exist but no injection found
                     if templates and not any(
-                        f.check_name == self.name and f.severity != "info" for f in result.observations
+                        f.check_name == self.name and f.severity != "info"
+                        for f in result.observations
                     ):
                         result.observations.append(
                             build_observation(

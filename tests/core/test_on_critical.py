@@ -148,7 +148,9 @@ class TestLauncherAnnotate:
         web_check = FakeCheck(
             name="header_analysis",
             produces=["header_observations"],
-            _observations=[make_critical_observation(host="target.com", check_name="header_analysis")],
+            _observations=[
+                make_critical_observation(host="target.com", check_name="header_analysis")
+            ],
             _outputs={"header_observations": True},
         )
         ai_check = FakeCheck(
@@ -182,7 +184,9 @@ class TestLauncherAnnotate:
         check1 = FakeCheck(
             name="header_analysis",
             produces=["header_observations"],
-            _observations=[make_critical_observation(host="target.com", check_name="header_analysis")],
+            _observations=[
+                make_critical_observation(host="target.com", check_name="header_analysis")
+            ],
             _outputs={"header_observations": True},
         )
         check2 = FakeCheck(
@@ -219,7 +223,9 @@ class TestLauncherSkipDownstream:
         web_check = FakeCheck(
             name="header_analysis",
             produces=["header_observations"],
-            _observations=[make_critical_observation(host="target.com", check_name="header_analysis")],
+            _observations=[
+                make_critical_observation(host="target.com", check_name="header_analysis")
+            ],
             _outputs={"header_observations": True},
         )
         ai_check = FakeCheck(
@@ -252,7 +258,9 @@ class TestLauncherSkipDownstream:
         check1 = FakeCheck(
             name="header_analysis",
             produces=["header_observations"],
-            _observations=[make_critical_observation(host="target.com", check_name="header_analysis")],
+            _observations=[
+                make_critical_observation(host="target.com", check_name="header_analysis")
+            ],
             _outputs={"header_observations": True},
         )
         check2 = FakeCheck(
@@ -288,7 +296,9 @@ class TestLauncherStop:
         web_check = FakeCheck(
             name="header_analysis",
             produces=["header_observations"],
-            _observations=[make_critical_observation(host="target.com", check_name="header_analysis")],
+            _observations=[
+                make_critical_observation(host="target.com", check_name="header_analysis")
+            ],
             _outputs={"header_observations": True},
         )
         ai_check = FakeCheck(

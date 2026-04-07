@@ -28,7 +28,12 @@ pytestmark = pytest.mark.integration
 
 
 async def _create_populated_scan(
-    scan_repo, observation_repo, chain_repo, check_log_repo, scan_id="sarif-scan", target="example.com"
+    scan_repo,
+    observation_repo,
+    chain_repo,
+    check_log_repo,
+    scan_id="sarif-scan",
+    target="example.com",
 ):
     """Create a scan with observations, chains, and log entries."""
     await scan_repo.create_scan(
@@ -151,7 +156,9 @@ async def _create_populated_scan(
 
 class TestTechnicalReportSARIF:
     @pytest.mark.asyncio
-    async def test_sarif_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_sarif_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
 
@@ -192,7 +199,9 @@ class TestTechnicalReportSARIF:
         assert "server_header" in rule_ids
 
     @pytest.mark.asyncio
-    async def test_sarif_tool_info(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_sarif_tool_info(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
@@ -202,7 +211,9 @@ class TestTechnicalReportSARIF:
         assert driver["version"] == "1.3.0"
 
     @pytest.mark.asyncio
-    async def test_sarif_locations(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_sarif_locations(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
@@ -260,7 +271,9 @@ class TestTechnicalReportSARIF:
         assert props["chainCount"] == 1
 
     @pytest.mark.asyncio
-    async def test_sarif_help_uri(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_sarif_help_uri(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
@@ -345,7 +358,9 @@ class TestDeltaReportSARIF:
 
 class TestExecutiveReportSARIF:
     @pytest.mark.asyncio
-    async def test_sarif_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_sarif_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("sarif-scan", "sarif")
         assert result["format"] == "sarif"
@@ -369,7 +384,9 @@ class TestExecutiveReportSARIF:
 
 class TestComplianceReportSARIF:
     @pytest.mark.asyncio
-    async def test_sarif_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_sarif_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("sarif-scan", "sarif")
         assert result["format"] == "sarif"
@@ -392,7 +409,9 @@ class TestComplianceReportSARIF:
 
         async with db.session() as session:
             result = await session.execute(
-                select(ObservationRecord.fingerprint).where(ObservationRecord.title == "Missing CSP")
+                select(ObservationRecord.fingerprint).where(
+                    ObservationRecord.title == "Missing CSP"
+                )
             )
             fp = result.scalar_one()
 
@@ -500,7 +519,9 @@ async def test_targeted_sarif_export(targeted_setup):
 
 async def test_targeted_custom_title(targeted_setup):
     fps, db = targeted_setup
-    result = await generate_targeted_export(fps[:1], "md", title="Critical Observations Only", db=db)
+    result = await generate_targeted_export(
+        fps[:1], "md", title="Critical Observations Only", db=db
+    )
     assert "# Critical Observations Only" in result["content"]
 
 

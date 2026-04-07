@@ -39,7 +39,9 @@ class FakeCheck:
         return result
 
 
-def make_observation(title: str, severity: str = "medium", host: str = "example.com") -> Observation:
+def make_observation(
+    title: str, severity: str = "medium", host: str = "example.com"
+) -> Observation:
     return Observation(
         id=f"obs-{title.lower().replace(' ', '-')}",
         title=title,

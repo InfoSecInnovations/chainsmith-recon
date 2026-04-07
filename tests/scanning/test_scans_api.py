@@ -214,7 +214,9 @@ class TestScanRepositoryReads:
         # Verify related data is gone
         async with get_session() as session:
             result = await session.execute(
-                select(func.count()).select_from(ObservationRecord).where(ObservationRecord.scan_id == "scan-aaa")
+                select(func.count())
+                .select_from(ObservationRecord)
+                .where(ObservationRecord.scan_id == "scan-aaa")
             )
             assert result.scalar() == 0
             result = await session.execute(

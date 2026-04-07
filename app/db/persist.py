@@ -129,8 +129,7 @@ async def on_scan_complete(
         logger.info(f"Scan {scan_id} persisted: {obs_count} observations")
     except Exception:
         logger.warning(
-            "Failed to persist scan results — data may be partially "
-            "written via streaming writers",
+            "Failed to persist scan results — data may be partially written via streaming writers",
             exc_info=True,
         )
 

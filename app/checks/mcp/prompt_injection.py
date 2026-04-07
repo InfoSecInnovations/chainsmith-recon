@@ -187,7 +187,9 @@ class MCPPromptInjectionCheck(BaseCheck):
                 result.errors.append(f"Prompt injection test for {tool_name}: {e}")
 
         if not any(
-            f.severity in ("high", "critical") for f in result.observations if f.check_name == self.name
+            f.severity in ("high", "critical")
+            for f in result.observations
+            if f.check_name == self.name
         ):
             result.observations.append(
                 build_observation(

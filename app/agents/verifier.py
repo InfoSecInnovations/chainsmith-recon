@@ -387,7 +387,10 @@ class VerifierAgent:
                             importance=EventImportance.HIGH,
                             message=f"HALLUCINATION CAUGHT [{observation_id}]: {reasoning[:80]}",
                             observation_id=observation_id,
-                            details={"confidence": confidence, "observation_title": observation_title},
+                            details={
+                                "confidence": confidence,
+                                "observation_title": observation_title,
+                            },
                         )
                     )
                 elif status == "verified":

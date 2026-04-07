@@ -14,7 +14,9 @@ pytestmark = pytest.mark.integration
 
 class TestComplianceReportMarkdown:
     @pytest.mark.asyncio
-    async def test_basic_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_basic_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "md")
 
@@ -28,7 +30,9 @@ class TestComplianceReportMarkdown:
         assert "Observation Summary" in content
 
     @pytest.mark.asyncio
-    async def test_check_coverage(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_check_coverage(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "md")
         content = result["content"]
@@ -48,7 +52,9 @@ class TestComplianceReportMarkdown:
         assert "| port_scan | network |" in content
 
     @pytest.mark.asyncio
-    async def test_severity_summary(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_severity_summary(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "md")
         content = result["content"]
@@ -88,7 +94,9 @@ class TestComplianceReportMarkdown:
 
         async with db.session() as session:
             result = await session.execute(
-                select(ObservationRecord.fingerprint).where(ObservationRecord.title == "Missing CSP")
+                select(ObservationRecord.fingerprint).where(
+                    ObservationRecord.title == "Missing CSP"
+                )
             )
             fp = result.scalar_one()
 
@@ -104,7 +112,9 @@ class TestComplianceReportMarkdown:
 
 class TestComplianceReportJSON:
     @pytest.mark.asyncio
-    async def test_json_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_json_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "json")
 
@@ -118,7 +128,9 @@ class TestComplianceReportJSON:
 
 class TestComplianceReportHTML:
     @pytest.mark.asyncio
-    async def test_html_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    async def test_html_structure(
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
+    ):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "html")
 

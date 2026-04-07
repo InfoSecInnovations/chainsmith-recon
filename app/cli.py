@@ -303,7 +303,9 @@ def scan(
         # Summary
         if not quiet:
             click.echo()
-            click.echo(style(f"Scan complete: {len(observations)} observations", fg="green", bold=True))
+            click.echo(
+                style(f"Scan complete: {len(observations)} observations", fg="green", bold=True)
+            )
             click.echo()
 
         # 8. Output
@@ -1811,7 +1813,9 @@ def observations_overrides(ctx, status: str, as_json: bool):
             return
 
         click.echo(
-            click.style(f"Observation Overrides ({resp.get('total', 0)} total)", fg="cyan", bold=True)
+            click.style(
+                f"Observation Overrides ({resp.get('total', 0)} total)", fg="cyan", bold=True
+            )
         )
         click.echo()
 
@@ -2092,7 +2096,9 @@ def serve(host: str, port: int, reload: bool, coordinator: bool):
 @click.argument("scan_id", required=False)
 @click.option("--all", "import_all", is_flag=True, help="Import all scratch directories")
 @click.option("--dry-run", is_flag=True, help="Preview without importing")
-@click.option("--keep", is_flag=True, help="Keep scratch files after import (default: delete on success)")
+@click.option(
+    "--keep", is_flag=True, help="Keep scratch files after import (default: delete on success)"
+)
 def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bool):
     """Import observations from scratch space into the database.
 
@@ -2210,7 +2216,9 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
                     shutil.rmtree(scan_dir)
                     click.echo(f"    Cleaned up {scan_dir}")
                 except Exception as e:
-                    click.echo(click.style(f"    Warning: could not remove {scan_dir}: {e}", fg="yellow"))
+                    click.echo(
+                        click.style(f"    Warning: could not remove {scan_dir}: {e}", fg="yellow")
+                    )
 
         return total_imported, total_skipped
 
@@ -2224,9 +2232,18 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
     imported, skipped = asyncio.run(_import())
 
     if dry_run:
-        click.echo(click.style(f"\nDry run complete. Would import observations from {len(scan_dirs)} scan(s).", fg="yellow"))
+        click.echo(
+            click.style(
+                f"\nDry run complete. Would import observations from {len(scan_dirs)} scan(s).",
+                fg="yellow",
+            )
+        )
     else:
-        click.echo(click.style(f"\nImported {imported} observations ({skipped} duplicates skipped).", fg="green"))
+        click.echo(
+            click.style(
+                f"\nImported {imported} observations ({skipped} duplicates skipped).", fg="green"
+            )
+        )
 
 
 @cli.command("scratch-list")
@@ -2238,9 +2255,7 @@ def scratch_list():
         click.echo("No scratch directory found.")
         return
 
-    scan_dirs = sorted(
-        [d for d in SCRATCH_DIR.iterdir() if d.is_dir()]
-    )
+    scan_dirs = sorted([d for d in SCRATCH_DIR.iterdir() if d.is_dir()])
 
     if not scan_dirs:
         click.echo("No scratch data found.")
@@ -2254,6 +2269,7 @@ def scratch_list():
         meta = ""
         if meta_file.exists():
             import json
+
             try:
                 data = json.loads(meta_file.read_text(encoding="utf-8"))
                 meta = f" ({data.get('reason', '')})"

@@ -122,7 +122,10 @@ class AdjudicatorAgent:
                 agent=AgentType.ADJUDICATOR,
                 importance=EventImportance.MEDIUM,
                 message=f"Adjudicator starting severity review of {len(verified)} verified observations...",
-                details={"total_observations": len(verified), "approach": AdjudicationApproach.EVIDENCE_RUBRIC},
+                details={
+                    "total_observations": len(verified),
+                    "approach": AdjudicationApproach.EVIDENCE_RUBRIC,
+                },
             )
         )
 
@@ -267,7 +270,9 @@ class AdjudicatorAgent:
         if observation.evidence_summary:
             parts.append(f"Evidence: {observation.evidence_summary}")
         if observation.exploitation_techniques:
-            parts.append(f"Exploitation Techniques: {', '.join(observation.exploitation_techniques)}")
+            parts.append(
+                f"Exploitation Techniques: {', '.join(observation.exploitation_techniques)}"
+            )
 
         if asset_context:
             parts.append("")

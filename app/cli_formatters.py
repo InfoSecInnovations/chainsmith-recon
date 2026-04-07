@@ -34,7 +34,9 @@ SUITE_COLORS = {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def format_observation_terminal(observation: dict, verbose: bool = False, no_color: bool = False) -> str:
+def format_observation_terminal(
+    observation: dict, verbose: bool = False, no_color: bool = False
+) -> str:
     """Format an observation dict for terminal output."""
     sev = observation.get("severity", "info").upper()
     color = SEVERITY_COLORS.get(observation.get("severity", "info"), "white")

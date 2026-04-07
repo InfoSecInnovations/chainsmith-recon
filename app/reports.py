@@ -145,7 +145,9 @@ def _technical_markdown(scan, observations, chains, severity_counts, risk, cover
         f"**Scan ID:** {scan['id']}",
         f"**Date:** {date}",
         f"**Duration:** {duration}",
-        f"**Observations:** {total} ({sev_summary})" if sev_summary else f"**Observations:** {total}",
+        f"**Observations:** {total} ({sev_summary})"
+        if sev_summary
+        else f"**Observations:** {total}",
         f"**Risk Score:** {risk}",
         "",
         "---",
@@ -1257,7 +1259,9 @@ def _compliance_html(d: dict) -> str:
     # Override audit
     if d["override_audit"]:
         parts.append("<h2>Override Audit Trail</h2>")
-        parts.append("<table><tr><th>Observation</th><th>Status</th><th>Reason</th><th>Date</th></tr>")
+        parts.append(
+            "<table><tr><th>Observation</th><th>Status</th><th>Reason</th><th>Date</th></tr>"
+        )
         for ov in d["override_audit"]:
             parts.append(
                 f"<tr><td>{_esc(ov['observation_title'])}</td><td>{_esc(ov['status'])}</td>"
@@ -1684,7 +1688,12 @@ def _compliance_sarif(data: dict) -> str:
             }
         )
     rules = (
-        [{"id": "observation_override", "shortDescription": {"text": "Observation Override Audit Entry"}}]
+        [
+            {
+                "id": "observation_override",
+                "shortDescription": {"text": "Observation Override Audit Entry"},
+            }
+        ]
         if results
         else []
     )

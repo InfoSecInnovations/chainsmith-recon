@@ -136,7 +136,9 @@ class CheckLauncher:
         # Store critical_hosts in context for downstream consumers
         self.context["critical_hosts"] = self.critical_hosts
 
-        logger.info(f"Completed after {iteration} iterations. {len(self.observations)} total observations.")
+        logger.info(
+            f"Completed after {iteration} iterations. {len(self.observations)} total observations."
+        )
         self._log_final_state()
 
         return self.observations

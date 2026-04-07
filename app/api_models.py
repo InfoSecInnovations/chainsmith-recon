@@ -75,7 +75,6 @@ class ScanStartInput(BaseModel):
     port_profile: str | None = None  # Port profile: web, ai, full, lab
 
 
-
 # ─── Settings Models ──────────────────────────────────────────
 
 

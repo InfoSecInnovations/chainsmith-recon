@@ -119,7 +119,9 @@ class TestReverseDnsCheckRun:
             result = await check.run(context)
 
         assert result.success is True
-        internal_observations = [f for f in result.observations if "Internal hostname in PTR" in f.title]
+        internal_observations = [
+            f for f in result.observations if "Internal hostname in PTR" in f.title
+        ]
         assert len(internal_observations) == 1
         assert internal_observations[0].severity == "low"
 
