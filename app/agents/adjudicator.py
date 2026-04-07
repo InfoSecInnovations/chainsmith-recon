@@ -15,7 +15,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 
-from app.lib.llm import LLMResponse, get_llm_client
+from app.lib.llm import LLMClient, LLMResponse, get_llm_client
 from app.models import (
     AdjudicatedRisk,
     AdjudicationApproach,
@@ -162,12 +162,13 @@ class AdjudicatorAgent:
 
     def __init__(
         self,
+        client: LLMClient,
         event_callback: Callable[[AgentEvent], Awaitable[None]] | None = None,
         approach: AdjudicationApproach = AdjudicationApproach.AUTO,
     ):
+        self.client = client
         self.event_callback = event_callback
         self.approach = approach
-        self.client = get_llm_client()
         self.is_running = False
         self.results: list[AdjudicatedRisk] = []
 

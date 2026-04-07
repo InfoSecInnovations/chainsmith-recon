@@ -14,7 +14,7 @@ Covers:
 
 import json
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -144,23 +144,17 @@ def sample_operator_context():
 
 
 class TestAgentInstantiation:
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_default_approach_is_auto(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_default_approach_is_auto(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         assert agent.approach == AdjudicationApproach.AUTO
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_explicit_approach(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent(approach=AdjudicationApproach.ADVERSARIAL_DEBATE)
+    def test_explicit_approach(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.ADVERSARIAL_DEBATE)
         assert agent.approach == AdjudicationApproach.ADVERSARIAL_DEBATE
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_event_callback_stored(self, mock_get):
-        mock_get.return_value = MagicMock()
+    def test_event_callback_stored(self, mock_llm_client):
         callback = AsyncMock()
-        agent = AdjudicatorAgent(event_callback=callback)
+        agent = AdjudicatorAgent(client=mock_llm_client, event_callback=callback)
         assert agent.event_callback is callback
 
 
@@ -170,45 +164,33 @@ class TestAgentInstantiation:
 
 
 class TestAutoTiering:
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_critical_uses_adversarial(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_critical_uses_adversarial(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         finding = _make_finding(severity="critical")
         assert agent._resolve_approach(finding) == AdjudicationApproach.ADVERSARIAL_DEBATE
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_high_uses_adversarial(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_high_uses_adversarial(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         finding = _make_finding(severity="high")
         assert agent._resolve_approach(finding) == AdjudicationApproach.ADVERSARIAL_DEBATE
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_medium_uses_rubric(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_medium_uses_rubric(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         finding = _make_finding(severity="medium")
         assert agent._resolve_approach(finding) == AdjudicationApproach.EVIDENCE_RUBRIC
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_low_uses_challenge(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_low_uses_challenge(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         finding = _make_finding(severity="low")
         assert agent._resolve_approach(finding) == AdjudicationApproach.STRUCTURED_CHALLENGE
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_info_uses_challenge(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_info_uses_challenge(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         finding = _make_finding(severity="info")
         assert agent._resolve_approach(finding) == AdjudicationApproach.STRUCTURED_CHALLENGE
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_explicit_approach_overrides_auto(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent(approach=AdjudicationApproach.EVIDENCE_RUBRIC)
+    def test_explicit_approach_overrides_auto(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.EVIDENCE_RUBRIC)
         finding = _make_finding(severity="critical")
         assert agent._resolve_approach(finding) == AdjudicationApproach.EVIDENCE_RUBRIC
 
@@ -219,13 +201,10 @@ class TestAutoTiering:
 
 
 class TestStructuredChallenge:
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_severity_adjusted(self, mock_get, mock_llm_client):
-        mock_get.return_value = mock_llm_client
+    async def test_severity_adjusted(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("medium"))
 
-        agent = AdjudicatorAgent(approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
+        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -235,26 +214,20 @@ class TestStructuredChallenge:
         assert results[0].approach_used == AdjudicationApproach.STRUCTURED_CHALLENGE
         assert results[0].confidence == 0.85
 
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_severity_upheld(self, mock_get, mock_llm_client):
-        mock_get.return_value = mock_llm_client
+    async def test_severity_upheld(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("high"))
 
-        agent = AdjudicatorAgent(approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
+        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
         assert len(results) == 1
         assert results[0].original_severity == results[0].adjudicated_severity
 
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_llm_failure_upholds_severity(self, mock_get, mock_llm_client):
-        mock_get.return_value = mock_llm_client
+    async def test_llm_failure_upholds_severity(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response({}, success=False)
 
-        agent = AdjudicatorAgent(approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
+        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -270,11 +243,7 @@ class TestStructuredChallenge:
 
 
 class TestAdversarialDebate:
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_three_llm_calls(self, mock_get, mock_llm_client):
-        mock_get.return_value = mock_llm_client
-
+    async def test_three_llm_calls(self, mock_llm_client):
         prosecution = {
             "argument": "This is critical",
             "suggested_severity": "critical",
@@ -293,7 +262,7 @@ class TestAdversarialDebate:
             _make_llm_response(verdict),
         ]
 
-        agent = AdjudicatorAgent(approach=AdjudicationApproach.ADVERSARIAL_DEBATE)
+        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.ADVERSARIAL_DEBATE)
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -309,13 +278,10 @@ class TestAdversarialDebate:
 
 
 class TestEvidenceRubric:
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_rubric_scoring(self, mock_get, mock_llm_client):
-        mock_get.return_value = mock_llm_client
+    async def test_rubric_scoring(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response(_rubric_response("medium"))
 
-        agent = AdjudicatorAgent(approach=AdjudicationApproach.EVIDENCE_RUBRIC)
+        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.EVIDENCE_RUBRIC)
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -330,39 +296,31 @@ class TestEvidenceRubric:
 
 
 class TestOperatorContext:
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_match_exact_domain(self, mock_get, sample_operator_context):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_match_exact_domain(self, mock_llm_client, sample_operator_context):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         finding = _make_finding(target_url="https://api.example.com/v1/users")
         ctx = agent._match_asset_context(finding, sample_operator_context)
         assert ctx is not None
         assert ctx.exposure == "internet-facing"
         assert ctx.criticality == "high"
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_match_wildcard_domain(self, mock_get, sample_operator_context):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_match_wildcard_domain(self, mock_llm_client, sample_operator_context):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         finding = _make_finding(target_url="https://tools.internal.local/admin")
         ctx = agent._match_asset_context(finding, sample_operator_context)
         assert ctx is not None
         assert ctx.exposure == "vpn-only"
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_fallback_to_defaults(self, mock_get, sample_operator_context):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_fallback_to_defaults(self, mock_llm_client, sample_operator_context):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         finding = _make_finding(target_url="https://unknown.host.com/path")
         ctx = agent._match_asset_context(finding, sample_operator_context)
         assert ctx is not None
         assert ctx.exposure == "unknown"
         assert ctx.criticality == "medium"
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_no_context_returns_none(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_no_context_returns_none(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         finding = _make_finding()
         assert agent._match_asset_context(finding, None) is None
 
@@ -377,25 +335,23 @@ class TestOperatorContextLoading:
         result = load_operator_context(config=self._make_config("/nonexistent/path.yaml"))
         assert result is None
 
-    @patch("app.engine.adjudication._YAML_AVAILABLE", False)
-    def test_no_yaml_returns_none(self, tmp_path):
+    def test_malformed_yaml_returns_none(self, tmp_path):
         ctx_file = tmp_path / "context.yaml"
-        ctx_file.write_text("assets: []")
+        ctx_file.write_text("just a plain string")
         result = load_operator_context(config=self._make_config(str(ctx_file)))
         assert result is None
 
-    @patch("app.engine.adjudication._yaml")
-    @patch("app.engine.adjudication._YAML_AVAILABLE", True)
-    def test_valid_file_loads(self, mock_yaml, tmp_path):
+    def test_valid_file_loads(self, tmp_path):
         ctx_file = tmp_path / "context.yaml"
-        ctx_file.write_text("placeholder")
-
-        mock_yaml.safe_load.return_value = {
-            "assets": [
-                {"domain": "api.example.com", "exposure": "internet-facing", "criticality": "high"}
-            ],
-            "defaults": {"exposure": "unknown", "criticality": "medium"},
-        }
+        ctx_file.write_text(
+            "assets:\n"
+            "  - domain: api.example.com\n"
+            "    exposure: internet-facing\n"
+            "    criticality: high\n"
+            "defaults:\n"
+            "  exposure: unknown\n"
+            "  criticality: medium\n"
+        )
 
         result = load_operator_context(config=self._make_config(str(ctx_file)))
         assert result is not None
@@ -409,14 +365,12 @@ class TestOperatorContextLoading:
 
 
 class TestEventEmission:
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_emits_start_and_complete(self, mock_get, mock_llm_client):
-        mock_get.return_value = mock_llm_client
+    async def test_emits_start_and_complete(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("high"))
 
         callback = AsyncMock()
         agent = AdjudicatorAgent(
+            client=mock_llm_client,
             event_callback=callback,
             approach=AdjudicationApproach.STRUCTURED_CHALLENGE,
         )
@@ -428,14 +382,12 @@ class TestEventEmission:
         assert EventType.ADJUDICATION_START in event_types
         assert EventType.ADJUDICATION_COMPLETE in event_types
 
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_emits_upheld_when_severity_same(self, mock_get, mock_llm_client):
-        mock_get.return_value = mock_llm_client
+    async def test_emits_upheld_when_severity_same(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("high"))
 
         callback = AsyncMock()
         agent = AdjudicatorAgent(
+            client=mock_llm_client,
             event_callback=callback,
             approach=AdjudicationApproach.STRUCTURED_CHALLENGE,
         )
@@ -446,14 +398,12 @@ class TestEventEmission:
         event_types = [call.args[0].event_type for call in callback.call_args_list]
         assert EventType.SEVERITY_UPHELD in event_types
 
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_emits_adjusted_when_severity_changes(self, mock_get, mock_llm_client):
-        mock_get.return_value = mock_llm_client
+    async def test_emits_adjusted_when_severity_changes(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("medium"))
 
         callback = AsyncMock()
         agent = AdjudicatorAgent(
+            client=mock_llm_client,
             event_callback=callback,
             approach=AdjudicationApproach.STRUCTURED_CHALLENGE,
         )
@@ -471,27 +421,18 @@ class TestEventEmission:
 
 
 class TestEdgeCases:
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_no_verified_findings(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    async def test_no_verified_findings(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         pending_finding = _make_finding(status="pending")
         results = await agent.adjudicate_findings([pending_finding])
         assert results == []
 
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_empty_findings(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    async def test_empty_findings(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         results = await agent.adjudicate_findings([])
         assert results == []
 
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_malformed_json_upholds_severity(self, mock_get, mock_llm_client):
-        mock_get.return_value = mock_llm_client
+    async def test_malformed_json_upholds_severity(self, mock_llm_client):
         mock_llm_client.chat.return_value = LLMResponse(
             content="This is not valid JSON at all",
             model="test",
@@ -499,7 +440,7 @@ class TestEdgeCases:
             success=True,
         )
 
-        agent = AdjudicatorAgent(approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
+        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -507,11 +448,7 @@ class TestEdgeCases:
         assert results[0].adjudicated_severity == FindingSeverity.HIGH
         assert results[0].confidence == 0.0
 
-    @pytest.mark.asyncio
-    @patch("app.agents.adjudicator.get_llm_client")
-    async def test_stop_halts_processing(self, mock_get, mock_llm_client):
-        mock_get.return_value = mock_llm_client
-
+    async def test_stop_halts_processing(self, mock_llm_client):
         call_count = 0
 
         async def chat_side_effect(**kwargs):
@@ -523,7 +460,7 @@ class TestEdgeCases:
 
         mock_llm_client.chat.side_effect = chat_side_effect
 
-        agent = AdjudicatorAgent(approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
+        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
         findings = [_make_finding(finding_id=f"F-{i:03d}") for i in range(5)]
         results = await agent.adjudicate_findings(findings)
         # Stop called after 2nd LLM call, so should have fewer than 5 results
@@ -595,23 +532,17 @@ class TestApproachResolution:
 
 
 class TestJsonCleaning:
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_strips_markdown_fences(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_strips_markdown_fences(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         raw = '```json\n{"key": "value"}\n```'
         assert agent._clean_json(raw) == '{"key": "value"}'
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_strips_plain_fences(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_strips_plain_fences(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         raw = '```\n{"key": "value"}\n```'
         assert agent._clean_json(raw) == '{"key": "value"}'
 
-    @patch("app.agents.adjudicator.get_llm_client")
-    def test_passes_clean_json(self, mock_get):
-        mock_get.return_value = MagicMock()
-        agent = AdjudicatorAgent()
+    def test_passes_clean_json(self, mock_llm_client):
+        agent = AdjudicatorAgent(client=mock_llm_client)
         raw = '{"key": "value"}'
         assert agent._clean_json(raw) == '{"key": "value"}'

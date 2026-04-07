@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from app.agents.adjudicator import AdjudicatorAgent
 from app.config import get_config
+from app.lib.llm import get_llm_client
 from app.models import AdjudicationApproach, OperatorContext
 
 if TYPE_CHECKING:
@@ -160,7 +161,7 @@ async def run_adjudication(
         resolved_approach = resolve_approach(approach)
 
         # Create agent and run
-        agent = AdjudicatorAgent(approach=resolved_approach)
+        agent = AdjudicatorAgent(client=get_llm_client(), approach=resolved_approach)
         results = await agent.adjudicate_findings(verified, operator_context)
 
         # Store results as dicts for state/API compatibility
