@@ -18,9 +18,6 @@ from app.db.models import Base
 
 logger = logging.getLogger(__name__)
 
-_engine: AsyncEngine | None = None
-_session_factory: async_sessionmaker[AsyncSession] | None = None
-
 
 def _build_url(backend: str, db_path: Path, postgresql_url: str) -> str:
     """Build the SQLAlchemy connection URL from config."""
@@ -34,48 +31,75 @@ def _build_url(backend: str, db_path: Path, postgresql_url: str) -> str:
     return f"sqlite+aiosqlite:///{db_path}"
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Database class — owns engine + session factory, no globals
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class Database:
+    """Scoped database connection. Create one per app lifetime (or per test)."""
+
+    def __init__(self) -> None:
+        self._engine: AsyncEngine | None = None
+        self._session_factory: async_sessionmaker[AsyncSession] | None = None
+
+    async def init(
+        self,
+        backend: str = "sqlite",
+        db_path: Path = Path("./data/chainsmith.db"),
+        postgresql_url: str = "",
+    ) -> None:
+        """Initialize the engine and create tables if needed."""
+        if backend == "sqlite":
+            db_path = Path(db_path)
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.info(f"SQLite database path: {db_path.resolve()}")
+
+        url = _build_url(backend, db_path, postgresql_url)
+        self._engine = create_async_engine(url, echo=False)
+        self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
+
+        async with self._engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        logger.info("Database initialized successfully")
+
+    def session(self) -> AsyncSession:
+        """Get a new async session. Caller must use ``async with``."""
+        if self._session_factory is None:
+            raise RuntimeError("Database not initialized. Call init() first.")
+        return self._session_factory()
+
+    async def close(self) -> None:
+        """Dispose of the engine connection pool."""
+        if self._engine is not None:
+            await self._engine.dispose()
+            self._engine = None
+            self._session_factory = None
+            logger.info("Database connection closed")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Module-level convenience — thin wrappers over a default Database instance
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_default_db = Database()
+
+
 async def init_db(
     backend: str = "sqlite",
     db_path: Path = Path("./data/chainsmith.db"),
     postgresql_url: str = "",
 ) -> None:
-    """
-    Initialize the database engine and create tables if needed.
-
-    Called once at app startup. If the database file or tables don't
-    exist, they are created automatically.
-    """
-    global _engine, _session_factory
-
-    # Ensure parent directory exists for SQLite
-    if backend == "sqlite":
-        db_path = Path(db_path)
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        logger.info(f"SQLite database path: {db_path.resolve()}")
-
-    url = _build_url(backend, db_path, postgresql_url)
-    _engine = create_async_engine(url, echo=False)
-    _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
-
-    # Create tables (safe if they already exist)
-    async with _engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    logger.info("Database initialized successfully")
+    """Initialize the default database instance."""
+    await _default_db.init(backend=backend, db_path=db_path, postgresql_url=postgresql_url)
 
 
 def get_session() -> AsyncSession:
-    """Get a new async database session. Caller must use `async with`."""
-    if _session_factory is None:
-        raise RuntimeError("Database not initialized. Call init_db() first.")
-    return _session_factory()
+    """Get a session from the default database instance."""
+    return _default_db.session()
 
 
 async def close_db() -> None:
-    """Dispose of the engine connection pool. Called at app shutdown."""
-    global _engine, _session_factory
-    if _engine is not None:
-        await _engine.dispose()
-        _engine = None
-        _session_factory = None
-        logger.info("Database connection closed")
+    """Close the default database instance."""
+    await _default_db.close()

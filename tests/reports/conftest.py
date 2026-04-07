@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from app.db.engine import close_db, init_db
+import app.db.engine as _engine_module
+from app.db.engine import Database
 from app.db.repositories import (
     ChainRepository,
     CheckLogRepository,
@@ -40,53 +41,57 @@ def _all_viz_content():
 
 @pytest.fixture
 async def db(tmp_path):
-    db_path = tmp_path / "test.db"
-    await init_db(backend="sqlite", db_path=db_path)
-    yield db_path
-    await close_db()
+    database = Database()
+    await database.init(backend="sqlite", db_path=tmp_path / "test.db")
+    # Swap the global default so get_session() uses this instance too
+    old_default = _engine_module._default_db
+    _engine_module._default_db = database
+    yield database
+    _engine_module._default_db = old_default
+    await database.close()
 
 
 # --- Repository fixtures ----------------------------------------------------
 
 
 @pytest.fixture
-def scan_repo():
-    return ScanRepository()
+def scan_repo(db):
+    return ScanRepository(db)
 
 
 @pytest.fixture
-def finding_repo():
-    return FindingRepository()
+def finding_repo(db):
+    return FindingRepository(db)
 
 
 @pytest.fixture
-def chain_repo():
-    return ChainRepository()
+def chain_repo(db):
+    return ChainRepository(db)
 
 
 @pytest.fixture
-def check_log_repo():
-    return CheckLogRepository()
+def check_log_repo(db):
+    return CheckLogRepository(db)
 
 
 @pytest.fixture
-def comparison_repo():
-    return ComparisonRepository()
+def comparison_repo(db):
+    return ComparisonRepository(db)
 
 
 @pytest.fixture
-def override_repo():
-    return FindingOverrideRepository()
+def override_repo(db):
+    return FindingOverrideRepository(db)
 
 
 @pytest.fixture
-def engagement_repo():
-    return EngagementRepository()
+def engagement_repo(db):
+    return EngagementRepository(db)
 
 
 @pytest.fixture
-def trend_repo():
-    return TrendRepository()
+def trend_repo(db):
+    return TrendRepository(db)
 
 
 # --- Shared test helpers ----------------------------------------------------

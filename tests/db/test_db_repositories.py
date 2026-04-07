@@ -1,11 +1,12 @@
 """Tests for repository CRUD operations and the scan persistence orchestrator."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import func, select
 
-from app.db.engine import close_db, get_session, init_db
+import app.db.engine as _engine_module
+from app.db.engine import Database
 from app.db.models import Chain, CheckLog, Finding, Scan
 from app.db.repositories import (
     ChainRepository,
@@ -21,31 +22,34 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 async def db(tmp_path):
-    """Initialize an in-memory SQLite database for testing."""
-    db_path = tmp_path / "test.db"
-    await init_db(backend="sqlite", db_path=db_path)
-    yield db_path
-    await close_db()
+    """Initialize a SQLite database for testing."""
+    database = Database()
+    await database.init(backend="sqlite", db_path=tmp_path / "test.db")
+    old_default = _engine_module._default_db
+    _engine_module._default_db = database
+    yield database
+    _engine_module._default_db = old_default
+    await database.close()
 
 
 @pytest.fixture
-def scan_repo():
-    return ScanRepository()
+def scan_repo(db):
+    return ScanRepository(db)
 
 
 @pytest.fixture
-def finding_repo():
-    return FindingRepository()
+def finding_repo(db):
+    return FindingRepository(db)
 
 
 @pytest.fixture
-def chain_repo():
-    return ChainRepository()
+def chain_repo(db):
+    return ChainRepository(db)
 
 
 @pytest.fixture
-def check_log_repo():
-    return CheckLogRepository()
+def check_log_repo(db):
+    return CheckLogRepository(db)
 
 
 @pytest.fixture
@@ -132,7 +136,7 @@ class TestScanRepository:
         )
         assert scan_id == "scan-001"
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Scan).where(Scan.id == "scan-001"))
             scan = result.scalar_one()
             assert scan.target_domain == "example.com"
@@ -152,7 +156,7 @@ class TestScanRepository:
             profile_name="aggressive",
         )
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Scan).where(Scan.id == "scan-002"))
             scan = result.scalar_one()
             assert scan.settings == {"parallel": True, "rate_limit": 5.0}
@@ -177,7 +181,7 @@ class TestScanRepository:
             duration_ms=12345,
         )
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Scan).where(Scan.id == "scan-003"))
             scan = result.scalar_one()
             assert scan.status == "complete"
@@ -202,7 +206,7 @@ class TestScanRepository:
             error_message="Connection refused",
         )
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Scan).where(Scan.id == "scan-004"))
             scan = result.scalar_one()
             assert scan.status == "error"
@@ -227,7 +231,7 @@ class TestFindingRepository:
         count = await finding_repo.bulk_create("scan-001", sample_findings)
         assert count == 3
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(
                 select(func.count()).select_from(Finding).where(Finding.scan_id == "scan-001")
             )
@@ -244,7 +248,7 @@ class TestFindingRepository:
         """Each finding gets a fingerprint assigned."""
         await finding_repo.bulk_create("scan-001", sample_findings)
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Finding).where(Finding.scan_id == "scan-001"))
             findings = result.scalars().all()
             for f in findings:
@@ -256,7 +260,7 @@ class TestFindingRepository:
         """Each finding gets a unique ID."""
         await finding_repo.bulk_create("scan-001", sample_findings)
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Finding.id).where(Finding.scan_id == "scan-001"))
             ids = [row[0] for row in result.all()]
             assert len(ids) == len(set(ids))
@@ -282,7 +286,7 @@ class TestFindingRepository:
             ],
         )
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Finding).where(Finding.scan_id == "scan-001"))
             f = result.scalar_one()
             assert f.title == "Test XSS"
@@ -310,7 +314,7 @@ class TestFindingRepository:
             ],
         )
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Finding).where(Finding.scan_id == "scan-001"))
             f = result.scalar_one()
             assert f.check_name == "legacy_check_name"
@@ -330,7 +334,7 @@ class TestFindingRepository:
             ],
         )
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Finding).where(Finding.id == "custom-id-123"))
             f = result.scalar_one()
             assert f.id == "custom-id-123"
@@ -348,7 +352,7 @@ class TestChainRepository:
         count = await chain_repo.bulk_create("scan-001", sample_chains)
         assert count == 2
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(
                 select(func.count()).select_from(Chain).where(Chain.scan_id == "scan-001")
             )
@@ -376,7 +380,7 @@ class TestChainRepository:
             ],
         )
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Chain).where(Chain.scan_id == "scan-001"))
             c = result.scalar_one()
             assert c.title == "Test Chain"
@@ -399,7 +403,7 @@ class TestChainRepository:
             ],
         )
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Chain).where(Chain.scan_id == "scan-001"))
             c = result.scalar_one()
             assert c.finding_ids == ["a", "b"]
@@ -417,7 +421,7 @@ class TestCheckLogRepository:
         count = await check_log_repo.bulk_create("scan-001", sample_check_log)
         assert count == 6
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(
                 select(func.count()).select_from(CheckLog).where(CheckLog.scan_id == "scan-001")
             )
@@ -445,7 +449,7 @@ class TestCheckLogRepository:
             ],
         )
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(CheckLog).where(CheckLog.scan_id == "scan-001"))
             entry = result.scalar_one()
             assert entry.check_name == "port_scan"
@@ -459,7 +463,7 @@ class TestCheckLogRepository:
         """Log entries get auto-incrementing integer IDs."""
         await check_log_repo.bulk_create("scan-001", sample_check_log)
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(
                 select(CheckLog.id).where(CheckLog.scan_id == "scan-001")
             )
@@ -515,12 +519,12 @@ class TestPersistOrchestrator:
 
         with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = True
-            scan_id = await on_scan_start(mock_state)
+            scan_id = await on_scan_start(mock_state, db=db)
 
         assert scan_id is not None
         assert len(scan_id) == 16
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(Scan).where(Scan.id == scan_id))
             scan = result.scalar_one()
             assert scan.target_domain == "example.com"
@@ -533,7 +537,7 @@ class TestPersistOrchestrator:
 
         with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = False
-            scan_id = await on_scan_start(mock_state)
+            scan_id = await on_scan_start(mock_state, db=db)
 
         assert scan_id is None
 
@@ -542,13 +546,12 @@ class TestPersistOrchestrator:
         """on_scan_start returns None (doesn't raise) on DB error."""
         from app.db.persist import on_scan_start
 
-        with (
-            patch("app.db.persist.get_config") as mock_cfg,
-            patch("app.db.persist._scan_repo") as mock_repo,
-        ):
+        broken_db = MagicMock()
+        broken_db.session.side_effect = Exception("DB down")
+
+        with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = True
-            mock_repo.create_scan = AsyncMock(side_effect=Exception("DB down"))
-            scan_id = await on_scan_start(mock_state)
+            scan_id = await on_scan_start(mock_state, db=broken_db)
 
         assert scan_id is None
 
@@ -561,11 +564,11 @@ class TestPersistOrchestrator:
 
         with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = True
-            scan_id = await on_scan_start(mock_state)
+            scan_id = await on_scan_start(mock_state, db=db)
             started_at = time.time() - 5.0  # 5 seconds ago
-            await on_scan_complete(mock_state, scan_id, started_at)
+            await on_scan_complete(mock_state, scan_id, started_at, db=db)
 
-        async with get_session() as session:
+        async with db.session() as session:
             # Scan updated
             result = await session.execute(select(Scan).where(Scan.id == scan_id))
             scan = result.scalar_one()
@@ -600,9 +603,9 @@ class TestPersistOrchestrator:
         from app.db.persist import on_scan_complete
 
         # Should not raise
-        await on_scan_complete(mock_state, None, time.time())
+        await on_scan_complete(mock_state, None, time.time(), db=db)
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(select(func.count()).select_from(Finding))
             assert result.scalar() == 0
 
@@ -613,11 +616,10 @@ class TestPersistOrchestrator:
 
         from app.db.persist import on_scan_complete
 
-        with (
-            patch("app.db.persist.get_config") as mock_cfg,
-            patch("app.db.persist._finding_repo") as mock_repo,
-        ):
+        broken_db = MagicMock()
+        broken_db.session.side_effect = Exception("DB full")
+
+        with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = True
-            mock_repo.bulk_create = AsyncMock(side_effect=Exception("DB full"))
             # Should not raise
-            await on_scan_complete(mock_state, "scan-999", time.time())
+            await on_scan_complete(mock_state, "scan-999", time.time(), db=broken_db)

@@ -6,6 +6,8 @@ Write methods (Phase 1) persist scan data at lifecycle points.
 Read methods (Phase 2) serve historical data to API endpoints.
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 import uuid
@@ -13,7 +15,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, select
 
-from app.db.engine import get_session
+from app.db.engine import Database, get_session
 from app.db.models import (
     AdjudicationResult,
     Chain,
@@ -29,6 +31,19 @@ from app.db.models import (
 logger = logging.getLogger(__name__)
 
 
+class _RepositoryBase:
+    """Shared base: optional ``Database`` injection, falls back to global."""
+
+    def __init__(self, db: Database | None = None) -> None:
+        self._db = db
+
+    def _session(self):
+        """Return a new async session from the injected or global DB."""
+        if self._db is not None:
+            return self._db.session()
+        return get_session()
+
+
 def _generate_fingerprint(check_name: str, host: str, title: str, evidence: str = "") -> str:
     """
     Generate a stable fingerprint for deduplicating findings across scans.
@@ -40,7 +55,7 @@ def _generate_fingerprint(check_name: str, host: str, title: str, evidence: str 
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
-class ScanRepository:
+class ScanRepository(_RepositoryBase):
     """Persist scan metadata."""
 
     async def create_scan(
@@ -67,7 +82,7 @@ class ScanRepository:
             scenario_name=scenario_name,
             engagement_id=engagement_id,
         )
-        async with get_session() as session:
+        async with self._session() as session:
             session.add(scan)
             await session.commit()
         logger.info(f"Scan {scan_id} persisted (status=running)")
@@ -85,7 +100,7 @@ class ScanRepository:
         error_message: str | None = None,
     ) -> None:
         """Mark a scan as complete/error and record summary stats."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(select(Scan).where(Scan.id == scan_id))
             scan = result.scalar_one_or_none()
             if scan is None:
@@ -104,7 +119,7 @@ class ScanRepository:
 
     async def get_scan(self, scan_id: str) -> dict | None:
         """Get a scan by ID. Returns dict or None."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(select(Scan).where(Scan.id == scan_id))
             scan = result.scalar_one_or_none()
             if scan is None:
@@ -135,7 +150,7 @@ class ScanRepository:
 
         query = query.order_by(Scan.started_at.desc()).limit(limit).offset(offset)
 
-        async with get_session() as session:
+        async with self._session() as session:
             total_result = await session.execute(count_query)
             total = total_result.scalar()
             result = await session.execute(query)
@@ -145,7 +160,7 @@ class ScanRepository:
 
     async def delete_scan(self, scan_id: str) -> bool:
         """Delete a scan and all related data. Returns True if scan existed."""
-        async with get_session() as session:
+        async with self._session() as session:
             # Check existence
             result = await session.execute(select(Scan).where(Scan.id == scan_id))
             scan = result.scalar_one_or_none()
@@ -194,7 +209,7 @@ def _scan_to_dict(scan: Scan) -> dict:
     }
 
 
-class FindingRepository:
+class FindingRepository(_RepositoryBase):
     """Persist scan findings."""
 
     async def bulk_create(self, scan_id: str, findings: list[dict]) -> int:
@@ -237,7 +252,7 @@ class FindingRepository:
                 )
             )
 
-        async with get_session() as session:
+        async with self._session() as session:
             session.add_all(rows)
             await session.commit()
 
@@ -260,7 +275,7 @@ class FindingRepository:
         if host:
             query = query.where(Finding.host == host)
 
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(query)
             findings = [_finding_to_dict(f) for f in result.scalars().all()]
 
@@ -280,7 +295,7 @@ class FindingRepository:
 
         Severity overrides from user customizations are applied.
         """
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(select(Finding).where(Finding.scan_id == scan_id))
             finding_dicts = [_finding_to_dict(f) for f in result.scalars().all()]
 
@@ -328,7 +343,7 @@ def _finding_to_dict(f: Finding) -> dict:
     }
 
 
-class ChainRepository:
+class ChainRepository(_RepositoryBase):
     """Persist attack chains."""
 
     async def bulk_create(self, scan_id: str, chains: list[dict]) -> int:
@@ -351,7 +366,7 @@ class ChainRepository:
                 )
             )
 
-        async with get_session() as session:
+        async with self._session() as session:
             session.add_all(rows)
             await session.commit()
 
@@ -360,7 +375,7 @@ class ChainRepository:
 
     async def get_chains(self, scan_id: str) -> list[dict]:
         """Get chains for a scan."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(select(Chain).where(Chain.scan_id == scan_id))
             return [_chain_to_dict(c) for c in result.scalars().all()]
 
@@ -379,7 +394,7 @@ def _chain_to_dict(c: Chain) -> dict:
     }
 
 
-class CheckLogRepository:
+class CheckLogRepository(_RepositoryBase):
     """Persist check execution log entries."""
 
     async def bulk_create(self, scan_id: str, log_entries: list[dict]) -> int:
@@ -401,7 +416,7 @@ class CheckLogRepository:
                 )
             )
 
-        async with get_session() as session:
+        async with self._session() as session:
             session.add_all(rows)
             await session.commit()
 
@@ -410,7 +425,7 @@ class CheckLogRepository:
 
     async def get_log(self, scan_id: str) -> list[dict]:
         """Get check log entries for a scan."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(
                 select(CheckLog).where(CheckLog.scan_id == scan_id).order_by(CheckLog.id)
             )
@@ -430,7 +445,7 @@ def _check_log_to_dict(entry: CheckLog) -> dict:
     }
 
 
-class EngagementRepository:
+class EngagementRepository(_RepositoryBase):
     """Persist and query engagements."""
 
     async def create_engagement(
@@ -452,7 +467,7 @@ class EngagementRepository:
             created_at=now,
             updated_at=now,
         )
-        async with get_session() as session:
+        async with self._session() as session:
             session.add(engagement)
             await session.commit()
         logger.info(f"Created engagement {engagement_id}: {name}")
@@ -460,7 +475,7 @@ class EngagementRepository:
 
     async def get_engagement(self, engagement_id: str) -> dict | None:
         """Get an engagement by ID."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(select(Engagement).where(Engagement.id == engagement_id))
             eng = result.scalar_one_or_none()
             return _engagement_to_dict(eng) if eng else None
@@ -481,7 +496,7 @@ class EngagementRepository:
 
         query = query.order_by(Engagement.updated_at.desc()).limit(limit).offset(offset)
 
-        async with get_session() as session:
+        async with self._session() as session:
             total_result = await session.execute(count_query)
             total = total_result.scalar()
             result = await session.execute(query)
@@ -498,7 +513,7 @@ class EngagementRepository:
         status: str | None = None,
     ) -> dict | None:
         """Update an engagement. Returns updated dict or None if not found."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(select(Engagement).where(Engagement.id == engagement_id))
             eng = result.scalar_one_or_none()
             if eng is None:
@@ -517,7 +532,7 @@ class EngagementRepository:
 
     async def delete_engagement(self, engagement_id: str) -> bool:
         """Delete an engagement and unlink its scans. Returns True if existed."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(select(Engagement).where(Engagement.id == engagement_id))
             eng = result.scalar_one_or_none()
             if eng is None:
@@ -550,7 +565,7 @@ def _engagement_to_dict(eng: Engagement) -> dict:
     }
 
 
-class ComparisonRepository:
+class ComparisonRepository(_RepositoryBase):
     """Compute and store finding status tracking and scan comparisons."""
 
     async def compute_finding_statuses(self, scan_id: str) -> dict:
@@ -561,7 +576,7 @@ class ComparisonRepository:
 
         Returns {new, recurring, resolved, regressed, previous_scan_id}.
         """
-        async with get_session() as session:
+        async with self._session() as session:
             # Get current scan
             result = await session.execute(select(Scan).where(Scan.id == scan_id))
             current_scan = result.scalar_one_or_none()
@@ -747,7 +762,7 @@ class ComparisonRepository:
         Compare two scans by fingerprint. Returns comparison stats and
         finding lists. Checks for a cached comparison first.
         """
-        async with get_session() as session:
+        async with self._session() as session:
             # Check cache
             result = await session.execute(
                 select(ScanComparison).where(
@@ -830,7 +845,7 @@ class ComparisonRepository:
 
     async def get_finding_history(self, fingerprint: str) -> list[dict]:
         """Get status history for a finding fingerprint across scans."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(
                 select(FindingStatusHistory)
                 .where(FindingStatusHistory.fingerprint == fingerprint)
@@ -849,7 +864,7 @@ class ComparisonRepository:
             ]
 
 
-class FindingOverrideRepository:
+class FindingOverrideRepository(_RepositoryBase):
     """Manage manual finding overrides (accepted risk, false positive)."""
 
     VALID_STATUSES = {"accepted", "false_positive"}
@@ -867,7 +882,7 @@ class FindingOverrideRepository:
             )
 
         now = datetime.now(UTC)
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(
                 select(FindingOverride).where(FindingOverride.fingerprint == fingerprint)
             )
@@ -890,7 +905,7 @@ class FindingOverrideRepository:
 
     async def remove_override(self, fingerprint: str) -> bool:
         """Remove an override (reopen the finding). Returns True if existed."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(
                 select(FindingOverride).where(FindingOverride.fingerprint == fingerprint)
             )
@@ -906,7 +921,7 @@ class FindingOverrideRepository:
 
     async def get_override(self, fingerprint: str) -> dict | None:
         """Get override for a fingerprint, or None."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(
                 select(FindingOverride).where(FindingOverride.fingerprint == fingerprint)
             )
@@ -922,7 +937,7 @@ class FindingOverrideRepository:
             count_query = count_query.where(FindingOverride.status == status)
         query = query.order_by(FindingOverride.updated_at.desc())
 
-        async with get_session() as session:
+        async with self._session() as session:
             total_result = await session.execute(count_query)
             total = total_result.scalar()
             result = await session.execute(query)
@@ -955,7 +970,7 @@ SEVERITY_WEIGHTS = {
 SEVERITY_LEVELS = ["critical", "high", "medium", "low", "info"]
 
 
-class TrendRepository:
+class TrendRepository(_RepositoryBase):
     """Compute trend data across scans for engagements or targets."""
 
     async def get_engagement_trend(
@@ -966,7 +981,7 @@ class TrendRepository:
         last_n: int | None = None,
     ) -> dict:
         """Get trend data for all completed scans in an engagement."""
-        async with get_session() as session:
+        async with self._session() as session:
             query = (
                 select(Scan.id)
                 .where(Scan.engagement_id == engagement_id)
@@ -1000,7 +1015,7 @@ class TrendRepository:
         last_n: int | None = None,
     ) -> dict:
         """Get trend data for all completed scans of a target domain."""
-        async with get_session() as session:
+        async with self._session() as session:
             query = (
                 select(Scan.id)
                 .where(Scan.target_domain == target_domain)
@@ -1046,7 +1061,7 @@ class TrendRepository:
     async def _build_data_points(self, scan_ids: list[str]) -> list[dict]:
         """Build per-scan trend data points."""
         # Get all overridden fingerprints to exclude
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(select(FindingOverride.fingerprint))
             overridden_fps = {row[0] for row in result.all()}
 
@@ -1063,7 +1078,7 @@ class TrendRepository:
         overridden_fps: set[str],
     ) -> dict | None:
         """Build a single trend data point for a scan."""
-        async with get_session() as session:
+        async with self._session() as session:
             # Get scan metadata
             result = await session.execute(select(Scan).where(Scan.id == scan_id))
             scan = result.scalar_one_or_none()
@@ -1103,7 +1118,7 @@ class TrendRepository:
         new_count = 0
         resolved_count = 0
         regressed_count = 0
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(
                 select(FindingStatusHistory.status, func.count())
                 .where(FindingStatusHistory.scan_id == scan_id)
@@ -1135,7 +1150,7 @@ class TrendRepository:
         this_target = self._average_points(data_points)
 
         # All-targets average: compute from ALL completed scans in DB
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(
                 select(Scan.id).where(Scan.status == "complete").order_by(Scan.started_at)
             )
@@ -1170,7 +1185,7 @@ class TrendRepository:
         if not scan_ids:
             return {"regression_rate": None, "mttr": {}}
 
-        async with get_session() as session:
+        async with self._session() as session:
             # --- Regression rate ---
             # Total resolved across these scans
             result = await session.execute(
@@ -1270,7 +1285,7 @@ class TrendRepository:
 # ─── Adjudication Repository ────────────────────────────────────────────────
 
 
-class AdjudicationRepository:
+class AdjudicationRepository(_RepositoryBase):
     """Persist and query adjudication results."""
 
     async def bulk_create(self, scan_id: str, results: list[dict]) -> int:
@@ -1295,7 +1310,7 @@ class AdjudicationRepository:
                 )
             )
 
-        async with get_session() as session:
+        async with self._session() as session:
             session.add_all(rows)
             await session.commit()
 
@@ -1304,7 +1319,7 @@ class AdjudicationRepository:
 
     async def get_results(self, scan_id: str) -> list[dict]:
         """Get all adjudication results for a scan."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(
                 select(AdjudicationResult).where(AdjudicationResult.scan_id == scan_id)
             )
@@ -1312,7 +1327,7 @@ class AdjudicationRepository:
 
     async def get_result_for_finding(self, scan_id: str, finding_id: str) -> dict | None:
         """Get adjudication result for a specific finding in a scan."""
-        async with get_session() as session:
+        async with self._session() as session:
             result = await session.execute(
                 select(AdjudicationResult).where(
                     AdjudicationResult.scan_id == scan_id,

@@ -6,6 +6,8 @@ All operations are fire-and-forget with graceful degradation: if any
 DB write fails, the scan continues normally and a warning is logged.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 import uuid
@@ -22,16 +24,10 @@ from app.db.repositories import (
 )
 
 if TYPE_CHECKING:
+    from app.db.engine import Database
     from app.state import AppState
 
 logger = logging.getLogger(__name__)
-
-_scan_repo = ScanRepository()
-_finding_repo = FindingRepository()
-_chain_repo = ChainRepository()
-_check_log_repo = CheckLogRepository()
-_comparison_repo = ComparisonRepository()
-_adjudication_repo = AdjudicationRepository()
 
 
 def _is_enabled() -> bool:
@@ -39,7 +35,19 @@ def _is_enabled() -> bool:
     return get_config().storage.auto_persist
 
 
-async def on_scan_start(state: "AppState") -> str | None:
+def _make_repos(db: Database | None = None):
+    """Create a set of repositories, optionally bound to a specific Database."""
+    return (
+        ScanRepository(db),
+        FindingRepository(db),
+        ChainRepository(db),
+        CheckLogRepository(db),
+        ComparisonRepository(db),
+        AdjudicationRepository(db),
+    )
+
+
+async def on_scan_start(state: AppState, db: Database | None = None) -> str | None:
     """
     Called when a scan begins. Creates the scan record in the database.
     Returns the scan_id for use in subsequent persistence calls, or None
@@ -61,7 +69,8 @@ async def on_scan_start(state: "AppState") -> str | None:
         except Exception:
             pass
 
-        await _scan_repo.create_scan(
+        scan_repo = ScanRepository(db)
+        await scan_repo.create_scan(
             scan_id=scan_id,
             session_id=state.session_id,
             target_domain=state.target or "",
@@ -78,9 +87,10 @@ async def on_scan_start(state: "AppState") -> str | None:
 
 
 async def on_scan_complete(
-    state: "AppState",
+    state: AppState,
     scan_id: str | None,
     started_at: float,
+    db: Database | None = None,
 ) -> None:
     """
     Called when a scan completes (success or error). Persists findings,
@@ -90,22 +100,23 @@ async def on_scan_complete(
         return
 
     duration_ms = int((time.time() - started_at) * 1000)
+    scan_repo, finding_repo, chain_repo, check_log_repo, comparison_repo, _ = _make_repos(db)
 
     try:
         # Count failed checks
         checks_failed = sum(1 for s in state.check_statuses.values() if s == "failed")
 
         # Persist findings
-        await _finding_repo.bulk_create(scan_id, state.findings)
+        await finding_repo.bulk_create(scan_id, state.findings)
 
         # Persist chains (if any were analyzed)
-        await _chain_repo.bulk_create(scan_id, state.chains)
+        await chain_repo.bulk_create(scan_id, state.chains)
 
         # Persist check log
-        await _check_log_repo.bulk_create(scan_id, state.check_log)
+        await check_log_repo.bulk_create(scan_id, state.check_log)
 
         # Update scan record with final stats
-        await _scan_repo.complete_scan(
+        await scan_repo.complete_scan(
             scan_id=scan_id,
             status=state.status,
             checks_total=state.checks_total,
@@ -119,7 +130,7 @@ async def on_scan_complete(
         # Compute finding statuses (new/recurring/resolved/regressed)
         if state.status == "complete" and state.findings:
             try:
-                statuses = await _comparison_repo.compute_finding_statuses(scan_id)
+                statuses = await comparison_repo.compute_finding_statuses(scan_id)
                 logger.info(
                     f"Finding statuses for scan {scan_id}: "
                     f"{statuses.get('new', 0)} new, "
@@ -143,8 +154,9 @@ async def on_scan_complete(
 
 
 async def on_adjudication_complete(
-    state: "AppState",
+    state: AppState,
     scan_id: str | None,
+    db: Database | None = None,
 ) -> None:
     """
     Called when adjudication completes. Persists adjudication results
@@ -154,7 +166,8 @@ async def on_adjudication_complete(
         return
 
     try:
-        count = await _adjudication_repo.bulk_create(scan_id, state.adjudication_results)
+        adjudication_repo = AdjudicationRepository(db)
+        count = await adjudication_repo.bulk_create(scan_id, state.adjudication_results)
         logger.info(f"Persisted {count} adjudication results for scan {scan_id}")
     except Exception:
         logger.warning(

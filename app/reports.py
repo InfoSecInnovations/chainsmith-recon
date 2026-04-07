@@ -1752,12 +1752,16 @@ async def generate_targeted_export(
     fingerprints: list[str],
     fmt: str = "md",
     title: str | None = None,
+    db=None,
 ) -> dict:
     """
     Generate a report from a curated set of findings identified by fingerprint.
 
     Searches all scans to find the most recent instance of each fingerprint.
     Returns {"content": str, "filename": str, "format": str}.
+
+    Args:
+        db: Optional Database instance. Falls back to global get_session() if None.
     """
     from sqlalchemy import select
 
@@ -1766,7 +1770,8 @@ async def generate_targeted_export(
 
     # Look up findings by fingerprint (most recent instance of each)
     findings = []
-    async with get_session() as session:
+    _session = db.session() if db is not None else get_session()
+    async with _session as session:
         for fp in fingerprints:
             result = await session.execute(
                 select(Finding)

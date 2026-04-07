@@ -4,7 +4,6 @@ import json
 
 import pytest
 
-from app.db.engine import get_session
 from app.db.models import Finding
 from app.reports import generate_compliance_report
 
@@ -87,7 +86,7 @@ class TestComplianceReportMarkdown:
 
         from sqlalchemy import select
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(
                 select(Finding.fingerprint).where(Finding.title == "Missing CSP")
             )

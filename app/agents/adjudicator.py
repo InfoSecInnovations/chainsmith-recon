@@ -15,7 +15,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 
-from app.lib.llm import LLMClient, LLMResponse, get_llm_client
+from app.lib.llm import LLMClient, LLMResponse
 from app.models import (
     AdjudicatedRisk,
     AdjudicationApproach,

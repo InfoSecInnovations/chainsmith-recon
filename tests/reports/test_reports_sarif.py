@@ -12,16 +12,7 @@ import json
 
 import pytest
 
-from app.db.engine import close_db, get_session, init_db
 from app.db.models import Finding
-from app.db.repositories import (
-    ChainRepository,
-    CheckLogRepository,
-    EngagementRepository,
-    FindingOverrideRepository,
-    FindingRepository,
-    ScanRepository,
-)
 from app.reports import (
     generate_compliance_report,
     generate_delta_report,
@@ -33,45 +24,7 @@ from app.reports import (
 
 pytestmark = pytest.mark.integration
 
-# --- Fixtures ----------------------------------------------------------------
-
-
-@pytest.fixture
-async def db(tmp_path):
-    db_path = tmp_path / "test.db"
-    await init_db(backend="sqlite", db_path=db_path)
-    yield db_path
-    await close_db()
-
-
-@pytest.fixture
-def scan_repo():
-    return ScanRepository()
-
-
-@pytest.fixture
-def finding_repo():
-    return FindingRepository()
-
-
-@pytest.fixture
-def chain_repo():
-    return ChainRepository()
-
-
-@pytest.fixture
-def check_log_repo():
-    return CheckLogRepository()
-
-
-@pytest.fixture
-def override_repo():
-    return FindingOverrideRepository()
-
-
-@pytest.fixture
-def engagement_repo():
-    return EngagementRepository()
+# --- Helpers -----------------------------------------------------------------
 
 
 async def _create_populated_scan(
@@ -437,7 +390,7 @@ class TestComplianceReportSARIF:
 
         from sqlalchemy import select
 
-        async with get_session() as session:
+        async with db.session() as session:
             result = await session.execute(
                 select(Finding.fingerprint).where(Finding.title == "Missing CSP")
             )
@@ -491,20 +444,20 @@ class TestTrendReportSARIF:
 
 
 @pytest.fixture
-async def targeted_fingerprints(db, scan_repo, finding_repo, chain_repo, check_log_repo):
-    """Set up a scan with findings and return fingerprints."""
+async def targeted_setup(db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    """Set up a scan with findings and return (fingerprints, db)."""
     await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
     from sqlalchemy import select
 
-    async with get_session() as session:
+    async with db.session() as session:
         result = await session.execute(select(Finding.fingerprint))
         fps = [row[0] for row in result.all()]
-    return fps
+    return fps, db
 
 
-async def test_targeted_markdown_export(targeted_fingerprints):
-    fps = targeted_fingerprints
-    result = await generate_targeted_export(fps[:2], "md")
+async def test_targeted_markdown_export(targeted_setup):
+    fps, db = targeted_setup
+    result = await generate_targeted_export(fps[:2], "md", db=db)
 
     assert result["format"] == "md"
     assert result["filename"].startswith("targeted-export-")
@@ -514,9 +467,9 @@ async def test_targeted_markdown_export(targeted_fingerprints):
     assert "**Findings:** 2" in content
 
 
-async def test_targeted_json_export(targeted_fingerprints):
-    fps = targeted_fingerprints
-    result = await generate_targeted_export(fps, "json")
+async def test_targeted_json_export(targeted_setup):
+    fps, db = targeted_setup
+    result = await generate_targeted_export(fps, "json", db=db)
 
     assert result["format"] == "json"
     report = json.loads(result["content"])
@@ -524,18 +477,18 @@ async def test_targeted_json_export(targeted_fingerprints):
     assert report["summary"]["total_findings"] == 4
 
 
-async def test_targeted_html_export(targeted_fingerprints):
-    fps = targeted_fingerprints
-    result = await generate_targeted_export(fps, "html")
+async def test_targeted_html_export(targeted_setup):
+    fps, db = targeted_setup
+    result = await generate_targeted_export(fps, "html", db=db)
 
     assert result["format"] == "html"
     assert "<!DOCTYPE html>" in result["content"]
     assert "Targeted Export" in result["content"]
 
 
-async def test_targeted_sarif_export(targeted_fingerprints):
-    fps = targeted_fingerprints
-    result = await generate_targeted_export(fps, "sarif")
+async def test_targeted_sarif_export(targeted_setup):
+    fps, db = targeted_setup
+    result = await generate_targeted_export(fps, "sarif", db=db)
 
     assert result["format"] == "sarif"
     sarif = json.loads(result["content"])
@@ -545,20 +498,20 @@ async def test_targeted_sarif_export(targeted_fingerprints):
     assert props["reportType"] == "targeted"
 
 
-async def test_targeted_custom_title(targeted_fingerprints):
-    fps = targeted_fingerprints
-    result = await generate_targeted_export(fps[:1], "md", title="Critical Findings Only")
+async def test_targeted_custom_title(targeted_setup):
+    fps, db = targeted_setup
+    result = await generate_targeted_export(fps[:1], "md", title="Critical Findings Only", db=db)
     assert "# Critical Findings Only" in result["content"]
 
 
 async def test_targeted_no_findings_raises(db):
     with pytest.raises(ValueError, match="No findings found"):
-        await generate_targeted_export(["nonexistent-fp"], "md")
+        await generate_targeted_export(["nonexistent-fp"], "md", db=db)
 
 
-async def test_targeted_risk_score_calculation(targeted_fingerprints):
-    fps = targeted_fingerprints
-    result = await generate_targeted_export(fps, "json")
+async def test_targeted_risk_score_calculation(targeted_setup):
+    fps, db = targeted_setup
+    result = await generate_targeted_export(fps, "json", db=db)
     report = json.loads(result["content"])
     # 1 critical(10) + 1 high(5) + 1 medium(2) + 1 info(0) = 17
     assert report["summary"]["risk_score"] == 17
