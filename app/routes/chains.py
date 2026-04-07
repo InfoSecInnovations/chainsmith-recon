@@ -30,8 +30,8 @@ _chain_repo = ChainRepository()
 @router.post("/api/v1/chains/analyze", status_code=202)
 async def analyze_chains():
     """Start chain analysis (rule-based + LLM)."""
-    if len(state.findings) == 0:
-        raise HTTPException(400, "No findings to analyze. Run a scan first.")
+    if len(state.observations) == 0:
+        raise HTTPException(400, "No observations to analyze. Run a scan first.")
 
     if state.chain_status == "analyzing":
         raise HTTPException(409, "Chain analysis already running.")
@@ -85,8 +85,8 @@ async def get_chains(
 @router.post("/api/v1/chains/retry", status_code=202)
 async def retry_chain_analysis():
     """Re-run LLM chain analysis only (keeps existing rule-based chains)."""
-    if len(state.findings) == 0:
-        raise HTTPException(400, "No findings to analyze. Run a scan first.")
+    if len(state.observations) == 0:
+        raise HTTPException(400, "No observations to analyze. Run a scan first.")
 
     if state.chain_status == "analyzing":
         raise HTTPException(409, "Chain analysis already running.")
@@ -110,7 +110,7 @@ async def get_chain_detail(chain_id: str):
     if not chain:
         raise HTTPException(404, f"Chain '{chain_id}' not found")
 
-    # Include the actual finding objects
-    chain_with_findings = chain.copy()
-    chain_with_findings["findings"] = [f for f in state.findings if f["id"] in chain["finding_ids"]]
-    return chain_with_findings
+    # Include the actual observation objects
+    chain_with_observations = chain.copy()
+    chain_with_observations["observations"] = [f for f in state.observations if f["id"] in chain["observation_ids"]]
+    return chain_with_observations

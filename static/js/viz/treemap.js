@@ -1,5 +1,5 @@
 /**
- * Chainsmith Viz — Treemap (drill-down finding hierarchy).
+ * Chainsmith Viz — Treemap (drill-down observation hierarchy).
  * Requires: D3, viz-common.js
  */
 (function (ns) {
@@ -13,11 +13,11 @@
     var treemapSizeMode  = 'count';
     var treemapCurrentRoot = null;
     var treemapFullRoot    = null;
-    var treemapFindings    = null;
+    var treemapObservations    = null;
 
-    function buildTreemapHierarchy(findingsArr) {
+    function buildTreemapHierarchy(observationsArr) {
         var suiteMap = new Map();
-        findingsArr.forEach(function (f) {
+        observationsArr.forEach(function (f) {
             var suite = f.suite || ns.inferSuite(f.check_name);
             var host  = f.host || 'unknown';
             if (!suiteMap.has(suite)) suiteMap.set(suite, new Map());
@@ -27,7 +27,7 @@
         });
 
         return {
-            name: 'All Findings',
+            name: 'All Observations',
             children: Array.from(suiteMap.entries()).map(function (suiteEntry) {
                 return {
                     name: suiteEntry[0],
@@ -104,18 +104,18 @@
 
         var displayNodes = revalued.children || [];
 
-        function getNodeFindings(d) {
+        function getNodeObservations(d) {
             return d.leaves().map(function (l) { return l.data.data; }).filter(Boolean);
         }
 
         function getNodeColor(d) {
-            var nf = getNodeFindings(d);
+            var nf = getNodeObservations(d);
             if (nf.length === 0) return '#1e293b';
             return SEV_COLORS[ns.worstSeverity(nf)] || '#6b7280';
         }
 
         function getTextColor(d) {
-            var nf = getNodeFindings(d);
+            var nf = getNodeObservations(d);
             if (nf.length === 0) return '#fff';
             var worst = ns.worstSeverity(nf);
             if (worst === 'critical' || worst === 'high') return '#fff';
@@ -124,12 +124,12 @@
         }
 
         function showTooltip(event, d) {
-            var nf = getNodeFindings(d);
+            var nf = getNodeObservations(d);
             var content = '<strong>' + d.data.name + '</strong>';
             if (d.data.data && d.data.data.severity) {
                 content += '<span class="treemap-tooltip-severity" style="background:' + SEV_COLORS[d.data.data.severity] + ';color:#fff">' + d.data.data.severity + '</span>';
             } else {
-                content += '<div class="treemap-tooltip-breakdown">' + nf.length + ' finding' + (nf.length !== 1 ? 's' : '') + ': ' + ns.severityBreakdown(nf) + '</div>';
+                content += '<div class="treemap-tooltip-breakdown">' + nf.length + ' observation' + (nf.length !== 1 ? 's' : '') + ': ' + ns.severityBreakdown(nf) + '</div>';
             }
             tip.show(content, event);
         }
@@ -154,7 +154,7 @@
                 event.stopPropagation();
                 tip.hide();
                 if (d.data.data) {
-                    openModal(d.data.data.title, getFindingModalContent(d.data.data));
+                    openModal(d.data.data.title, getObservationModalContent(d.data.data));
                     return;
                 }
                 if (d.children) {
@@ -196,9 +196,9 @@
             .text(function (d) {
                 var w = d.x1 - d.x0, h = d.y1 - d.y0;
                 if (w < 50 || h < 36) return '';
-                var nf = getNodeFindings(d);
+                var nf = getNodeObservations(d);
                 if (d.data.data) return '';
-                return nf.length + ' finding' + (nf.length !== 1 ? 's' : '');
+                return nf.length + ' observation' + (nf.length !== 1 ? 's' : '');
             });
 
         svgEl.on('click', function () {
@@ -229,14 +229,14 @@
      * Render the treemap visualization.
      */
     ns.renderTreemap = async function () {
-        var findingsData = await api.getFindings();
-        treemapFindings = findingsData.findings;
+        var observationsData = await api.getObservations();
+        treemapObservations = observationsData.observations;
 
         var empty    = document.getElementById('treemap-empty');
         var controls = document.getElementById('treemap-controls');
         var chartEl  = document.getElementById('treemap-chart');
 
-        if (!treemapFindings || treemapFindings.length === 0) {
+        if (!treemapObservations || treemapObservations.length === 0) {
             empty.style.display    = 'flex';
             controls.style.display = 'none';
             chartEl.style.display  = 'none';
@@ -247,7 +247,7 @@
         controls.style.display = 'flex';
         chartEl.style.display  = 'block';
 
-        var hierarchyData = buildTreemapHierarchy(treemapFindings);
+        var hierarchyData = buildTreemapHierarchy(treemapObservations);
         treemapFullRoot    = d3.hierarchy(hierarchyData);
         treemapCurrentRoot = treemapFullRoot;
 
@@ -261,7 +261,7 @@
             document.querySelectorAll('#treemap-size-toggle button').forEach(function (b) { b.classList.remove('active'); });
             btn.classList.add('active');
             treemapSizeMode = btn.dataset.mode;
-            var newData = buildTreemapHierarchy(treemapFindings);
+            var newData = buildTreemapHierarchy(treemapObservations);
             treemapFullRoot = d3.hierarchy(newData);
             var target = treemapFullRoot;
             if (treemapCurrentRoot && treemapCurrentRoot !== treemapFullRoot) {

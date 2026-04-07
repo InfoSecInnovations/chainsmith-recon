@@ -18,7 +18,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
@@ -138,9 +138,9 @@ class SitemapCheck(ServiceIteratingCheck):
             if re.search(r"/(api|v\d+)/", path, re.I):
                 api_paths.append(path)
 
-        # Base finding: sitemap discovered
-        result.findings.append(
-            build_finding(
+        # Base observation: sitemap discovered
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"Sitemap contains {len(all_paths)} URLs ({len(set(all_paths))} unique paths)",
                 description=f"Sitemap parsing discovered {len(all_paths)} URLs from {service.host}",
@@ -152,7 +152,7 @@ class SitemapCheck(ServiceIteratingCheck):
             )
         )
 
-        # Sensitive paths finding
+        # Sensitive paths observation
         if sensitive_paths:
             severity = (
                 "medium"
@@ -162,8 +162,8 @@ class SitemapCheck(ServiceIteratingCheck):
                 )
                 else "low"
             )
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Sitemap reveals sensitive paths ({len(sensitive_paths)})",
                     description="Sitemap contains paths suggesting internal or sensitive resources",
@@ -176,15 +176,15 @@ class SitemapCheck(ServiceIteratingCheck):
                 )
             )
 
-        # API versioning finding
+        # API versioning observation
         api_versions = set()
         for p in api_paths:
             m = re.search(r"/v(\d+)/", p, re.I)
             if m:
                 api_versions.add(f"v{m.group(1)}")
         if len(api_versions) > 1:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Sitemap reveals API versioning: {', '.join(sorted(api_versions))}",
                     description="Multiple API versions discovered, older versions may lack security controls",

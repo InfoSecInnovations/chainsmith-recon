@@ -123,15 +123,15 @@ class TestTlsAnalysisCheckRun:
         assert "staging.example.com" in tls_hosts
         assert "www.example.com" not in tls_hosts
 
-        # Should have at least cert summary finding
-        assert len(result.findings) >= 1
-        assert any("TLS certificate" in f.title for f in result.findings)
-        # SANs finding
-        assert any("SANs discovered" in f.title for f in result.findings)
+        # Should have at least cert summary observation
+        assert len(result.observations) >= 1
+        assert any("TLS certificate" in f.title for f in result.observations)
+        # SANs observation
+        assert any("SANs discovered" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_self_signed_certificate(self):
-        """Self-signed cert should produce medium severity finding."""
+        """Self-signed cert should produce medium severity observation."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
 
         check = TlsAnalysisCheck()
@@ -165,13 +165,13 @@ class TestTlsAnalysisCheckRun:
                 )
 
         assert result.success is True
-        self_signed_findings = [f for f in result.findings if "self-signed" in f.title.lower()]
-        assert len(self_signed_findings) == 1
-        assert self_signed_findings[0].severity == "medium"
+        self_signed_observations = [f for f in result.observations if "self-signed" in f.title.lower()]
+        assert len(self_signed_observations) == 1
+        assert self_signed_observations[0].severity == "medium"
 
     @pytest.mark.asyncio
     async def test_expired_certificate(self):
-        """Expired cert should produce medium severity finding."""
+        """Expired cert should produce medium severity observation."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
 
         check = TlsAnalysisCheck()
@@ -205,13 +205,13 @@ class TestTlsAnalysisCheckRun:
                 )
 
         assert result.success is True
-        expired_findings = [f for f in result.findings if "expired" in f.title.lower()]
-        assert len(expired_findings) == 1
-        assert expired_findings[0].severity == "medium"
+        expired_observations = [f for f in result.observations if "expired" in f.title.lower()]
+        assert len(expired_observations) == 1
+        assert expired_observations[0].severity == "medium"
 
     @pytest.mark.asyncio
     async def test_expiring_soon_certificate(self):
-        """Cert expiring within 30 days should produce low severity finding."""
+        """Cert expiring within 30 days should produce low severity observation."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
 
         check = TlsAnalysisCheck()
@@ -245,13 +245,13 @@ class TestTlsAnalysisCheckRun:
                 )
 
         assert result.success is True
-        expiring_findings = [f for f in result.findings if "expires soon" in f.title.lower()]
-        assert len(expiring_findings) == 1
-        assert expiring_findings[0].severity == "low"
+        expiring_observations = [f for f in result.observations if "expires soon" in f.title.lower()]
+        assert len(expiring_observations) == 1
+        assert expiring_observations[0].severity == "low"
 
     @pytest.mark.asyncio
     async def test_deprecated_tls_protocol(self):
-        """Deprecated TLS versions should produce low severity findings."""
+        """Deprecated TLS versions should produce low severity observations."""
         from app.checks.network.tls_analysis import TlsAnalysisCheck
 
         check = TlsAnalysisCheck()
@@ -290,11 +290,11 @@ class TestTlsAnalysisCheckRun:
                 )
 
         assert result.success is True
-        deprecated_findings = [
-            f for f in result.findings if "TLS 1.0" in f.title or "TLS 1.1" in f.title
+        deprecated_observations = [
+            f for f in result.observations if "TLS 1.0" in f.title or "TLS 1.1" in f.title
         ]
-        assert len(deprecated_findings) == 2
-        assert all(f.severity == "low" for f in deprecated_findings)
+        assert len(deprecated_observations) == 2
+        assert all(f.severity == "low" for f in deprecated_observations)
 
     @pytest.mark.asyncio
     async def test_tls_connect_failure_skips(self):

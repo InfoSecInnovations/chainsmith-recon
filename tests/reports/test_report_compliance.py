@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from app.db.models import Finding
+from app.db.models import ObservationRecord
 from app.reports import generate_compliance_report
 
 from .conftest import PDF_MAGIC, _create_populated_scan
@@ -14,8 +14,8 @@ pytestmark = pytest.mark.integration
 
 class TestComplianceReportMarkdown:
     @pytest.mark.asyncio
-    async def test_basic_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_basic_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "md")
 
         assert result["format"] == "md"
@@ -25,11 +25,11 @@ class TestComplianceReportMarkdown:
         assert "# Compliance Report" in content
         assert "**Target:** example.com" in content
         assert "Scope and Coverage" in content
-        assert "Finding Summary" in content
+        assert "Observation Summary" in content
 
     @pytest.mark.asyncio
-    async def test_check_coverage(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_check_coverage(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "md")
         content = result["content"]
         assert "**Checks Executed:** 5" in content
@@ -38,9 +38,9 @@ class TestComplianceReportMarkdown:
 
     @pytest.mark.asyncio
     async def test_checks_performed_table(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
     ):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "md")
         content = result["content"]
         assert "Checks Performed" in content
@@ -48,15 +48,15 @@ class TestComplianceReportMarkdown:
         assert "| port_scan | network |" in content
 
     @pytest.mark.asyncio
-    async def test_severity_summary(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_severity_summary(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "md")
         content = result["content"]
-        assert "**Total Findings:** 4" in content
+        assert "**Total Observations:** 4" in content
 
     @pytest.mark.asyncio
     async def test_with_engagement(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo, engagement_repo
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo, engagement_repo
     ):
         eng = await engagement_repo.create_engagement(
             name="Q1 Pentest",
@@ -64,7 +64,7 @@ class TestComplianceReportMarkdown:
             description="Test engagement",
             client_name="Acme Corp",
         )
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
 
         result = await generate_compliance_report("report-scan", "md", engagement_id=eng["id"])
         content = result["content"]
@@ -77,18 +77,18 @@ class TestComplianceReportMarkdown:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         chain_repo,
         check_log_repo,
         override_repo,
     ):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
 
         from sqlalchemy import select
 
         async with db.session() as session:
             result = await session.execute(
-                select(Finding.fingerprint).where(Finding.title == "Missing CSP")
+                select(ObservationRecord.fingerprint).where(ObservationRecord.title == "Missing CSP")
             )
             fp = result.scalar_one()
 
@@ -104,22 +104,22 @@ class TestComplianceReportMarkdown:
 
 class TestComplianceReportJSON:
     @pytest.mark.asyncio
-    async def test_json_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_json_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "json")
 
         report = json.loads(result["content"])
         assert report["report_type"] == "compliance"
         assert report["scope"]["checks_executed"] == 5
         assert report["scope"]["completed"] == 4
-        assert report["findings"]["total"] == 4
+        assert report["observations"]["total"] == 4
         assert len(report["scope"]["checks_run"]) == 5
 
 
 class TestComplianceReportHTML:
     @pytest.mark.asyncio
-    async def test_html_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_html_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "html")
 
         assert result["format"] == "html"
@@ -142,8 +142,8 @@ class TestComplianceReportPDF:
     xhtml2pdf = pytest.importorskip("xhtml2pdf")
 
     @pytest.mark.asyncio
-    async def test_pdf_output(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_pdf_output(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("report-scan", "pdf")
 
         assert result["format"] == "pdf"

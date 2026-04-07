@@ -167,7 +167,7 @@ class TestToolChainAnalysisCheck:
     async def test_detects_rce_chain(self, check, mcp_tools_context):
         """read_file + execute_command = file access + code exec."""
         result = await check.run(mcp_tools_context)
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) > 0
 
     @pytest.mark.asyncio
@@ -180,7 +180,7 @@ class TestToolChainAnalysisCheck:
         }
         result = await check.run(ctx)
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) > 0
 
 
@@ -203,8 +203,8 @@ class TestShadowToolDetectionCheck:
         """Flat tool names should be flagged as medium."""
         result = await check.run(mcp_tools_context)
         assert result.success
-        flat_findings = [f for f in result.findings if "flat" in f.title.lower()]
-        assert len(flat_findings) > 0
+        flat_observations = [f for f in result.observations if "flat" in f.title.lower()]
+        assert len(flat_observations) > 0
 
     @pytest.mark.asyncio
     async def test_namespaced_tools_safe(self, check):
@@ -216,7 +216,7 @@ class TestShadowToolDetectionCheck:
             "mcp_servers": [],
         }
         result = await check.run(ctx)
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) > 0
 
     @pytest.mark.asyncio
@@ -234,7 +234,7 @@ class TestShadowToolDetectionCheck:
         with patch("app.checks.mcp.shadow_tool_detection.AsyncHttpClient", return_value=mock):
             result = await check.run(mcp_tools_context)
 
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert any(
             "list_changed" in f.title.lower() or "re-registration" in f.title.lower() for f in high
         )
@@ -269,7 +269,7 @@ class TestMCPToolInvocationCheck:
             result = await check.run(mcp_tools_context)
 
         assert result.success
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) > 0
 
     @pytest.mark.asyncio
@@ -281,7 +281,7 @@ class TestMCPToolInvocationCheck:
             result = await check.run(mcp_tools_context)
 
         assert result.success
-        medium = [f for f in result.findings if f.severity == "medium"]
+        medium = [f for f in result.observations if f.severity == "medium"]
         assert len(medium) > 0
 
 
@@ -311,7 +311,7 @@ class TestToolRateLimitCheck:
             result = await check.run(mcp_tools_context)
 
         assert result.success
-        medium = [f for f in result.findings if f.severity == "medium"]
+        medium = [f for f in result.observations if f.severity == "medium"]
         assert len(medium) > 0  # No rate limit = medium
 
     @pytest.mark.asyncio
@@ -332,7 +332,7 @@ class TestToolRateLimitCheck:
             result = await check.run(mcp_tools_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) > 0
 
 
@@ -389,7 +389,7 @@ class TestUndeclaredCapabilityCheck:
             result = await check.run(ctx)
 
         assert result.success
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert len(high) > 0
 
     @pytest.mark.asyncio
@@ -407,7 +407,7 @@ class TestUndeclaredCapabilityCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) > 0
 
 

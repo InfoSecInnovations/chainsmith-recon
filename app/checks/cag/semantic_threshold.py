@@ -20,7 +20,7 @@ import time
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Query variations with decreasing similarity to baseline
@@ -92,8 +92,8 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
                         threshold_results.append(threshold_info)
 
                         severity = self._determine_severity(threshold_info)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=self._build_title(threshold_info),
                                 description=self._build_description(threshold_info),
@@ -216,7 +216,7 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
         }
 
     def _determine_severity(self, threshold_info: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if not threshold_info.get("is_semantic_cache"):
             return "info"
 
@@ -230,7 +230,7 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
         return "low"
 
     def _build_title(self, threshold_info: dict) -> str:
-        """Build finding title."""
+        """Build observation title."""
         if not threshold_info.get("is_semantic_cache"):
             return "Not a semantic cache (exact match only)"
 
@@ -244,7 +244,7 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
         return "Semantic cache only matches near-exact queries (tight threshold)"
 
     def _build_description(self, threshold_info: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         if not threshold_info.get("is_semantic_cache"):
             return (
                 "Cache only matches exact queries. Not a semantic cache, or "

@@ -12,7 +12,7 @@ import ssl
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
@@ -85,10 +85,10 @@ class HTTP2DetectionCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"HTTP protocol detection error: {e}")
 
-        # Generate findings
+        # Generate observations
         if h2_supported and h3_available:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"HTTP/2 and HTTP/3 supported: {service.host}",
                     description="Both HTTP/2 and HTTP/3 (QUIC) are available, indicating modern infrastructure",
@@ -101,8 +101,8 @@ class HTTP2DetectionCheck(ServiceIteratingCheck):
                 )
             )
         elif h2_supported:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"HTTP/2 supported: {service.host}:{service.port}",
                     description="HTTP/2 is supported via TLS ALPN negotiation",
@@ -115,8 +115,8 @@ class HTTP2DetectionCheck(ServiceIteratingCheck):
                 )
             )
         elif h3_available:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"HTTP/3 (QUIC) available: {service.host}",
                     description="HTTP/3 advertised via Alt-Svc header",
@@ -129,8 +129,8 @@ class HTTP2DetectionCheck(ServiceIteratingCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"HTTP/1.1 only: {service.host}:{service.port}",
                     description="No HTTP/2 or HTTP/3 support detected — legacy HTTP/1.1 only",

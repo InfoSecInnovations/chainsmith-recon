@@ -13,11 +13,11 @@ pytestmark = pytest.mark.integration
 
 class TestTrendReportMarkdown:
     @pytest.fixture
-    async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def target_scans(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
         """Create two completed scans for the same target."""
         await _create_populated_scan(
             scan_repo,
-            finding_repo,
+            observation_repo,
             chain_repo,
             check_log_repo,
             scan_id="trend-1",
@@ -28,7 +28,7 @@ class TestTrendReportMarkdown:
             session_id="s2",
             target_domain="trend.com",
         )
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "trend-2",
             [
                 {
@@ -47,7 +47,7 @@ class TestTrendReportMarkdown:
                 },
             ],
         )
-        await scan_repo.complete_scan("trend-2", status="complete", findings_count=2)
+        await scan_repo.complete_scan("trend-2", status="complete", observations_count=2)
 
     @pytest.mark.asyncio
     async def test_basic_structure(self, target_scans):
@@ -89,10 +89,10 @@ class TestTrendReportMarkdown:
 
 class TestTrendReportJSON:
     @pytest.fixture
-    async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def target_scans(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
         await _create_populated_scan(
             scan_repo,
-            finding_repo,
+            observation_repo,
             chain_repo,
             check_log_repo,
             scan_id="tj-1",
@@ -111,10 +111,10 @@ class TestTrendReportJSON:
 
 class TestTrendReportHTML:
     @pytest.fixture
-    async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def target_scans(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
         await _create_populated_scan(
             scan_repo,
-            finding_repo,
+            observation_repo,
             chain_repo,
             check_log_repo,
             scan_id="th-1",
@@ -141,7 +141,7 @@ class TestTrendReportHTML:
 class TestTrendReportEngagement:
     @pytest.fixture
     async def engagement_scans(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo, engagement_repo
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo, engagement_repo
     ):
         eng = await engagement_repo.create_engagement(
             name="Trend Engagement",
@@ -153,7 +153,7 @@ class TestTrendReportEngagement:
             target_domain="eng-trend.com",
             engagement_id=eng["id"],
         )
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "te-1",
             [
                 {
@@ -165,7 +165,7 @@ class TestTrendReportEngagement:
                 },
             ],
         )
-        await scan_repo.complete_scan("te-1", status="complete", findings_count=1)
+        await scan_repo.complete_scan("te-1", status="complete", observations_count=1)
         return eng["id"]
 
     @pytest.mark.asyncio
@@ -193,10 +193,10 @@ class TestTrendReportPDF:
     xhtml2pdf = pytest.importorskip("xhtml2pdf")
 
     @pytest.fixture
-    async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def target_scans(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
         await _create_populated_scan(
             scan_repo,
-            finding_repo,
+            observation_repo,
             chain_repo,
             check_log_repo,
             scan_id="tp-1",

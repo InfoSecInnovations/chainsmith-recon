@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import format_chat_request_with_extra
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -54,7 +54,7 @@ class StreamingAnalysisCheck(BaseCheck):
 
             try:
                 sr = await self._test_streaming(url, service, api_format, context)
-                result.findings.extend(sr.findings)
+                result.observations.extend(sr.observations)
                 result.outputs.update(sr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -193,10 +193,10 @@ class StreamingAnalysisCheck(BaseCheck):
             result.errors.append(f"{url}: {e}")
             return result
 
-        # Generate findings
+        # Generate observations
         if filter_bypass:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Streaming bypasses content filter",
                     description=(
@@ -218,8 +218,8 @@ class StreamingAnalysisCheck(BaseCheck):
             evidence = "SSE streaming supported"
             if ttft_ms:
                 evidence += f", time-to-first-token: {ttft_ms:.0f}ms"
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Streaming supported: SSE responses with {ttft_ms:.0f}ms TTFT"
                     if ttft_ms
@@ -235,8 +235,8 @@ class StreamingAnalysisCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Streaming not supported",
                     description="Stream parameter ignored or not supported",

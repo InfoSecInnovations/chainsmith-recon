@@ -2,18 +2,18 @@
 Tests for Phase 2 scan history API endpoints and modified existing endpoints.
 
 Tests the new /api/scans/* routes and the ?scan_id= parameter on
-existing /api/findings and /api/chains endpoints.
+existing /api/observations and /api/chains endpoints.
 """
 
 import pytest
 from sqlalchemy import func, select
 
 from app.db.engine import close_db, get_session, init_db
-from app.db.models import Chain, CheckLog, Finding
+from app.db.models import Chain, CheckLog, ObservationRecord
 from app.db.repositories import (
     ChainRepository,
     CheckLogRepository,
-    FindingRepository,
+    ObservationRepository,
     ScanRepository,
 )
 
@@ -35,11 +35,11 @@ async def db(tmp_path):
 async def seeded_db(db):
     """Database with two scans and sample data."""
     scan_repo = ScanRepository()
-    finding_repo = FindingRepository()
+    observation_repo = ObservationRepository()
     chain_repo = ChainRepository()
     log_repo = CheckLogRepository()
 
-    # Scan 1: completed with findings
+    # Scan 1: completed with observations
     await scan_repo.create_scan(
         scan_id="scan-aaa",
         session_id="sess-1",
@@ -47,7 +47,7 @@ async def seeded_db(db):
         settings={"parallel": False},
         scenario_name="web_check",
     )
-    await finding_repo.bulk_create(
+    await observation_repo.bulk_create(
         "scan-aaa",
         [
             {
@@ -86,7 +86,7 @@ async def seeded_db(db):
                 "title": "XSS to Session Hijack",
                 "severity": "high",
                 "source": "rule-based",
-                "finding_ids": ["f-001", "f-002"],
+                "observation_ids": ["f-001", "f-002"],
             },
         ],
     )
@@ -94,9 +94,9 @@ async def seeded_db(db):
         "scan-aaa",
         [
             {"check": "xss_check", "event": "started", "suite": "web"},
-            {"check": "xss_check", "event": "completed", "findings": 1, "suite": "web"},
+            {"check": "xss_check", "event": "completed", "observations": 1, "suite": "web"},
             {"check": "header_check", "event": "started", "suite": "web"},
-            {"check": "header_check", "event": "completed", "findings": 1, "suite": "web"},
+            {"check": "header_check", "event": "completed", "observations": 1, "suite": "web"},
         ],
     )
     await scan_repo.complete_scan(
@@ -105,7 +105,7 @@ async def seeded_db(db):
         checks_total=2,
         checks_completed=2,
         checks_failed=0,
-        findings_count=3,
+        observations_count=3,
         duration_ms=5000,
     )
 
@@ -115,7 +115,7 @@ async def seeded_db(db):
         session_id="sess-2",
         target_domain="other.com",
     )
-    await finding_repo.bulk_create(
+    await observation_repo.bulk_create(
         "scan-bbb",
         [
             {
@@ -132,7 +132,7 @@ async def seeded_db(db):
         status="complete",
         checks_total=1,
         checks_completed=1,
-        findings_count=1,
+        observations_count=1,
     )
 
     return {"scan_a": "scan-aaa", "scan_b": "scan-bbb"}
@@ -152,7 +152,7 @@ class TestScanRepositoryReads:
         assert scan["id"] == "scan-aaa"
         assert scan["target_domain"] == "example.com"
         assert scan["status"] == "complete"
-        assert scan["findings_count"] == 3
+        assert scan["observations_count"] == 3
         assert scan["duration_ms"] == 5000
         assert scan["started_at"] is not None
         assert scan["completed_at"] is not None
@@ -214,7 +214,7 @@ class TestScanRepositoryReads:
         # Verify related data is gone
         async with get_session() as session:
             result = await session.execute(
-                select(func.count()).select_from(Finding).where(Finding.scan_id == "scan-aaa")
+                select(func.count()).select_from(ObservationRecord).where(ObservationRecord.scan_id == "scan-aaa")
             )
             assert result.scalar() == 0
             result = await session.execute(
@@ -237,45 +237,45 @@ class TestScanRepositoryReads:
         assert deleted is False
 
 
-# ─── FindingRepository Read Tests ───────────────────────────────────────────
+# ─── ObservationRepository Read Tests ───────────────────────────────────────────
 
 
-class TestFindingRepositoryReads:
-    """Tests for finding query methods."""
+class TestObservationRepositoryReads:
+    """Tests for observation query methods."""
 
     @pytest.mark.asyncio
-    async def test_get_findings(self, seeded_db):
-        repo = FindingRepository()
-        findings = await repo.get_findings("scan-aaa")
-        assert len(findings) == 3
-        titles = {f["title"] for f in findings}
+    async def test_get_observations(self, seeded_db):
+        repo = ObservationRepository()
+        observations = await repo.get_observations("scan-aaa")
+        assert len(observations) == 3
+        titles = {f["title"] for f in observations}
         assert "XSS in Search" in titles
         assert "Missing CSP" in titles
 
     @pytest.mark.asyncio
-    async def test_get_findings_filter_severity(self, seeded_db):
-        repo = FindingRepository()
-        findings = await repo.get_findings("scan-aaa", severity="high")
-        assert len(findings) == 1
-        assert findings[0]["title"] == "XSS in Search"
+    async def test_get_observations_filter_severity(self, seeded_db):
+        repo = ObservationRepository()
+        observations = await repo.get_observations("scan-aaa", severity="high")
+        assert len(observations) == 1
+        assert observations[0]["title"] == "XSS in Search"
 
     @pytest.mark.asyncio
-    async def test_get_findings_filter_host(self, seeded_db):
-        repo = FindingRepository()
-        findings = await repo.get_findings("scan-aaa", host="api.example.com")
-        assert len(findings) == 1
-        assert findings[0]["title"] == "SSH Open"
+    async def test_get_observations_filter_host(self, seeded_db):
+        repo = ObservationRepository()
+        observations = await repo.get_observations("scan-aaa", host="api.example.com")
+        assert len(observations) == 1
+        assert observations[0]["title"] == "SSH Open"
 
     @pytest.mark.asyncio
-    async def test_get_findings_empty_scan(self, seeded_db):
-        repo = FindingRepository()
-        findings = await repo.get_findings("nonexistent-scan")
-        assert findings == []
+    async def test_get_observations_empty_scan(self, seeded_db):
+        repo = ObservationRepository()
+        observations = await repo.get_observations("nonexistent-scan")
+        assert observations == []
 
     @pytest.mark.asyncio
-    async def test_get_findings_by_host(self, seeded_db):
-        repo = FindingRepository()
-        hosts = await repo.get_findings_by_host("scan-aaa")
+    async def test_get_observations_by_host(self, seeded_db):
+        repo = ObservationRepository()
+        hosts = await repo.get_observations_by_host("scan-aaa")
         assert len(hosts) == 2  # example.com and api.example.com
         host_names = {h["name"] for h in hosts}
         assert "example.com" in host_names
@@ -284,16 +284,16 @@ class TestFindingRepositoryReads:
         # Check counts per host
         for h in hosts:
             if h["name"] == "example.com":
-                assert len(h["findings"]) == 2
+                assert len(h["observations"]) == 2
             elif h["name"] == "api.example.com":
-                assert len(h["findings"]) == 1
+                assert len(h["observations"]) == 1
 
     @pytest.mark.asyncio
-    async def test_finding_dict_shape(self, seeded_db):
-        """Finding dicts have all expected keys."""
-        repo = FindingRepository()
-        findings = await repo.get_findings("scan-aaa", severity="high")
-        f = findings[0]
+    async def test_observation_dict_shape(self, seeded_db):
+        """Observation dicts have all expected keys."""
+        repo = ObservationRepository()
+        observations = await repo.get_observations("scan-aaa", severity="high")
+        f = observations[0]
         expected_keys = {
             "id",
             "scan_id",
@@ -330,7 +330,7 @@ class TestChainRepositoryReads:
         chains = await repo.get_chains("scan-aaa")
         assert len(chains) == 1
         assert chains[0]["title"] == "XSS to Session Hijack"
-        assert chains[0]["finding_ids"] == ["f-001", "f-002"]
+        assert chains[0]["observation_ids"] == ["f-001", "f-002"]
 
     @pytest.mark.asyncio
     async def test_get_chains_empty(self, seeded_db):
@@ -349,7 +349,7 @@ class TestChainRepositoryReads:
             "description",
             "severity",
             "source",
-            "finding_ids",
+            "observation_ids",
             "created_at",
         }
         assert expected_keys == set(chains[0].keys())
@@ -384,7 +384,7 @@ class TestCheckLogRepositoryReads:
             "check",
             "suite",
             "event",
-            "findings",
+            "observations",
             "duration_ms",
             "error_message",
             "timestamp",
@@ -414,7 +414,7 @@ class TestScanDictShape:
             "checks_total",
             "checks_completed",
             "checks_failed",
-            "findings_count",
+            "observations_count",
             "scope",
             "settings",
             "profile_name",

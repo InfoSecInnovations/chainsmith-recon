@@ -34,7 +34,7 @@ from typing import Any
 
 import yaml
 
-from app.checks.base import BaseCheck, CheckResult, Finding, Service
+from app.checks.base import BaseCheck, CheckResult, Observation, Service
 
 # ── Config schema ─────────────────────────────────────────────────
 
@@ -216,8 +216,8 @@ class SimulatedCheck(BaseCheck):
 
             for hostname in target_hosts:
                 ip = dns_records.get(hostname, hostname)
-                result.findings.append(
-                    Finding(
+                result.observations.append(
+                    Observation(
                         id=f"{self.name}-{hostname}",
                         title=f"Host discovered: {hostname}",
                         description=f"DNS resolved {hostname} to {ip}",
@@ -250,8 +250,8 @@ class SimulatedCheck(BaseCheck):
                         metadata={"ip": ip, "simulated": True},
                     )
                     result.services.append(svc)
-                    result.findings.append(
-                        Finding(
+                    result.observations.append(
+                        Observation(
                             id=f"{self.name}-{host}",
                             title=f"Host discovered: {host}",
                             description=f"Simulated host at {host}:{port}",

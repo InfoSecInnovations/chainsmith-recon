@@ -11,7 +11,7 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -22,7 +22,7 @@ class VCSExposureCheck(ServiceIteratingCheck):
     description = "Assess depth of exposed .git/.svn/.hg repositories"
 
     conditions = [CheckCondition("services", "truthy")]
-    produces = ["vcs_findings"]
+    produces = ["vcs_observations"]
     service_types = ["http", "html", "api"]
 
     timeout_seconds = 60.0
@@ -74,8 +74,8 @@ class VCSExposureCheck(ServiceIteratingCheck):
                 # ── Mercurial exposure ──
                 hg_resp = await client.get(service.with_path("/.hg/store"))
                 if not hg_resp.error and hg_resp.status_code == 200:
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Mercurial metadata exposed: {service.host}",
                             description=".hg/store is accessible — source code may be recoverable",
@@ -123,8 +123,8 @@ class VCSExposureCheck(ServiceIteratingCheck):
                     break
 
         if has_creds:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Git config contains credentials: {service.host}",
                     description="Remote URL with embedded token/password found in .git/config",
@@ -139,8 +139,8 @@ class VCSExposureCheck(ServiceIteratingCheck):
         else:
             recoverable = len(accessible_git) >= 3
             severity = "critical" if recoverable else "high"
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Git repository exposed: {service.host}",
                     description=f"{len(accessible_git)} git metadata files accessible — "
@@ -160,8 +160,8 @@ class VCSExposureCheck(ServiceIteratingCheck):
         """Probe SVN metadata."""
         resp = await client.get(service.with_path("/.svn/entries"))
         if not resp.error and resp.status_code == 200:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"SVN metadata exposed: {service.host}",
                     description=".svn/entries is accessible — source code may be recoverable",

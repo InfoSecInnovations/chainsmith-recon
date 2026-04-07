@@ -10,7 +10,7 @@ HTTP/web-specific reconnaissance:
 - Path/directory enumeration
 - CORS misconfiguration testing
 - OpenAPI/Swagger documentation discovery
-- Critical findings: WebDAV, VCS exposure, config secrets, directory listing,
+- Critical observations: WebDAV, VCS exposure, config secrets, directory listing,
   default credentials, debug endpoints (Phase 6a)
 - Content & structure discovery: sitemap parsing, redirect chains,
   error page fingerprinting, SSRF indicators (Phase 6c)

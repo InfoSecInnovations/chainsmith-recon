@@ -90,9 +90,9 @@ class ServiceProbeCheck(ServiceIteratingCheck):
                         headers, content_type, response.body[:2000]
                     )
 
-                    # Create findings for interesting discoveries
-                    findings = self._analyze_response(service, headers, response)
-                    result.findings.extend(findings)
+                    # Create observations for interesting discoveries
+                    observations = self._analyze_response(service, headers, response)
+                    result.observations.extend(observations)
 
                     result.services.append(service)
                     return result
@@ -149,8 +149,8 @@ class ServiceProbeCheck(ServiceIteratingCheck):
         return "http"
 
     def _analyze_response(self, service: Service, headers: dict, response) -> list:
-        """Extract findings from initial response."""
-        findings = []
+        """Extract observations from initial response."""
+        observations = []
         headers_lower = {k.lower(): v for k, v in headers.items()}
 
         # Server header
@@ -158,8 +158,8 @@ class ServiceProbeCheck(ServiceIteratingCheck):
             server_value = headers_lower["server"]
             # Check if version info is present
             if any(c.isdigit() for c in server_value):
-                findings.append(
-                    self.create_finding(
+                observations.append(
+                    self.create_observation(
                         title=f"Server version disclosed: {server_value}",
                         description="Server header reveals version information that could aid targeted attacks",
                         severity="low",
@@ -178,8 +178,8 @@ class ServiceProbeCheck(ServiceIteratingCheck):
             if any(ai in value.lower() for ai in self.AI_POWERED_BY):
                 severity = "medium"
 
-            findings.append(
-                self.create_finding(
+            observations.append(
+                self.create_observation(
                     title=f"Technology disclosed: {value}",
                     description="X-Powered-By header reveals technology stack",
                     severity=severity,
@@ -211,8 +211,8 @@ class ServiceProbeCheck(ServiceIteratingCheck):
                 ):
                     severity = "medium"
 
-                findings.append(
-                    self.create_finding(
+                observations.append(
+                    self.create_observation(
                         title=f"Custom header: {key}",
                         description="Custom header may leak internal information",
                         severity=severity,
@@ -221,4 +221,4 @@ class ServiceProbeCheck(ServiceIteratingCheck):
                     )
                 )
 
-        return findings
+        return observations

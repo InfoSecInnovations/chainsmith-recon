@@ -15,7 +15,7 @@ import re
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Server fingerprint signatures
@@ -152,11 +152,11 @@ class MCPServerFingerprintCheck(BaseCheck):
 
             implementations.append(impl)
 
-            # Generate findings
+            # Generate observations
             if impl["identified"]:
                 version_str = f" v{impl['version']}" if impl.get("version") else ""
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"MCP server identified: {impl['implementation']}{version_str}",
                         description=(
@@ -172,8 +172,8 @@ class MCPServerFingerprintCheck(BaseCheck):
                     )
                 )
             else:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="MCP server is custom implementation (non-standard)",
                         description=(

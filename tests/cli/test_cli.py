@@ -18,10 +18,10 @@ from click.testing import CliRunner
 
 from app.cli import cli
 from app.cli_formatters import (
-    findings_to_json,
-    findings_to_markdown,
-    findings_to_sarif,
-    format_finding_terminal,
+    observations_to_json,
+    observations_to_markdown,
+    observations_to_sarif,
+    format_observation_terminal,
 )
 
 pytestmark = pytest.mark.unit
@@ -38,12 +38,12 @@ def runner():
 
 
 @pytest.fixture
-def sample_finding():
-    """Sample finding dict for testing."""
+def sample_observation():
+    """Sample observation dict for testing."""
     return {
         "id": "test-001",
-        "title": "Test Finding",
-        "description": "A test finding for unit tests",
+        "title": "Test Observation",
+        "description": "A test observation for unit tests",
         "severity": "medium",
         "evidence": "Some evidence here",
         "target_url": "http://example.com/api",
@@ -53,10 +53,10 @@ def sample_finding():
 
 
 @pytest.fixture
-def sample_findings(sample_finding):
-    """List of sample finding dicts."""
+def sample_observations(sample_observation):
+    """List of sample observation dicts."""
     return [
-        sample_finding,
+        sample_observation,
         {
             "id": "test-002",
             "title": "Critical Issue",
@@ -69,7 +69,7 @@ def sample_findings(sample_finding):
         },
         {
             "id": "test-003",
-            "title": "Info Finding",
+            "title": "Info Observation",
             "description": "Informational",
             "severity": "info",
             "check_name": "info_check",
@@ -98,32 +98,32 @@ def _patch_client(client):
 class TestOutputFormatting:
     """Tests for output formatting functions."""
 
-    def test_format_finding_terminal(self, sample_finding):
-        """format_finding_terminal produces colored output."""
-        output = format_finding_terminal(sample_finding, verbose=False)
+    def test_format_observation_terminal(self, sample_observation):
+        """format_observation_terminal produces colored output."""
+        output = format_observation_terminal(sample_observation, verbose=False)
         assert "MEDIUM" in output
-        assert "Test Finding" in output
+        assert "Test Observation" in output
 
-    def test_format_finding_terminal_verbose(self, sample_finding):
-        """format_finding_terminal verbose includes details."""
-        output = format_finding_terminal(sample_finding, verbose=True)
-        assert "Test Finding" in output
-        assert "A test finding" in output
+    def test_format_observation_terminal_verbose(self, sample_observation):
+        """format_observation_terminal verbose includes details."""
+        output = format_observation_terminal(sample_observation, verbose=True)
+        assert "Test Observation" in output
+        assert "A test observation" in output
         assert "http://example.com/api" in output
         assert "test_check" in output
 
-    def test_findings_to_json(self, sample_findings):
-        """findings_to_json produces valid JSON."""
-        output = findings_to_json(sample_findings)
+    def test_observations_to_json(self, sample_observations):
+        """observations_to_json produces valid JSON."""
+        output = observations_to_json(sample_observations)
         data = json.loads(output)
 
         assert len(data) == 3
-        assert data[0]["title"] == "Test Finding"
+        assert data[0]["title"] == "Test Observation"
         assert data[1]["severity"] == "critical"
 
-    def test_findings_to_markdown(self, sample_findings):
-        """findings_to_markdown produces Markdown report."""
-        output = findings_to_markdown(sample_findings, "example.com")
+    def test_observations_to_markdown(self, sample_observations):
+        """observations_to_markdown produces Markdown report."""
+        output = observations_to_markdown(sample_observations, "example.com")
 
         assert "# Chainsmith Recon Report" in output
         assert "**Target:** example.com" in output
@@ -131,11 +131,11 @@ class TestOutputFormatting:
         assert "## MEDIUM" in output
         assert "## INFO" in output
         assert "Critical Issue" in output
-        assert "Test Finding" in output
+        assert "Test Observation" in output
 
-    def test_findings_to_sarif(self, sample_findings):
-        """findings_to_sarif produces valid SARIF."""
-        output = findings_to_sarif(sample_findings, "example.com")
+    def test_observations_to_sarif(self, sample_observations):
+        """observations_to_sarif produces valid SARIF."""
+        output = observations_to_sarif(sample_observations, "example.com")
         data = json.loads(output)
 
         assert data["version"] == "2.1.0"
@@ -330,7 +330,7 @@ class TestScenariosCommand:
                     "ports": [80, 443],
                 },
                 "simulations": ["sim1", "sim2"],
-                "expected_findings": [],
+                "expected_observations": [],
             },
             "simulation_count": 2,
         }
@@ -370,7 +370,7 @@ class TestScanCommand:
         client.update_settings.return_value = {"status": "ok"}
         client.start_scan.return_value = {"status": "accepted"}
         client.poll_scan.return_value = {"status": "complete"}
-        client.get_findings.return_value = {"total": 0, "findings": []}
+        client.get_observations.return_value = {"total": 0, "observations": []}
 
         with _patch_client(client):
             result = runner.invoke(cli, ["scan", "example.com", "--quiet"])
@@ -386,7 +386,7 @@ class TestScanCommand:
         client.update_settings.return_value = {"status": "ok"}
         client.start_scan.return_value = {"status": "accepted"}
         client.poll_scan.return_value = {"status": "complete"}
-        client.get_findings.return_value = {"total": 0, "findings": []}
+        client.get_observations.return_value = {"total": 0, "observations": []}
 
         with _patch_client(client):
             result = runner.invoke(cli, ["scan", "example.com", "--suite", "network", "--quiet"])
@@ -405,7 +405,7 @@ class TestScanCommand:
         client.update_settings.return_value = {"status": "ok"}
         client.start_scan.return_value = {"status": "accepted"}
         client.poll_scan.return_value = {"status": "complete"}
-        client.get_findings.return_value = {"total": 0, "findings": []}
+        client.get_observations.return_value = {"total": 0, "observations": []}
 
         with _patch_client(client):
             result = runner.invoke(
@@ -434,7 +434,7 @@ class TestScanCommand:
         client.load_scenario.return_value = {"loaded": True, "simulation_count": 5, "scenario": {}}
         client.start_scan.return_value = {"status": "accepted"}
         client.poll_scan.return_value = {"status": "complete"}
-        client.get_findings.return_value = {"total": 0, "findings": []}
+        client.get_observations.return_value = {"total": 0, "observations": []}
 
         with _patch_client(client):
             result = runner.invoke(
@@ -486,17 +486,17 @@ class TestScanCommand:
 class TestExportCommand:
     """Tests for export command."""
 
-    def test_export_json_to_md(self, runner, sample_findings):
+    def test_export_json_to_md(self, runner, sample_observations):
         """export converts JSON to Markdown."""
-        input_json = json.dumps(sample_findings)
+        input_json = json.dumps(sample_observations)
 
         result = runner.invoke(cli, ["export", "-f", "md"], input=input_json)
         assert result.exit_code == 0
         assert "# Chainsmith Recon Report" in result.output
 
-    def test_export_json_to_sarif(self, runner, sample_findings):
+    def test_export_json_to_sarif(self, runner, sample_observations):
         """export converts JSON to SARIF."""
-        input_json = json.dumps(sample_findings)
+        input_json = json.dumps(sample_observations)
 
         result = runner.invoke(cli, ["export", "-f", "sarif"], input=input_json)
         assert result.exit_code == 0

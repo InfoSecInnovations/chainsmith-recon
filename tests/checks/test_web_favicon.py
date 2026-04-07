@@ -109,9 +109,9 @@ class TestFaviconCheck:
                 result = await check.check_service(service, {})
 
         assert result.success
-        framework_findings = [f for f in result.findings if "TestFramework" in f.title]
-        assert len(framework_findings) == 1
-        assert framework_findings[0].severity == "info"
+        framework_observations = [f for f in result.observations if "TestFramework" in f.title]
+        assert len(framework_observations) == 1
+        assert framework_observations[0].severity == "info"
         assert (
             result.outputs["favicon_info"]["identified"]["TestFramework"]
             == "Test framework detected"
@@ -119,18 +119,18 @@ class TestFaviconCheck:
 
     @pytest.mark.asyncio
     async def test_no_favicon(self, service):
-        """No favicon returns info finding."""
+        """No favicon returns info observation."""
         client = mock_client_multi(default=resp(404))
         with patch("app.checks.web.favicon.AsyncHttpClient", return_value=client):
             check = FaviconCheck()
             result = await check.check_service(service, {})
 
         assert result.success
-        assert any("No favicon" in f.title for f in result.findings)
+        assert any("No favicon" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_unknown_favicon_hash(self, service):
-        """Unknown favicon hash is recorded but no framework finding."""
+        """Unknown favicon hash is recorded but no framework observation."""
         client = mock_client_multi(
             response_map={
                 ("GET", "favicon.ico"): resp(200, body="unknown-favicon-bytes"),
@@ -142,9 +142,9 @@ class TestFaviconCheck:
             result = await check.check_service(service, {})
 
         assert result.success
-        # Should have unknown hash recorded, no framework match finding
+        # Should have unknown hash recorded, no framework match observation
         assert "unknown" in result.outputs["favicon_info"]["identified"]
-        assert not any("Framework identified" in f.title for f in result.findings)
+        assert not any("Framework identified" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_favicon_from_html_link(self, service):
@@ -172,7 +172,7 @@ class TestFaviconCheck:
                 result = await check.check_service(service, {})
 
         assert result.success
-        assert any("CustomApp" in f.title for f in result.findings)
+        assert any("CustomApp" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_error_handling(self, service):
@@ -211,7 +211,7 @@ class TestHTTP2DetectionCheck:
 
         assert result.success
         assert result.outputs["http_protocols"]["h2"] is True
-        assert any("HTTP/2 supported" in f.title for f in result.findings)
+        assert any("HTTP/2 supported" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_h3_via_alt_svc(self, https_service):
@@ -228,7 +228,7 @@ class TestHTTP2DetectionCheck:
 
         assert result.success
         assert result.outputs["http_protocols"]["h3"] is True
-        assert any("HTTP/3" in f.title for f in result.findings)
+        assert any("HTTP/3" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_h2_and_h3(self, https_service):
@@ -245,7 +245,7 @@ class TestHTTP2DetectionCheck:
 
         assert result.outputs["http_protocols"]["h2"] is True
         assert result.outputs["http_protocols"]["h3"] is True
-        assert any("HTTP/2 and HTTP/3" in f.title for f in result.findings)
+        assert any("HTTP/2 and HTTP/3" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_http1_only(self, service):
@@ -257,7 +257,7 @@ class TestHTTP2DetectionCheck:
 
         assert result.outputs["http_protocols"]["h2"] is False
         assert result.outputs["http_protocols"]["h3"] is False
-        assert any("HTTP/1.1 only" in f.title for f in result.findings)
+        assert any("HTTP/1.1 only" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_h2c_upgrade(self, service):

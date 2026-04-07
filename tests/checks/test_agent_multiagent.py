@@ -116,7 +116,7 @@ class TestTrustChain:
         with patch("app.checks.agent.trust_chain.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, multi_agent_context)
 
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
 
     @pytest.mark.asyncio
@@ -131,7 +131,7 @@ class TestTrustChain:
         with patch("app.checks.agent.trust_chain.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) == 0
 
 
@@ -164,11 +164,11 @@ class TestCrossInjection:
             result = await check.check_service(sample_service, multi_agent_context)
 
         # Should find critical since multi-agent + marker preserved + indicators
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
 
     @pytest.mark.asyncio
-    async def test_no_findings_when_filtered(self, sample_service, agent_context):
+    async def test_no_observations_when_filtered(self, sample_service, agent_context):
         check = AgentCrossInjectionCheck()
 
         async def mock_post(url, **kw):
@@ -180,7 +180,7 @@ class TestCrossInjection:
             result = await check.check_service(sample_service, agent_context)
 
         # No injection markers preserved
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) == 0
 
 

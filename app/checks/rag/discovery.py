@@ -27,7 +27,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Vector store detection signatures
@@ -162,8 +162,8 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
                     detected_stores.add(store_info["store_type"])
                     rag_endpoints.append(store_info)
 
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Vector store detected: {store_info['store_type']}",
                             description=self._build_store_description(store_info),
@@ -200,8 +200,8 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
 
                         severity = self._determine_severity(endpoint_info)
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"RAG endpoint: {path}",
                                 description=self._build_endpoint_description(endpoint_info),
@@ -340,7 +340,7 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
         }
 
     def _determine_severity(self, endpoint_info: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if endpoint_info.get("auth_required"):
             return "info"
 
@@ -351,7 +351,7 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
         return "low"
 
     def _build_store_description(self, store_info: dict) -> str:
-        """Build description for vector store finding."""
+        """Build description for vector store observation."""
         parts = [f"Vector store '{store_info['store_type']}' detected at {store_info['path']}."]
 
         if store_info.get("auth_required"):
@@ -362,7 +362,7 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
         return " ".join(parts)
 
     def _build_endpoint_description(self, endpoint_info: dict) -> str:
-        """Build description for RAG endpoint finding."""
+        """Build description for RAG endpoint observation."""
         parts = [f"RAG query endpoint discovered at {endpoint_info['path']}."]
 
         if endpoint_info.get("auth_required"):

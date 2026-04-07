@@ -13,7 +13,7 @@ import json
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Known MCP protocol versions (oldest to newest)
@@ -135,8 +135,8 @@ class MCPProtocolVersionCheck(BaseCheck):
 
                         if oldest["requested"] != newest["requested"]:
                             severity = "medium" if missing_in_old else "low"
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"MCP server supports protocol downgrade: accepted version {oldest['requested']}",
                                     description=(
@@ -160,8 +160,8 @@ class MCPProtocolVersionCheck(BaseCheck):
                                 )
                             )
                     elif len(accepted_versions) == 1:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Server only accepts current protocol version",
                                 description=f"MCP server only accepted version {accepted_versions[0]['requested']}.",

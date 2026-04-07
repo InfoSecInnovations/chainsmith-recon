@@ -9,7 +9,7 @@ Services:
 - ml_serving: ML model serving endpoint
 
 These services simulate AI infrastructure components commonly found in
-enterprise AI deployments, with configurable security findings.
+enterprise AI deployments, with configurable security observations.
 """
 
 __all__ = [

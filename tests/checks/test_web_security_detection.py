@@ -94,9 +94,9 @@ class TestCookieSecurityCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        secure_findings = [f for f in result.findings if "no-secure" in (f.id or "")]
-        assert len(secure_findings) == 1
-        assert secure_findings[0].severity == "medium"  # session cookie → medium
+        secure_observations = [f for f in result.observations if "no-secure" in (f.id or "")]
+        assert len(secure_observations) == 1
+        assert secure_observations[0].severity == "medium"  # session cookie → medium
 
     @pytest.mark.asyncio
     async def test_session_cookie_missing_httponly(self, service):
@@ -107,9 +107,9 @@ class TestCookieSecurityCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        httponly_findings = [f for f in result.findings if "no-httponly" in (f.id or "")]
-        assert len(httponly_findings) == 1
-        assert httponly_findings[0].severity == "medium"
+        httponly_observations = [f for f in result.observations if "no-httponly" in (f.id or "")]
+        assert len(httponly_observations) == 1
+        assert httponly_observations[0].severity == "medium"
 
     @pytest.mark.asyncio
     async def test_cookie_missing_samesite(self, service):
@@ -120,8 +120,8 @@ class TestCookieSecurityCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        samesite_findings = [f for f in result.findings if "no-samesite" in (f.id or "")]
-        assert len(samesite_findings) == 1
+        samesite_observations = [f for f in result.observations if "no-samesite" in (f.id or "")]
+        assert len(samesite_observations) == 1
 
     @pytest.mark.asyncio
     async def test_cookie_samesite_none(self, service):
@@ -132,7 +132,7 @@ class TestCookieSecurityCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        samesite_none = [f for f in result.findings if "samesite-none" in (f.id or "")]
+        samesite_none = [f for f in result.observations if "samesite-none" in (f.id or "")]
         assert len(samesite_none) == 1
 
     @pytest.mark.asyncio
@@ -146,8 +146,8 @@ class TestCookieSecurityCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        domain_findings = [f for f in result.findings if "broad-domain" in (f.id or "")]
-        assert len(domain_findings) == 1
+        domain_observations = [f for f in result.observations if "broad-domain" in (f.id or "")]
+        assert len(domain_observations) == 1
 
     @pytest.mark.asyncio
     async def test_non_session_cookie_lower_severity(self, service):
@@ -158,12 +158,12 @@ class TestCookieSecurityCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        secure_findings = [f for f in result.findings if "no-secure" in (f.id or "")]
-        assert len(secure_findings) == 1
-        assert secure_findings[0].severity == "low"  # non-session → low
+        secure_observations = [f for f in result.observations if "no-secure" in (f.id or "")]
+        assert len(secure_observations) == 1
+        assert secure_observations[0].severity == "low"  # non-session → low
 
     @pytest.mark.asyncio
-    async def test_fully_secured_cookie_no_security_findings(self, service):
+    async def test_fully_secured_cookie_no_security_observations(self, service):
         check = CookieSecurityCheck()
         headers = {"Set-Cookie": "theme=dark; Secure; HttpOnly; SameSite=Strict; Path=/"}
         with patch(
@@ -171,26 +171,26 @@ class TestCookieSecurityCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        # No secure/httponly/samesite findings
-        issue_findings = [
+        # No secure/httponly/samesite observations
+        issue_observations = [
             f
-            for f in result.findings
+            for f in result.observations
             if any(
                 x in (f.id or "")
                 for x in ["no-secure", "no-httponly", "no-samesite", "samesite-none"]
             )
         ]
-        assert len(issue_findings) == 0
+        assert len(issue_observations) == 0
 
     @pytest.mark.asyncio
-    async def test_no_cookies_no_findings(self, service):
+    async def test_no_cookies_no_observations(self, service):
         check = CookieSecurityCheck()
         with patch(
             "app.checks.web.cookie_security.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers={})),
         ):
             result = await check.check_service(service, {})
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_long_lived_session_cookie(self, service):
@@ -203,7 +203,7 @@ class TestCookieSecurityCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        long_lived = [f for f in result.findings if "long-lived" in (f.id or "")]
+        long_lived = [f for f in result.observations if "long-lived" in (f.id or "")]
         assert len(long_lived) == 1
 
 
@@ -228,8 +228,8 @@ class TestAuthDetectionCheck:
             return_value=mock_client_multi(default=default_resp),
         ):
             result = await check.check_service(service, {})
-        auth_findings = [f for f in result.findings if "basic" in f.title.lower()]
-        assert len(auth_findings) >= 1
+        auth_observations = [f for f in result.observations if "basic" in f.title.lower()]
+        assert len(auth_observations) >= 1
         assert result.outputs.get("auth_mechanisms", {}).get("basic")
 
     @pytest.mark.asyncio
@@ -254,8 +254,8 @@ class TestAuthDetectionCheck:
             return_value=mock_client_multi(responses),
         ):
             result = await check.check_service(service, {})
-        bearer_findings = [f for f in result.findings if "bearer" in f.title.lower()]
-        assert any(f.severity == "low" for f in bearer_findings)
+        bearer_observations = [f for f in result.observations if "bearer" in f.title.lower()]
+        assert any(f.severity == "low" for f in bearer_observations)
 
     @pytest.mark.asyncio
     async def test_detects_oidc_discovery(self, service):
@@ -269,10 +269,10 @@ class TestAuthDetectionCheck:
             return_value=mock_client_multi(responses),
         ):
             result = await check.check_service(service, {})
-        oidc_findings = [
-            f for f in result.findings if "oidc" in f.title.lower() or "oauth" in f.title.lower()
+        oidc_observations = [
+            f for f in result.observations if "oidc" in f.title.lower() or "oauth" in f.title.lower()
         ]
-        assert len(oidc_findings) >= 1
+        assert len(oidc_observations) >= 1
         assert result.outputs.get("auth_mechanisms", {}).get("oidc")
 
     @pytest.mark.asyncio
@@ -288,8 +288,8 @@ class TestAuthDetectionCheck:
             return_value=mock_client_multi(responses),
         ):
             result = await check.check_service(service, {})
-        login_findings = [f for f in result.findings if "login" in f.title.lower()]
-        assert len(login_findings) >= 1
+        login_observations = [f for f in result.observations if "login" in f.title.lower()]
+        assert len(login_observations) >= 1
         assert result.outputs.get("auth_mechanisms", {}).get("login_form")
 
     @pytest.mark.asyncio
@@ -309,12 +309,12 @@ class TestAuthDetectionCheck:
             return_value=mock_client_multi(responses),
         ):
             result = await check.check_service(service, context)
-        noauth = [f for f in result.findings if "no authentication" in f.title.lower()]
+        noauth = [f for f in result.observations if "no authentication" in f.title.lower()]
         assert len(noauth) >= 1
         assert noauth[0].severity == "medium"
 
     @pytest.mark.asyncio
-    async def test_no_auth_paths_no_extra_findings(self, service):
+    async def test_no_auth_paths_no_extra_observations(self, service):
         check = AuthDetectionCheck()
         with patch(
             "app.checks.web.auth_detection.AsyncHttpClient", return_value=mock_client_multi()
@@ -344,8 +344,8 @@ class TestWAFDetectionCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        cf_findings = [f for f in result.findings if "cloudflare" in f.title.lower()]
-        assert len(cf_findings) >= 1
+        cf_observations = [f for f in result.observations if "cloudflare" in f.title.lower()]
+        assert len(cf_observations) >= 1
         assert "Cloudflare" in result.outputs.get("waf_detected", {})
 
     @pytest.mark.asyncio
@@ -357,11 +357,11 @@ class TestWAFDetectionCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        aws_findings = [f for f in result.findings if "aws" in f.title.lower()]
-        assert len(aws_findings) >= 1
+        aws_observations = [f for f in result.observations if "aws" in f.title.lower()]
+        assert len(aws_observations) >= 1
         # Should also have accuracy warning
-        warn_findings = [f for f in result.findings if "accuracy" in f.title.lower()]
-        assert len(warn_findings) >= 1
+        warn_observations = [f for f in result.observations if "accuracy" in f.title.lower()]
+        assert len(warn_observations) >= 1
 
     @pytest.mark.asyncio
     async def test_detects_imperva_cookie(self, service):
@@ -374,7 +374,7 @@ class TestWAFDetectionCheck:
             result = await check.check_service(service, {})
         imperva = [
             f
-            for f in result.findings
+            for f in result.observations
             if "imperva" in f.title.lower() or "incapsula" in f.title.lower()
         ]
         assert len(imperva) >= 1
@@ -389,8 +389,8 @@ class TestWAFDetectionCheck:
             return_value=mock_client_multi(default=resp(403, body=block_body)),
         ):
             result = await check.check_service(service, {})
-        cf_findings = [f for f in result.findings if "cloudflare" in f.title.lower()]
-        assert len(cf_findings) >= 1
+        cf_observations = [f for f in result.observations if "cloudflare" in f.title.lower()]
+        assert len(cf_observations) >= 1
 
     @pytest.mark.asyncio
     async def test_detects_azure_front_door(self, service):
@@ -401,11 +401,11 @@ class TestWAFDetectionCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        azure_findings = [f for f in result.findings if "azure" in f.title.lower()]
-        assert len(azure_findings) >= 1
+        azure_observations = [f for f in result.observations if "azure" in f.title.lower()]
+        assert len(azure_observations) >= 1
 
     @pytest.mark.asyncio
-    async def test_no_waf_no_findings(self, service):
+    async def test_no_waf_no_observations(self, service):
         check = WAFDetectionCheck()
         headers = {"Server": "nginx/1.24", "Content-Type": "text/html"}
         with patch(
@@ -413,13 +413,13 @@ class TestWAFDetectionCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        # Should be no WAF findings (just empty outputs)
-        assert len(result.findings) == 0
+        # Should be no WAF observations (just empty outputs)
+        assert len(result.observations) == 0
         assert result.outputs.get("waf_detected") == {}
 
     @pytest.mark.asyncio
     async def test_waf_accuracy_warning(self, service):
-        """WAF detection should produce an accuracy warning finding when WAF detected."""
+        """WAF detection should produce an accuracy warning observation when WAF detected."""
         check = WAFDetectionCheck()
         # Sucuri is classified as WAF, so should trigger accuracy warning
         headers = {"x-sucuri-id": "12345", "Server": "Sucuri/Cloudproxy"}
@@ -428,7 +428,7 @@ class TestWAFDetectionCheck:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        warn = [f for f in result.findings if "accuracy" in f.title.lower()]
+        warn = [f for f in result.observations if "accuracy" in f.title.lower()]
         assert len(warn) >= 1
         assert warn[0].severity == "low"
 
@@ -441,4 +441,4 @@ class TestWAFDetectionCheck:
         ):
             result = await check.check_service(service, {})
         assert result.success is True
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0

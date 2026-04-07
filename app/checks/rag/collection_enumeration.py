@@ -15,7 +15,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Collection name patterns suggesting sensitive content
@@ -98,8 +98,8 @@ class RAGCollectionEnumerationCheck(ServiceIteratingCheck):
                     sensitive_names = self._flag_sensitive(collections)
                     severity = self._determine_severity(enum_result, sensitive_names)
 
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Knowledge base structure exposed: {store_type}",
                             description=self._build_description(enum_result, sensitive_names),

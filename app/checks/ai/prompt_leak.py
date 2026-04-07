@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -21,7 +21,7 @@ class PromptLeakageCheck(BaseCheck):
     intrusive = True
 
     conditions = [CheckCondition("chat_endpoints", "truthy")]
-    produces = ["prompt_leak_findings"]
+    produces = ["prompt_leak_observations"]
 
     timeout_seconds = 90.0
     sequential = True
@@ -69,7 +69,7 @@ class PromptLeakageCheck(BaseCheck):
 
             try:
                 lr = await self._test_leakage(url, service, api_format)
-                result.findings.extend(lr.findings)
+                result.observations.extend(lr.observations)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
 
@@ -120,8 +120,8 @@ class PromptLeakageCheck(BaseCheck):
             )
             severity = "critical" if has_secrets else "high"
 
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"System prompt leakage ({len(leak_evidence)} triggers)",
                     description="Responses suggest system prompt may be extractable",

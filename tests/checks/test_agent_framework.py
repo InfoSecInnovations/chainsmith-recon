@@ -106,7 +106,7 @@ class TestFrameworkExploits:
         with patch("app.checks.agent.framework_exploits.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, ctx)
 
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
 
     @pytest.mark.asyncio
@@ -128,7 +128,7 @@ class TestFrameworkExploits:
         with patch("app.checks.agent.framework_exploits.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, ctx)
 
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 class TestMemoryPoisoning:
@@ -163,7 +163,7 @@ class TestMemoryPoisoning:
         with patch("app.checks.agent.memory_poisoning.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
 
 
@@ -228,7 +228,7 @@ class TestReflectionAbuse:
         with patch("app.checks.agent.reflection_abuse.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert len(high) >= 1
 
 
@@ -262,7 +262,7 @@ class TestStateManipulation:
         with patch("app.checks.agent.state_manipulation.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
 
     @pytest.mark.asyncio
@@ -284,5 +284,5 @@ class TestStateManipulation:
         with patch("app.checks.agent.state_manipulation.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1

@@ -11,7 +11,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -132,8 +132,8 @@ class RAGMultimodalInjectionCheck(ServiceIteratingCheck):
                 upload_url = await self._find_upload_endpoint(client, base_url)
 
                 if not upload_url:
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title="RAG does not accept non-text inputs",
                             description="No file upload endpoints detected.",
@@ -157,8 +157,8 @@ class RAGMultimodalInjectionCheck(ServiceIteratingCheck):
                     injection_results.append(test_result)
 
                     if test_result.get("injection_followed"):
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Multimodal injection: {test['description']}",
                                 description=(
@@ -175,8 +175,8 @@ class RAGMultimodalInjectionCheck(ServiceIteratingCheck):
                             )
                         )
                     elif test_result.get("uploaded"):
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"RAG accepts file uploads: {test['content_type']}",
                                 description=("File upload accepted without content scanning."),

@@ -58,7 +58,7 @@ class TestReverseDnsCheckRun:
 
     @pytest.mark.asyncio
     async def test_single_ip_with_ptr(self):
-        """Single IP with a PTR record should produce info finding."""
+        """Single IP with a PTR record should produce info observation."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
 
         check = ReverseDnsCheck()
@@ -76,9 +76,9 @@ class TestReverseDnsCheckRun:
         assert "93.184.216.34" in result.outputs["reverse_dns"]
         assert result.outputs["reverse_dns"]["93.184.216.34"]["ptr_records"] == ["www.example.com"]
 
-        # Should have at least one info finding
-        assert len(result.findings) >= 1
-        assert any("Reverse DNS" in f.title for f in result.findings)
+        # Should have at least one info observation
+        assert len(result.observations) >= 1
+        assert any("Reverse DNS" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_multiple_ptr_records_virtual_hosting(self):
@@ -100,12 +100,12 @@ class TestReverseDnsCheckRun:
             result = await check.run(context)
 
         assert result.success is True
-        multi_findings = [f for f in result.findings if "multiple ptr" in f.title.lower()]
-        assert len(multi_findings) == 1
+        multi_observations = [f for f in result.observations if "multiple ptr" in f.title.lower()]
+        assert len(multi_observations) == 1
 
     @pytest.mark.asyncio
     async def test_internal_hostname_detection(self):
-        """Internal hostnames in PTR should produce low severity finding."""
+        """Internal hostnames in PTR should produce low severity observation."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
 
         check = ReverseDnsCheck()
@@ -119,13 +119,13 @@ class TestReverseDnsCheckRun:
             result = await check.run(context)
 
         assert result.success is True
-        internal_findings = [f for f in result.findings if "Internal hostname in PTR" in f.title]
-        assert len(internal_findings) == 1
-        assert internal_findings[0].severity == "low"
+        internal_observations = [f for f in result.observations if "Internal hostname in PTR" in f.title]
+        assert len(internal_observations) == 1
+        assert internal_observations[0].severity == "low"
 
     @pytest.mark.asyncio
-    async def test_ptr_mismatch_finding(self):
-        """PTR pointing outside target domain should produce info finding."""
+    async def test_ptr_mismatch_observation(self):
+        """PTR pointing outside target domain should produce info observation."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
 
         check = ReverseDnsCheck()
@@ -139,13 +139,13 @@ class TestReverseDnsCheckRun:
             result = await check.run(context)
 
         assert result.success is True
-        mismatch_findings = [f for f in result.findings if "mismatch" in f.title.lower()]
-        assert len(mismatch_findings) == 1
-        assert mismatch_findings[0].severity == "info"
+        mismatch_observations = [f for f in result.observations if "mismatch" in f.title.lower()]
+        assert len(mismatch_observations) == 1
+        assert mismatch_observations[0].severity == "info"
 
     @pytest.mark.asyncio
-    async def test_no_ptr_records_no_findings(self):
-        """IPs with no PTR records should not generate findings."""
+    async def test_no_ptr_records_no_observations(self):
+        """IPs with no PTR records should not generate observations."""
         from app.checks.network.reverse_dns import ReverseDnsCheck
 
         check = ReverseDnsCheck()
@@ -160,7 +160,7 @@ class TestReverseDnsCheckRun:
 
         assert result.success is True
         assert result.targets_checked == 1
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_new_hosts_from_ptr(self):
@@ -287,8 +287,8 @@ class TestReverseDnsCheckRun:
             result = await check.run(context)
 
         assert result.outputs["reverse_dns"]["10.0.0.5"]["internal"] is True
-        internal_findings = [f for f in result.findings if "internal" in f.title.lower()]
-        assert len(internal_findings) == 1
+        internal_observations = [f for f in result.observations if "internal" in f.title.lower()]
+        assert len(internal_observations) == 1
 
     @pytest.mark.asyncio
     async def test_socket_fallback_when_no_dnspython(self):

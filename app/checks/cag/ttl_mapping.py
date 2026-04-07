@@ -20,7 +20,7 @@ import time
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # TTL test intervals in seconds
@@ -78,8 +78,8 @@ class TTLMappingCheck(ServiceIteratingCheck):
                         ttl_results.append(ttl_info)
 
                         severity = self._determine_severity(ttl_info)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=self._build_title(ttl_info),
                                 description=self._build_description(ttl_info),
@@ -213,7 +213,7 @@ class TTLMappingCheck(ServiceIteratingCheck):
         return None
 
     def _determine_severity(self, ttl_info: dict) -> str:
-        """Determine finding severity based on TTL."""
+        """Determine observation severity based on TTL."""
         if ttl_info.get("ttl_unbounded"):
             return "medium"
         if ttl_info.get("ttl_mismatch"):
@@ -232,7 +232,7 @@ class TTLMappingCheck(ServiceIteratingCheck):
         return "low"
 
     def _build_title(self, ttl_info: dict) -> str:
-        """Build finding title."""
+        """Build observation title."""
         if ttl_info.get("ttl_unbounded"):
             return "Unbounded cache TTL (no expiry detected within test window)"
         if ttl_info.get("ttl_mismatch"):
@@ -246,7 +246,7 @@ class TTLMappingCheck(ServiceIteratingCheck):
         return "Cache TTL detected via headers"
 
     def _build_description(self, ttl_info: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         parts = []
 
         if ttl_info.get("ttl_unbounded"):

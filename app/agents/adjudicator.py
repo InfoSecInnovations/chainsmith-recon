@@ -1,8 +1,8 @@
 """
 Adjudicator Agent
 
-Challenges and debates the risk criticality of verified findings.
-Produces adjudicated_risk annotations without modifying original findings.
+Challenges and debates the risk criticality of verified observations.
+Produces adjudicated_risk annotations without modifying original observations.
 
 Three approaches available:
   - structured_challenge: Devil's advocate single LLM call (cheapest)
@@ -23,8 +23,8 @@ from app.models import (
     AgentType,
     EventImportance,
     EventType,
-    Finding,
-    FindingSeverity,
+    Observation,
+    ObservationSeverity,
     OperatorAssetContext,
     OperatorContext,
 )
@@ -35,9 +35,9 @@ logger = logging.getLogger(__name__)
 
 STRUCTURED_CHALLENGE_PROMPT = """\
 You are a security severity adjudicator. Your job is to challenge the assigned \
-severity of a security finding by arguing as a devil's advocate.
+severity of a security observation by arguing as a devil's advocate.
 
-Given a finding with its evidence and context, argue why the current severity \
+Given an observation with its evidence and context, argue why the current severity \
 rating might be WRONG — either too high or too low. Then make a final decision.
 
 RULES:
@@ -62,9 +62,9 @@ OUTPUT FORMAT (JSON only):
 }"""
 
 ADVERSARIAL_PROSECUTOR_PROMPT = """\
-You are a security severity PROSECUTOR. Your job is to argue that the finding's \
+You are a security severity PROSECUTOR. Your job is to argue that the observation's \
 severity should be MAINTAINED or RAISED. Build the strongest case for why this \
-finding is dangerous.
+observation is dangerous.
 
 Consider: real-world exploitability, blast radius, data exposure, lateral \
 movement potential, and any operator context provided.
@@ -77,8 +77,8 @@ Output your argument as valid JSON only, no markdown fences:
 }"""
 
 ADVERSARIAL_DEFENDER_PROMPT = """\
-You are a security severity DEFENDER. Your job is to argue that the finding's \
-severity should be LOWERED. Build the strongest case for why this finding is \
+You are a security severity DEFENDER. Your job is to argue that the observation's \
+severity should be LOWERED. Build the strongest case for why this observation is \
 less dangerous than it appears.
 
 Consider: mitigating controls, limited attack surface, required preconditions, \
@@ -116,7 +116,7 @@ OUTPUT FORMAT (JSON only):
 }"""
 
 EVIDENCE_RUBRIC_PROMPT = """\
-You are a security severity scorer. Rate the finding using a structured rubric. \
+You are a security severity scorer. Rate the observation using a structured rubric. \
 Do NOT free-form debate — map evidence to each factor and score it.
 
 RUBRIC FACTORS (score each 0.0-1.0):
@@ -154,9 +154,9 @@ Output your scores as valid JSON only, no markdown fences:
 
 class AdjudicatorAgent:
     """
-    Challenges and debates severity ratings of verified findings.
+    Challenges and debates severity ratings of verified observations.
 
-    Read-only on scope and findings — produces adjudicated_risk annotations
+    Read-only on scope and observations — produces adjudicated_risk annotations
     without modifying original data.
     """
 
@@ -177,16 +177,16 @@ class AdjudicatorAgent:
         if self.event_callback:
             await self.event_callback(event)
 
-    async def adjudicate_findings(
+    async def adjudicate_observations(
         self,
-        findings: list[Finding],
+        observations: list[Observation],
         operator_context: OperatorContext | None = None,
     ) -> list[AdjudicatedRisk]:
         """
-        Adjudicate severity of verified findings.
+        Adjudicate severity of verified observations.
 
         Args:
-            findings: Verified findings to adjudicate.
+            observations: Verified observations to adjudicate.
             operator_context: Optional operator-declared asset context.
 
         Returns:
@@ -195,9 +195,9 @@ class AdjudicatorAgent:
         self.is_running = True
         self.results = []
 
-        verified = [f for f in findings if f.status == "verified"]
+        verified = [f for f in observations if f.status == "verified"]
         if not verified:
-            logger.info("No verified findings to adjudicate")
+            logger.info("No verified observations to adjudicate")
             self.is_running = False
             return []
 
@@ -206,33 +206,33 @@ class AdjudicatorAgent:
                 event_type=EventType.ADJUDICATION_START,
                 agent=AgentType.ADJUDICATOR,
                 importance=EventImportance.MEDIUM,
-                message=f"Adjudicator starting severity review of {len(verified)} verified findings...",
-                details={"total_findings": len(verified), "approach": self.approach},
+                message=f"Adjudicator starting severity review of {len(verified)} verified observations...",
+                details={"total_observations": len(verified), "approach": self.approach},
             )
         )
 
         upheld = 0
         adjusted = 0
 
-        for finding in verified:
+        for observation in verified:
             if not self.is_running:
                 break
 
             try:
-                result = await self._adjudicate_single(finding, operator_context)
+                result = await self._adjudicate_single(observation, operator_context)
                 self.results.append(result)
 
                 if result.original_severity == result.adjudicated_severity:
                     upheld += 1
                     event_type = EventType.SEVERITY_UPHELD
                     importance = EventImportance.LOW
-                    msg = f"Severity upheld for {finding.id}: {result.original_severity}"
+                    msg = f"Severity upheld for {observation.id}: {result.original_severity}"
                 else:
                     adjusted += 1
                     event_type = EventType.SEVERITY_ADJUSTED
                     importance = EventImportance.HIGH
                     msg = (
-                        f"Severity adjusted for {finding.id}: "
+                        f"Severity adjusted for {observation.id}: "
                         f"{result.original_severity} -> {result.adjudicated_severity}"
                     )
 
@@ -242,7 +242,7 @@ class AdjudicatorAgent:
                         agent=AgentType.ADJUDICATOR,
                         importance=importance,
                         message=msg,
-                        finding_id=finding.id,
+                        observation_id=observation.id,
                         details={
                             "original": result.original_severity,
                             "adjudicated": result.adjudicated_severity,
@@ -252,14 +252,14 @@ class AdjudicatorAgent:
                     )
                 )
             except Exception as e:
-                logger.warning(f"Failed to adjudicate finding {finding.id}: {e}")
+                logger.warning(f"Failed to adjudicate observation {observation.id}: {e}")
                 await self.emit(
                     AgentEvent(
                         event_type=EventType.ERROR,
                         agent=AgentType.ADJUDICATOR,
                         importance=EventImportance.MEDIUM,
-                        message=f"Adjudication failed for {finding.id}: {e}",
-                        finding_id=finding.id,
+                        message=f"Adjudication failed for {observation.id}: {e}",
+                        observation_id=observation.id,
                     )
                 )
 
@@ -270,7 +270,7 @@ class AdjudicatorAgent:
                 importance=EventImportance.MEDIUM,
                 message=(
                     f"Adjudication complete: {upheld} upheld, {adjusted} adjusted "
-                    f"out of {len(verified)} findings"
+                    f"out of {len(verified)} observations"
                 ),
                 details={
                     "total": len(verified),
@@ -292,46 +292,46 @@ class AdjudicatorAgent:
 
     async def _adjudicate_single(
         self,
-        finding: Finding,
+        observation: Observation,
         operator_context: OperatorContext | None,
     ) -> AdjudicatedRisk:
-        """Adjudicate a single finding using the resolved approach."""
-        approach = self._resolve_approach(finding)
-        asset_context = self._match_asset_context(finding, operator_context)
-        context_str = self._format_context(finding, asset_context)
+        """Adjudicate a single observation using the resolved approach."""
+        approach = self._resolve_approach(observation)
+        asset_context = self._match_asset_context(observation, operator_context)
+        context_str = self._format_context(observation, asset_context)
 
         if approach == AdjudicationApproach.STRUCTURED_CHALLENGE:
-            return await self._run_structured_challenge(finding, context_str)
+            return await self._run_structured_challenge(observation, context_str)
         elif approach == AdjudicationApproach.ADVERSARIAL_DEBATE:
-            return await self._run_adversarial_debate(finding, context_str)
+            return await self._run_adversarial_debate(observation, context_str)
         elif approach == AdjudicationApproach.EVIDENCE_RUBRIC:
-            return await self._run_evidence_rubric(finding, context_str)
+            return await self._run_evidence_rubric(observation, context_str)
         else:
-            return await self._run_structured_challenge(finding, context_str)
+            return await self._run_structured_challenge(observation, context_str)
 
-    def _resolve_approach(self, finding: Finding) -> AdjudicationApproach:
+    def _resolve_approach(self, observation: Observation) -> AdjudicationApproach:
         """For 'auto' mode, pick approach based on severity tier."""
         if self.approach != AdjudicationApproach.AUTO:
             return self.approach
 
-        severity = finding.severity
-        if severity in (FindingSeverity.HIGH, FindingSeverity.CRITICAL):
+        severity = observation.severity
+        if severity in (ObservationSeverity.HIGH, ObservationSeverity.CRITICAL):
             return AdjudicationApproach.ADVERSARIAL_DEBATE
-        elif severity == FindingSeverity.MEDIUM:
+        elif severity == ObservationSeverity.MEDIUM:
             return AdjudicationApproach.EVIDENCE_RUBRIC
         else:
             return AdjudicationApproach.STRUCTURED_CHALLENGE
 
     def _match_asset_context(
         self,
-        finding: Finding,
+        observation: Observation,
         operator_context: OperatorContext | None,
     ) -> OperatorAssetContext | None:
-        """Match a finding to operator-declared asset context."""
+        """Match an observation to operator-declared asset context."""
         if not operator_context or not operator_context.assets:
             return None
 
-        target = finding.target_url or finding.target_service or ""
+        target = observation.target_url or observation.target_service or ""
         target_lower = target.lower()
 
         for asset in operator_context.assets:
@@ -354,22 +354,22 @@ class AdjudicatorAgent:
 
     def _format_context(
         self,
-        finding: Finding,
+        observation: Observation,
         asset_context: OperatorAssetContext | None,
     ) -> str:
-        """Format finding + asset context into a prompt string."""
+        """Format observation + asset context into a prompt string."""
         parts = [
-            f"Finding ID: {finding.id}",
-            f"Title: {finding.title}",
-            f"Description: {finding.description}",
-            f"Current Severity: {finding.severity}",
-            f"Confidence: {finding.confidence}",
-            f"Target: {finding.target_url or finding.target_service or 'unknown'}",
+            f"Observation ID: {observation.id}",
+            f"Title: {observation.title}",
+            f"Description: {observation.description}",
+            f"Current Severity: {observation.severity}",
+            f"Confidence: {observation.confidence}",
+            f"Target: {observation.target_url or observation.target_service or 'unknown'}",
         ]
-        if finding.evidence_summary:
-            parts.append(f"Evidence: {finding.evidence_summary}")
-        if finding.exploitation_techniques:
-            parts.append(f"Exploitation Techniques: {', '.join(finding.exploitation_techniques)}")
+        if observation.evidence_summary:
+            parts.append(f"Evidence: {observation.evidence_summary}")
+        if observation.exploitation_techniques:
+            parts.append(f"Exploitation Techniques: {', '.join(observation.exploitation_techniques)}")
 
         if asset_context:
             parts.append("")
@@ -381,33 +381,33 @@ class AdjudicatorAgent:
 
         return "\n".join(parts)
 
-    async def _run_structured_challenge(self, finding: Finding, context: str) -> AdjudicatedRisk:
+    async def _run_structured_challenge(self, observation: Observation, context: str) -> AdjudicatedRisk:
         """Single LLM call — devil's advocate challenge."""
         response = await self.client.chat(
-            prompt=f"Evaluate this finding:\n\n{context}",
+            prompt=f"Evaluate this observation:\n\n{context}",
             system=STRUCTURED_CHALLENGE_PROMPT,
         )
         return self._parse_single_response(
-            finding, response, AdjudicationApproach.STRUCTURED_CHALLENGE
+            observation, response, AdjudicationApproach.STRUCTURED_CHALLENGE
         )
 
-    async def _run_adversarial_debate(self, finding: Finding, context: str) -> AdjudicatedRisk:
+    async def _run_adversarial_debate(self, observation: Observation, context: str) -> AdjudicatedRisk:
         """Three LLM calls — prosecutor, defender, judge."""
         # Call 1: Prosecutor argues to maintain/raise
         prosecution = await self.client.chat(
-            prompt=f"Evaluate this finding:\n\n{context}",
+            prompt=f"Evaluate this observation:\n\n{context}",
             system=ADVERSARIAL_PROSECUTOR_PROMPT,
         )
 
         # Call 2: Defender argues to lower
         defense = await self.client.chat(
-            prompt=f"Evaluate this finding:\n\n{context}",
+            prompt=f"Evaluate this observation:\n\n{context}",
             system=ADVERSARIAL_DEFENDER_PROMPT,
         )
 
         # Call 3: Judge weighs both arguments
         judge_prompt = (
-            f"Finding under review:\n\n{context}\n\n"
+            f"Observation under review:\n\n{context}\n\n"
             f"PROSECUTION ARGUMENT:\n{prosecution.content}\n\n"
             f"DEFENSE ARGUMENT:\n{defense.content}"
         )
@@ -416,43 +416,43 @@ class AdjudicatorAgent:
             system=ADVERSARIAL_JUDGE_PROMPT,
         )
         return self._parse_single_response(
-            finding, verdict, AdjudicationApproach.ADVERSARIAL_DEBATE
+            observation, verdict, AdjudicationApproach.ADVERSARIAL_DEBATE
         )
 
-    async def _run_evidence_rubric(self, finding: Finding, context: str) -> AdjudicatedRisk:
+    async def _run_evidence_rubric(self, observation: Observation, context: str) -> AdjudicatedRisk:
         """Single LLM call — structured rubric scoring."""
         response = await self.client.chat(
-            prompt=f"Score this finding using the rubric:\n\n{context}",
+            prompt=f"Score this observation using the rubric:\n\n{context}",
             system=EVIDENCE_RUBRIC_PROMPT,
         )
-        return self._parse_rubric_response(finding, response)
+        return self._parse_rubric_response(observation, response)
 
     def _parse_single_response(
         self,
-        finding: Finding,
+        observation: Observation,
         response: LLMResponse,
         approach: AdjudicationApproach,
     ) -> AdjudicatedRisk:
         """Parse a structured challenge or adversarial judge response."""
         if not response.success:
-            logger.warning(f"LLM call failed for {finding.id}: {response.error}")
-            return self._fallback_result(finding, approach, response.error or "LLM call failed")
+            logger.warning(f"LLM call failed for {observation.id}: {response.error}")
+            return self._fallback_result(observation, approach, response.error or "LLM call failed")
 
         try:
             data = json.loads(self._clean_json(response.content))
         except (json.JSONDecodeError, ValueError):
-            logger.warning(f"Failed to parse LLM JSON for {finding.id}")
-            return self._fallback_result(finding, approach, "Failed to parse LLM response")
+            logger.warning(f"Failed to parse LLM JSON for {observation.id}")
+            return self._fallback_result(observation, approach, "Failed to parse LLM response")
 
-        severity_str = data.get("final_severity", finding.severity).lower()
+        severity_str = data.get("final_severity", observation.severity).lower()
         try:
-            adjudicated_severity = FindingSeverity(severity_str)
+            adjudicated_severity = ObservationSeverity(severity_str)
         except ValueError:
-            adjudicated_severity = finding.severity
+            adjudicated_severity = observation.severity
 
         return AdjudicatedRisk(
-            finding_id=finding.id,
-            original_severity=finding.severity,
+            observation_id=observation.id,
+            original_severity=observation.severity,
             adjudicated_severity=adjudicated_severity,
             confidence=float(data.get("confidence", 0.5)),
             approach_used=approach,
@@ -462,34 +462,34 @@ class AdjudicatorAgent:
 
     def _parse_rubric_response(
         self,
-        finding: Finding,
+        observation: Observation,
         response: LLMResponse,
     ) -> AdjudicatedRisk:
         """Parse an evidence rubric response with scores."""
         if not response.success:
-            logger.warning(f"LLM call failed for {finding.id}: {response.error}")
+            logger.warning(f"LLM call failed for {observation.id}: {response.error}")
             return self._fallback_result(
-                finding, AdjudicationApproach.EVIDENCE_RUBRIC, response.error or "LLM call failed"
+                observation, AdjudicationApproach.EVIDENCE_RUBRIC, response.error or "LLM call failed"
             )
 
         try:
             data = json.loads(self._clean_json(response.content))
         except (json.JSONDecodeError, ValueError):
-            logger.warning(f"Failed to parse rubric JSON for {finding.id}")
+            logger.warning(f"Failed to parse rubric JSON for {observation.id}")
             return self._fallback_result(
-                finding, AdjudicationApproach.EVIDENCE_RUBRIC, "Failed to parse rubric response"
+                observation, AdjudicationApproach.EVIDENCE_RUBRIC, "Failed to parse rubric response"
             )
 
         scores = data.get("scores", {})
-        severity_str = data.get("final_severity", finding.severity).lower()
+        severity_str = data.get("final_severity", observation.severity).lower()
         try:
-            adjudicated_severity = FindingSeverity(severity_str)
+            adjudicated_severity = ObservationSeverity(severity_str)
         except ValueError:
-            adjudicated_severity = finding.severity
+            adjudicated_severity = observation.severity
 
         return AdjudicatedRisk(
-            finding_id=finding.id,
-            original_severity=finding.severity,
+            observation_id=observation.id,
+            original_severity=observation.severity,
             adjudicated_severity=adjudicated_severity,
             confidence=float(data.get("confidence", 0.5)),
             approach_used=AdjudicationApproach.EVIDENCE_RUBRIC,
@@ -499,13 +499,13 @@ class AdjudicatorAgent:
 
     @staticmethod
     def _fallback_result(
-        finding: Finding, approach: AdjudicationApproach, reason: str
+        observation: Observation, approach: AdjudicationApproach, reason: str
     ) -> AdjudicatedRisk:
         """Return a fallback result that upholds the original severity."""
         return AdjudicatedRisk(
-            finding_id=finding.id,
-            original_severity=finding.severity,
-            adjudicated_severity=finding.severity,
+            observation_id=observation.id,
+            original_severity=observation.severity,
+            adjudicated_severity=observation.severity,
             confidence=0.0,
             approach_used=approach,
             rationale=f"Adjudication inconclusive — severity upheld. Reason: {reason}",

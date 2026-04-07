@@ -21,7 +21,7 @@ import socket
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ class IPv6DiscoveryCheck(BaseCheck):
                     ),
                 }
                 ipv6_data[hostname] = entry
-                self._generate_findings(result, hostname, entry, dns_records)
+                self._generate_observations(result, hostname, entry, dns_records)
 
             result.targets_checked += 1
 
@@ -180,22 +180,22 @@ class IPv6DiscoveryCheck(BaseCheck):
 
         return addresses
 
-    def _generate_findings(
+    def _generate_observations(
         self,
         result: CheckResult,
         hostname: str,
         entry: dict[str, Any],
         dns_records: dict[str, str],
     ) -> None:
-        """Generate findings from IPv6 discovery results."""
+        """Generate observations from IPv6 discovery results."""
         ipv6_addrs = entry["ipv6_addresses"]
         addr_str = ", ".join(ipv6_addrs[:3])
         if len(ipv6_addrs) > 3:
             addr_str += f" (+{len(ipv6_addrs) - 3} more)"
 
         # Info: IPv6 address discovered
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"IPv6 address discovered: {hostname}",
                 description=(
@@ -212,8 +212,8 @@ class IPv6DiscoveryCheck(BaseCheck):
 
         # Medium: IPv6-only host (reachable on IPv6 but not IPv4 — possible firewall bypass)
         if entry["ipv6_only"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Service reachable on IPv6 but not IPv4: {hostname}",
                     description=(
@@ -235,8 +235,8 @@ class IPv6DiscoveryCheck(BaseCheck):
         # Low: ULA address exposed
         if entry.get("ula_detected"):
             ula_addrs = [a for a in ipv6_addrs if a.lower().startswith(ULA_PREFIX)]
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"RFC 4193 unique local address exposed: {hostname}",
                     description=(

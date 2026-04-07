@@ -123,8 +123,8 @@ class TestBannerGrabCheckRun:
         assert result.targets_checked == 1
 
     @pytest.mark.asyncio
-    async def test_redis_no_auth_critical_finding(self):
-        """Redis without auth should produce critical severity finding."""
+    async def test_redis_no_auth_critical_observation(self):
+        """Redis without auth should produce critical severity observation."""
         from app.checks.network.banner_grab import BannerGrabCheck
 
         check = BannerGrabCheck()
@@ -148,15 +148,15 @@ class TestBannerGrabCheckRun:
         with patch.object(check, "_grab_banner", return_value=banner_info):
             result = await check.run({"services": [svc]})
 
-        noauth_findings = [
-            f for f in result.findings if "without authentication" in f.title.lower()
+        noauth_observations = [
+            f for f in result.observations if "without authentication" in f.title.lower()
         ]
-        assert len(noauth_findings) == 1
-        assert noauth_findings[0].severity == "critical"
+        assert len(noauth_observations) == 1
+        assert noauth_observations[0].severity == "critical"
 
     @pytest.mark.asyncio
     async def test_redis_with_auth_no_critical(self):
-        """Redis with auth should NOT produce critical finding."""
+        """Redis with auth should NOT produce critical observation."""
         from app.checks.network.banner_grab import BannerGrabCheck
 
         check = BannerGrabCheck()
@@ -180,10 +180,10 @@ class TestBannerGrabCheckRun:
         with patch.object(check, "_grab_banner", return_value=banner_info):
             result = await check.run({"services": [svc]})
 
-        noauth_findings = [
-            f for f in result.findings if "without authentication" in f.title.lower()
+        noauth_observations = [
+            f for f in result.observations if "without authentication" in f.title.lower()
         ]
-        assert len(noauth_findings) == 0
+        assert len(noauth_observations) == 0
 
     @pytest.mark.asyncio
     async def test_ssh_banner_detection(self):
@@ -216,8 +216,8 @@ class TestBannerGrabCheckRun:
         assert data["service"] == "SSH"
 
     @pytest.mark.asyncio
-    async def test_version_disclosure_finding(self):
-        """Identified service with version should produce low severity version finding."""
+    async def test_version_disclosure_observation(self):
+        """Identified service with version should produce low severity version observation."""
         from app.checks.network.banner_grab import BannerGrabCheck
 
         check = BannerGrabCheck()
@@ -241,13 +241,13 @@ class TestBannerGrabCheckRun:
         with patch.object(check, "_grab_banner", return_value=banner_info):
             result = await check.run({"services": [svc]})
 
-        version_findings = [f for f in result.findings if "version disclosed" in f.title.lower()]
-        assert len(version_findings) == 1
-        assert version_findings[0].severity == "low"
+        version_observations = [f for f in result.observations if "version disclosed" in f.title.lower()]
+        assert len(version_observations) == 1
+        assert version_observations[0].severity == "low"
 
     @pytest.mark.asyncio
-    async def test_unknown_service_banner_finding(self):
-        """Unknown service with banner should produce medium severity finding."""
+    async def test_unknown_service_banner_observation(self):
+        """Unknown service with banner should produce medium severity observation."""
         from app.checks.network.banner_grab import BannerGrabCheck
 
         check = BannerGrabCheck()
@@ -271,13 +271,13 @@ class TestBannerGrabCheckRun:
         with patch.object(check, "_grab_banner", return_value=banner_info):
             result = await check.run({"services": [svc]})
 
-        unknown_findings = [f for f in result.findings if "unidentified" in f.title.lower()]
-        assert len(unknown_findings) == 1
-        assert unknown_findings[0].severity == "medium"
+        unknown_observations = [f for f in result.observations if "unidentified" in f.title.lower()]
+        assert len(unknown_observations) == 1
+        assert unknown_observations[0].severity == "medium"
 
     @pytest.mark.asyncio
-    async def test_no_banner_no_findings(self):
-        """Service with no banner should produce no findings."""
+    async def test_no_banner_no_observations(self):
+        """Service with no banner should produce no observations."""
         from app.checks.network.banner_grab import BannerGrabCheck
 
         check = BannerGrabCheck()
@@ -295,7 +295,7 @@ class TestBannerGrabCheckRun:
 
         assert result.success is True
         assert result.targets_checked == 1
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_deduplication_same_host_port(self):
@@ -359,8 +359,8 @@ class TestBannerGrabCheckRun:
         assert result.targets_checked == 1
 
     @pytest.mark.asyncio
-    async def test_memcached_no_auth_high_finding(self):
-        """Memcached without auth should produce high severity finding."""
+    async def test_memcached_no_auth_high_observation(self):
+        """Memcached without auth should produce high severity observation."""
         from app.checks.network.banner_grab import BannerGrabCheck
 
         check = BannerGrabCheck()
@@ -384,11 +384,11 @@ class TestBannerGrabCheckRun:
         with patch.object(check, "_grab_banner", return_value=banner_info):
             result = await check.run({"services": [svc]})
 
-        noauth_findings = [
-            f for f in result.findings if "without authentication" in f.title.lower()
+        noauth_observations = [
+            f for f in result.observations if "without authentication" in f.title.lower()
         ]
-        assert len(noauth_findings) == 1
-        assert noauth_findings[0].severity == "high"
+        assert len(noauth_observations) == 1
+        assert noauth_observations[0].severity == "high"
 
     @pytest.mark.asyncio
     async def test_multiple_non_http_services(self):

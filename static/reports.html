@@ -475,7 +475,7 @@
     <nav class="nav">
         <a href="index.html" class="nav-item">Scope</a>
         <a href="scan.html" class="nav-item">Scan</a>
-        <a href="findings.html" class="nav-item">Results</a>
+        <a href="observations.html" class="nav-item">Observations</a>
         <a href="engagements.html" class="nav-item">Engagements</a>
         <a href="trend.html" class="nav-item">Trends</a>
         <a href="reports.html" class="nav-item active">Reports</a>
@@ -496,7 +496,7 @@
                         </div>
                         <div class="report-type-info">
                             <div class="report-type-name">Technical</div>
-                            <div class="report-type-desc">Full findings, chains & coverage</div>
+                            <div class="report-type-desc">Full observations, chains & coverage</div>
                         </div>
                     </div>
                     <div class="report-type-item" data-type="delta">
@@ -718,7 +718,7 @@
             const section = document.getElementById('inputs-section');
             const scanOptions = (scansCache || []).map(s => {
                 const date = s.started_at ? s.started_at.substring(0, 10) : 'N/A';
-                const label = `${s.target} - ${date} (${s.total_findings || 0} findings)`;
+                const label = `${s.target} - ${date} (${s.total_observations || 0} observations)`;
                 return `<option value="${s.id}">${label}</option>`;
             }).join('');
             const scanSelect = `

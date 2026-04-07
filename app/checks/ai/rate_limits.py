@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import fmt_rate_limit_evidence, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import extract_headers_dict
 
@@ -47,7 +47,7 @@ class RateLimitCheck(BaseCheck):
 
             try:
                 rr = await self._test_rate_limits(url, service, api_format)
-                result.findings.extend(rr.findings)
+                result.observations.extend(rr.observations)
                 result.outputs.update(rr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -91,8 +91,8 @@ class RateLimitCheck(BaseCheck):
         host = service.host
 
         if rate_info["detected"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Rate limiting detected (threshold: ~{rate_info['threshold']} requests)",
                     description="Endpoint enforces rate limiting",
@@ -107,8 +107,8 @@ class RateLimitCheck(BaseCheck):
                 )
             )
         elif rate_info["headers"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Rate limit headers present",
                     description="Rate limiting configured but threshold not reached in testing",
@@ -121,8 +121,8 @@ class RateLimitCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No rate limiting detected",
                     description=f"No rate limiting after {self.TEST_REQUESTS} requests — potential DoS vector",

@@ -1,7 +1,7 @@
 """
 app/engine/adjudication.py - Adjudication Orchestration
 
-Coordinates severity adjudication of verified findings.
+Coordinates severity adjudication of verified observations.
 Mirrors the pattern of app/engine/chains.py for chain analysis.
 """
 
@@ -99,16 +99,16 @@ async def run_adjudication(
     approach: str | None = None,
 ) -> None:
     """
-    Run adjudication on verified findings.
+    Run adjudication on verified observations.
 
     Updates state.adjudication_status and state.adjudication_results.
     Persists results if auto_persist is enabled.
 
     Args:
-        state: The application state with findings to adjudicate.
+        state: The application state with observations to adjudicate.
         approach: Optional approach override for this invocation.
     """
-    from app.models import Finding, FindingStatus
+    from app.models import Observation, ObservationStatus
 
     state.adjudication_status = "adjudicating"
     state.adjudication_results = []
@@ -123,14 +123,14 @@ async def run_adjudication(
             logger.info("Adjudicator disabled — skipping")
             return
 
-        # Convert dict findings to Finding models if needed
-        findings = []
-        for f in state.findings:
+        # Convert dict observations to Observation models if needed
+        observations = []
+        for f in state.observations:
             if isinstance(f, dict):
-                findings.append(
-                    Finding(
+                observations.append(
+                    Observation(
                         id=f.get("id", "unknown"),
-                        finding_type=f.get("check_name", f.get("finding_type", "unknown")),
+                        observation_type=f.get("check_name", f.get("observation_type", "unknown")),
                         title=f.get("title", ""),
                         description=f.get("description", ""),
                         severity=f.get("severity", "info"),
@@ -146,12 +146,12 @@ async def run_adjudication(
                     )
                 )
             else:
-                findings.append(f)
+                observations.append(f)
 
-        verified = [f for f in findings if f.status == FindingStatus.VERIFIED]
+        verified = [f for f in observations if f.status == ObservationStatus.VERIFIED]
         if not verified:
             state.adjudication_status = "complete"
-            logger.info("No verified findings to adjudicate")
+            logger.info("No verified observations to adjudicate")
             return
 
         # Load operator context
@@ -162,7 +162,7 @@ async def run_adjudication(
 
         # Create agent and run
         agent = AdjudicatorAgent(client=get_llm_client(), approach=resolved_approach)
-        results = await agent.adjudicate_findings(verified, operator_context)
+        results = await agent.adjudicate_observations(verified, operator_context)
 
         # Store results as dicts for state/API compatibility
         state.adjudication_results = [r.model_dump(mode="json") for r in results]

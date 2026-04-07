@@ -8,7 +8,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import format_chat_request_with_extra
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -75,7 +75,7 @@ class TokenCostExhaustionCheck(BaseCheck):
 
             try:
                 tr = await self._test_cost(url, service, api_format)
-                result.findings.extend(tr.findings)
+                result.observations.extend(tr.observations)
                 result.outputs.update(tr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -142,8 +142,8 @@ class TokenCostExhaustionCheck(BaseCheck):
         )
 
         if extreme_accepted:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No output token limit enforced",
                     description="Endpoint accepted extreme max_tokens values — cost exhaustion possible",
@@ -158,8 +158,8 @@ class TokenCostExhaustionCheck(BaseCheck):
                 )
             )
         elif accepted:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Large completions accepted ({len(accepted)} tests)",
                     description="Some expensive operations are possible",
@@ -173,8 +173,8 @@ class TokenCostExhaustionCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Token limits enforced",
                     description="Cost exhaustion tests were rejected",

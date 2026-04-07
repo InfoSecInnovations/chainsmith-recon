@@ -11,10 +11,10 @@ pytestmark = pytest.mark.unit
 
 
 class TestHeatmapTabPresence:
-    """Verify heatmap tab and panel exist in findings.html."""
+    """Verify heatmap tab and panel exist in observations.html."""
 
-    def test_findings_html_exists(self):
-        assert FINDINGS_HTML.exists(), "static/findings.html must exist"
+    def test_observations_html_exists(self):
+        assert FINDINGS_HTML.exists(), "static/observations.html must exist"
 
     def test_heatmap_tab_exists(self):
         content = _all_viz_content()
@@ -53,7 +53,7 @@ class TestHeatmapTabPresence:
 
 
 class TestHeatmapJavaScript:
-    """Verify heatmap JS functions and constants exist in findings.html."""
+    """Verify heatmap JS functions and constants exist in observations.html."""
 
     def test_render_heatmap_function(self):
         content = _all_viz_content()
@@ -159,7 +159,7 @@ class TestHeatmapDataLogic:
         return "other"
 
     @classmethod
-    def build_heatmap_data(cls, findings_list):
+    def build_heatmap_data(cls, observations_list):
         """Python mirror of the JS buildHeatmapData for testing grouping logic."""
         sev_order = ["critical", "high", "medium", "low", "info"]
         known_suites = ["web", "network", "ai", "mcp", "agent", "rag", "cag"]
@@ -167,7 +167,7 @@ class TestHeatmapDataLogic:
         hosts = set()
         suites = set()
 
-        for f in findings_list:
+        for f in observations_list:
             raw_host = f.get("host") or f.get("target_url") or "unknown"
             host = cls.normalize_host(raw_host)
             suite = f.get("suite") or cls.infer_suite(f.get("check_name"))
@@ -177,11 +177,11 @@ class TestHeatmapDataLogic:
             if host not in matrix:
                 matrix[host] = {}
             if suite not in matrix[host]:
-                matrix[host][suite] = {"worst": None, "count": 0, "findings": []}
+                matrix[host][suite] = {"worst": None, "count": 0, "observations": []}
 
             cell = matrix[host][suite]
             cell["count"] += 1
-            cell["findings"].append(f)
+            cell["observations"].append(f)
 
             sev_idx = (
                 sev_order.index(f["severity"]) if f["severity"] in sev_order else len(sev_order)
@@ -199,38 +199,38 @@ class TestHeatmapDataLogic:
 
         return {"matrix": matrix, "hosts": sorted(hosts), "suites": all_suites}
 
-    def test_empty_findings(self):
+    def test_empty_observations(self):
         result = self.build_heatmap_data([])
         assert result["hosts"] == []
         assert result["suites"] == []
         assert result["matrix"] == {}
 
-    def test_single_finding(self):
-        findings = [{"host": "example.com", "suite": "web", "severity": "high", "title": "XSS"}]
-        result = self.build_heatmap_data(findings)
+    def test_single_observation(self):
+        observations = [{"host": "example.com", "suite": "web", "severity": "high", "title": "XSS"}]
+        result = self.build_heatmap_data(observations)
         assert result["hosts"] == ["example.com"]
         assert "web" in result["suites"]
         assert result["matrix"]["example.com"]["web"]["worst"] == "high"
         assert result["matrix"]["example.com"]["web"]["count"] == 1
 
-    def test_multiple_findings_same_cell(self):
-        findings = [
+    def test_multiple_observations_same_cell(self):
+        observations = [
             {"host": "example.com", "suite": "web", "severity": "low", "title": "A"},
             {"host": "example.com", "suite": "web", "severity": "critical", "title": "B"},
             {"host": "example.com", "suite": "web", "severity": "medium", "title": "C"},
         ]
-        result = self.build_heatmap_data(findings)
+        result = self.build_heatmap_data(observations)
         cell = result["matrix"]["example.com"]["web"]
         assert cell["worst"] == "critical"
         assert cell["count"] == 3
 
     def test_multiple_hosts_and_suites(self):
-        findings = [
+        observations = [
             {"host": "a.com", "suite": "web", "severity": "high", "title": "X"},
             {"host": "a.com", "suite": "network", "severity": "info", "title": "Y"},
             {"host": "b.com", "suite": "ai", "severity": "medium", "title": "Z"},
         ]
-        result = self.build_heatmap_data(findings)
+        result = self.build_heatmap_data(observations)
         assert sorted(result["hosts"]) == ["a.com", "b.com"]
         assert "web" in result["suites"]
         assert "network" in result["suites"]
@@ -241,51 +241,51 @@ class TestHeatmapDataLogic:
         assert "web" not in result["matrix"].get("b.com", {})
 
     def test_suite_order_follows_known_suites(self):
-        findings = [
+        observations = [
             {"host": "h", "suite": "cag", "severity": "low", "title": "A"},
             {"host": "h", "suite": "web", "severity": "low", "title": "B"},
             {"host": "h", "suite": "ai", "severity": "low", "title": "C"},
         ]
-        result = self.build_heatmap_data(findings)
+        result = self.build_heatmap_data(observations)
         # Known order: web comes before ai comes before cag
         assert result["suites"].index("web") < result["suites"].index("ai")
         assert result["suites"].index("ai") < result["suites"].index("cag")
 
     def test_unknown_suite_appended(self):
-        findings = [
+        observations = [
             {"host": "h", "suite": "web", "severity": "low", "title": "A"},
             {"host": "h", "suite": "custom", "severity": "info", "title": "B"},
         ]
-        result = self.build_heatmap_data(findings)
+        result = self.build_heatmap_data(observations)
         assert "custom" in result["suites"]
         # custom comes after known suites
         assert result["suites"].index("web") < result["suites"].index("custom")
 
     def test_fallback_host_from_target_url(self):
-        findings = [
+        observations = [
             {"target_url": "http://test.io/path", "suite": "web", "severity": "info", "title": "T"}
         ]
-        result = self.build_heatmap_data(findings)
+        result = self.build_heatmap_data(observations)
         assert "test.io" in result["hosts"]
 
     def test_worst_severity_picks_most_severe(self):
         """Verify worst severity is determined by index position, not alphabetically."""
-        findings = [
+        observations = [
             {"host": "h", "suite": "web", "severity": "info", "title": "A"},
             {"host": "h", "suite": "web", "severity": "high", "title": "B"},
             {"host": "h", "suite": "web", "severity": "low", "title": "C"},
         ]
-        result = self.build_heatmap_data(findings)
+        result = self.build_heatmap_data(observations)
         assert result["matrix"]["h"]["web"]["worst"] == "high"
 
     def test_hosts_with_ports_are_merged(self):
-        """Findings for example.com:443 and example.com:8080 collapse into one row."""
-        findings = [
+        """Observations for example.com:443 and example.com:8080 collapse into one row."""
+        observations = [
             {"host": "example.com:443", "suite": "web", "severity": "high", "title": "A"},
             {"host": "example.com:8080", "suite": "web", "severity": "low", "title": "B"},
             {"host": "example.com", "suite": "network", "severity": "info", "title": "C"},
         ]
-        result = self.build_heatmap_data(findings)
+        result = self.build_heatmap_data(observations)
         assert result["hosts"] == ["example.com"], (
             "All port variants should merge into one host row"
         )
@@ -295,7 +295,7 @@ class TestHeatmapDataLogic:
 
     def test_url_hosts_are_normalized_to_hostname(self):
         """Full URLs like http://api.example.com/foo collapse to api.example.com."""
-        findings = [
+        observations = [
             {
                 "host": "http://api.example.com/login",
                 "suite": "web",
@@ -315,28 +315,28 @@ class TestHeatmapDataLogic:
                 "title": "C",
             },
         ]
-        result = self.build_heatmap_data(findings)
+        result = self.build_heatmap_data(observations)
         assert result["hosts"] == ["api.example.com"], "URL paths should collapse to hostname"
         assert result["matrix"]["api.example.com"]["web"]["count"] == 2
 
     def test_infer_suite_from_check_name(self):
         """When suite field is absent, check_name is used to infer suite."""
-        findings = [
+        observations = [
             {"host": "h", "check_name": "dns_lookup", "severity": "info", "title": "A"},
             {"host": "h", "check_name": "header_check", "severity": "low", "title": "B"},
             {"host": "h", "check_name": "llm_injection", "severity": "high", "title": "C"},
         ]
-        result = self.build_heatmap_data(findings)
+        result = self.build_heatmap_data(observations)
         assert "network" in result["matrix"]["h"], "dns_lookup should infer to network"
         assert "web" in result["matrix"]["h"], "header_check should infer to web"
         assert "ai" in result["matrix"]["h"], "llm_injection should infer to ai"
 
     def test_infer_suite_unknown_check(self):
         """Unknown check names get 'other' suite."""
-        findings = [
+        observations = [
             {"host": "h", "check_name": "custom_something", "severity": "info", "title": "A"},
         ]
-        result = self.build_heatmap_data(findings)
+        result = self.build_heatmap_data(observations)
         assert "other" in result["matrix"]["h"]
 
 

@@ -16,7 +16,7 @@ import json
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Notifications to test (client→server direction)
@@ -131,8 +131,8 @@ class MCPNotificationInjectionCheck(BaseCheck):
 
                         if accepted:
                             server_status["accepted"].append(test["method"])
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=test["title"],
                                     description=test["description"],
@@ -158,8 +158,8 @@ class MCPNotificationInjectionCheck(BaseCheck):
                             server_status["custom_accepted"].append(method)
 
                     if server_status["custom_accepted"]:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Server accepts arbitrary custom notification methods",
                                 description=(
@@ -177,8 +177,8 @@ class MCPNotificationInjectionCheck(BaseCheck):
 
                     # If nothing was accepted, report clean
                     if not server_status["accepted"] and not server_status["custom_accepted"]:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Server rejects unsolicited client notifications",
                                 description="The MCP server properly rejects notification injection attempts.",

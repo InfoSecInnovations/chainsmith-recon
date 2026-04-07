@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request_with_extra
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -64,7 +64,7 @@ class ResponseCachingCheck(BaseCheck):
 
             try:
                 cr = await self._test_caching(url, service, api_format)
-                result.findings.extend(cr.findings)
+                result.observations.extend(cr.observations)
                 result.outputs.update(cr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -162,8 +162,8 @@ class ResponseCachingCheck(BaseCheck):
 
         if cache_headers_found:
             header_str = ", ".join(f"{k}: {v}" for k, v in cache_headers_found.items())
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Cache headers present: {header_str[:80]}",
                     description="Response includes cache-related headers indicating proxy/CDN caching",
@@ -178,8 +178,8 @@ class ResponseCachingCheck(BaseCheck):
             )
 
         if all_identical and not temp_override_works:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Response caching detected: identical responses override temperature parameter",
                     description=(
@@ -202,8 +202,8 @@ class ResponseCachingCheck(BaseCheck):
             )
         elif all_identical:
             # Identical at temp=0 but different at temp=2.0 — deterministic, not cached
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No caching detected (deterministic at temperature=0, varies at temperature=2.0)",
                     description="Responses are deterministic at low temperature but vary with high temperature, as expected",
@@ -216,8 +216,8 @@ class ResponseCachingCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No caching detected (responses vary as expected)",
                     description="Responses vary across identical requests, indicating no caching",

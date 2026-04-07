@@ -175,11 +175,11 @@ class TestTracerouteCdnDetection:
         assert check._detect_cdn("EDGE01.CLOUDFLARE.NET") == "Cloudflare"
 
 
-class TestTracerouteFindings:
-    """Test finding generation from traceroute results."""
+class TestTracerouteObservations:
+    """Test observation generation from traceroute results."""
 
     @pytest.mark.asyncio
-    async def test_route_info_finding(self):
+    async def test_route_info_observation(self):
         from app.checks.network.traceroute import TracerouteCheck
 
         check = TracerouteCheck()
@@ -197,11 +197,11 @@ class TestTracerouteFindings:
             }
             context = {"dns_records": {"www.example.com": "1.2.3.4"}}
             result = await check.run(context)
-            info_findings = [f for f in result.findings if f.severity == "info"]
-            assert any("route" in f.title.lower() for f in info_findings)
+            info_observations = [f for f in result.observations if f.severity == "info"]
+            assert any("route" in f.title.lower() for f in info_observations)
 
     @pytest.mark.asyncio
-    async def test_cdn_detected_finding(self):
+    async def test_cdn_detected_observation(self):
         from app.checks.network.traceroute import TracerouteCheck
 
         check = TracerouteCheck()
@@ -227,11 +227,11 @@ class TestTracerouteFindings:
             result = await check.run(context)
             assert any(
                 "cdn" in f.title.lower() and "cloudflare" in f.title.lower()
-                for f in result.findings
+                for f in result.observations
             )
 
     @pytest.mark.asyncio
-    async def test_no_findings_when_trace_fails(self):
+    async def test_no_observations_when_trace_fails(self):
         from app.checks.network.traceroute import TracerouteCheck
 
         check = TracerouteCheck()
@@ -239,7 +239,7 @@ class TestTracerouteFindings:
             mock_trace.return_value = None
             context = {"dns_records": {"www.example.com": "1.2.3.4"}}
             result = await check.run(context)
-            assert len(result.findings) == 0
+            assert len(result.observations) == 0
 
 
 class TestTracerouteProbeHop:

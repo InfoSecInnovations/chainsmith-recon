@@ -73,10 +73,10 @@ async def get_compliance_report():
 # ─── Export ───────────────────────────────────────────────────
 
 
-def _count_by_severity(findings: list) -> dict:
-    """Count findings by severity."""
+def _count_by_severity(observations: list) -> dict:
+    """Count observations by severity."""
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    for f in findings:
+    for f in observations:
         sev = f.get("severity", "info").lower()
         if sev in counts:
             counts[sev] += 1
@@ -85,7 +85,7 @@ def _count_by_severity(findings: list) -> dict:
 
 @router.post("/api/v1/export")
 async def export_report():
-    """Export full scan report (findings + chains + compliance)."""
+    """Export full scan report (observations + chains + compliance)."""
     if not state.target:
         raise HTTPException(400, "No scope defined")
 
@@ -104,10 +104,10 @@ async def export_report():
             "exclusions": state.exclude,
             "techniques": state.techniques,
         },
-        "findings": {
-            "total": len(state.findings),
-            "by_severity": _count_by_severity(state.findings),
-            "items": state.findings,
+        "observations": {
+            "total": len(state.observations),
+            "by_severity": _count_by_severity(state.observations),
+            "items": state.observations,
         },
         "chains": {"total": len(state.chains), "items": state.chains},
         "compliance": {

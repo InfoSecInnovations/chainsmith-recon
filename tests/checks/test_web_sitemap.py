@@ -127,11 +127,11 @@ class TestSitemapCheck:
             result = await check.check_service(service, context)
 
         assert result.success
-        assert len(result.findings) >= 1
+        assert len(result.observations) >= 1
         # Should find 6 paths
-        info_findings = [f for f in result.findings if "sitemap-discovered" in (f.id or "")]
-        assert len(info_findings) == 1
-        assert "6" in info_findings[0].title
+        info_observations = [f for f in result.observations if "sitemap-discovered" in (f.id or "")]
+        assert len(info_observations) == 1
+        assert "6" in info_observations[0].title
 
     @pytest.mark.asyncio
     async def test_sitemap_default_location(self, service):
@@ -148,11 +148,11 @@ class TestSitemapCheck:
             result = await check.check_service(service, context)
 
         assert result.success
-        assert any("sitemap-discovered" in (f.id or "") for f in result.findings)
+        assert any("sitemap-discovered" in (f.id or "") for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_sitemap_not_found(self, service):
-        """No findings when sitemap returns 404."""
+        """No observations when sitemap returns 404."""
         check = SitemapCheck()
         context = {}
 
@@ -165,7 +165,7 @@ class TestSitemapCheck:
             result = await check.check_service(service, context)
 
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_sensitive_paths_detected(self, service):
@@ -181,7 +181,7 @@ class TestSitemapCheck:
         ):
             result = await check.check_service(service, context)
 
-        sensitive = [f for f in result.findings if "sensitive-paths" in (f.id or "")]
+        sensitive = [f for f in result.observations if "sensitive-paths" in (f.id or "")]
         assert len(sensitive) == 1
 
     @pytest.mark.asyncio
@@ -198,7 +198,7 @@ class TestSitemapCheck:
         ):
             result = await check.check_service(service, context)
 
-        versioning = [f for f in result.findings if "api-versioning" in (f.id or "")]
+        versioning = [f for f in result.observations if "api-versioning" in (f.id or "")]
         assert len(versioning) == 1
         assert "v1" in versioning[0].evidence
         assert "v2" in versioning[0].evidence
@@ -222,7 +222,7 @@ class TestSitemapCheck:
             result = await check.check_service(service, context)
 
         assert result.success
-        assert any("sitemap-discovered" in (f.id or "") for f in result.findings)
+        assert any("sitemap-discovered" in (f.id or "") for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_outputs_sitemap_paths(self, service):
@@ -243,7 +243,7 @@ class TestSitemapCheck:
 
     @pytest.mark.asyncio
     async def test_empty_sitemap(self, service):
-        """Empty sitemap body produces no findings."""
+        """Empty sitemap body produces no observations."""
         check = SitemapCheck()
         context = {}
 
@@ -256,7 +256,7 @@ class TestSitemapCheck:
             result = await check.check_service(service, context)
 
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_malformed_xml(self, service):
@@ -273,4 +273,4 @@ class TestSitemapCheck:
             result = await check.check_service(service, context)
 
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0

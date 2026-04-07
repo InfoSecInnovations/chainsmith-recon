@@ -2,11 +2,11 @@
 app/lib/evidence.py - Evidence Collector
 
 Utilities for formatting, truncating, and bundling evidence
-that backs up security findings.
+that backs up security observations.
 
 Evidence should be:
 - Concise enough to read in a report
-- Specific enough to reproduce the finding
+- Specific enough to reproduce the observation
 - Machine-readable for future correlation
 """
 
@@ -20,7 +20,7 @@ MAX_EVIDENCE_LENGTH = 1000  # chars; truncated beyond this
 @dataclass
 class EvidenceBundle:
     """
-    Structured evidence package for a single finding.
+    Structured evidence package for a single observation.
 
     Carries both a human-readable summary and structured raw data
     for downstream processing or replay.
@@ -31,7 +31,7 @@ class EvidenceBundle:
     snippets: list[str] = field(default_factory=list)  # Key response snippets
 
     def to_evidence_string(self) -> str:
-        """Return the summary for use in Finding.evidence."""
+        """Return the summary for use in Observation.evidence."""
         return self.summary
 
     def to_dict(self) -> dict:
@@ -43,7 +43,7 @@ class EvidenceBundle:
 
 
 def fmt_header_evidence(header_name: str, header_value: str | None) -> str:
-    """Format a header finding as evidence string."""
+    """Format a header observation as evidence string."""
     if header_value is None:
         return f"Header '{header_name}' not present in response"
     return f"Header '{header_name}': {_truncate(header_value)}"

@@ -332,7 +332,7 @@ class TestRAGIndirectInjectionCheck:
         result = await check.check_service(sample_service, {})
 
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_confidence_scoring(self, check, sample_service, rag_endpoint_context):

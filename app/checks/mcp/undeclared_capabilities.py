@@ -13,7 +13,7 @@ import json
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Standard MCP capabilities and their probe methods
@@ -100,8 +100,8 @@ class UndeclaredCapabilityCheck(BaseCheck):
                                     "method": method,
                                 }
                             )
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Undeclared capability accessible: {method} returns data but {cap_name} not declared",
                                     description=(
@@ -128,8 +128,8 @@ class UndeclaredCapabilityCheck(BaseCheck):
                                     "description": desc,
                                 }
                             )
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Non-standard method accepted: {method} returns data",
                                     description=(
@@ -148,8 +148,8 @@ class UndeclaredCapabilityCheck(BaseCheck):
                         not server_undeclared["undeclared_accessible"]
                         and not server_undeclared["non_standard_accessible"]
                     ):
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Server correctly rejects requests for undeclared capabilities",
                                 description="All probed undeclared capabilities and non-standard methods were rejected.",

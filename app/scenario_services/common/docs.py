@@ -5,14 +5,14 @@ API documentation portal service template.
 
 This service provides a documentation landing page with links to
 OpenAPI/Swagger documentation. It can expose internal endpoints
-and authentication schemes based on active findings.
+and authentication schemes based on active observations.
 
 Configurable via environment variables:
     BRAND_NAME          Display name (default: from scenario.json)
     DOCS_VERSION        Documentation version (default: 2.0.0)
     API_BASE_URL        Base URL for API references (default: http://localhost:8080)
 
-Planted findings:
+Planted observations:
     openapi_exposed             Adds internal servers to OpenAPI spec
     internal_endpoints_documented   Documents internal/admin endpoints
     auth_schemes_revealed       X-Auth-Schemes header leak
@@ -37,7 +37,7 @@ from app.scenario_services.common.config import (
     get_brand_domain,
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -68,7 +68,7 @@ def custom_openapi():
     """
     Generate customized OpenAPI schema with optional internal info.
 
-    Findings:
+    Observations:
         openapi_exposed: Adds internal server URLs
         internal_endpoints_documented: Documents admin endpoints
     """
@@ -85,8 +85,8 @@ def custom_openapi():
         routes=app.routes,
     )
 
-    # Finding: openapi_exposed - leak internal server info
-    if is_finding_active("openapi_exposed"):
+    # Observation: openapi_exposed - leak internal server info
+    if is_observation_active("openapi_exposed"):
         openapi_schema["info"]["x-internal"] = True
         openapi_schema["servers"] = [
             {"url": f"https://api.{domain}", "description": "Production"},
@@ -97,8 +97,8 @@ def custom_openapi():
             {"url": "http://localhost:8080", "description": "Development"},
         ]
 
-    # Finding: internal_endpoints_documented - expose admin routes
-    if is_finding_active("internal_endpoints_documented"):
+    # Observation: internal_endpoints_documented - expose admin routes
+    if is_observation_active("internal_endpoints_documented"):
         openapi_schema["paths"]["/internal/admin"] = {
             "get": {
                 "summary": "Admin endpoint",
@@ -128,13 +128,13 @@ app.openapi = custom_openapi
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
-    """Add headers based on active findings."""
+    """Add headers based on active observations."""
     response = await call_next(request)
 
     response.headers["X-Docs-Version"] = DOCS_VERSION
 
-    # Finding: auth_schemes_revealed - leak authentication methods
-    if is_finding_active("auth_schemes_revealed"):
+    # Observation: auth_schemes_revealed - leak authentication methods
+    if is_observation_active("auth_schemes_revealed"):
         response.headers["X-Auth-Schemes"] = "Bearer, API-Key, Internal-Token"
 
     return response

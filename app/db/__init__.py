@@ -1,7 +1,7 @@
 """
 app/db - Data persistence layer for Chainsmith.
 
-Provides async SQLAlchemy-based storage for scan results, findings,
+Provides async SQLAlchemy-based storage for scan results, observations,
 chains, and check execution logs.
 """
 

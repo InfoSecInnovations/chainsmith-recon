@@ -106,7 +106,7 @@ class TestMultiAgentDetection:
             result = await check.check_service(sample_service, agent_context)
 
         assert result.success
-        assert len(result.findings) >= 1
+        assert len(result.observations) >= 1
         assert "multi_agent_topology" in result.outputs
         assert result.outputs["multi_agent_topology"]["agent_count"] >= 2
 
@@ -126,10 +126,10 @@ class TestMultiAgentDetection:
             result = await check.check_service(sample_service, agent_context)
 
         assert result.success
-        # Check for delegation-related findings
+        # Check for delegation-related observations
         assert any(
             "delegation" in f.title.lower() or "multi-agent" in f.title.lower()
-            for f in result.findings
+            for f in result.observations
         )
 
     @pytest.mark.asyncio
@@ -141,7 +141,7 @@ class TestMultiAgentDetection:
             result = await check.check_service(sample_service, agent_context)
 
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 class TestFrameworkVersion:
@@ -187,10 +187,10 @@ class TestFrameworkVersion:
         with patch("app.checks.agent.framework_version.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
-        vuln_findings = [f for f in result.findings if f.severity in ("high", "medium")]
-        assert len(vuln_findings) >= 1
+        vuln_observations = [f for f in result.observations if f.severity in ("high", "medium")]
+        assert len(vuln_observations) >= 1
         assert any(
-            "vulnerable" in f.title.lower() or "vuln" in f.title.lower() for f in vuln_findings
+            "vulnerable" in f.title.lower() or "vuln" in f.title.lower() for f in vuln_observations
         )
 
     def test_version_comparison(self):
@@ -233,7 +233,7 @@ class TestMemoryExtraction:
             result = await check.check_service(sample_service, agent_context)
 
         assert result.success
-        assert len(result.findings) >= 1
+        assert len(result.observations) >= 1
         assert "memory_contents" in result.outputs
 
     @pytest.mark.asyncio
@@ -253,7 +253,7 @@ class TestMemoryExtraction:
         with patch("app.checks.agent.memory_extraction.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
-        assert any(f.severity == "critical" for f in result.findings)
+        assert any(f.severity == "critical" for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_auth_required_memory(self, sample_service, agent_context):
@@ -269,5 +269,5 @@ class TestMemoryExtraction:
         with patch("app.checks.agent.memory_extraction.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
-        info_findings = [f for f in result.findings if f.severity == "info"]
-        assert len(info_findings) >= 1
+        info_observations = [f for f in result.observations if f.severity == "info"]
+        assert len(info_observations) >= 1

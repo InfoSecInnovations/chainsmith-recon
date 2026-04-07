@@ -2,9 +2,9 @@
 app/routes/adjudication.py - Severity Adjudication Routes
 
 Endpoints for:
-- Starting adjudication on verified findings
+- Starting adjudication on verified observations
 - Adjudication status and results
-- Per-finding adjudication detail
+- Per-observation adjudication detail
 
 When an optional `scan_id` query parameter is provided, results are
 read from the database (historical). Otherwise, the active session's
@@ -30,13 +30,13 @@ _adjudication_repo = AdjudicationRepository()
 
 @router.post("/api/v1/adjudicate", status_code=202)
 async def start_adjudication(body: AdjudicateRequest = AdjudicateRequest()):
-    """Start severity adjudication on verified findings.
+    """Start severity adjudication on verified observations.
 
     Optional body fields:
       - approach: structured_challenge, adversarial_debate, evidence_rubric, auto
     """
-    if len(state.findings) == 0:
-        raise HTTPException(400, "No findings to adjudicate. Run a scan first.")
+    if len(state.observations) == 0:
+        raise HTTPException(400, "No observations to adjudicate. Run a scan first.")
 
     if state.adjudication_status == "adjudicating":
         raise HTTPException(409, "Adjudication already running.")
@@ -88,22 +88,22 @@ async def get_adjudication_status(
     }
 
 
-@router.get("/api/v1/adjudication/{finding_id}")
-async def get_finding_adjudication(
-    finding_id: str,
+@router.get("/api/v1/adjudication/{observation_id}")
+async def get_observation_adjudication(
+    observation_id: str,
     scan_id: str | None = Query(None, description="Historical scan ID"),
 ):
-    """Get adjudication result for a specific finding."""
+    """Get adjudication result for a specific observation."""
     if scan_id:
-        result = await _adjudication_repo.get_result_for_finding(scan_id, finding_id)
+        result = await _adjudication_repo.get_result_for_observation(scan_id, observation_id)
         if not result:
-            raise HTTPException(404, f"No adjudication result for finding '{finding_id}'")
+            raise HTTPException(404, f"No adjudication result for observation '{observation_id}'")
         return result
 
     result = next(
-        (r for r in state.adjudication_results if r.get("finding_id") == finding_id),
+        (r for r in state.adjudication_results if r.get("observation_id") == observation_id),
         None,
     )
     if not result:
-        raise HTTPException(404, f"No adjudication result for finding '{finding_id}'")
+        raise HTTPException(404, f"No adjudication result for observation '{observation_id}'")
     return result

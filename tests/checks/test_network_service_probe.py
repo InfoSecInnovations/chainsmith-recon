@@ -224,8 +224,8 @@ class TestServiceProbeCheckService:
         assert result.services[0].service_type == "tcp"
 
 
-class TestServiceProbeCheckFindings:
-    """Tests for ServiceProbeCheck finding generation."""
+class TestServiceProbeCheckObservations:
+    """Tests for ServiceProbeCheck observation generation."""
 
     @pytest.fixture
     def check(self):
@@ -248,8 +248,8 @@ class TestServiceProbeCheckFindings:
             elapsed_ms=50.0,
         )
 
-    async def test_finding_server_version_disclosure(self, check, sample_service):
-        """Server header with version creates finding."""
+    async def test_observation_server_version_disclosure(self, check, sample_service):
+        """Server header with version creates observation."""
         response = self._make_response(
             headers={"Server": "nginx/1.21.0", "content-type": "text/html"},
         )
@@ -263,12 +263,12 @@ class TestServiceProbeCheckFindings:
 
             result = await check.check_service(sample_service, {})
 
-        server_findings = [f for f in result.findings if "Server" in f.title]
-        assert len(server_findings) == 1
-        assert server_findings[0].severity == "low"
+        server_observations = [f for f in result.observations if "Server" in f.title]
+        assert len(server_observations) == 1
+        assert server_observations[0].severity == "low"
 
-    async def test_finding_powered_by_disclosure(self, check, sample_service):
-        """X-Powered-By creates finding."""
+    async def test_observation_powered_by_disclosure(self, check, sample_service):
+        """X-Powered-By creates observation."""
         response = self._make_response(
             headers={"X-Powered-By": "Express", "content-type": "text/html"},
         )
@@ -282,10 +282,10 @@ class TestServiceProbeCheckFindings:
 
             result = await check.check_service(sample_service, {})
 
-        tech_findings = [f for f in result.findings if "Technology" in f.title]
-        assert len(tech_findings) == 1
+        tech_observations = [f for f in result.observations if "Technology" in f.title]
+        assert len(tech_observations) == 1
 
-    async def test_finding_ai_powered_by_higher_severity(self, check, sample_service):
+    async def test_observation_ai_powered_by_higher_severity(self, check, sample_service):
         """AI tech in X-Powered-By gets higher severity."""
         response = self._make_response(
             headers={"X-Powered-By": "vLLM/0.4.1", "content-type": "text/html"},
@@ -300,12 +300,12 @@ class TestServiceProbeCheckFindings:
 
             result = await check.check_service(sample_service, {})
 
-        tech_findings = [f for f in result.findings if "Technology" in f.title]
-        assert len(tech_findings) == 1
-        assert tech_findings[0].severity == "medium"
+        tech_observations = [f for f in result.observations if "Technology" in f.title]
+        assert len(tech_observations) == 1
+        assert tech_observations[0].severity == "medium"
 
-    async def test_finding_custom_header(self, check, sample_service):
-        """Custom X- headers create findings."""
+    async def test_observation_custom_header(self, check, sample_service):
+        """Custom X- headers create observations."""
         response = self._make_response(
             headers={
                 "X-Custom-Debug": "true",
@@ -322,10 +322,10 @@ class TestServiceProbeCheckFindings:
 
             result = await check.check_service(sample_service, {})
 
-        custom_findings = [f for f in result.findings if "Custom header" in f.title]
-        assert len(custom_findings) == 1
+        custom_observations = [f for f in result.observations if "Custom header" in f.title]
+        assert len(custom_observations) == 1
 
-    async def test_finding_sensitive_custom_header_higher_severity(self, check, sample_service):
+    async def test_observation_sensitive_custom_header_higher_severity(self, check, sample_service):
         """Custom headers with sensitive names get higher severity."""
         response = self._make_response(
             headers={
@@ -343,9 +343,9 @@ class TestServiceProbeCheckFindings:
 
             result = await check.check_service(sample_service, {})
 
-        custom_findings = [f for f in result.findings if "Custom header" in f.title]
-        assert len(custom_findings) == 1
-        assert custom_findings[0].severity == "medium"
+        custom_observations = [f for f in result.observations if "Custom header" in f.title]
+        assert len(custom_observations) == 1
+        assert custom_observations[0].severity == "medium"
 
 
 class TestServiceProbeClassifyService:

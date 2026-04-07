@@ -1,7 +1,7 @@
 """
 Chainsmith Agent
 
-Handles scoping conversations and builds attack chains from verified findings.
+Handles scoping conversations and builds attack chains from verified observations.
 Conversational flow that prompts for missing scope information.
 """
 
@@ -18,8 +18,8 @@ from app.models import (
     AttackChain,
     EventImportance,
     EventType,
-    Finding,
-    FindingStatus,
+    Observation,
+    ObservationStatus,
     ScopeDefinition,
 )
 
@@ -311,18 +311,18 @@ Ready to launch. Click the Launch button to begin."""
 
     # ─── Chain Building Methods ────────────────────────────────
 
-    async def build_chains(self, findings: list[Finding]) -> list[AttackChain]:
-        """Build attack chains from verified findings."""
+    async def build_chains(self, observations: list[Observation]) -> list[AttackChain]:
+        """Build attack chains from verified observations."""
         self.chains = []
 
-        verified = [f for f in findings if f.status == FindingStatus.VERIFIED]
+        verified = [f for f in observations if f.status == ObservationStatus.VERIFIED]
 
         await self.emit(
             AgentEvent(
                 event_type=EventType.AGENT_START,
                 agent=AgentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
-                message=f"Analyzing {len(verified)} verified findings for attack chains...",
+                message=f"Analyzing {len(verified)} verified observations for attack chains...",
             )
         )
 
@@ -332,7 +332,7 @@ Ready to launch. Click the Launch button to begin."""
                     event_type=EventType.AGENT_COMPLETE,
                     agent=AgentType.CHAINSMITH,
                     importance=EventImportance.LOW,
-                    message="Not enough findings for chain analysis (need 2+)",
+                    message="Not enough observations for chain analysis (need 2+)",
                 )
             )
             return []
@@ -351,11 +351,11 @@ Ready to launch. Click the Launch button to begin."""
 
         return self.chains
 
-    def _build_chains_from_patterns(self, findings: list[Finding]):
+    def _build_chains_from_patterns(self, observations: list[Observation]):
         """Build chains using pattern matching."""
-        # Extract keywords from each finding
-        finding_keywords = {}
-        for f in findings:
+        # Extract keywords from each observation
+        observation_keywords = {}
+        for f in observations:
             text = f"{f.title} {f.description} {f.evidence_summary or ''}".lower()
             keywords = set()
 
@@ -463,23 +463,23 @@ Ready to launch. Click the Launch button to begin."""
                 if kw in text:
                     keywords.add(kw)
 
-            finding_keywords[f.id] = keywords
+            observation_keywords[f.id] = keywords
 
         # Match against patterns
         for pattern in self.attack_patterns:
             indicators = set(pattern.get("indicators", []))
             matching = []
 
-            for f in findings:
-                if finding_keywords.get(f.id, set()) & indicators:
+            for f in observations:
+                if observation_keywords.get(f.id, set()) & indicators:
                     matching.append(f)
 
             if len(matching) >= 2:
                 chain = AttackChain(
                     id=f"CHAIN-{len(self.chains) + 1:03d}",
                     title=pattern.get("name", "Attack Chain"),
-                    finding_ids=[f.id for f in matching],
-                    impact_statement=pattern.get("impact", "Multiple findings increase risk."),
+                    observation_ids=[f.id for f in matching],
+                    impact_statement=pattern.get("impact", "Multiple observations increase risk."),
                     attack_steps=pattern.get("steps", []),
                     combined_severity="high" if len(matching) > 3 else "medium",
                     confidence=0.7,

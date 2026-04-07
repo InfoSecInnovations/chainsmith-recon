@@ -6,7 +6,7 @@ Covers:
 - ScanAdvisorConfig defaults (disabled by default)
 - Gap analysis: detects checks blocked by missing context
 - Partial results: flags failed and skipped checks
-- Follow-up suggestions: triggers based on findings
+- Follow-up suggestions: triggers based on observations
 - Coverage cross-reference: detects suites with low/no coverage
 - Deduplication of recommendations
 - Disabled advisor returns empty list
@@ -31,7 +31,7 @@ def _make_advisor(
     skipped=None,
     all_check_names=None,
     context=None,
-    findings=None,
+    observations=None,
     check_metadata=None,
     enabled=True,
 ) -> ScanAdvisor:
@@ -42,7 +42,7 @@ def _make_advisor(
         skipped=skipped or set(),
         all_check_names=all_check_names or set(),
         context=context or {},
-        findings=findings or [],
+        observations=observations or [],
         check_metadata=check_metadata or {},
         config=ScanAdvisorConfig(enabled=enabled),
     )
@@ -194,12 +194,12 @@ class TestPartialResults:
 
 
 class TestFollowUpSuggestions:
-    def test_suggests_followup_when_trigger_has_findings(self):
-        """When llm_endpoint_discovery has findings and prompt_leakage didn't run."""
+    def test_suggests_followup_when_trigger_has_observations(self):
+        """When llm_endpoint_discovery has observations and prompt_leakage didn't run."""
         advisor = _make_advisor(
             completed={"llm_endpoint_discovery"},
             all_check_names={"llm_endpoint_discovery", "prompt_leakage"},
-            findings=[{"check_name": "llm_endpoint_discovery", "title": "Found LLM"}],
+            observations=[{"check_name": "llm_endpoint_discovery", "title": "Found LLM"}],
             check_metadata={
                 "prompt_leakage": {"conditions": ["chat_endpoints truthy"], "produces": []},
             },
@@ -213,19 +213,19 @@ class TestFollowUpSuggestions:
         advisor = _make_advisor(
             completed={"llm_endpoint_discovery", "prompt_leakage"},
             all_check_names={"llm_endpoint_discovery", "prompt_leakage"},
-            findings=[{"check_name": "llm_endpoint_discovery", "title": "Found LLM"}],
+            observations=[{"check_name": "llm_endpoint_discovery", "title": "Found LLM"}],
             check_metadata={},
         )
         recs = advisor.analyze()
         followup_recs = [r for r in recs if r.check_name == "prompt_leakage"]
         assert len(followup_recs) == 0
 
-    def test_no_followup_when_trigger_has_no_findings(self):
-        """Don't suggest follow-ups for checks that produced no findings."""
+    def test_no_followup_when_trigger_has_no_observations(self):
+        """Don't suggest follow-ups for checks that produced no observations."""
         advisor = _make_advisor(
             completed={"llm_endpoint_discovery"},
             all_check_names={"llm_endpoint_discovery", "prompt_leakage"},
-            findings=[],  # no findings
+            observations=[],  # no observations
             check_metadata={
                 "prompt_leakage": {"conditions": ["chat_endpoints truthy"], "produces": []},
             },
@@ -283,7 +283,7 @@ class TestDeduplication:
             completed=set(),
             failed={"prompt_leakage"},
             all_check_names={"llm_endpoint_discovery", "prompt_leakage"},
-            findings=[{"check_name": "llm_endpoint_discovery", "title": "Found LLM"}],
+            observations=[{"check_name": "llm_endpoint_discovery", "title": "Found LLM"}],
             check_metadata={
                 "prompt_leakage": {"conditions": ["chat_endpoints truthy"], "produces": []},
             },

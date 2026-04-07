@@ -21,7 +21,7 @@ import time
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +122,7 @@ class TracerouteCheck(BaseCheck):
             trace_result = await self._trace_route(ip)
             if trace_result:
                 traceroute_data[host_label] = trace_result
-                self._generate_findings(result, host_label, ip, trace_result)
+                self._generate_observations(result, host_label, ip, trace_result)
 
             result.targets_checked += 1
 
@@ -246,14 +246,14 @@ class TracerouteCheck(BaseCheck):
                     return provider
         return None
 
-    def _generate_findings(
+    def _generate_observations(
         self,
         result: CheckResult,
         host: str,
         target_ip: str,
         trace: dict[str, Any],
     ) -> None:
-        """Generate findings from traceroute results."""
+        """Generate observations from traceroute results."""
         total_hops = trace["total_hops"]
         avg_rtt = trace.get("avg_rtt_ms")
         cdn = trace.get("cdn_detected")
@@ -262,8 +262,8 @@ class TracerouteCheck(BaseCheck):
         rtt_str = f"{avg_rtt}ms avg" if avg_rtt else "unknown"
 
         # Info: route summary
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"Route to {host}: {total_hops} hops, {rtt_str}",
                 description=(
@@ -292,8 +292,8 @@ class TracerouteCheck(BaseCheck):
                     break
 
             hop_str = f" (hop {cdn_hop})" if cdn_hop else ""
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"CDN detected in path to {host}: {cdn}{hop_str}",
                     description=(

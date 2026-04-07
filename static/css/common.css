@@ -1089,13 +1089,13 @@ input[type="datetime-local"]:focus {
     margin-bottom: 8px;
 }
 
-.chain-card-findings {
+.chain-card-observations {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
 }
 
-.chain-finding-tag {
+.chain-observation-tag {
     font-size: 0.6875rem;
     padding: 2px 6px;
     background: var(--bg-secondary);

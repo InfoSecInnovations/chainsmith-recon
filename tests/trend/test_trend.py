@@ -8,13 +8,13 @@ suite breakdown, override exclusion, and averages.
 import pytest
 
 from app.db.engine import close_db, get_session, init_db
-from app.db.models import Finding
+from app.db.models import ObservationRecord
 from app.db.repositories import (
     SEVERITY_WEIGHTS,
     ComparisonRepository,
     EngagementRepository,
-    FindingOverrideRepository,
-    FindingRepository,
+    ObservationOverrideRepository,
+    ObservationRepository,
     ScanRepository,
     TrendRepository,
 )
@@ -43,8 +43,8 @@ def scan_repo():
 
 
 @pytest.fixture
-def finding_repo():
-    return FindingRepository()
+def observation_repo():
+    return ObservationRepository()
 
 
 @pytest.fixture
@@ -59,22 +59,22 @@ def engagement_repo():
 
 @pytest.fixture
 def override_repo():
-    return FindingOverrideRepository()
+    return ObservationOverrideRepository()
 
 
-async def _create_scan_with_findings(
-    scan_repo, finding_repo, comparison_repo, scan_id, target, findings, engagement_id=None
+async def _create_scan_with_observations(
+    scan_repo, observation_repo, comparison_repo, scan_id, target, observations, engagement_id=None
 ):
-    """Helper to create a completed scan with findings and compute statuses."""
+    """Helper to create a completed scan with observations and compute statuses."""
     await scan_repo.create_scan(
         scan_id=scan_id,
         session_id=f"s-{scan_id}",
         target_domain=target,
         engagement_id=engagement_id,
     )
-    await finding_repo.bulk_create(scan_id, findings)
-    await scan_repo.complete_scan(scan_id, status="complete", findings_count=len(findings))
-    await comparison_repo.compute_finding_statuses(scan_id)
+    await observation_repo.bulk_create(scan_id, observations)
+    await scan_repo.complete_scan(scan_id, status="complete", observations_count=len(observations))
+    await comparison_repo.compute_observation_statuses(scan_id)
 
 
 # --- Single Scan Trend -------------------------------------------------------
@@ -86,13 +86,13 @@ class TestSingleScanTrend:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         trend_repo,
     ):
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "trend-s1",
             "example.com",
@@ -138,13 +138,13 @@ class TestSingleScanTrend:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         trend_repo,
     ):
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "risk-s1",
             "risk.com",
@@ -167,13 +167,13 @@ class TestSingleScanTrend:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         trend_repo,
     ):
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "suite-s1",
             "suite.com",
@@ -217,14 +217,14 @@ class TestMultiScanTrend:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         trend_repo,
     ):
         """Multiple scans produce ordered data points."""
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "multi-s1",
             "multi.com",
@@ -232,9 +232,9 @@ class TestMultiScanTrend:
                 {"title": "F1", "severity": "high", "check_name": "c1", "host": "multi.com"},
             ],
         )
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "multi-s2",
             "multi.com",
@@ -256,14 +256,14 @@ class TestMultiScanTrend:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         trend_repo,
     ):
-        """New/resolved counts come from FindingStatusHistory."""
-        await _create_scan_with_findings(
+        """New/resolved counts come from ObservationStatusHistory."""
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "nr-s1",
             "nr.com",
@@ -273,9 +273,9 @@ class TestMultiScanTrend:
             ],
         )
         # Second scan: A persists, B gone, C new
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "nr-s2",
             "nr.com",
@@ -306,7 +306,7 @@ class TestEngagementTrend:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         engagement_repo,
         trend_repo,
@@ -317,9 +317,9 @@ class TestEngagementTrend:
         )
         eid = eng["id"]
 
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "eng-s1",
             "eng.com",
@@ -329,9 +329,9 @@ class TestEngagementTrend:
             engagement_id=eid,
         )
 
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "eng-s2",
             "eng.com",
@@ -352,7 +352,7 @@ class TestEngagementTrend:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         engagement_repo,
         trend_repo,
@@ -360,9 +360,9 @@ class TestEngagementTrend:
         eng_a = await engagement_repo.create_engagement(name="A", target_domain="shared.com")
         eng_b = await engagement_repo.create_engagement(name="B", target_domain="shared.com")
 
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "ea-s1",
             "shared.com",
@@ -372,9 +372,9 @@ class TestEngagementTrend:
             engagement_id=eng_a["id"],
         )
 
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "eb-s1",
             "shared.com",
@@ -394,19 +394,19 @@ class TestEngagementTrend:
 
 class TestOverrideExclusion:
     @pytest.mark.asyncio
-    async def test_overridden_findings_excluded(
+    async def test_overridden_observations_excluded(
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         override_repo,
         trend_repo,
     ):
-        """Findings with active overrides are excluded from trend counts."""
-        await _create_scan_with_findings(
+        """Observations with active overrides are excluded from trend counts."""
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "ov-s1",
             "ov.com",
@@ -416,11 +416,11 @@ class TestOverrideExclusion:
             ],
         )
 
-        # Get the FP finding's fingerprint and override it
+        # Get the FP observation's fingerprint and override it
         from sqlalchemy import select
 
         async with get_session() as session:
-            result = await session.execute(select(Finding.fingerprint).where(Finding.title == "FP"))
+            result = await session.execute(select(ObservationRecord.fingerprint).where(ObservationRecord.title == "FP"))
             fp_fingerprint = result.scalar_one()
 
         await override_repo.set_override(fp_fingerprint, "false_positive", reason="Not real")
@@ -428,11 +428,11 @@ class TestOverrideExclusion:
         result = await trend_repo.get_target_trend("ov.com")
         dp = result["data_points"][0]
 
-        # Only 1 finding should be counted (the XSS), not the false positive
+        # Only 1 observation should be counted (the XSS), not the false positive
         assert dp["total"] == 1
         assert dp["high"] == 1
         assert dp["critical"] == 0
-        # Risk should only reflect the non-overridden finding
+        # Risk should only reflect the non-overridden observation
         assert dp["risk_score"] == SEVERITY_WEIGHTS["high"]
 
 
@@ -445,13 +445,13 @@ class TestAverages:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         trend_repo,
     ):
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "avg-s1",
             "avg.com",
@@ -459,9 +459,9 @@ class TestAverages:
                 {"title": "F1", "severity": "high", "check_name": "c1", "host": "avg.com"},
             ],
         )
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "avg-s2",
             "avg.com",
@@ -484,14 +484,14 @@ class TestAverages:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         trend_repo,
     ):
         """all_targets averages span the entire database."""
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "at-s1",
             "alpha.com",
@@ -499,9 +499,9 @@ class TestAverages:
                 {"title": "F1", "severity": "critical", "check_name": "c1", "host": "alpha.com"},
             ],
         )
-        await _create_scan_with_findings(
+        await _create_scan_with_observations(
             scan_repo,
-            finding_repo,
+            observation_repo,
             comparison_repo,
             "at-s2",
             "beta.com",
@@ -547,7 +547,7 @@ class TestEmptyCases:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         trend_repo,
     ):
         """Running/error scans are not included in trend."""
@@ -556,7 +556,7 @@ class TestEmptyCases:
             session_id="s1",
             target_domain="partial.com",
         )
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "running-scan",
             [
                 {"title": "F1", "severity": "high", "check_name": "c1", "host": "partial.com"},

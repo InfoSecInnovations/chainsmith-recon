@@ -30,7 +30,7 @@ class CheckStatus(Enum):
 
 
 class Severity(Enum):
-    """Finding severity levels."""
+    """Observation severity levels."""
 
     INFO = "info"
     LOW = "low"
@@ -88,7 +88,7 @@ class Service:
 
 
 @dataclass
-class Finding:
+class Observation:
     """
     A security-relevant observation from a check.
 
@@ -135,8 +135,8 @@ class CheckResult:
     # Services discovered/enriched (for service-discovering checks)
     services: list[Service] = field(default_factory=list)
 
-    # Security findings
-    findings: list[Finding] = field(default_factory=list)
+    # Security observations
+    observations: list[Observation] = field(default_factory=list)
 
     # Problems encountered (non-fatal)
     errors: list[str] = field(default_factory=list)
@@ -311,9 +311,9 @@ class BaseCheck(ABC):
         result.completed_at = datetime.utcnow()
         result.duration_ms = (result.completed_at - started).total_seconds() * 1000
 
-        # Tag findings with check name
-        for finding in result.findings:
-            finding.check_name = self.name
+        # Tag observations with check name
+        for observation in result.observations:
+            observation.check_name = self.name
 
         self.result = result
         return result
@@ -329,11 +329,11 @@ class BaseCheck(ABC):
                 - Other outputs from previous checks
 
         Returns:
-            CheckResult with success, outputs, services, findings, errors
+            CheckResult with success, outputs, services, observations, errors
         """
         pass
 
-    def create_finding(
+    def create_observation(
         self,
         title: str,
         description: str,
@@ -343,9 +343,9 @@ class BaseCheck(ABC):
         target_url: str | None = None,
         raw_data: dict | None = None,
         references: list[str] | None = None,
-    ) -> Finding:
-        """Helper to create a properly formatted finding."""
-        return Finding(
+    ) -> Observation:
+        """Helper to create a properly formatted observation."""
+        return Observation(
             id="",  # Assigned by runner
             title=title,
             description=description,
@@ -431,7 +431,7 @@ class ServiceIteratingCheck(BaseCheck):
                 service_result = await self.check_service(service, context)
 
                 # Accumulate results
-                result.findings.extend(service_result.findings)
+                result.observations.extend(service_result.observations)
                 result.services.extend(service_result.services)
                 result.outputs.update(service_result.outputs)
                 result.errors.extend(service_result.errors)
@@ -453,6 +453,6 @@ class ServiceIteratingCheck(BaseCheck):
             context: Full context (for cross-referencing)
 
         Returns:
-            CheckResult with findings for this service
+            CheckResult with observations for this service
         """
         pass

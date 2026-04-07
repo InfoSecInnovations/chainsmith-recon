@@ -14,7 +14,7 @@ class AppState:
     """
     Global application state for scan tracking.
 
-    Holds target info, findings, progress, settings, and proof-of-scope config.
+    Holds target info, observations, progress, settings, and proof-of-scope config.
     """
 
     def __init__(self):
@@ -26,7 +26,7 @@ class AppState:
         self.target: str | None = None
         self.exclude: list[str] = []
         self.techniques: list[str] = []
-        self.findings: list[dict] = []
+        self.observations: list[dict] = []
         self.status: str = "idle"
         self.phase: str = "idle"  # idle, scanning, done
         self.error_message: str | None = None

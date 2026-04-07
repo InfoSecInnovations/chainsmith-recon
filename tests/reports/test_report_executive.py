@@ -13,8 +13,8 @@ pytestmark = pytest.mark.integration
 
 class TestExecutiveReportMarkdown:
     @pytest.mark.asyncio
-    async def test_basic_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_basic_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "md")
 
         assert result["format"] == "md"
@@ -25,26 +25,26 @@ class TestExecutiveReportMarkdown:
         assert "# Executive Summary" in content
         assert "**Target:** example.com" in content
         assert "Risk Overview" in content
-        assert "Top Findings" in content
+        assert "Top Observations" in content
 
     @pytest.mark.asyncio
-    async def test_risk_score(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_risk_score(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "md")
         # 1 critical(10) + 1 high(5) + 1 medium(2) + 1 info(0) = 17
         assert "**Risk Score:** 17" in result["content"]
 
     @pytest.mark.asyncio
-    async def test_top_findings(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_top_observations(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "md")
         content = result["content"]
         assert "SQL Injection" in content
         assert "XSS in Search" in content
 
     @pytest.mark.asyncio
-    async def test_severity_table(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_severity_table(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "md")
         content = result["content"]
         assert "| Critical | 1 |" in content
@@ -52,36 +52,36 @@ class TestExecutiveReportMarkdown:
 
     @pytest.mark.asyncio
     async def test_with_previous_scan(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
     ):
         """When a previous scan exists, show risk trend."""
         # First scan (previous)
         await _create_populated_scan(
             scan_repo,
-            finding_repo,
+            observation_repo,
             chain_repo,
             check_log_repo,
             scan_id="exec-prev",
             target="trend.com",
         )
-        # Second scan (current) - fewer findings
+        # Second scan (current) - fewer observations
         await scan_repo.create_scan(
             scan_id="exec-curr",
             session_id="s2",
             target_domain="trend.com",
         )
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "exec-curr",
             [
                 {
-                    "title": "Low Finding",
+                    "title": "Low Observation",
                     "severity": "low",
                     "check_name": "c1",
                     "host": "trend.com",
                 },
             ],
         )
-        await scan_repo.complete_scan("exec-curr", status="complete", findings_count=1)
+        await scan_repo.complete_scan("exec-curr", status="complete", observations_count=1)
 
         result = await generate_executive_report("exec-curr", "md")
         content = result["content"]
@@ -91,8 +91,8 @@ class TestExecutiveReportMarkdown:
 
 class TestExecutiveReportJSON:
     @pytest.mark.asyncio
-    async def test_json_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_json_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "json")
 
         assert result["format"] == "json"
@@ -101,14 +101,14 @@ class TestExecutiveReportJSON:
         report = json.loads(result["content"])
         assert report["report_type"] == "executive"
         assert report["summary"]["risk_score"] == 17
-        assert report["summary"]["active_findings"] == 4
-        assert len(report["top_findings"]) <= 5
+        assert report["summary"]["active_observations"] == 4
+        assert len(report["top_observations"]) <= 5
 
 
 class TestExecutiveReportHTML:
     @pytest.mark.asyncio
-    async def test_html_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_html_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "html")
 
         assert result["format"] == "html"
@@ -118,11 +118,11 @@ class TestExecutiveReportHTML:
         assert "<!DOCTYPE html>" in content
         assert "Executive Summary" in content
         assert "stat-grid" in content
-        assert "Top Findings" in content
+        assert "Top Observations" in content
 
     @pytest.mark.asyncio
-    async def test_html_badges(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_html_badges(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "html")
         assert "badge-critical" in result["content"]
 
@@ -138,8 +138,8 @@ class TestExecutiveReportPDF:
     xhtml2pdf = pytest.importorskip("xhtml2pdf")
 
     @pytest.mark.asyncio
-    async def test_pdf_output(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_pdf_output(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("report-scan", "pdf")
 
         assert result["format"] == "pdf"

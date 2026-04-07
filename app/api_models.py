@@ -28,12 +28,12 @@ class ProofSettingsInput(BaseModel):
     """Proof of scope settings."""
 
     traffic_logging: bool = True
-    screenshot_findings: bool = False
+    screenshot_observations: bool = False
     hash_responses: bool = True
 
 
 class OnCriticalSettings(BaseModel):
-    """On-critical finding behavior settings."""
+    """On-critical observation behavior settings."""
 
     default: str = "annotate"  # annotate, skip_downstream, stop
     network: str | None = None
@@ -104,7 +104,7 @@ class ScanStatus(BaseModel):
     checks_total: int = 0
     checks_completed: int = 0
     current_check: str | None = None
-    findings_count: int = 0
+    observations_count: int = 0
     error: str | None = None
 
 
@@ -119,8 +119,8 @@ class CheckInfo(BaseModel):
     simulated: bool = False
 
 
-class FindingDetail(BaseModel):
-    """Detailed finding information."""
+class ObservationDetail(BaseModel):
+    """Detailed observation information."""
 
     id: str
     title: str
@@ -158,7 +158,7 @@ class PreferencesUpdateInput(BaseModel):
     parallel: bool | None = None
     rate_limit: float | None = None
     timeout_seconds: float | None = None
-    max_findings_per_check: int | None = None
+    max_observations_per_check: int | None = None
     politeness_delay: float | None = None
     llm_provider: str | None = None
     enabled_checks: list[str] | None = None

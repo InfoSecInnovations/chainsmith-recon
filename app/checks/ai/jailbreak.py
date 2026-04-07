@@ -10,7 +10,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -130,7 +130,7 @@ class JailbreakTestingCheck(BaseCheck):
 
             try:
                 jr = await self._test_jailbreaks(url, service, api_format, context)
-                result.findings.extend(jr.findings)
+                result.observations.extend(jr.observations)
                 result.outputs.update(jr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -200,8 +200,8 @@ class JailbreakTestingCheck(BaseCheck):
 
         if bypassed:
             severity = "critical" if len(bypassed) >= 3 else "high"
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Jailbreak successful ({len(bypassed)}/{len(self.JAILBREAK_PROMPTS)} bypassed)",
                     description=(
@@ -219,8 +219,8 @@ class JailbreakTestingCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"All jailbreak techniques blocked ({len(blocked)}/{len(self.JAILBREAK_PROMPTS)})",
                     description="All tested jailbreak techniques were filtered",

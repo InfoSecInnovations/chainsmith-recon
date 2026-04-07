@@ -33,7 +33,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Framework detection signatures
@@ -176,8 +176,8 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
                         # Determine severity based on capabilities
                         severity = self._determine_severity(endpoint_info)
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Agent endpoint: {path}",
                                 description=self._build_description(endpoint_info),
@@ -350,7 +350,7 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
         return capabilities
 
     def _determine_severity(self, endpoint_info: dict) -> str:
-        """Determine finding severity based on endpoint characteristics."""
+        """Determine observation severity based on endpoint characteristics."""
         # Unauthenticated access to agent is high severity
         if not endpoint_info.get("auth_required", True):
             # Execution endpoints are high

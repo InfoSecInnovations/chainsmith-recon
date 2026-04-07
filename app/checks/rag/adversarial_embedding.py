@@ -15,7 +15,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Adversarial query techniques (keyword-based, no GPU)
@@ -108,8 +108,8 @@ class RAGAdversarialEmbeddingCheck(ServiceIteratingCheck):
                     adversarial_results.append(tech_result)
 
                     if tech_result.get("retrieval_steered"):
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Adversarial embedding: {technique['description']}",
                                 description=(
@@ -131,8 +131,8 @@ class RAGAdversarialEmbeddingCheck(ServiceIteratingCheck):
             result.errors.append(f"{service.url}: {e}")
 
         if not any(r.get("retrieval_steered") for r in adversarial_results):
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Adversarial queries did not force unexpected retrieval",
                     description="Adversarial embedding techniques were not effective.",

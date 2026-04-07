@@ -8,7 +8,7 @@ Covers:
 - Operator context loading (file exists, missing, malformed)
 - Event emission (correct types and counts)
 - AdjudicatedRisk model validation
-- Edge cases (no verified findings, LLM unavailable, all upheld)
+- Edge cases (no verified observations, LLM unavailable, all upheld)
 - Approach resolution priority
 """
 
@@ -26,9 +26,9 @@ from app.models import (
     AdjudicationApproach,
     AgentType,
     EventType,
-    Finding,
-    FindingSeverity,
-    FindingStatus,
+    Observation,
+    ObservationSeverity,
+    ObservationStatus,
     OperatorAssetContext,
     OperatorContext,
 )
@@ -40,21 +40,21 @@ pytestmark = pytest.mark.unit
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _make_finding(
-    finding_id: str = "F-001",
+def _make_observation(
+    observation_id: str = "F-001",
     severity: str = "high",
     status: str = "verified",
-    title: str = "Test Finding",
+    title: str = "Test Observation",
     target_url: str = "https://api.example.com/v1",
-) -> Finding:
-    """Create a test finding."""
-    return Finding(
-        id=finding_id,
-        finding_type="test_check",
+) -> Observation:
+    """Create a test observation."""
+    return Observation(
+        id=observation_id,
+        observation_type="test_check",
         title=title,
-        description="A test finding for adjudication",
-        severity=FindingSeverity(severity),
-        status=FindingStatus(status),
+        description="A test observation for adjudication",
+        severity=ObservationSeverity(severity),
+        status=ObservationStatus(status),
         confidence=0.8,
         discovered_by=AgentType.SCOUT,
         discovered_at=datetime(2026, 1, 1),
@@ -81,7 +81,7 @@ def _challenge_response(severity: str = "medium", confidence: float = 0.85) -> d
         "challenge_argument": "The severity seems overstated given context",
         "final_severity": severity,
         "confidence": confidence,
-        "rationale": "Finding is valid but mitigated by VPN access requirement",
+        "rationale": "Observation is valid but mitigated by VPN access requirement",
         "factors": {
             "attack_vector": "network",
             "complexity": "high",
@@ -168,35 +168,35 @@ class TestAgentInstantiation:
 class TestAutoTiering:
     def test_critical_uses_adversarial(self, mock_llm_client):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        finding = _make_finding(severity="critical")
-        assert agent._resolve_approach(finding) == AdjudicationApproach.ADVERSARIAL_DEBATE
+        observation = _make_observation(severity="critical")
+        assert agent._resolve_approach(observation) == AdjudicationApproach.ADVERSARIAL_DEBATE
 
     def test_high_uses_adversarial(self, mock_llm_client):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        finding = _make_finding(severity="high")
-        assert agent._resolve_approach(finding) == AdjudicationApproach.ADVERSARIAL_DEBATE
+        observation = _make_observation(severity="high")
+        assert agent._resolve_approach(observation) == AdjudicationApproach.ADVERSARIAL_DEBATE
 
     def test_medium_uses_rubric(self, mock_llm_client):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        finding = _make_finding(severity="medium")
-        assert agent._resolve_approach(finding) == AdjudicationApproach.EVIDENCE_RUBRIC
+        observation = _make_observation(severity="medium")
+        assert agent._resolve_approach(observation) == AdjudicationApproach.EVIDENCE_RUBRIC
 
     def test_low_uses_challenge(self, mock_llm_client):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        finding = _make_finding(severity="low")
-        assert agent._resolve_approach(finding) == AdjudicationApproach.STRUCTURED_CHALLENGE
+        observation = _make_observation(severity="low")
+        assert agent._resolve_approach(observation) == AdjudicationApproach.STRUCTURED_CHALLENGE
 
     def test_info_uses_challenge(self, mock_llm_client):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        finding = _make_finding(severity="info")
-        assert agent._resolve_approach(finding) == AdjudicationApproach.STRUCTURED_CHALLENGE
+        observation = _make_observation(severity="info")
+        assert agent._resolve_approach(observation) == AdjudicationApproach.STRUCTURED_CHALLENGE
 
     def test_explicit_approach_overrides_auto(self, mock_llm_client):
         agent = AdjudicatorAgent(
             client=mock_llm_client, approach=AdjudicationApproach.EVIDENCE_RUBRIC
         )
-        finding = _make_finding(severity="critical")
-        assert agent._resolve_approach(finding) == AdjudicationApproach.EVIDENCE_RUBRIC
+        observation = _make_observation(severity="critical")
+        assert agent._resolve_approach(observation) == AdjudicationApproach.EVIDENCE_RUBRIC
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -211,12 +211,12 @@ class TestStructuredChallenge:
         agent = AdjudicatorAgent(
             client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
         )
-        finding = _make_finding(severity="high")
-        results = await agent.adjudicate_findings([finding])
+        observation = _make_observation(severity="high")
+        results = await agent.adjudicate_observations([observation])
 
         assert len(results) == 1
-        assert results[0].original_severity == FindingSeverity.HIGH
-        assert results[0].adjudicated_severity == FindingSeverity.MEDIUM
+        assert results[0].original_severity == ObservationSeverity.HIGH
+        assert results[0].adjudicated_severity == ObservationSeverity.MEDIUM
         assert results[0].approach_used == AdjudicationApproach.STRUCTURED_CHALLENGE
         assert results[0].confidence == 0.85
 
@@ -226,8 +226,8 @@ class TestStructuredChallenge:
         agent = AdjudicatorAgent(
             client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
         )
-        finding = _make_finding(severity="high")
-        results = await agent.adjudicate_findings([finding])
+        observation = _make_observation(severity="high")
+        results = await agent.adjudicate_observations([observation])
 
         assert len(results) == 1
         assert results[0].original_severity == results[0].adjudicated_severity
@@ -238,11 +238,11 @@ class TestStructuredChallenge:
         agent = AdjudicatorAgent(
             client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
         )
-        finding = _make_finding(severity="high")
-        results = await agent.adjudicate_findings([finding])
+        observation = _make_observation(severity="high")
+        results = await agent.adjudicate_observations([observation])
 
         assert len(results) == 1
-        assert results[0].adjudicated_severity == FindingSeverity.HIGH
+        assert results[0].adjudicated_severity == ObservationSeverity.HIGH
         assert results[0].confidence == 0.0
         assert "inconclusive" in results[0].rationale.lower()
 
@@ -275,13 +275,13 @@ class TestAdversarialDebate:
         agent = AdjudicatorAgent(
             client=mock_llm_client, approach=AdjudicationApproach.ADVERSARIAL_DEBATE
         )
-        finding = _make_finding(severity="high")
-        results = await agent.adjudicate_findings([finding])
+        observation = _make_observation(severity="high")
+        results = await agent.adjudicate_observations([observation])
 
         assert mock_llm_client.chat.call_count == 3
         assert len(results) == 1
         assert results[0].approach_used == AdjudicationApproach.ADVERSARIAL_DEBATE
-        assert results[0].adjudicated_severity == FindingSeverity.MEDIUM
+        assert results[0].adjudicated_severity == ObservationSeverity.MEDIUM
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -296,8 +296,8 @@ class TestEvidenceRubric:
         agent = AdjudicatorAgent(
             client=mock_llm_client, approach=AdjudicationApproach.EVIDENCE_RUBRIC
         )
-        finding = _make_finding(severity="high")
-        results = await agent.adjudicate_findings([finding])
+        observation = _make_observation(severity="high")
+        results = await agent.adjudicate_observations([observation])
 
         assert len(results) == 1
         assert results[0].approach_used == AdjudicationApproach.EVIDENCE_RUBRIC
@@ -312,31 +312,31 @@ class TestEvidenceRubric:
 class TestOperatorContext:
     def test_match_exact_domain(self, mock_llm_client, sample_operator_context):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        finding = _make_finding(target_url="https://api.example.com/v1/users")
-        ctx = agent._match_asset_context(finding, sample_operator_context)
+        observation = _make_observation(target_url="https://api.example.com/v1/users")
+        ctx = agent._match_asset_context(observation, sample_operator_context)
         assert ctx is not None
         assert ctx.exposure == "internet-facing"
         assert ctx.criticality == "high"
 
     def test_match_wildcard_domain(self, mock_llm_client, sample_operator_context):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        finding = _make_finding(target_url="https://tools.internal.local/admin")
-        ctx = agent._match_asset_context(finding, sample_operator_context)
+        observation = _make_observation(target_url="https://tools.internal.local/admin")
+        ctx = agent._match_asset_context(observation, sample_operator_context)
         assert ctx is not None
         assert ctx.exposure == "vpn-only"
 
     def test_fallback_to_defaults(self, mock_llm_client, sample_operator_context):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        finding = _make_finding(target_url="https://unknown.host.com/path")
-        ctx = agent._match_asset_context(finding, sample_operator_context)
+        observation = _make_observation(target_url="https://unknown.host.com/path")
+        ctx = agent._match_asset_context(observation, sample_operator_context)
         assert ctx is not None
         assert ctx.exposure == "unknown"
         assert ctx.criticality == "medium"
 
     def test_no_context_returns_none(self, mock_llm_client):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        finding = _make_finding()
-        assert agent._match_asset_context(finding, None) is None
+        observation = _make_observation()
+        assert agent._match_asset_context(observation, None) is None
 
 
 class TestOperatorContextLoading:
@@ -389,8 +389,8 @@ class TestEventEmission:
             approach=AdjudicationApproach.STRUCTURED_CHALLENGE,
         )
 
-        finding = _make_finding(severity="high")
-        await agent.adjudicate_findings([finding])
+        observation = _make_observation(severity="high")
+        await agent.adjudicate_observations([observation])
 
         event_types = [call.args[0].event_type for call in callback.call_args_list]
         assert EventType.ADJUDICATION_START in event_types
@@ -406,8 +406,8 @@ class TestEventEmission:
             approach=AdjudicationApproach.STRUCTURED_CHALLENGE,
         )
 
-        finding = _make_finding(severity="high")
-        await agent.adjudicate_findings([finding])
+        observation = _make_observation(severity="high")
+        await agent.adjudicate_observations([observation])
 
         event_types = [call.args[0].event_type for call in callback.call_args_list]
         assert EventType.SEVERITY_UPHELD in event_types
@@ -422,8 +422,8 @@ class TestEventEmission:
             approach=AdjudicationApproach.STRUCTURED_CHALLENGE,
         )
 
-        finding = _make_finding(severity="high")
-        await agent.adjudicate_findings([finding])
+        observation = _make_observation(severity="high")
+        await agent.adjudicate_observations([observation])
 
         event_types = [call.args[0].event_type for call in callback.call_args_list]
         assert EventType.SEVERITY_ADJUSTED in event_types
@@ -435,15 +435,15 @@ class TestEventEmission:
 
 
 class TestEdgeCases:
-    async def test_no_verified_findings(self, mock_llm_client):
+    async def test_no_verified_observations(self, mock_llm_client):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        pending_finding = _make_finding(status="pending")
-        results = await agent.adjudicate_findings([pending_finding])
+        pending_observation = _make_observation(status="pending")
+        results = await agent.adjudicate_observations([pending_observation])
         assert results == []
 
-    async def test_empty_findings(self, mock_llm_client):
+    async def test_empty_observations(self, mock_llm_client):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        results = await agent.adjudicate_findings([])
+        results = await agent.adjudicate_observations([])
         assert results == []
 
     async def test_malformed_json_upholds_severity(self, mock_llm_client):
@@ -457,11 +457,11 @@ class TestEdgeCases:
         agent = AdjudicatorAgent(
             client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
         )
-        finding = _make_finding(severity="high")
-        results = await agent.adjudicate_findings([finding])
+        observation = _make_observation(severity="high")
+        results = await agent.adjudicate_observations([observation])
 
         assert len(results) == 1
-        assert results[0].adjudicated_severity == FindingSeverity.HIGH
+        assert results[0].adjudicated_severity == ObservationSeverity.HIGH
         assert results[0].confidence == 0.0
 
     async def test_stop_halts_processing(self, mock_llm_client):
@@ -479,8 +479,8 @@ class TestEdgeCases:
         agent = AdjudicatorAgent(
             client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
         )
-        findings = [_make_finding(finding_id=f"F-{i:03d}") for i in range(5)]
-        results = await agent.adjudicate_findings(findings)
+        observations = [_make_observation(observation_id=f"F-{i:03d}") for i in range(5)]
+        results = await agent.adjudicate_observations(observations)
         # Stop called after 2nd LLM call, so should have fewer than 5 results
         assert len(results) < 5
 
@@ -493,23 +493,23 @@ class TestEdgeCases:
 class TestAdjudicatedRiskModel:
     def test_valid_model(self):
         risk = AdjudicatedRisk(
-            finding_id="F-001",
-            original_severity=FindingSeverity.HIGH,
-            adjudicated_severity=FindingSeverity.MEDIUM,
+            observation_id="F-001",
+            original_severity=ObservationSeverity.HIGH,
+            adjudicated_severity=ObservationSeverity.MEDIUM,
             confidence=0.85,
             approach_used=AdjudicationApproach.STRUCTURED_CHALLENGE,
             rationale="Mitigated by VPN",
             factors={"attack_vector": "local"},
         )
-        assert risk.finding_id == "F-001"
+        assert risk.observation_id == "F-001"
         assert risk.adjudicated_by == AgentType.ADJUDICATOR
 
     def test_confidence_bounds(self):
         with pytest.raises(ValueError):
             AdjudicatedRisk(
-                finding_id="F-001",
-                original_severity=FindingSeverity.HIGH,
-                adjudicated_severity=FindingSeverity.HIGH,
+                observation_id="F-001",
+                original_severity=ObservationSeverity.HIGH,
+                adjudicated_severity=ObservationSeverity.HIGH,
                 confidence=1.5,  # Out of bounds
                 approach_used=AdjudicationApproach.AUTO,
                 rationale="Test",

@@ -12,7 +12,7 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -24,13 +24,13 @@ class WebDAVCheck(ServiceIteratingCheck):
     intrusive = True
 
     conditions = [CheckCondition("services", "truthy")]
-    produces = ["webdav_findings"]
+    produces = ["webdav_observations"]
     service_types = ["http", "html", "api"]
 
     timeout_seconds = 60.0
     delay_between_targets = 0.3
 
-    reason = "WebDAV write access = arbitrary file upload = likely RCE path, superseding AI-specific findings"
+    reason = "WebDAV write access = arbitrary file upload = likely RCE path, superseding AI-specific observations"
     references = ["OWASP WSTG-CONF-06", "CWE-284"]
     techniques = ["WebDAV method probing", "HTTP method enumeration"]
 
@@ -53,8 +53,8 @@ class WebDAVCheck(ServiceIteratingCheck):
                     "PROPFIND", service.url, headers={"Depth": "0"}
                 )
                 if not propfind_resp.error and propfind_resp.status_code in range(200, 300):
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"WebDAV PROPFIND enabled: {service.host}",
                             description="PROPFIND returned success — WebDAV directory listing possible",
@@ -80,8 +80,8 @@ class WebDAVCheck(ServiceIteratingCheck):
                     headers={"Content-Type": "text/plain"},
                 )
                 if not put_resp.error and put_resp.status_code in (200, 201, 204):
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"WebDAV write access: PUT accepted at {service.host}",
                             description="PUT request succeeded — arbitrary file upload possible via WebDAV",
@@ -96,8 +96,8 @@ class WebDAVCheck(ServiceIteratingCheck):
                     await client._request("DELETE", test_url)
 
                 elif not put_resp.error and put_resp.status_code == 401:
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"WebDAV methods require auth: {service.host}",
                             description="WebDAV PUT returned 401 — methods detected but require authentication",
@@ -114,8 +114,8 @@ class WebDAVCheck(ServiceIteratingCheck):
                 mkcol_url = service.with_path(mkcol_path)
                 mkcol_resp = await client._request("MKCOL", mkcol_url)
                 if not mkcol_resp.error and mkcol_resp.status_code in (200, 201, 204):
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"WebDAV MKCOL enabled: {service.host}",
                             description="MKCOL succeeded — directory creation via WebDAV possible",

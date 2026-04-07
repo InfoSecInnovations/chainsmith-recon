@@ -19,7 +19,7 @@ import socket
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +124,8 @@ class ReverseDnsCheck(BaseCheck):
             if not ptr_records:
                 continue
 
-            # Generate findings
-            self._generate_findings(
+            # Generate observations
+            self._generate_observations(
                 result,
                 ip,
                 forward_hosts,
@@ -182,7 +182,7 @@ class ReverseDnsCheck(BaseCheck):
         except (TimeoutError, socket.herror, socket.gaierror, OSError):
             return []
 
-    def _generate_findings(
+    def _generate_observations(
         self,
         result: CheckResult,
         ip: str,
@@ -192,13 +192,13 @@ class ReverseDnsCheck(BaseCheck):
         known_hosts: set[str],
         base_domain: str,
     ) -> None:
-        """Generate findings from PTR record results."""
+        """Generate observations from PTR record results."""
         host_label = forward_hosts[0] if forward_hosts else ip
         ptr_str = ", ".join(ptr_records)
 
-        # Base info finding: PTR record(s)
-        result.findings.append(
-            build_finding(
+        # Base info observation: PTR record(s)
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"Reverse DNS: {ip} -> {ptr_records[0]}",
                 description=(
@@ -214,8 +214,8 @@ class ReverseDnsCheck(BaseCheck):
 
         # Multiple PTR records — possible virtual hosting
         if len(ptr_records) > 1:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Multiple PTR records for {ip} (possible virtual hosting)",
                     description=(
@@ -234,8 +234,8 @@ class ReverseDnsCheck(BaseCheck):
             internal_ptrs = [
                 ptr for ptr in ptr_records if any(pat in ptr.lower() for pat in INTERNAL_PATTERNS)
             ]
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Internal hostname in PTR: {ip}",
                     description=(
@@ -259,8 +259,8 @@ class ReverseDnsCheck(BaseCheck):
                 and base_domain
                 and base_domain not in cleaned
             ):
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"PTR/forward mismatch: {ip}",
                         description=(
@@ -277,4 +277,4 @@ class ReverseDnsCheck(BaseCheck):
                         discriminator=f"mismatch-{ip}",
                     )
                 )
-                break  # One mismatch finding per IP is sufficient
+                break  # One mismatch observation per IP is sufficient

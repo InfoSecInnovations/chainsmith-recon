@@ -116,8 +116,8 @@ class PortScanCheck(BaseCheck):
                         )
                         result.services.append(service)
 
-                        result.findings.append(
-                            self.create_finding(
+                        result.observations.append(
+                            self.create_observation(
                                 title=f"Open port: {host}:{port}",
                                 description=f"TCP port {port} is accepting connections",
                                 severity="info",

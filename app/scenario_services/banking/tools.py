@@ -6,12 +6,12 @@ Banking-specific chatbot tools.
 This module provides tool definitions and execution for banking chatbots.
 Tools are divided into:
 - Legitimate tools (always available)
-- Sensitive tools (exposed based on active findings)
+- Sensitive tools (exposed based on active observations)
 
 Configurable via environment variables:
     ROUTING_NUMBER      Bank routing number (default: 062205678)
 
-Planted findings:
+Planted observations:
     customer_lookup_tool        Exposes lookup_customer_by_email
     internal_announcement_tool  Exposes get_internal_announcements
     fetch_document_tool         Exposes fetch_document with path leaks
@@ -22,7 +22,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.scenario_services.common.config import is_finding_active
+from app.scenario_services.common.config import is_observation_active
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # RESPONSE MODELS
@@ -269,9 +269,9 @@ def lookup_customer_by_email(email: str) -> dict:
     SHOULD NOT BE EXPOSED - Internal tool for support agents.
     Allows customer enumeration.
 
-    Finding: customer_lookup_tool
+    Observation: customer_lookup_tool
     """
-    if not is_finding_active("customer_lookup_tool"):
+    if not is_observation_active("customer_lookup_tool"):
         return {"error": "Tool not available"}
 
     fake_customers = {
@@ -306,9 +306,9 @@ def get_internal_announcements(category: str | None = None) -> dict:
     SHOULD NOT BE EXPOSED - Internal announcements feed.
     Leaks organizational information.
 
-    Finding: internal_announcement_tool
+    Observation: internal_announcement_tool
     """
-    if not is_finding_active("internal_announcement_tool"):
+    if not is_observation_active("internal_announcement_tool"):
         return {"error": "Tool not available"}
 
     announcements = [
@@ -356,9 +356,9 @@ def fetch_document(document_path: str) -> dict:
     """
     SHOULD NOT BE EXPOSED - Document retrieval with path traversal hints.
 
-    Finding: fetch_document_tool
+    Observation: fetch_document_tool
     """
-    if not is_finding_active("fetch_document_tool"):
+    if not is_observation_active("fetch_document_tool"):
         return {"error": "Tool not available"}
 
     allowed_docs = {
@@ -513,12 +513,12 @@ def get_active_tools() -> list[dict]:
     """Get list of tool definitions that should be active for this session."""
     tools = TOOL_DEFINITIONS.copy()
 
-    # Add sensitive tools if their finding is active
-    if is_finding_active("customer_lookup_tool"):
+    # Add sensitive tools if their observation is active
+    if is_observation_active("customer_lookup_tool"):
         tools.append(SENSITIVE_TOOL_DEFINITIONS[0])
-    if is_finding_active("internal_announcement_tool"):
+    if is_observation_active("internal_announcement_tool"):
         tools.append(SENSITIVE_TOOL_DEFINITIONS[1])
-    if is_finding_active("fetch_document_tool"):
+    if is_observation_active("fetch_document_tool"):
         tools.append(SENSITIVE_TOOL_DEFINITIONS[2])
 
     return tools

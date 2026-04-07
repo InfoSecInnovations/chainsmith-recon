@@ -94,7 +94,7 @@ class TestDnsEnumerationCheckRun:
             result = await check.run({})
 
         assert result.success is True
-        assert len(result.findings) == 2
+        assert len(result.observations) == 2
 
         # DNS outputs hostnames, not services
         assert "www.example.com" in result.outputs["target_hosts"]
@@ -140,8 +140,8 @@ class TestDnsEnumerationCheckRun:
         assert "www.example.com" in result.outputs["target_hosts"]
         assert result.outputs["dns_records"]["www.example.com"] == "192.168.1.1"
 
-    async def test_run_creates_findings(self):
-        """Run creates findings for discovered hosts."""
+    async def test_run_creates_observations(self):
+        """Run creates observations for discovered hosts."""
         check = DnsEnumerationCheck(
             base_domain="example.com",
             wordlist=["www"],
@@ -152,13 +152,13 @@ class TestDnsEnumerationCheckRun:
 
             result = await check.run({})
 
-        assert len(result.findings) == 1
-        finding = result.findings[0]
-        assert "www.example.com" in finding.title
-        assert finding.severity == "info"
-        assert finding.check_name == "dns_enumeration"
-        assert finding.target is None  # DNS findings have no Service
-        assert finding.target_url is None
+        assert len(result.observations) == 1
+        observation = result.observations[0]
+        assert "www.example.com" in observation.title
+        assert observation.severity == "info"
+        assert observation.check_name == "dns_enumeration"
+        assert observation.target is None  # DNS observations have no Service
+        assert observation.target_url is None
 
 
 class TestDnsEnumerationResolveHost:

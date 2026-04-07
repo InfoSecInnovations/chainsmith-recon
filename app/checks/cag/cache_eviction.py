@@ -17,7 +17,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Cache management endpoints to probe
@@ -87,8 +87,8 @@ class CacheEvictionCheck(ServiceIteratingCheck):
                         eviction_results.append(probe_result)
 
                         severity = self._determine_severity(probe_result)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Cache eviction endpoint: {ep_def['method']} {ep_def['path']}",
                                 description=self._build_description(probe_result),
@@ -110,8 +110,8 @@ class CacheEvictionCheck(ServiceIteratingCheck):
                     if probe_result:
                         eviction_results.append(probe_result)
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Key-specific cache eviction: {ep_def['action']}",
                                 description=self._build_description(probe_result),
@@ -215,7 +215,7 @@ class CacheEvictionCheck(ServiceIteratingCheck):
             return None
 
     def _determine_severity(self, probe_result: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if probe_result.get("accessible"):
             return "critical"
         if probe_result.get("auth_required"):
@@ -223,7 +223,7 @@ class CacheEvictionCheck(ServiceIteratingCheck):
         return "info"
 
     def _build_description(self, probe_result: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         if probe_result.get("accessible"):
             return (
                 f"Cache management endpoint {probe_result['method']} {probe_result['path']} "

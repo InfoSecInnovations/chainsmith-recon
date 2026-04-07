@@ -13,7 +13,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # State modification payloads
@@ -105,8 +105,8 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
 
                         if res["writable"]:
                             severity = "critical" if not res["validated"] else "medium"
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Agent state writable: {mod['id']}",
                                     description=(
@@ -168,8 +168,8 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
                         manipulation_results.append(thread_result)
 
                         if writable:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Thread state modifiable: thread {tid}",
                                     description=(
@@ -191,10 +191,10 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
                                 )
                             )
 
-                # 3. Check if state endpoint is read-only (info finding)
+                # 3. Check if state endpoint is read-only (info observation)
                 if state_readable and not any(r.get("writable") for r in manipulation_results):
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title="State endpoint is read-only",
                             description="State endpoint is accessible but read-only.",

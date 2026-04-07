@@ -19,7 +19,7 @@ import uuid
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Warming endpoints to probe
@@ -103,8 +103,8 @@ class CacheWarmingCheck(ServiceIteratingCheck):
                         warm_results.append(probe_result)
 
                         severity = self._determine_severity(probe_result)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Cache warming endpoint: {ep_def['path']}",
                                 description=self._build_description(probe_result),
@@ -233,7 +233,7 @@ class CacheWarmingCheck(ServiceIteratingCheck):
                 await client.post(url, json={}, headers={"Content-Type": "application/json"})
 
     def _determine_severity(self, probe_result: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if probe_result.get("content_accepted"):
             return "critical"
         if probe_result.get("accessible") and not probe_result.get("validates_input"):
@@ -245,7 +245,7 @@ class CacheWarmingCheck(ServiceIteratingCheck):
         return "info"
 
     def _build_description(self, probe_result: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         if probe_result.get("content_accepted"):
             return (
                 f"Cache warming endpoint {probe_result['path']} accepts arbitrary content "

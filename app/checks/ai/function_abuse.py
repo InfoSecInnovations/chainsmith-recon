@@ -10,7 +10,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -100,7 +100,7 @@ class FunctionCallingAbuseCheck(BaseCheck):
                     api_format,
                     discovered_tools,
                 )
-                result.findings.extend(fr.findings)
+                result.observations.extend(fr.observations)
                 result.outputs.update(fr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -203,10 +203,10 @@ class FunctionCallingAbuseCheck(BaseCheck):
             "extra_tools": list(set(extra_tools)),
         }
 
-        # Generate findings
+        # Generate observations
         if escalated:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Tool executes with elevated permissions: {escalated[0]['tool']}",
                     description="Tool responded to permission escalation probe with execution indicators",
@@ -222,8 +222,8 @@ class FunctionCallingAbuseCheck(BaseCheck):
             )
 
         if injected:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Tool parameter injection: {injected[0]['tool']}",
                     description="Tool accepted injected parameter values and returned results",
@@ -239,8 +239,8 @@ class FunctionCallingAbuseCheck(BaseCheck):
             )
 
         if invoked:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Tool invocation confirmed: {', '.join(i['tool'] for i in invoked[:3])}",
                     description="Tools execute on conversational request",
@@ -255,8 +255,8 @@ class FunctionCallingAbuseCheck(BaseCheck):
             )
 
         if not invoked and not injected and not escalated:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Tool invocation blocked by guardrails",
                     description=f"All probe attempts on {len(tools_to_test)} tools were blocked",

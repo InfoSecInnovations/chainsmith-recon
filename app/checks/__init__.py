@@ -26,7 +26,7 @@ Usage:
     runner.register_check(ServiceProbeCheck())
     runner.register_check(HeaderAnalysisCheck())
 
-    findings = await runner.run()
+    observations = await runner.run()
 """
 
 from app.checks.base import (
@@ -34,7 +34,7 @@ from app.checks.base import (
     CheckCondition,
     CheckResult,
     CheckStatus,
-    Finding,
+    Observation,
     Service,
     ServiceIteratingCheck,
     Severity,
@@ -48,7 +48,7 @@ __all__ = [
     "CheckResult",
     "CheckCondition",
     "CheckStatus",
-    "Finding",
+    "Observation",
     "Service",
     "Severity",
     # Runner

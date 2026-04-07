@@ -2,14 +2,14 @@
 app/scenario_services/common - Shared utilities for scenario services.
 
 This package provides:
-- config: Session management, finding checks, environment configuration
+- config: Session management, observation checks, environment configuration
 - (future) middleware: Common FastAPI middleware
 - (future) responses: Standard response helpers
 """
 
 from app.scenario_services.common.config import (
     HONEYPOT_ENABLED,
-    RANDOMIZE_FINDINGS,
+    RANDOMIZE_OBSERVATIONS,
     RANGE_MODE,
     RATE_LIMIT_ENABLED,
     SERVICE_NAME,
@@ -19,7 +19,7 @@ from app.scenario_services.common.config import (
     WAF_ENABLED,
     ScenarioConfig,
     SessionState,
-    get_active_findings,
+    get_active_observations,
     get_active_hallucinations,
     get_brand_domain,
     # Brand helpers
@@ -30,8 +30,8 @@ from app.scenario_services.common.config import (
     get_or_create_session,
     get_scenario_config,
     get_session_id,
-    # Finding checks
-    is_finding_active,
+    # Observation checks
+    is_observation_active,
     is_range_mode,
     reload_session,
     reset_session,
@@ -43,9 +43,9 @@ __all__ = [
     "reset_session",
     "reload_session",
     "SessionState",
-    # Findings
-    "is_finding_active",
-    "get_active_findings",
+    # Observations
+    "is_observation_active",
+    "get_active_observations",
     "get_active_hallucinations",
     "get_session_id",
     "is_range_mode",
@@ -55,7 +55,7 @@ __all__ = [
     "ScenarioConfig",
     # Flags
     "VERBOSE_ERRORS",
-    "RANDOMIZE_FINDINGS",
+    "RANDOMIZE_OBSERVATIONS",
     "RATE_LIMIT_ENABLED",
     "WAF_ENABLED",
     "HONEYPOT_ENABLED",

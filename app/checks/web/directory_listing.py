@@ -10,7 +10,7 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -21,7 +21,7 @@ class DirectoryListingCheck(ServiceIteratingCheck):
     description = "Check for enabled directory listing (autoindex) on discovered paths"
 
     conditions = [CheckCondition("services", "truthy")]
-    produces = ["directory_listing_findings"]
+    produces = ["directory_listing_observations"]
     service_types = ["http", "html", "api"]
 
     timeout_seconds = 60.0
@@ -107,8 +107,8 @@ class DirectoryListingCheck(ServiceIteratingCheck):
                         severity = "medium"
                         title = f"Directory listing enabled: {service.host}{path}"
 
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=title,
                             description=f"Directory listing enabled at {path}"

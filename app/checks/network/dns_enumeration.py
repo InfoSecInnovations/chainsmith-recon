@@ -20,7 +20,7 @@ import socket
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 # Common subdomain wordlist for active enumeration
 DEFAULT_WORDLIST = [
@@ -125,8 +125,8 @@ class DnsEnumerationCheck(BaseCheck):
                 resolved_hosts.append(hostname)
                 dns_records[hostname] = ip
 
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Host discovered: {hostname}",
                         description=f"DNS resolved {hostname} to {ip}",

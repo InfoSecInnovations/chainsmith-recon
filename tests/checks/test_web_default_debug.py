@@ -85,10 +85,10 @@ class TestDirectoryListingCheck:
         ):
             result = await check.check_service(service, {})
 
-        assert len(result.findings) >= 1
-        root_finding = [f for f in result.findings if "root" in f.title.lower()]
-        assert len(root_finding) >= 1
-        assert root_finding[0].severity == "high"
+        assert len(result.observations) >= 1
+        root_observation = [f for f in result.observations if "root" in f.title.lower()]
+        assert len(root_observation) >= 1
+        assert root_observation[0].severity == "high"
 
     @pytest.mark.asyncio
     async def test_detects_sensitive_files(self, service):
@@ -106,18 +106,18 @@ class TestDirectoryListingCheck:
         ):
             result = await check.check_service(service, {})
 
-        sensitive = [f for f in result.findings if "sensitive" in f.title.lower()]
+        sensitive = [f for f in result.observations if "sensitive" in f.title.lower()]
         assert len(sensitive) >= 1
 
     @pytest.mark.asyncio
-    async def test_no_listing_no_findings(self, service):
+    async def test_no_listing_no_observations(self, service):
         check = DirectoryListingCheck()
         with patch(
             "app.checks.web.directory_listing.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, body="<html>Normal page</html>")),
         ):
             result = await check.check_service(service, {})
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 class TestDefaultCredsCheck:
@@ -130,7 +130,7 @@ class TestDefaultCredsCheck:
         check = DefaultCredsCheck()
         with patch.object(DefaultCredsCheck, "_is_intrusive_allowed", return_value=False):
             result = await check.check_service(service, {})
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
         assert result.outputs.get("default_creds_skipped") is True
 
     @pytest.mark.asyncio
@@ -151,7 +151,7 @@ class TestDefaultCredsCheck:
         ):
             result = await check.check_service(service, context)
 
-        no_auth = [f for f in result.findings if "no authentication" in f.title.lower()]
+        no_auth = [f for f in result.observations if "no authentication" in f.title.lower()]
         assert len(no_auth) >= 1
         assert no_auth[0].severity == "critical"
 
@@ -175,19 +175,19 @@ class TestDefaultCredsCheck:
         ):
             result = await check.check_service(service, context)
 
-        login_form = [f for f in result.findings if "Login form" in f.title]
+        login_form = [f for f in result.observations if "Login form" in f.title]
         assert len(login_form) >= 1
         assert login_form[0].severity == "high"
 
     @pytest.mark.asyncio
-    async def test_no_admin_paths_no_findings(self, service):
+    async def test_no_admin_paths_no_observations(self, service):
         check = DefaultCredsCheck()
         context = {f"paths_{service.port}": {"accessible": ["/api", "/health"]}}
 
         with patch.object(DefaultCredsCheck, "_is_intrusive_allowed", return_value=True):
             result = await check.check_service(service, context)
 
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 class TestDebugEndpointCheck:
@@ -209,7 +209,7 @@ class TestDebugEndpointCheck:
         ):
             result = await check.check_service(service, {})
 
-        werkzeug = [f for f in result.findings if "Werkzeug" in f.title or "werkzeug" in f.title]
+        werkzeug = [f for f in result.observations if "Werkzeug" in f.title or "werkzeug" in f.title]
         assert len(werkzeug) >= 1
         assert werkzeug[0].severity == "critical"
 
@@ -227,7 +227,7 @@ class TestDebugEndpointCheck:
         ):
             result = await check.check_service(service, {})
 
-        django = [f for f in result.findings if "Django" in f.title or "django" in f.title.lower()]
+        django = [f for f in result.observations if "Django" in f.title or "django" in f.title.lower()]
         assert len(django) >= 1
 
     @pytest.mark.asyncio
@@ -253,7 +253,7 @@ class TestDebugEndpointCheck:
             result = await check.check_service(service, {})
 
         actuator = [
-            f for f in result.findings if "Actuator" in f.title or "actuator" in f.title.lower()
+            f for f in result.observations if "Actuator" in f.title or "actuator" in f.title.lower()
         ]
         assert len(actuator) >= 1
         assert actuator[0].severity == "high"
@@ -274,20 +274,20 @@ class TestDebugEndpointCheck:
 
         sensitive = [
             f
-            for f in result.findings
+            for f in result.observations
             if "sensitive" in f.title.lower() or "leaks" in f.title.lower()
         ]
         assert len(sensitive) >= 1
 
     @pytest.mark.asyncio
-    async def test_no_debug_endpoints_no_findings(self, service):
+    async def test_no_debug_endpoints_no_observations(self, service):
         check = DebugEndpointCheck()
         with patch(
             "app.checks.web.debug_endpoints.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(404)),
         ):
             result = await check.check_service(service, {})
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 class TestCheckRegistration:

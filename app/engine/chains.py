@@ -102,7 +102,7 @@ CHAIN_PATTERNS = [
         "title": "API Documentation Intelligence Gathering",
         "description": "Exposed API documentation combined with endpoint discovery reveals full attack surface",
         "severity": "medium",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "openapi_discovery"},
             {"check_name": "path_probe", "title_contains": "openapi"},
         ],
@@ -119,7 +119,7 @@ CHAIN_PATTERNS = [
         "title": "Technology Stack Identification",
         "description": "Version disclosure enables targeted vulnerability research",
         "severity": "medium",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "service_probe", "title_contains": "Technology"},
             {"check_name": "service_probe", "title_contains": "Server"},
         ],
@@ -136,7 +136,7 @@ CHAIN_PATTERNS = [
         "title": "Client-Side Attack Surface",
         "description": "Missing security headers enable client-side attacks",
         "severity": "low",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "header_analysis", "title_contains": "Missing security headers"}
         ],
         "exploitation_steps": [
@@ -152,7 +152,7 @@ CHAIN_PATTERNS = [
         "title": "Protected Administrative Interface",
         "description": "Admin interface exists but is protected - potential authorization bypass target",
         "severity": "medium",
-        "required_findings": [
+        "required_observations": [
             {
                 "check_name": "path_probe",
                 "title_contains": "Protected path",
@@ -172,7 +172,7 @@ CHAIN_PATTERNS = [
         "title": "Debug Endpoint Information Leakage",
         "description": "Debug endpoints may leak sensitive configuration or allow manipulation",
         "severity": "high",
-        "required_findings": [{"check_name": "openapi_discovery", "evidence_contains": "debug"}],
+        "required_observations": [{"check_name": "openapi_discovery", "evidence_contains": "debug"}],
         "exploitation_steps": [
             "Access discovered debug endpoints",
             "Extract configuration information",
@@ -186,7 +186,7 @@ CHAIN_PATTERNS = [
         "title": "Multi-Service Architecture Reconnaissance",
         "description": "Multiple services discovered increases attack surface complexity",
         "severity": "medium",
-        "required_findings": [{"check_name": "dns_enumeration", "count_gte": 2}],
+        "required_observations": [{"check_name": "dns_enumeration", "count_gte": 2}],
         "exploitation_steps": [
             "Map relationships between discovered services",
             "Identify internal communication patterns",
@@ -200,7 +200,7 @@ CHAIN_PATTERNS = [
         "title": "AI/ML Service Prompt Injection Surface",
         "description": "Chat/AI endpoints combined with API documentation suggest prompt injection opportunities",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "llm_endpoint_discovery"},
             {"check_name": "openapi_discovery"},
         ],
@@ -217,7 +217,7 @@ CHAIN_PATTERNS = [
         "title": "AI Model Information Disclosure",
         "description": "Model information endpoints reveal architecture details for targeted attacks",
         "severity": "medium",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "model_info_check"},
             {"check_name": "ai_framework_fingerprint"},
         ],
@@ -234,7 +234,7 @@ CHAIN_PATTERNS = [
         "title": "AI Service Error-Based Reconnaissance",
         "description": "Error messages from AI service reveal internal structure and tools",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "ai_error_leakage", "title_contains": "tool"},
         ],
         "exploitation_steps": [
@@ -250,7 +250,7 @@ CHAIN_PATTERNS = [
         "title": "Embedding Endpoint Data Exposure",
         "description": "Embedding endpoints may enable training data extraction or inference attacks",
         "severity": "medium",
-        "required_findings": [{"check_name": "embedding_endpoint_discovery"}],
+        "required_observations": [{"check_name": "embedding_endpoint_discovery"}],
         "exploitation_steps": [
             "Test embedding endpoint for membership inference",
             "Attempt to extract training data patterns",
@@ -265,12 +265,12 @@ CHAIN_PATTERNS = [
         "title": "RAG Pipeline Prompt Injection",
         "description": "Discovered RAG pipeline is vulnerable to indirect prompt injection, enabling attacker-controlled context to influence all responses",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "rag_discovery"},
             {"check_name": "rag_indirect_injection"},
         ],
         "exploitation_steps": [
-            "Confirm RAG pipeline endpoints from discovery findings",
+            "Confirm RAG pipeline endpoints from discovery observations",
             "Craft documents containing indirect prompt injection payloads",
             "Submit crafted queries that trigger retrieval of poisoned context",
             "Verify injection payloads execute within the LLM response",
@@ -282,7 +282,7 @@ CHAIN_PATTERNS = [
         "title": "RAG Document Exfiltration",
         "description": "RAG endpoint leaks sensitive document content through crafted retrieval queries",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "rag_discovery"},
             {"check_name": "rag_document_exfiltration"},
         ],
@@ -299,7 +299,7 @@ CHAIN_PATTERNS = [
         "title": "RAG Corpus Poisoning with Persistent Injection",
         "description": "Writable ingestion endpoint combined with injection vulnerability enables persistent attacker-controlled responses for all users",
         "severity": "critical",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "rag_corpus_poisoning"},
             {"check_name": "rag_indirect_injection"},
         ],
@@ -316,7 +316,7 @@ CHAIN_PATTERNS = [
         "title": "Vector Store Unauthenticated Access",
         "description": "Direct unauthenticated access to the vector store backend bypasses all RAG pipeline controls",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "rag_vector_store_access"},
             {"check_name": "rag_auth_bypass"},
         ],
@@ -333,7 +333,7 @@ CHAIN_PATTERNS = [
         "title": "RAG Cross-Collection Data Leakage",
         "description": "Enumerated collections combined with broken isolation enables lateral access across knowledge bases",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "rag_collection_enumeration"},
             {"check_name": "rag_cross_collection"},
         ],
@@ -350,7 +350,7 @@ CHAIN_PATTERNS = [
         "title": "RAG Metadata Injection with Source Spoofing",
         "description": "Injected metadata poisons source citations, enabling phishing or trust manipulation via fabricated references",
         "severity": "medium",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "rag_metadata_injection"},
             {"check_name": "rag_source_attribution"},
         ],
@@ -368,7 +368,7 @@ CHAIN_PATTERNS = [
         "title": "CAG Cross-User Data Leakage",
         "description": "Cache serves one user's context to another — direct data leakage across trust boundaries",
         "severity": "critical",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "cag_discovery"},
             {"check_name": "cag_cross_user_leakage"},
         ],
@@ -385,7 +385,7 @@ CHAIN_PATTERNS = [
         "title": "CAG Cache Poisoning Attack",
         "description": "Leaky cache combined with confirmed poisoning enables attacker-injected content served to other users",
         "severity": "critical",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "cag_cache_probe"},
             {"check_name": "cag_cache_poisoning"},
         ],
@@ -402,7 +402,7 @@ CHAIN_PATTERNS = [
         "title": "CAG Cache Warming with Persistent Injection",
         "description": "Cache warming accepts arbitrary content and injected prompt responses persist across users",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "cag_cache_warming"},
             {"check_name": "cag_injection_persistence"},
         ],
@@ -419,7 +419,7 @@ CHAIN_PATTERNS = [
         "title": "CAG Timing Side-Channel Query Surveillance",
         "description": "Timing differences combined with known similarity threshold reveal what other users are querying",
         "severity": "medium",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "cag_side_channel"},
             {"check_name": "cag_semantic_threshold"},
         ],
@@ -436,7 +436,7 @@ CHAIN_PATTERNS = [
         "title": "CAG Stale Context Privilege Persistence",
         "description": "Cached context outlives authorization changes; mapped TTL reveals the exploitation window",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "cag_stale_context"},
             {"check_name": "cag_ttl_mapping"},
         ],
@@ -454,7 +454,7 @@ CHAIN_PATTERNS = [
         "title": "MCP Unauthenticated Tool Execution",
         "description": "Enumerated tools with no authentication enables direct unauthenticated tool invocation",
         "severity": "critical",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "mcp_tool_enumeration"},
             {"check_name": "mcp_auth_check"},
             {"check_name": "mcp_tool_invocation"},
@@ -472,7 +472,7 @@ CHAIN_PATTERNS = [
         "title": "MCP Shadow Tool Prompt Injection",
         "description": "Hidden shadow tools that override legitimate ones are exploitable via prompt injection in tool results",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "mcp_shadow_tool_detection"},
             {"check_name": "mcp_prompt_injection"},
         ],
@@ -489,7 +489,7 @@ CHAIN_PATTERNS = [
         "title": "MCP Dangerous Tool Chain Confirmed",
         "description": "Dangerous capability combinations identified and confirmed invocable",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "mcp_tool_chain_analysis"},
             {"check_name": "mcp_tool_invocation"},
         ],
@@ -506,7 +506,7 @@ CHAIN_PATTERNS = [
         "title": "MCP Schema-Informed Tool Exploitation",
         "description": "Leaked schemas reveal parameter structure, enabling precisely crafted tool invocations",
         "severity": "medium",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "mcp_schema_leakage"},
             {"check_name": "mcp_tool_invocation"},
         ],
@@ -523,7 +523,7 @@ CHAIN_PATTERNS = [
         "title": "MCP Resource Traversal with Template Injection",
         "description": "Path traversal on resources combined with template injection enables server-side file access or SSRF",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "mcp_resource_traversal"},
             {"check_name": "mcp_template_injection"},
         ],
@@ -541,7 +541,7 @@ CHAIN_PATTERNS = [
         "title": "Agent Goal Hijacking",
         "description": "Discovered agent endpoints are vulnerable to goal override, redirecting autonomous agent behavior",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "agent_discovery"},
             {"check_name": "agent_goal_injection"},
         ],
@@ -558,7 +558,7 @@ CHAIN_PATTERNS = [
         "title": "Agent Persistent Memory Compromise",
         "description": "Extracted agent memory reveals context for poisoning, enabling persistent attacker instructions",
         "severity": "critical",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "agent_memory_extraction"},
             {"check_name": "agent_memory_poisoning"},
         ],
@@ -575,7 +575,7 @@ CHAIN_PATTERNS = [
         "title": "Agent Privilege Escalation via Tool Abuse",
         "description": "Conversational tool invocation combined with privilege claims enables escalated operations",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "agent_tool_abuse"},
             {"check_name": "agent_privilege_escalation"},
         ],
@@ -592,7 +592,7 @@ CHAIN_PATTERNS = [
         "title": "Multi-Agent Lateral Injection Chain",
         "description": "Multi-agent topology discovered; output from one agent poisons another through trusted channels",
         "severity": "critical",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "agent_multi_agent_detection"},
             {"check_name": "agent_cross_injection"},
             {"check_name": "agent_trust_chain"},
@@ -610,7 +610,7 @@ CHAIN_PATTERNS = [
         "title": "Agent Guardrail Bypass via Context Overflow",
         "description": "Triggerable loops combined with context overflow pushes safety instructions out of the context window",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "agent_loop_detection"},
             {"check_name": "agent_context_overflow"},
         ],
@@ -627,7 +627,7 @@ CHAIN_PATTERNS = [
         "title": "Agent Framework Targeted Exploitation",
         "description": "Specific framework version identified with confirmed exploitable known vulnerabilities",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "agent_framework_version"},
             {"check_name": "agent_framework_exploits"},
         ],
@@ -645,7 +645,7 @@ CHAIN_PATTERNS = [
         "title": "Full LLM Compromise Pipeline",
         "description": "System prompt extracted and tools discovered enables fully informed attacks against the LLM service",
         "severity": "critical",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "llm_endpoint_discovery"},
             {"check_name": "prompt_leakage"},
             {"check_name": "tool_discovery"},
@@ -663,7 +663,7 @@ CHAIN_PATTERNS = [
         "title": "Unauthenticated RAG Data Exfiltration",
         "description": "No authentication on AI endpoints combined with RAG pipeline enables unauthenticated document theft",
         "severity": "critical",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "auth_bypass"},
             {"check_name": "rag_discovery"},
             {"check_name": "rag_document_exfiltration"},
@@ -681,7 +681,7 @@ CHAIN_PATTERNS = [
         "title": "Content Filter Bypass Pipeline",
         "description": "Filters characterized, jailbreaks confirmed, and streaming bypasses content filtering",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "content_filter_check"},
             {"check_name": "jailbreak_testing"},
             {"check_name": "streaming_analysis"},
@@ -699,7 +699,7 @@ CHAIN_PATTERNS = [
         "title": "Cross-Origin AI Service Abuse",
         "description": "Permissive CORS on AI endpoints allows any website to make cross-origin requests to the LLM",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "cors_check"},
             {"check_name": "llm_endpoint_discovery"},
         ],
@@ -716,12 +716,12 @@ CHAIN_PATTERNS = [
         "title": "SSRF via Agent Callback Injection",
         "description": "URL-accepting parameters combined with agent callback injection enables server-side request forgery",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "ssrf_indicator"},
             {"check_name": "agent_callback_injection"},
         ],
         "exploitation_steps": [
-            "Identify parameters that accept URLs from SSRF indicator findings",
+            "Identify parameters that accept URLs from SSRF indicator observations",
             "Craft callback injection payloads targeting internal network resources",
             "Submit payloads through the agent's callback/webhook interface",
             "Verify the agent makes server-side requests to attacker-specified URLs",
@@ -733,7 +733,7 @@ CHAIN_PATTERNS = [
         "title": "Infrastructure-Informed AI Attack",
         "description": "Leaked config files reveal API keys and settings that inform targeted attacks against the identified AI framework",
         "severity": "medium",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "config_exposure"},
             {"check_name": "ai_framework_fingerprint"},
         ],
@@ -750,7 +750,7 @@ CHAIN_PATTERNS = [
         "title": "Financial Denial of Service via Token Exhaustion",
         "description": "Rate limit bypass combined with expensive completions enables uncapped cost generation",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "rate_limit_check"},
             {"check_name": "token_cost_exhaustion"},
         ],
@@ -767,7 +767,7 @@ CHAIN_PATTERNS = [
         "title": "API Schema-Informed Mass Assignment",
         "description": "Full API schema reveals data models; mass assignment confirms writable fields that should be protected",
         "severity": "high",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "openapi_discovery"},
             {"check_name": "mass_assignment"},
         ],
@@ -784,7 +784,7 @@ CHAIN_PATTERNS = [
         "title": "Credential Compromise via Default Credentials",
         "description": "Authentication mechanism identified and default credentials confirmed working",
         "severity": "high",
-        "required_findings": [{"check_name": "auth_detection"}, {"check_name": "default_creds"}],
+        "required_observations": [{"check_name": "auth_detection"}, {"check_name": "default_creds"}],
         "exploitation_steps": [
             "Identify the authentication mechanism in use (Basic, Bearer, OAuth, form)",
             "Confirm default credentials provide valid access to the application",
@@ -798,7 +798,7 @@ CHAIN_PATTERNS = [
         "title": "MCP-to-Agent Injection Pipeline",
         "description": "MCP tools feed into agent context; prompt injection via tool results hijacks agent behavior",
         "severity": "critical",
-        "required_findings": [
+        "required_observations": [
             {"check_name": "mcp_discovery"},
             {"check_name": "agent_discovery"},
             {"check_name": "mcp_prompt_injection"},
@@ -890,9 +890,9 @@ def detect_rule_based_chains(state: "AppState") -> list[dict]:
     chain_counter = 0
 
     for pattern in CHAIN_PATTERNS:
-        matching_findings = match_pattern(pattern, state.findings)
+        matching_observations = match_pattern(pattern, state.observations)
 
-        if matching_findings:
+        if matching_observations:
             chain_counter += 1
             chains.append(
                 {
@@ -900,7 +900,7 @@ def detect_rule_based_chains(state: "AppState") -> list[dict]:
                     "title": pattern["title"],
                     "description": pattern["description"],
                     "severity": pattern["severity"],
-                    "finding_ids": [f["id"] for f in matching_findings],
+                    "observation_ids": [f["id"] for f in matching_observations],
                     "exploitation_steps": pattern["exploitation_steps"],
                     "source": "rule-based",
                     "pattern_name": pattern["name"],
@@ -911,74 +911,76 @@ def detect_rule_based_chains(state: "AppState") -> list[dict]:
     return chains
 
 
-def match_pattern(pattern: dict, findings: list[dict]) -> list[dict]:
-    """Check if findings match a pattern's requirements."""
-    matched_findings = []
+def match_pattern(pattern: dict, observations: list[dict]) -> list[dict]:
+    """Check if observations match a pattern's requirements."""
+    matched_observations = []
 
-    for req in pattern["required_findings"]:
+    for req in pattern["required_observations"]:
         matching = []
 
-        for finding in findings:
+        for observation in observations:
             # Check check_name match
-            if req.get("check_name") and finding.get("check_name") != req["check_name"]:
+            if req.get("check_name") and observation.get("check_name") != req["check_name"]:
                 continue
 
             # Check title_contains
             if req.get("title_contains"):
-                if req["title_contains"].lower() not in finding.get("title", "").lower():
+                if req["title_contains"].lower() not in observation.get("title", "").lower():
                     continue
 
             # Check title_contains_2 (secondary filter)
             if req.get("title_contains_2"):
-                if req["title_contains_2"].lower() not in finding.get("title", "").lower():
+                if req["title_contains_2"].lower() not in observation.get("title", "").lower():
                     continue
 
             # Check evidence_contains
             if req.get("evidence_contains"):
-                if req["evidence_contains"].lower() not in finding.get("evidence", "").lower():
+                if req["evidence_contains"].lower() not in observation.get("evidence", "").lower():
                     continue
 
-            # Check count_gte (minimum count of findings)
+            # Check count_gte (minimum count of observations)
             if req.get("count_gte"):
-                count = len([f for f in findings if f.get("check_name") == req["check_name"]])
+                count = len(
+                    [f for f in observations if f.get("check_name") == req["check_name"]]
+                )
                 if count < req["count_gte"]:
                     continue
 
-            matching.append(finding)
+            matching.append(observation)
 
         if not matching:
             return []  # Pattern not fully matched
 
-        matched_findings.extend(matching)
+        matched_observations.extend(matching)
 
     # Deduplicate
     seen_ids = set()
-    unique_findings = []
-    for f in matched_findings:
+    unique_observations = []
+    for f in matched_observations:
         if f["id"] not in seen_ids:
             seen_ids.add(f["id"])
-            unique_findings.append(f)
+            unique_observations.append(f)
 
-    return unique_findings
+    return unique_observations
 
 
-def _build_chain_prompt(state: "AppState", findings_summary: list[dict]) -> str:
+def _build_chain_prompt(state: "AppState", observations_summary: list[dict]) -> str:
     """Build the chain analysis prompt."""
-    return f"""You are a penetration testing expert analyzing reconnaissance findings for attack chain opportunities.
+    return f"""You are a penetration testing expert analyzing reconnaissance observations for attack chain opportunities.
 
 Target: {state.target}
 
-Findings discovered:
-{format_findings_for_llm(findings_summary)}
+Observations discovered:
+{format_observations_for_llm(observations_summary)}
 
-Analyze these findings and identify potential ATTACK CHAINS - combinations of findings that together enable a more severe attack than any single finding alone.
+Analyze these observations and identify potential ATTACK CHAINS - combinations of observations that together enable a more severe attack than any single observation alone.
 
 For each chain you identify, provide:
 1. A descriptive title
-2. Which finding IDs are involved
+2. Which observation IDs are involved
 3. The combined severity (low/medium/high/critical)
 4. Brief step-by-step exploitation instructions (keep each step to one short sentence)
-5. A concise reasoning for why these findings combine into a chain (2-3 sentences max)
+5. A concise reasoning for why these observations combine into a chain (2-3 sentences max)
 
 Be concise. Limit to the top 5 most impactful chains.
 
@@ -987,15 +989,15 @@ IMPORTANT: Respond with ONLY valid JSON, no other text. Use this exact format:
     "chains": [
         {{
             "title": "Chain title",
-            "finding_ids": ["F-001", "F-002"],
+            "observation_ids": ["O-001", "O-002"],
             "severity": "high",
             "exploitation_steps": ["Step 1", "Step 2"],
-            "reasoning": "Why these findings combine..."
+            "reasoning": "Why these observations combine..."
         }}
     ]
 }}
 
-Only include chains that represent genuine combined attack opportunities. If no additional chains beyond obvious single-finding attacks exist, return {{"chains": []}}."""
+Only include chains that represent genuine combined attack opportunities. If no additional chains beyond obvious single-observation attacks exist, return {{"chains": []}}."""
 
 
 async def detect_llm_chains(state: "AppState") -> ChainAnalysisResult:
@@ -1015,10 +1017,10 @@ async def detect_llm_chains(state: "AppState") -> ChainAnalysisResult:
             attempts=0,
         )
 
-    # Prepare findings summary
-    findings_summary = []
-    for f in state.findings:
-        findings_summary.append(
+    # Prepare observations summary
+    observations_summary = []
+    for f in state.observations:
+        observations_summary.append(
             {
                 "id": f["id"],
                 "title": f["title"],
@@ -1029,7 +1031,7 @@ async def detect_llm_chains(state: "AppState") -> ChainAnalysisResult:
             }
         )
 
-    prompt = _build_chain_prompt(state, findings_summary)
+    prompt = _build_chain_prompt(state, observations_summary)
     sanitized_prompt_used = False
     attempts = 0
     last_response: LLMResponse | None = None
@@ -1124,7 +1126,7 @@ def _build_chain_objects(llm_chains: list[dict], state: "AppState") -> list[dict
                 "title": lc.get("title", "LLM-discovered chain"),
                 "description": lc.get("reasoning", ""),
                 "severity": lc.get("severity", "medium"),
-                "finding_ids": lc.get("finding_ids", []),
+                "observation_ids": lc.get("observation_ids", []),
                 "exploitation_steps": lc.get("exploitation_steps", []),
                 "source": "llm",
                 "pattern_name": None,
@@ -1135,10 +1137,10 @@ def _build_chain_objects(llm_chains: list[dict], state: "AppState") -> list[dict
     return chains
 
 
-def format_findings_for_llm(findings: list[dict]) -> str:
-    """Format findings for LLM prompt."""
+def format_observations_for_llm(observations: list[dict]) -> str:
+    """Format observations for LLM prompt."""
     lines = []
-    for f in findings:
+    for f in observations:
         lines.append(f"- {f['id']}: [{f['severity'].upper()}] {f['title']}")
         lines.append(f"  Check: {f['check']}, Target: {f['target']}")
         if f["evidence"]:
@@ -1207,10 +1209,10 @@ def parse_llm_response(content: str) -> list[dict] | None:
 
 def find_overlapping_chain(new_chain: dict, existing_chains: list[dict]) -> dict | None:
     """Find if a chain overlaps significantly with existing chains."""
-    new_ids = set(new_chain.get("finding_ids", []))
+    new_ids = set(new_chain.get("observation_ids", []))
 
     for existing in existing_chains:
-        existing_ids = set(existing.get("finding_ids", []))
+        existing_ids = set(existing.get("observation_ids", []))
 
         # Check for >50% overlap
         overlap = len(new_ids & existing_ids)

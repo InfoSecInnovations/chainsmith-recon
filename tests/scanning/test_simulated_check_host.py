@@ -19,7 +19,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestSimulatedCheckHostGeneration:
-    """Tests for service and finding generation from hosts output."""
+    """Tests for service and observation generation from hosts output."""
 
     async def test_hosts_generate_services(self):
         """Hosts in output generate Service objects."""
@@ -45,8 +45,8 @@ class TestSimulatedCheckHostGeneration:
         assert result.services[1].host == "api.example.local"
         assert result.services[1].port == 8080
 
-    async def test_hosts_generate_findings(self):
-        """Hosts in output generate Finding objects."""
+    async def test_hosts_generate_observations(self):
+        """Hosts in output generate Observation objects."""
         config = SimulationConfig(
             suite="network",
             emulates="dns_enumeration",
@@ -58,11 +58,11 @@ class TestSimulatedCheckHostGeneration:
 
         result = await check.run({})
 
-        assert len(result.findings) == 1
-        finding = result.findings[0]
-        assert "www.example.local" in finding.title
-        assert finding.severity == "info"
-        assert finding.check_name == "dns_enumeration"
+        assert len(result.observations) == 1
+        observation = result.observations[0]
+        assert "www.example.local" in observation.title
+        assert observation.severity == "info"
+        assert observation.check_name == "dns_enumeration"
 
     async def test_host_service_metadata(self):
         """Service metadata includes IP and simulated flag."""
@@ -157,14 +157,14 @@ class TestSimulatedCheckHostGeneration:
         result = await check.run({})
 
         assert result.services == []
-        assert result.findings == []
+        assert result.observations == []
 
 
 class TestSimulatedCheckDnsFormat:
     """Tests for the new DNS simulation format (target_hosts + dns_records)."""
 
-    async def test_dns_format_generates_findings_not_services(self):
-        """DNS format (target_hosts + dns_records) creates findings but no services."""
+    async def test_dns_format_generates_observations_not_services(self):
+        """DNS format (target_hosts + dns_records) creates observations but no services."""
         config = SimulationConfig(
             suite="network",
             emulates="dns_enumeration",
@@ -184,11 +184,11 @@ class TestSimulatedCheckDnsFormat:
 
         # DNS should not create services
         assert result.services == []
-        # But should create findings
-        assert len(result.findings) == 2
+        # But should create observations
+        assert len(result.observations) == 2
 
-    async def test_dns_format_finding_content(self):
-        """DNS findings have correct content and no target/target_url."""
+    async def test_dns_format_observation_content(self):
+        """DNS observations have correct content and no target/target_url."""
         config = SimulationConfig(
             suite="network",
             emulates="dns_enumeration",
@@ -205,12 +205,12 @@ class TestSimulatedCheckDnsFormat:
 
         result = await check.run({})
 
-        finding = result.findings[0]
-        assert "www.example.local" in finding.title
-        assert "192.168.1.1" in finding.description
-        assert finding.target is None
-        assert finding.target_url is None
-        assert finding.check_name == "dns_enumeration"
+        observation = result.observations[0]
+        assert "www.example.local" in observation.title
+        assert "192.168.1.1" in observation.description
+        assert observation.target is None
+        assert observation.target_url is None
+        assert observation.check_name == "dns_enumeration"
 
     async def test_dns_format_outputs_preserved(self):
         """DNS format preserves target_hosts and dns_records in outputs."""
@@ -410,7 +410,7 @@ class TestRealSimulationFiles:
 
         assert result.success is True
         assert len(result.services) > 0
-        assert len(result.findings) > 0
+        assert len(result.observations) > 0
 
     def test_load_dns_exception(self, simulations_dir: Path):
         """Load actual dns_exception.yaml file."""

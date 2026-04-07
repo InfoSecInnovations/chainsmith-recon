@@ -131,7 +131,7 @@ async def submit_result(
     body: TaskResultPayload,
     key_id: str = Depends(require_swarm_auth),
 ):
-    """Submit check results (findings). This is how findings flow back."""
+    """Submit check results (observations). This is how observations flow back."""
     coordinator = get_coordinator()
     if not coordinator.complete_task(task_id, body):
         raise HTTPException(status_code=404, detail="Task not found or not assigned to this agent")

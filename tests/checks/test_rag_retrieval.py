@@ -164,7 +164,7 @@ class TestDocumentExfiltration:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
         assert "credentials" in critical[0].title.lower() or "api" in str(result.outputs).lower()
 
@@ -204,7 +204,7 @@ class TestDocumentExfiltration:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        low = [f for f in result.findings if f.severity == "low"]
+        low = [f for f in result.observations if f.severity == "low"]
         assert len(low) >= 1
         assert "non-sensitive" in low[0].title.lower()
 
@@ -235,7 +235,7 @@ class TestRetrievalManipulation:
         assert "retrieval_control" in result.outputs
         # Should detect that top_k is overridable
         if result.outputs["retrieval_control"]["topk_overridable"]:
-            high = [f for f in result.findings if f.severity == "high"]
+            high = [f for f in result.observations if f.severity == "high"]
             assert len(high) >= 1
 
     @pytest.mark.asyncio
@@ -254,7 +254,7 @@ class TestRetrievalManipulation:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        low = [f for f in result.findings if f.severity == "low"]
+        low = [f for f in result.observations if f.severity == "low"]
         assert len(low) >= 1
 
 
@@ -305,7 +305,7 @@ class TestSourceAttribution:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1
 
 
@@ -346,7 +346,7 @@ class TestFusionReranker:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1
 
 
@@ -380,8 +380,8 @@ class TestCrossCollection:
 
         assert result.success
         # Should detect cross-collection leak
-        leak_findings = [f for f in result.findings if f.severity in ("critical", "high")]
-        assert len(leak_findings) >= 1
+        leak_observations = [f for f in result.observations if f.severity in ("critical", "high")]
+        assert len(leak_observations) >= 1
 
     @pytest.mark.asyncio
     async def test_isolation_enforced(self, sample_service, kb_structure_context):
@@ -405,5 +405,5 @@ class TestCrossCollection:
             result = await check.check_service(sample_service, kb_structure_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1

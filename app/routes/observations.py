@@ -1,12 +1,12 @@
 """
-app/routes/findings.py - Findings Routes
+app/routes/observations.py - Observations Routes
 
 Endpoints for:
-- Listing findings
-- Finding details
-- Finding grouping by host
+- Listing observations
+- Observation details
+- Observation grouping by host
 
-When an optional `scan_id` query parameter is provided, findings are
+When an optional `scan_id` query parameter is provided, observations are
 read from the database (historical). Otherwise, the active scan's
 in-memory data is returned (current behavior).
 """
@@ -15,37 +15,37 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.db.repositories import FindingRepository
+from app.db.repositories import ObservationRepository
 from app.state import state
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_finding_repo = FindingRepository()
+_observation_repo = ObservationRepository()
 
 
-@router.get("/api/v1/findings")
-async def get_findings(
+@router.get("/api/v1/observations")
+async def get_observations(
     scan_id: str | None = Query(None, description="Historical scan ID"),
     severity: str | None = Query(None, description="Filter by severity"),
     host: str | None = Query(None, description="Filter by host"),
 ):
-    """Get all findings. Pass scan_id to read from a historical scan."""
+    """Get all observations. Pass scan_id to read from a historical scan."""
     if scan_id:
-        findings = await _finding_repo.get_findings(scan_id, severity=severity, host=host)
-        return {"total": len(findings), "findings": findings}
+        observations = await _observation_repo.get_observations(scan_id, severity=severity, host=host)
+        return {"total": len(observations), "observations": observations}
 
-    return {"total": len(state.findings), "findings": state.findings}
+    return {"total": len(state.observations), "observations": state.observations}
 
 
-@router.get("/api/v1/findings/by-host")
-async def get_findings_by_host(
+@router.get("/api/v1/observations/by-host")
+async def get_observations_by_host(
     scan_id: str | None = Query(None, description="Historical scan ID"),
 ):
-    """Get findings grouped by host. Pass scan_id for historical data."""
+    """Get observations grouped by host. Pass scan_id for historical data."""
     if scan_id:
-        hosts = await _finding_repo.get_findings_by_host(scan_id)
+        hosts = await _observation_repo.get_observations_by_host(scan_id)
         # Determine target from scan record
         from app.db.repositories import ScanRepository
 
@@ -54,7 +54,7 @@ async def get_findings_by_host(
         return {"target": target, "hosts": hosts}
 
     hosts = {}
-    for f in state.findings:
+    for f in state.observations:
         # Try to extract host from various fields
         host = None
 
@@ -66,10 +66,10 @@ async def get_findings_by_host(
             else:
                 host = target_url.split("/")[0]
 
-        # Fall back to extracting from finding ID (format: checkname-hostname-...)
+        # Fall back to extracting from observation ID (format: checkname-hostname-...)
         if not host:
-            finding_id = f.get("id", "")
-            parts = finding_id.split("-")
+            observation_id = f.get("id", "")
+            parts = observation_id.split("-")
             if len(parts) >= 2:
                 # Skip the check name prefix, grab potential hostname
                 potential_host = parts[1]
@@ -87,14 +87,14 @@ async def get_findings_by_host(
 
     return {
         "target": state.target,
-        "hosts": [{"name": host, "findings": findings} for host, findings in hosts.items()],
+        "hosts": [{"name": host, "observations": observations} for host, observations in hosts.items()],
     }
 
 
-@router.get("/api/v1/findings/{finding_id}")
-async def get_finding_detail(finding_id: str):
-    """Get detailed info about a specific finding."""
-    finding = next((f for f in state.findings if f["id"] == finding_id), None)
-    if not finding:
-        raise HTTPException(404, f"Finding '{finding_id}' not found")
-    return finding
+@router.get("/api/v1/observations/{observation_id}")
+async def get_observation_detail(observation_id: str):
+    """Get detailed info about a specific observation."""
+    observation = next((f for f in state.observations if f["id"] == observation_id), None)
+    if not observation:
+        raise HTTPException(404, f"Observation '{observation_id}' not found")
+    return observation

@@ -18,7 +18,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import cap_response, log_invocation
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Traversal payloads — read-only probes only
@@ -117,8 +117,8 @@ class MCPResourceTraversalCheck(BaseCheck):
                             # Check for actual file content indicators
                             body = r["body"]
                             if self._looks_like_file_content(body, attack_type):
-                                result.findings.append(
-                                    build_finding(
+                                result.observations.append(
+                                    build_observation(
                                         check_name=self.name,
                                         title=f"Resource path traversal: {uri} returned file contents",
                                         description=f"The MCP resource endpoint returned actual file contents for traversal URI: {uri}",
@@ -130,8 +130,8 @@ class MCPResourceTraversalCheck(BaseCheck):
                                     )
                                 )
                             elif r.get("error_leaks_path"):
-                                result.findings.append(
-                                    build_finding(
+                                result.observations.append(
+                                    build_observation(
                                         check_name=self.name,
                                         title="Resource traversal blocked but error leaks file path",
                                         description=f"Error message reveals internal path structure for URI: {uri}",
@@ -156,8 +156,8 @@ class MCPResourceTraversalCheck(BaseCheck):
 
                         if r["success"] and r["has_content"]:
                             if self._looks_like_ssrf_content(r["body"], attack_type):
-                                result.findings.append(
-                                    build_finding(
+                                result.observations.append(
+                                    build_observation(
                                         check_name=self.name,
                                         title=f"SSRF via MCP resource: {uri} returned internal data",
                                         description=f"The MCP resource endpoint fetched an internal URL: {uri}",
@@ -173,8 +173,8 @@ class MCPResourceTraversalCheck(BaseCheck):
                     for uri, attack_type, _desc in PROTOCOL_PAYLOADS:
                         r = await self._probe_resource(client, server_url, uri)
                         if r["success"] and r["has_content"]:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Resource URI accepts {uri.split(':')[0]}:// protocol",
                                     description=f"The MCP resource endpoint accepted a non-standard protocol URI: {uri}",
@@ -187,9 +187,9 @@ class MCPResourceTraversalCheck(BaseCheck):
                             )
 
                     # If nothing found
-                    if not any(f.check_name == self.name for f in result.findings):
-                        result.findings.append(
-                            build_finding(
+                    if not any(f.check_name == self.name for f in result.observations):
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Resource URI validation enforced (traversal attempts rejected)",
                                 description="MCP resource URIs are properly validated against traversal and SSRF.",

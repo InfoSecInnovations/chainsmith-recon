@@ -13,7 +13,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Reflection-targeted injection prompts
@@ -160,8 +160,8 @@ class AgentReflectionAbuseCheck(ServiceIteratingCheck):
                     reflection_results.append(analysis)
 
                     if analysis["reflection_exploited"]:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Reflection abuse: {prompt['id']}",
                                 description=(
@@ -185,8 +185,8 @@ class AgentReflectionAbuseCheck(ServiceIteratingCheck):
                             )
                         )
                     elif analysis["reflection_active"]:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Agent reflection influenced: {prompt['id']}",
                                 description=(

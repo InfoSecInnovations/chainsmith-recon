@@ -21,7 +21,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import cap_response
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Injection payloads by type
@@ -134,8 +134,8 @@ class ResourceTemplateInjectionCheck(BaseCheck):
 
                                     if probe["vulnerable"]:
                                         severity = self._injection_severity(inj_type, probe)
-                                        result.findings.append(
-                                            build_finding(
+                                        result.observations.append(
+                                            build_observation(
                                                 check_name=self.name,
                                                 title=f"Resource template {inj_type} injection: parameter '{param}' is vulnerable",
                                                 description=(
@@ -164,10 +164,10 @@ class ResourceTemplateInjectionCheck(BaseCheck):
 
                     # If templates exist but no injection found
                     if templates and not any(
-                        f.check_name == self.name and f.severity != "info" for f in result.findings
+                        f.check_name == self.name and f.severity != "info" for f in result.observations
                     ):
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Resource template parameters properly validated",
                                 description=f"Tested {len(templates)} resource templates, no injection vulnerabilities found.",

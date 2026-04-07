@@ -20,7 +20,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Per-store probes: (path, method, body_or_none, description)
@@ -136,8 +136,8 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
                         accessible.append(store_result)
                         severity = self._determine_severity(store_result)
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Vector store directly accessible: {store_type}",
                                 description=self._build_description(store_result),

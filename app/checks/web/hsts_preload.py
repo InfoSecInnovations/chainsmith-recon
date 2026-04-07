@@ -12,7 +12,7 @@ import logging
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
@@ -43,8 +43,8 @@ class HSTSPreloadCheck(ServiceIteratingCheck):
         hsts_header = self._get_hsts_header(service, context)
 
         if not hsts_header and service.scheme != "https":
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"No HSTS header: {service.host}",
                     description="No HSTS header present — HSTS preload check not applicable",
@@ -116,10 +116,10 @@ class HSTSPreloadCheck(ServiceIteratingCheck):
             }
         )
 
-        # Generate findings based on preload status
+        # Generate observations based on preload status
         if is_preloaded:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Domain is HSTS preloaded: {service.host}",
                     description="Domain is on the Chromium HSTS preload list — browsers enforce HTTPS on first visit",
@@ -132,8 +132,8 @@ class HSTSPreloadCheck(ServiceIteratingCheck):
                 )
             )
         elif has_preload_directive and not is_preloaded:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"HSTS preload directive present but not yet preloaded: {service.host}",
                     description="The HSTS header includes the preload directive, but the domain is not yet on the preload list. Submission may be pending or rejected.",
@@ -159,8 +159,8 @@ class HSTSPreloadCheck(ServiceIteratingCheck):
                 f"Missing: {', '.join(missing)}" if missing else "Preload list submission required"
             )
 
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"HSTS header present but domain not preloaded: {service.host}",
                     description=f"HSTS is configured but the domain is not on the browser preload list — first visit is still vulnerable to SSL stripping. {detail}",

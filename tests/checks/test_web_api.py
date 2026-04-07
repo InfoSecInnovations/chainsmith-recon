@@ -107,8 +107,8 @@ class TestOpenAPICheckService:
         with patch("app.checks.web.openapi.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        spec_findings = [f for f in result.findings if "OpenAPI" in f.title]
-        assert len(spec_findings) == 1
+        spec_observations = [f for f in result.observations if "OpenAPI" in f.title]
+        assert len(spec_observations) == 1
 
     async def test_swagger_json_discovery(self, sample_service):
         """Swagger JSON spec is detected."""
@@ -129,7 +129,7 @@ class TestOpenAPICheckService:
         with patch("app.checks.web.openapi.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) == 1
+        assert len(result.observations) == 1
 
     async def test_sensitive_endpoints_high_severity(self, sample_service):
         """Sensitive endpoints increase severity."""
@@ -151,8 +151,8 @@ class TestOpenAPICheckService:
         with patch("app.checks.web.openapi.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) == 1
-        assert result.findings[0].severity == "high"
+        assert len(result.observations) == 1
+        assert result.observations[0].severity == "high"
 
     async def test_swagger_ui_detection(self, sample_service):
         """Swagger UI HTML is detected."""
@@ -167,8 +167,8 @@ class TestOpenAPICheckService:
         with patch("app.checks.web.openapi.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        ui_findings = [f for f in result.findings if "UI" in f.title]
-        assert len(ui_findings) == 1
+        ui_observations = [f for f in result.observations if "UI" in f.title]
+        assert len(ui_observations) == 1
 
     async def test_sets_outputs_on_discovery(self, sample_service):
         """Outputs contain spec data."""
@@ -212,7 +212,7 @@ class TestCorsCheckService:
     """Tests for CorsCheck.check_service."""
 
     async def test_cors_wildcard_detection(self, sample_service):
-        """CORS wildcard origin creates finding."""
+        """CORS wildcard origin creates observation."""
         check = CorsCheck()
         check.TEST_ORIGINS = ["https://evil.com"]
 
@@ -225,9 +225,9 @@ class TestCorsCheckService:
         with patch("app.checks.web.cors.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        wildcard_findings = [f for f in result.findings if "wildcard" in f.title.lower()]
-        assert len(wildcard_findings) == 1
-        assert wildcard_findings[0].severity == "medium"
+        wildcard_observations = [f for f in result.observations if "wildcard" in f.title.lower()]
+        assert len(wildcard_observations) == 1
+        assert wildcard_observations[0].severity == "medium"
 
     async def test_cors_wildcard_with_credentials(self, sample_service):
         """Wildcard with credentials is high severity."""
@@ -244,11 +244,11 @@ class TestCorsCheckService:
         with patch("app.checks.web.cors.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) == 1
-        assert result.findings[0].severity == "high"
+        assert len(result.observations) == 1
+        assert result.observations[0].severity == "high"
 
     async def test_cors_origin_reflection(self, sample_service):
-        """Reflected origin creates finding."""
+        """Reflected origin creates observation."""
         check = CorsCheck()
         check.TEST_ORIGINS = ["https://evil.attacker.com"]
 
@@ -261,11 +261,11 @@ class TestCorsCheckService:
         with patch("app.checks.web.cors.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        reflect_findings = [f for f in result.findings if "reflects" in f.title.lower()]
-        assert len(reflect_findings) == 1
+        reflect_observations = [f for f in result.observations if "reflects" in f.title.lower()]
+        assert len(reflect_observations) == 1
 
     async def test_cors_null_origin(self, sample_service):
-        """Null origin creates finding."""
+        """Null origin creates observation."""
         check = CorsCheck()
         check.TEST_ORIGINS = ["null"]
 
@@ -278,12 +278,12 @@ class TestCorsCheckService:
         with patch("app.checks.web.cors.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        null_findings = [f for f in result.findings if "null" in f.title.lower()]
-        assert len(null_findings) == 1
-        assert null_findings[0].severity == "medium"
+        null_observations = [f for f in result.observations if "null" in f.title.lower()]
+        assert len(null_observations) == 1
+        assert null_observations[0].severity == "medium"
 
     async def test_no_cors_headers(self, sample_service):
-        """No CORS headers means no finding."""
+        """No CORS headers means no observation."""
         check = CorsCheck()
         check.TEST_ORIGINS = ["https://evil.com"]
 
@@ -292,7 +292,7 @@ class TestCorsCheckService:
         with patch("app.checks.web.cors.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     async def test_error_handling(self, sample_service):
         """HTTP errors are captured."""

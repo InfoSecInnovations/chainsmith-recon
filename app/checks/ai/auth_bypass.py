@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -61,7 +61,7 @@ class AuthBypassCheck(BaseCheck):
 
             try:
                 ar = await self._test_auth(url, service, api_format)
-                result.findings.extend(ar.findings)
+                result.observations.extend(ar.observations)
                 result.outputs.update(ar.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -110,8 +110,8 @@ class AuthBypassCheck(BaseCheck):
 
         # No auth at all works
         if "no_auth" in accepted:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="AI endpoint requires no authentication",
                     description="Chat endpoint responds to requests without any auth headers",
@@ -126,8 +126,8 @@ class AuthBypassCheck(BaseCheck):
                 )
             )
         elif "empty_bearer" in accepted:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Auth bypass: empty Bearer token accepted",
                     description="Endpoint responds to requests with an empty Bearer token",
@@ -143,8 +143,8 @@ class AuthBypassCheck(BaseCheck):
             )
         elif any(label.startswith("default_") for label in accepted):
             default_accepted = [a for a in accepted if a.startswith("default_")]
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Default API key accepted: {', '.join(default_accepted)}",
                     description="Endpoint accepts well-known default or test API keys",
@@ -159,8 +159,8 @@ class AuthBypassCheck(BaseCheck):
                 )
             )
         elif "basic_test" in accepted:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Auth bypass: Basic test:test credentials accepted",
                     description="Endpoint accepts Basic auth with test:test credentials",
@@ -175,8 +175,8 @@ class AuthBypassCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Authentication enforced",
                     description=f"All {len(self.AUTH_TESTS)} bypass attempts rejected",

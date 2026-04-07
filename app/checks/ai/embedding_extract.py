@@ -8,7 +8,7 @@ vectors, test similarity relationships, and check for information leakage.
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -66,7 +66,7 @@ class EmbeddingExtractionCheck(BaseCheck):
 
             try:
                 er = await self._analyze_endpoint(url, service, api_format)
-                result.findings.extend(er.findings)
+                result.observations.extend(er.observations)
                 result.outputs.update(er.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -118,8 +118,8 @@ class EmbeddingExtractionCheck(BaseCheck):
         dimensions = len(vectors[0])
         model_guess = self.DIMENSION_MAP.get(dimensions, "unknown")
 
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"Embedding endpoint functional: {dimensions}-dimensional vectors",
                 description=f"Embedding endpoint returns {dimensions}-dimensional vectors",
@@ -134,8 +134,8 @@ class EmbeddingExtractionCheck(BaseCheck):
         )
 
         if model_guess != "unknown":
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Embedding model identified: {model_guess}",
                     description=f"Vector dimensionality ({dimensions}) matches known model: {model_guess}",
@@ -152,8 +152,8 @@ class EmbeddingExtractionCheck(BaseCheck):
         # Check for extra metadata beyond vectors
         unique_fields = list(set(extra_fields))
         if unique_fields:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Embedding endpoint returns metadata beyond vectors: {', '.join(unique_fields[:5])}",
                     description="Extra fields in embedding response may reveal configuration or usage data",
@@ -171,8 +171,8 @@ class EmbeddingExtractionCheck(BaseCheck):
         if len(vectors) >= 2:
             sim = self._cosine_similarity(vectors[0], vectors[1])
             if sim > 0.5:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="Embedding similarity confirms real model",
                         description=f"Similar texts produce cosine similarity {sim:.3f} (> 0.5 threshold)",

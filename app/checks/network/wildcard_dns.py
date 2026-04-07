@@ -17,7 +17,7 @@ import string
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 
 def _random_subdomain(length: int = 12) -> str:
@@ -110,8 +110,8 @@ class WildcardDnsCheck(BaseCheck):
                 f"round-robin or geo-DNS."
             )
 
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"Wildcard DNS detected: *.{base_domain}",
                 description=desc,

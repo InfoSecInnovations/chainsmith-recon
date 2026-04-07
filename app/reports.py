@@ -3,7 +3,7 @@ app/reports.py - Report generation from historical scan data.
 
 Generates Technical, Delta, Executive, Compliance, and Trend reports
 in Markdown, JSON, HTML, and PDF formats.
-All data is pulled from the database via repositories.
+All data is pulled from the database via observation/chain/scan repositories.
 """
 
 import html as html_lib
@@ -17,8 +17,8 @@ from app.db.repositories import (
     CheckLogRepository,
     ComparisonRepository,
     EngagementRepository,
-    FindingOverrideRepository,
-    FindingRepository,
+    ObservationOverrideRepository,
+    ObservationRepository,
     ScanRepository,
     TrendRepository,
 )
@@ -26,11 +26,11 @@ from app.db.repositories import (
 logger = logging.getLogger(__name__)
 
 _scan_repo = ScanRepository()
-_finding_repo = FindingRepository()
+_observation_repo = ObservationRepository()
 _chain_repo = ChainRepository()
 _check_log_repo = CheckLogRepository()
 _comparison_repo = ComparisonRepository()
-_override_repo = FindingOverrideRepository()
+_override_repo = ObservationOverrideRepository()
 _engagement_repo = EngagementRepository()
 _trend_repo = TrendRepository()
 
@@ -55,10 +55,10 @@ _SARIF_SEV_RANK = {
 }
 
 
-def _count_by_severity(findings: list[dict]) -> dict:
+def _count_by_severity(observations: list[dict]) -> dict:
     counts = dict.fromkeys(SEVERITY_ORDER, 0)
-    for f in findings:
-        sev = f.get("severity", "info").lower()
+    for o in observations:
+        sev = o.get("severity", "info").lower()
         if sev in counts:
             counts[sev] += 1
     return counts
@@ -95,32 +95,32 @@ async def generate_technical_report(scan_id: str, fmt: str = "md") -> dict:
     if scan is None:
         raise ValueError(f"Scan '{scan_id}' not found")
 
-    findings = await _finding_repo.get_findings(scan_id)
+    observations = await _observation_repo.get_observations(scan_id)
     chains = await _chain_repo.get_chains(scan_id)
     log_entries = await _check_log_repo.get_log(scan_id)
     overrides = await _override_repo.list_overrides()
     override_map = {o["fingerprint"]: o for o in overrides.get("overrides", [])}
 
-    # Annotate findings with override info
-    for f in findings:
-        fp = f.get("fingerprint")
+    # Annotate observations with override info
+    for obs in observations:
+        fp = obs.get("fingerprint")
         if fp and fp in override_map:
-            f["override"] = override_map[fp]
+            obs["override"] = override_map[fp]
 
-    severity_counts = _count_by_severity(findings)
+    severity_counts = _count_by_severity(observations)
     risk = _risk_score(severity_counts)
     coverage = _check_coverage(log_entries)
 
     if fmt == "json":
-        content = _technical_json(scan, findings, chains, severity_counts, risk, coverage)
+        content = _technical_json(scan, observations, chains, severity_counts, risk, coverage)
     elif fmt == "sarif":
-        content = _technical_sarif(scan, findings, chains, severity_counts, risk, coverage)
+        content = _technical_sarif(scan, observations, chains, severity_counts, risk, coverage)
     elif fmt in ("html", "pdf"):
-        content = _technical_html(scan, findings, chains, severity_counts, risk, coverage)
+        content = _technical_html(scan, observations, chains, severity_counts, risk, coverage)
         if fmt == "pdf":
             content = _html_to_pdf(content)
     else:
-        content = _technical_markdown(scan, findings, chains, severity_counts, risk, coverage)
+        content = _technical_markdown(scan, observations, chains, severity_counts, risk, coverage)
 
     target = scan.get("target_domain", "unknown")
     ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json"}.get(fmt, "md")
@@ -129,7 +129,7 @@ async def generate_technical_report(scan_id: str, fmt: str = "md") -> dict:
     return {"content": content, "filename": filename, "format": fmt}
 
 
-def _technical_markdown(scan, findings, chains, severity_counts, risk, coverage) -> str:
+def _technical_markdown(scan, observations, chains, severity_counts, risk, coverage) -> str:
     target = scan.get("target_domain", "unknown")
     date = scan.get("started_at", "N/A")
     duration_ms = scan.get("duration_ms")
@@ -145,7 +145,7 @@ def _technical_markdown(scan, findings, chains, severity_counts, risk, coverage)
         f"**Scan ID:** {scan['id']}",
         f"**Date:** {date}",
         f"**Duration:** {duration}",
-        f"**Findings:** {total} ({sev_summary})" if sev_summary else f"**Findings:** {total}",
+        f"**Observations:** {total} ({sev_summary})" if sev_summary else f"**Observations:** {total}",
         f"**Risk Score:** {risk}",
         "",
         "---",
@@ -160,12 +160,12 @@ def _technical_markdown(scan, findings, chains, severity_counts, risk, coverage)
 
     lines.extend(["", f"**Risk Score:** {risk}", ""])
 
-    # Findings by severity
-    lines.append("## Findings")
+    # Observations by severity
+    lines.append("## Observations")
     lines.append("")
 
     by_severity: dict[str, list[dict]] = {}
-    for f in findings:
+    for f in observations:
         sev = f.get("severity", "info")
         by_severity.setdefault(sev, []).append(f)
 
@@ -225,10 +225,10 @@ def _technical_markdown(scan, findings, chains, severity_counts, risk, coverage)
             lines.append(f"- **Source:** {c.get('source', 'N/A')}")
             if c.get("description"):
                 lines.append(f"- **Description:** {c['description']}")
-            if c.get("finding_ids"):
-                ids = c["finding_ids"]
+            if c.get("observation_ids"):
+                ids = c["observation_ids"]
                 if isinstance(ids, list):
-                    lines.append(f"- **Findings:** {', '.join(str(fid) for fid in ids)}")
+                    lines.append(f"- **Observations:** {', '.join(str(oid) for oid in ids)}")
             lines.append("")
 
     # Check coverage
@@ -243,7 +243,7 @@ def _technical_markdown(scan, findings, chains, severity_counts, risk, coverage)
     return "\n".join(lines)
 
 
-def _technical_json(scan, findings, chains, severity_counts, risk, coverage) -> str:
+def _technical_json(scan, observations, chains, severity_counts, risk, coverage) -> str:
     report = {
         "report_type": "technical",
         "generated_at": datetime.now(UTC).isoformat(),
@@ -251,9 +251,9 @@ def _technical_json(scan, findings, chains, severity_counts, risk, coverage) -> 
         "summary": {
             "by_severity": severity_counts,
             "risk_score": risk,
-            "total_findings": sum(severity_counts.values()),
+            "total_observations": sum(severity_counts.values()),
         },
-        "findings": findings,
+        "observations": observations,
         "chains": chains,
         "check_coverage": coverage,
     }
@@ -279,12 +279,12 @@ async def generate_delta_report(scan_a_id: str, scan_b_id: str, fmt: str = "md")
 
     comparison = await _comparison_repo.compare_scans(scan_a_id, scan_b_id)
 
-    # Get full findings for risk score calculation
-    findings_a = await _finding_repo.get_findings(scan_a_id)
-    findings_b = await _finding_repo.get_findings(scan_b_id)
+    # Get full observations for risk score calculation
+    observations_a = await _observation_repo.get_observations(scan_a_id)
+    observations_b = await _observation_repo.get_observations(scan_b_id)
 
-    sev_a = _count_by_severity(findings_a)
-    sev_b = _count_by_severity(findings_b)
+    sev_a = _count_by_severity(observations_a)
+    sev_b = _count_by_severity(observations_b)
     risk_a = _risk_score(sev_a)
     risk_b = _risk_score(sev_b)
 
@@ -349,27 +349,27 @@ def _delta_markdown(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) ->
 
     lines.append("")
 
-    # New findings
-    new_findings = comparison.get("new_findings", [])
-    if new_findings:
-        lines.append(f"## New Findings ({len(new_findings)})")
+    # New observations
+    new_observations = comparison.get("new_observations", comparison.get("new_findings", []))
+    if new_observations:
+        lines.append(f"## New Observations ({len(new_observations)})")
         lines.append("")
-        for f in new_findings:
+        for f in new_observations:
             sev = f.get("severity", "info").upper()
             lines.append(f"- **[{sev}]** {f.get('title', 'Untitled')}")
         lines.append("")
 
-    # Resolved findings
-    resolved_findings = comparison.get("resolved_findings", [])
-    if resolved_findings:
-        lines.append(f"## Resolved Findings ({len(resolved_findings)})")
+    # Resolved observations
+    resolved_observations = comparison.get("resolved_observations", comparison.get("resolved_findings", []))
+    if resolved_observations:
+        lines.append(f"## Resolved Observations ({len(resolved_observations)})")
         lines.append("")
-        for f in resolved_findings:
+        for f in resolved_observations:
             sev = f.get("severity", "info").upper()
             lines.append(f"- ~~[{sev}] {f.get('title', 'Untitled')}~~")
         lines.append("")
 
-    if not new_findings and not resolved_findings:
+    if not new_observations and not resolved_observations:
         lines.append("*No changes between scans.*")
         lines.append("")
 
@@ -392,8 +392,8 @@ def _delta_json(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str
             "severity_a": sev_a,
             "severity_b": sev_b,
         },
-        "new_findings": comparison.get("new_findings", []),
-        "resolved_findings": comparison.get("resolved_findings", []),
+        "new_observations": comparison.get("new_observations", comparison.get("new_findings", [])),
+        "resolved_observations": comparison.get("resolved_observations", comparison.get("resolved_findings", [])),
     }
     return json.dumps(report, indent=2)
 
@@ -622,7 +622,7 @@ def _trend_arrow(old: int, new: int) -> str:
 # ─── HTML renderers for existing report types ────────────────────────────────
 
 
-def _technical_html(scan, findings, chains, severity_counts, risk, coverage) -> str:
+def _technical_html(scan, observations, chains, severity_counts, risk, coverage) -> str:
     target = _esc(scan.get("target_domain", "unknown"))
     date = _esc(scan.get("started_at", "N/A"))
     duration_ms = scan.get("duration_ms")
@@ -648,10 +648,10 @@ def _technical_html(scan, findings, chains, severity_counts, risk, coverage) -> 
     )
     parts.append("</div>")
 
-    # Findings
-    parts.append(f"<h2>Findings ({total})</h2>")
+    # Observations
+    parts.append(f"<h2>Observations ({total})</h2>")
     by_severity: dict[str, list[dict]] = {}
-    for f in findings:
+    for f in observations:
         by_severity.setdefault(f.get("severity", "info"), []).append(f)
 
     for sev in SEVERITY_ORDER:
@@ -741,26 +741,26 @@ def _delta_html(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str
         )
     parts.append("</table>")
 
-    # New findings
-    new_findings = comparison.get("new_findings", [])
-    if new_findings:
-        parts.append(f"<h2>New Findings ({len(new_findings)})</h2>")
-        for f in new_findings:
+    # New observations
+    new_observations = comparison.get("new_observations", comparison.get("new_findings", []))
+    if new_observations:
+        parts.append(f"<h2>New Observations ({len(new_observations)})</h2>")
+        for f in new_observations:
             parts.append(
                 f'<div class="card"><div class="card-title">'
                 f"{_severity_badge(f.get('severity', 'info'))} {_esc(f.get('title', 'Untitled'))}</div></div>"
             )
 
-    resolved_findings = comparison.get("resolved_findings", [])
-    if resolved_findings:
-        parts.append(f"<h2>Resolved Findings ({len(resolved_findings)})</h2>")
-        for f in resolved_findings:
+    resolved_observations = comparison.get("resolved_observations", comparison.get("resolved_findings", []))
+    if resolved_observations:
+        parts.append(f"<h2>Resolved Observations ({len(resolved_observations)})</h2>")
+        for f in resolved_observations:
             parts.append(
                 f'<div class="card override"><div class="card-title">'
                 f"{_severity_badge(f.get('severity', 'info'))} {_esc(f.get('title', 'Untitled'))}</div></div>"
             )
 
-    if not new_findings and not resolved_findings:
+    if not new_observations and not resolved_observations:
         parts.append("<p><em>No changes between scans.</em></p>")
 
     return _wrap_html(f"Delta Report — {target}", "\n".join(parts))
@@ -777,7 +777,7 @@ async def generate_executive_report(
     """
     Generate an executive summary report for a scan.
 
-    Includes risk score with trend (if previous scan exists), top findings,
+    Includes risk score with trend (if previous scan exists), top observations,
     and remediation progress. Designed for leadership briefings.
 
     Returns {"content": str, "filename": str, "format": str}.
@@ -786,19 +786,19 @@ async def generate_executive_report(
     if scan is None:
         raise ValueError(f"Scan '{scan_id}' not found")
 
-    findings = await _finding_repo.get_findings(scan_id)
+    observations = await _observation_repo.get_observations(scan_id)
     overrides = await _override_repo.list_overrides()
     override_map = {o["fingerprint"]: o for o in overrides.get("overrides", [])}
 
-    severity_counts = _count_by_severity(findings)
+    severity_counts = _count_by_severity(observations)
     risk = _risk_score(severity_counts)
 
-    # Top 5 findings by severity weight
-    def _sev_weight(f):
-        return SEVERITY_WEIGHTS.get(f.get("severity", "info").lower(), 0)
+    # Top 5 observations by severity weight
+    def _sev_weight(o):
+        return SEVERITY_WEIGHTS.get(o.get("severity", "info").lower(), 0)
 
-    active_findings = [f for f in findings if f.get("fingerprint") not in override_map]
-    top_findings = sorted(active_findings, key=_sev_weight, reverse=True)[:5]
+    active_observations = [o for o in observations if o.get("fingerprint") not in override_map]
+    top_observations = sorted(active_observations, key=_sev_weight, reverse=True)[:5]
 
     # Previous scan for trend (same target, completed before this one)
     # list_scans returns newest-first (desc), so previous scan is at i+1
@@ -813,24 +813,24 @@ async def generate_executive_report(
             prev_scan = scans_list[i + 1]
             break
     if prev_scan:
-        prev_findings = await _finding_repo.get_findings(prev_scan["id"])
-        prev_severity = _count_by_severity(prev_findings)
+        prev_observations = await _observation_repo.get_observations(prev_scan["id"])
+        prev_severity = _count_by_severity(prev_observations)
         prev_risk = _risk_score(prev_severity)
 
-    # Remediation: count overridden findings that appear in this scan
-    overridden_count = sum(1 for f in findings if f.get("fingerprint") in override_map)
+    # Remediation: count overridden observations that appear in this scan
+    overridden_count = sum(1 for o in observations if o.get("fingerprint") in override_map)
 
     data = {
         "scan": scan,
         "target": target,
         "severity_counts": severity_counts,
         "risk": risk,
-        "top_findings": top_findings,
+        "top_observations": top_observations,
         "prev_scan": prev_scan,
         "prev_risk": prev_risk,
         "prev_severity": prev_severity,
         "overridden_count": overridden_count,
-        "total_active": len(active_findings),
+        "total_active": len(active_observations),
     }
 
     if fmt == "json":
@@ -884,7 +884,7 @@ def _executive_markdown(d: dict) -> str:
 
     lines.extend(
         [
-            f"**Active Findings:** {total_active}",
+            f"**Active Observations:** {total_active}",
             f"**Overridden (accepted/false positive):** {d['overridden_count']}",
             "",
             "| Severity | Count |",
@@ -903,14 +903,14 @@ def _executive_markdown(d: dict) -> str:
                 sign = "+" if diff > 0 else ""
                 lines.append(f"- {s.capitalize()}: {sign}{diff}")
 
-    lines.extend(["", "## Top Findings", ""])
-    for i, f in enumerate(d["top_findings"], 1):
+    lines.extend(["", "## Top Observations", ""])
+    for i, f in enumerate(d["top_observations"], 1):
         s = f.get("severity", "info").upper()
         lines.append(f"{i}. **[{s}]** {f.get('title', 'Untitled')}")
         if f.get("description"):
             lines.append(f"   {f['description']}")
-    if not d["top_findings"]:
-        lines.append("*No active findings.*")
+    if not d["top_observations"]:
+        lines.append("*No active observations.*")
 
     lines.append("")
     return "\n".join(lines)
@@ -926,10 +926,10 @@ def _executive_json(d: dict) -> str:
             "risk_score": d["risk"],
             "previous_risk_score": d["prev_risk"],
             "by_severity": d["severity_counts"],
-            "active_findings": d["total_active"],
+            "active_observations": d["total_active"],
             "overridden_count": d["overridden_count"],
         },
-        "top_findings": d["top_findings"],
+        "top_observations": d["top_observations"],
     }
     return json.dumps(report, indent=2)
 
@@ -960,7 +960,7 @@ def _executive_html(d: dict) -> str:
         )
     parts.append(
         f'<div class="stat"><div class="stat-value">{d["total_active"]}</div>'
-        f'<div class="stat-label">Active Findings</div></div>'
+        f'<div class="stat-label">Active Observations</div></div>'
     )
     for s in ["critical", "high"]:
         parts.append(
@@ -980,10 +980,10 @@ def _executive_html(d: dict) -> str:
         parts.append(f"<tr><td>{_severity_badge(s)}</td><td>{sev[s]}</td></tr>")
     parts.append("</table>")
 
-    # Top findings
-    parts.append("<h2>Top Findings</h2>")
-    if d["top_findings"]:
-        for f in d["top_findings"]:
+    # Top observations
+    parts.append("<h2>Top Observations</h2>")
+    if d["top_observations"]:
+        for f in d["top_observations"]:
             parts.append(
                 f'<div class="card"><div class="card-title">'
                 f"{_severity_badge(f.get('severity', 'info'))} {_esc(f.get('title', 'Untitled'))}</div>"
@@ -992,7 +992,7 @@ def _executive_html(d: dict) -> str:
                 parts.append(f'<div class="card-detail">{_esc(f["description"])}</div>')
             parts.append("</div>")
     else:
-        parts.append("<p><em>No active findings.</em></p>")
+        parts.append("<p><em>No active observations.</em></p>")
 
     return _wrap_html(f"Executive Summary — {target}", "\n".join(parts))
 
@@ -1008,7 +1008,7 @@ async def generate_compliance_report(
     """
     Generate a compliance report for a scan (optionally within an engagement).
 
-    Covers engagement scope, scan window, check coverage, finding remediation
+    Covers engagement scope, scan window, check coverage, observation remediation
     status, and override audit trail. Suitable for audit/compliance teams.
 
     Returns {"content": str, "filename": str, "format": str}.
@@ -1017,7 +1017,7 @@ async def generate_compliance_report(
     if scan is None:
         raise ValueError(f"Scan '{scan_id}' not found")
 
-    findings = await _finding_repo.get_findings(scan_id)
+    observations = await _observation_repo.get_observations(scan_id)
     log_entries = await _check_log_repo.get_log(scan_id)
     overrides = await _override_repo.list_overrides()
     override_map = {o["fingerprint"]: o for o in overrides.get("overrides", [])}
@@ -1029,17 +1029,17 @@ async def generate_compliance_report(
     if eid:
         engagement = await _engagement_repo.get_engagement(eid)
 
-    severity_counts = _count_by_severity(findings)
+    severity_counts = _count_by_severity(observations)
 
-    # Build override audit trail for findings in this scan
+    # Build override audit trail for observations in this scan
     override_audit = []
-    for f in findings:
-        fp = f.get("fingerprint")
+    for obs in observations:
+        fp = obs.get("fingerprint")
         if fp and fp in override_map:
             ov = override_map[fp]
             override_audit.append(
                 {
-                    "finding_title": f.get("title", "Untitled"),
+                    "observation_title": obs.get("title", "Untitled"),
                     "fingerprint": fp,
                     "status": ov["status"],
                     "reason": ov.get("reason", ""),
@@ -1063,7 +1063,7 @@ async def generate_compliance_report(
         "engagement": engagement,
         "target": scan.get("target_domain", "unknown"),
         "severity_counts": severity_counts,
-        "total_findings": len(findings),
+        "total_observations": len(observations),
         "coverage": coverage,
         "override_audit": override_audit,
         "checks_run": checks_run,
@@ -1141,9 +1141,9 @@ def _compliance_markdown(d: dict) -> str:
 
     lines.extend(
         [
-            "## Finding Summary",
+            "## Observation Summary",
             "",
-            f"**Total Findings:** {d['total_findings']}",
+            f"**Total Observations:** {d['total_observations']}",
             f"**Overridden:** {d['overridden_count']}",
             "",
             "| Severity | Count |",
@@ -1159,13 +1159,13 @@ def _compliance_markdown(d: dict) -> str:
                 "",
                 "## Override Audit Trail",
                 "",
-                "| Finding | Status | Reason | Date |",
-                "|---------|--------|--------|------|",
+                "| Observation | Status | Reason | Date |",
+                "|------------|--------|--------|------|",
             ]
         )
         for ov in d["override_audit"]:
             lines.append(
-                f"| {ov['finding_title']} | {ov['status']} | "
+                f"| {ov['observation_title']} | {ov['status']} | "
                 f"{ov['reason'] or 'N/A'} | {ov['overridden_at'] or 'N/A'} |"
             )
 
@@ -1187,8 +1187,8 @@ def _compliance_json(d: dict) -> str:
             "skipped": d["coverage"]["skipped"],
             "checks_run": d["checks_run"],
         },
-        "findings": {
-            "total": d["total_findings"],
+        "observations": {
+            "total": d["total_observations"],
             "by_severity": d["severity_counts"],
             "overridden_count": d["overridden_count"],
         },
@@ -1242,11 +1242,11 @@ def _compliance_html(d: dict) -> str:
             parts.append(f"<tr><td>{_esc(c['check'])}</td><td>{_esc(c['suite'])}</td></tr>")
         parts.append("</table>")
 
-    # Finding summary
-    parts.append("<h2>Finding Summary</h2>")
+    # Observation summary
+    parts.append("<h2>Observation Summary</h2>")
     parts.append('<div class="stat-grid">')
     parts.append(
-        f'<div class="stat"><div class="stat-value">{d["total_findings"]}</div><div class="stat-label">Total</div></div>'
+        f'<div class="stat"><div class="stat-value">{d["total_observations"]}</div><div class="stat-label">Total</div></div>'
     )
     for s in SEVERITY_ORDER:
         parts.append(
@@ -1257,10 +1257,10 @@ def _compliance_html(d: dict) -> str:
     # Override audit
     if d["override_audit"]:
         parts.append("<h2>Override Audit Trail</h2>")
-        parts.append("<table><tr><th>Finding</th><th>Status</th><th>Reason</th><th>Date</th></tr>")
+        parts.append("<table><tr><th>Observation</th><th>Status</th><th>Reason</th><th>Date</th></tr>")
         for ov in d["override_audit"]:
             parts.append(
-                f"<tr><td>{_esc(ov['finding_title'])}</td><td>{_esc(ov['status'])}</td>"
+                f"<tr><td>{_esc(ov['observation_title'])}</td><td>{_esc(ov['status'])}</td>"
                 f"<td>{_esc(ov['reason'] or 'N/A')}</td><td>{_esc(ov['overridden_at'] or 'N/A')}</td></tr>"
             )
         parts.append("</table>")
@@ -1385,8 +1385,8 @@ def _trend_markdown(d: dict) -> str:
             suite_totals[suite] = suite_totals.get(suite, 0) + count
     if suite_totals:
         lines.extend(["", "## Suite Breakdown (cumulative)", ""])
-        lines.append("| Suite | Total Findings |")
-        lines.append("|-------|----------------|")
+        lines.append("| Suite | Total Observations |")
+        lines.append("|-------|--------------------|")
         for suite, count in sorted(suite_totals.items(), key=lambda x: -x[1]):
             lines.append(f"| {suite} | {count} |")
 
@@ -1502,8 +1502,8 @@ def _trend_html(d: dict) -> str:
 # ─── SARIF Output ───────────────────────────────────────────────────────────
 
 
-def _finding_to_sarif_result(f: dict) -> dict:
-    """Convert a single Chainsmith finding to a SARIF result object."""
+def _observation_to_sarif_result(f: dict) -> dict:
+    """Convert a single Chainsmith observation to a SARIF result object."""
     sev = (f.get("severity") or "info").lower()
     result = {
         "ruleId": f.get("check_name", "unknown"),
@@ -1556,10 +1556,10 @@ def _finding_to_sarif_result(f: dict) -> dict:
     return result
 
 
-def _build_sarif_rules(findings: list[dict]) -> list[dict]:
-    """Build SARIF rule descriptors from findings."""
+def _build_sarif_rules(observations: list[dict]) -> list[dict]:
+    """Build SARIF rule descriptors from observations."""
     seen = {}
-    for f in findings:
+    for f in observations:
         rule_id = f.get("check_name", "unknown")
         if rule_id not in seen:
             seen[rule_id] = {
@@ -1605,10 +1605,10 @@ def _sarif_envelope(
     return json.dumps(sarif, indent=2)
 
 
-def _technical_sarif(scan, findings, chains, severity_counts, risk, coverage) -> str:
+def _technical_sarif(scan, observations, chains, severity_counts, risk, coverage) -> str:
     """SARIF output for a technical report."""
-    results = [_finding_to_sarif_result(f) for f in findings]
-    rules = _build_sarif_rules(findings)
+    results = [_observation_to_sarif_result(o) for o in observations]
+    rules = _build_sarif_rules(observations)
     return _sarif_envelope(
         results,
         rules,
@@ -1625,10 +1625,10 @@ def _technical_sarif(scan, findings, chains, severity_counts, risk, coverage) ->
 
 
 def _delta_sarif(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str:
-    """SARIF output for a delta report — new findings only."""
-    new_findings = comparison.get("new_findings", [])
-    results = [_finding_to_sarif_result(f) for f in new_findings]
-    rules = _build_sarif_rules(new_findings)
+    """SARIF output for a delta report — new observations only."""
+    new_observations = comparison.get("new_observations", comparison.get("new_findings", []))
+    results = [_observation_to_sarif_result(o) for o in new_observations]
+    rules = _build_sarif_rules(new_observations)
     return _sarif_envelope(
         results,
         rules,
@@ -1647,16 +1647,16 @@ def _delta_sarif(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> st
 
 
 def _executive_sarif(data: dict) -> str:
-    """SARIF output for an executive report — top findings only."""
-    top = data.get("top_findings", [])
-    results = [_finding_to_sarif_result(f) for f in top]
+    """SARIF output for an executive report — top observations only."""
+    top = data.get("top_observations", [])
+    results = [_observation_to_sarif_result(o) for o in top]
     rules = _build_sarif_rules(top)
     props = {
         "reportType": "executive",
         "scanId": data["scan"]["id"],
         "target": data["target"],
         "riskScore": data["risk"],
-        "activeFindings": data["total_active"],
+        "activeObservations": data["total_active"],
         "overriddenCount": data["overridden_count"],
     }
     if data.get("prev_risk") is not None:
@@ -1670,9 +1670,9 @@ def _compliance_sarif(data: dict) -> str:
     for ov in data.get("override_audit", []):
         results.append(
             {
-                "ruleId": "finding_override",
+                "ruleId": "observation_override",
                 "level": "note",
-                "message": {"text": f"Override: {ov['finding_title']}"},
+                "message": {"text": f"Override: {ov['observation_title']}"},
                 "fingerprints": {"chainsmith/v1": ov["fingerprint"]},
                 "suppressions": [
                     {
@@ -1684,7 +1684,7 @@ def _compliance_sarif(data: dict) -> str:
             }
         )
     rules = (
-        [{"id": "finding_override", "shortDescription": {"text": "Finding Override Audit Entry"}}]
+        [{"id": "observation_override", "shortDescription": {"text": "Observation Override Audit Entry"}}]
         if results
         else []
     )
@@ -1695,7 +1695,7 @@ def _compliance_sarif(data: dict) -> str:
             "reportType": "compliance",
             "scanId": data["scan"]["id"],
             "target": data["target"],
-            "totalFindings": data["total_findings"],
+            "totalObservations": data["total_observations"],
             "checkCoverage": data["coverage"],
             "checksRun": len(data["checks_run"]),
             "overrideCount": data["overridden_count"],
@@ -1755,7 +1755,7 @@ async def generate_targeted_export(
     db=None,
 ) -> dict:
     """
-    Generate a report from a curated set of findings identified by fingerprint.
+    Generate a report from a curated set of observations identified by fingerprint.
 
     Searches all scans to find the most recent instance of each fingerprint.
     Returns {"content": str, "filename": str, "format": str}.
@@ -1766,22 +1766,22 @@ async def generate_targeted_export(
     from sqlalchemy import select
 
     from app.db.engine import get_session
-    from app.db.models import Finding
+    from app.db.models import ObservationRecord
 
-    # Look up findings by fingerprint (most recent instance of each)
-    findings = []
+    # Look up observations by fingerprint (most recent instance of each)
+    observations = []
     _session = db.session() if db is not None else get_session()
     async with _session as session:
         for fp in fingerprints:
             result = await session.execute(
-                select(Finding)
-                .where(Finding.fingerprint == fp)
-                .order_by(Finding.id.desc())
+                select(ObservationRecord)
+                .where(ObservationRecord.fingerprint == fp)
+                .order_by(ObservationRecord.id.desc())
                 .limit(1)
             )
             row = result.scalar_one_or_none()
             if row:
-                findings.append(
+                observations.append(
                     {
                         "title": row.title,
                         "severity": row.severity,
@@ -1802,11 +1802,11 @@ async def generate_targeted_export(
                     }
                 )
 
-    if not findings:
-        raise ValueError("No findings found for the provided fingerprints")
+    if not observations:
+        raise ValueError("No observations found for the provided fingerprints")
 
     report_title = title or "Targeted Export"
-    severity_counts = _count_by_severity(findings)
+    severity_counts = _count_by_severity(observations)
     risk = _risk_score(severity_counts)
 
     if fmt == "json":
@@ -1818,15 +1818,15 @@ async def generate_targeted_export(
                 "summary": {
                     "by_severity": severity_counts,
                     "risk_score": risk,
-                    "total_findings": len(findings),
+                    "total_observations": len(observations),
                 },
-                "findings": findings,
+                "observations": observations,
             },
             indent=2,
         )
     elif fmt == "sarif":
-        results = [_finding_to_sarif_result(f) for f in findings]
-        rules = _build_sarif_rules(findings)
+        results = [_observation_to_sarif_result(o) for o in observations]
+        rules = _build_sarif_rules(observations)
         content = _sarif_envelope(
             results,
             rules,
@@ -1839,7 +1839,7 @@ async def generate_targeted_export(
     elif fmt in ("html", "pdf"):
         parts = [
             f"<h1>{_esc(report_title)}</h1>",
-            f'<div class="meta"><span>{len(findings)} selected findings</span>'
+            f'<div class="meta"><span>{len(observations)} selected observations</span>'
             f"<span>Risk Score: {risk}</span></div>",
             '<div class="stat-grid">',
         ]
@@ -1856,8 +1856,8 @@ async def generate_targeted_export(
         )
         parts.append("</div>")
 
-        parts.append(f"<h2>Findings ({len(findings)})</h2>")
-        for f in findings:
+        parts.append(f"<h2>Observations ({len(observations)})</h2>")
+        for f in observations:
             sev = f.get("severity", "info")
             parts.append('<div class="card">')
             parts.append(
@@ -1890,13 +1890,13 @@ async def generate_targeted_export(
         lines = [
             f"# {report_title}",
             "",
-            f"**Findings:** {len(findings)}",
+            f"**Observations:** {len(observations)}",
             f"**Risk Score:** {risk}",
             "",
             "---",
             "",
         ]
-        for f in findings:
+        for f in observations:
             sev = (f.get("severity") or "info").upper()
             lines.append(f"### [{sev}] {f.get('title', 'Untitled')}")
             lines.append("")
@@ -1917,6 +1917,6 @@ async def generate_targeted_export(
         content = "\n".join(lines)
 
     ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json"}.get(fmt, "md")
-    filename = f"targeted-export-{len(findings)}findings.{ext}"
+    filename = f"targeted-export-{len(observations)}observations.{ext}"
 
     return {"content": content, "filename": filename, "format": fmt}

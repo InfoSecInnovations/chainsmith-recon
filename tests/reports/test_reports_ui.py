@@ -13,7 +13,7 @@ import pytest
 from app.db.engine import close_db, init_db
 from app.db.repositories import (
     EngagementRepository,
-    FindingRepository,
+    ObservationRepository,
     ScanRepository,
 )
 from app.reports import (
@@ -41,7 +41,7 @@ async def db(tmp_path):
 async def seeded_db(db):
     """Database with scans for report generation."""
     scan_repo = ScanRepository()
-    finding_repo = FindingRepository()
+    observation_repo = ObservationRepository()
     eng_repo = EngagementRepository()
 
     # Create engagement
@@ -56,7 +56,7 @@ async def seeded_db(db):
         settings={"parallel": False},
         engagement_id=eng_id,
     )
-    await finding_repo.bulk_create(
+    await observation_repo.bulk_create(
         "scan-001",
         [
             {
@@ -79,7 +79,7 @@ async def seeded_db(db):
             },
         ],
     )
-    await scan_repo.complete_scan("scan-001", findings_count=2)
+    await scan_repo.complete_scan("scan-001", observations_count=2)
 
     # Scan 2
     await scan_repo.create_scan(
@@ -88,7 +88,7 @@ async def seeded_db(db):
         target_domain="example.com",
         settings={"parallel": True},
     )
-    await finding_repo.bulk_create(
+    await observation_repo.bulk_create(
         "scan-002",
         [
             {
@@ -103,7 +103,7 @@ async def seeded_db(db):
             },
         ],
     )
-    await scan_repo.complete_scan("scan-002", findings_count=1)
+    await scan_repo.complete_scan("scan-002", observations_count=1)
 
     return {
         "scan_ids": ["scan-001", "scan-002"],
@@ -161,11 +161,11 @@ class TestReportsPageStatic:
         content = (Path(__file__).parent.parent.parent / "static" / "scan.html").read_text()
         assert 'href="reports.html"' in content
 
-    def test_reports_nav_link_in_findings(self):
-        """findings.html has Reports nav link."""
+    def test_reports_nav_link_in_observations(self):
+        """observations.html has Reports nav link."""
         from pathlib import Path
 
-        content = (Path(__file__).parent.parent.parent / "static" / "findings.html").read_text()
+        content = (Path(__file__).parent.parent.parent / "static" / "observations.html").read_text()
         assert 'href="reports.html"' in content
 
     def test_reports_nav_link_in_trend(self):
@@ -263,7 +263,7 @@ class TestReportGenerationFromUI:
             import json
 
             content = json.loads(content)
-        assert "findings" in content or "scan" in content
+        assert "observations" in content or "scan" in content
 
     @pytest.mark.asyncio
     async def test_delta_report_html(self, seeded_db):

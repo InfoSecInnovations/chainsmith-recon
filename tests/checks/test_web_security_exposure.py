@@ -86,7 +86,7 @@ class TestWebDAVCheck:
         check = WebDAVCheck()
         with patch.object(WebDAVCheck, "_is_intrusive_allowed", return_value=False):
             result = await check.check_service(service, {})
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
         assert result.outputs.get("webdav_skipped") is True
 
     @pytest.mark.asyncio
@@ -104,8 +104,8 @@ class TestWebDAVCheck:
             ),
         ):
             result = await check.check_service(service, {})
-        assert any("PROPFIND" in f.title for f in result.findings)
-        assert any(f.severity == "high" for f in result.findings)
+        assert any("PROPFIND" in f.title for f in result.observations)
+        assert any(f.severity == "high" for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_detects_put_write(self, service):
@@ -123,7 +123,7 @@ class TestWebDAVCheck:
             ),
         ):
             result = await check.check_service(service, {})
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
         assert any("PUT" in f.title for f in critical)
 
@@ -142,7 +142,7 @@ class TestWebDAVCheck:
             ),
         ):
             result = await check.check_service(service, {})
-        medium = [f for f in result.findings if f.severity == "medium"]
+        medium = [f for f in result.observations if f.severity == "medium"]
         assert len(medium) >= 1
 
 
@@ -175,10 +175,10 @@ class TestVCSExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        assert len(result.findings) >= 1
-        git_finding = result.findings[0]
-        assert git_finding.severity in ("critical", "high")
-        assert "Git" in git_finding.title or "git" in git_finding.title.lower()
+        assert len(result.observations) >= 1
+        git_observation = result.observations[0]
+        assert git_observation.severity in ("critical", "high")
+        assert "Git" in git_observation.title or "git" in git_observation.title.lower()
 
     @pytest.mark.asyncio
     async def test_detects_git_credentials(self, service):
@@ -202,9 +202,9 @@ class TestVCSExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        cred_findings = [f for f in result.findings if "credential" in f.title.lower()]
-        assert len(cred_findings) >= 1
-        assert cred_findings[0].severity == "critical"
+        cred_observations = [f for f in result.observations if "credential" in f.title.lower()]
+        assert len(cred_observations) >= 1
+        assert cred_observations[0].severity == "critical"
 
     @pytest.mark.asyncio
     async def test_detects_svn(self, service):
@@ -220,10 +220,10 @@ class TestVCSExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        assert any("SVN" in f.title for f in result.findings)
+        assert any("SVN" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
-    async def test_no_findings_when_no_vcs(self, service):
+    async def test_no_observations_when_no_vcs(self, service):
         check = VCSExposureCheck()
         responses = {
             ("GET", ".svn"): resp(404),
@@ -236,7 +236,7 @@ class TestVCSExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -266,7 +266,7 @@ class TestConfigExposureCheck:
 
         secrets = [
             f
-            for f in result.findings
+            for f in result.observations
             if "secret" in f.title.lower() or "contains" in f.title.lower()
         ]
         assert len(secrets) >= 1
@@ -288,15 +288,15 @@ class TestConfigExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        assert len(result.findings) >= 1
-        assert result.findings[0].severity == "high"
+        assert len(result.observations) >= 1
+        assert result.observations[0].severity == "high"
         assert (
-            "no secrets detected" in result.findings[0].description.lower()
-            or "accessible" in result.findings[0].title.lower()
+            "no secrets detected" in result.observations[0].description.lower()
+            or "accessible" in result.observations[0].title.lower()
         )
 
     @pytest.mark.asyncio
-    async def test_no_findings_when_no_config(self, service):
+    async def test_no_observations_when_no_config(self, service):
         check = ConfigExposureCheck()
         responses = {
             ("GET", ".env"): resp(404),
@@ -312,7 +312,7 @@ class TestConfigExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_detects_aws_credentials(self, service):
@@ -329,4 +329,4 @@ class TestConfigExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        assert any(f.severity == "critical" for f in result.findings)
+        assert any(f.severity == "critical" for f in result.observations)

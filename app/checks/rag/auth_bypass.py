@@ -11,7 +11,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Per-store default credential attempts
@@ -138,8 +138,8 @@ class RAGAuthBypassCheck(ServiceIteratingCheck):
                                 "path": test_path,
                             }
                         )
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Vector store requires no authentication: {store_type}",
                                 description=(
@@ -173,8 +173,8 @@ class RAGAuthBypassCheck(ServiceIteratingCheck):
                         )
                         if bypass:
                             bypass_results.append(bypass)
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Vector store default key accepted: {store_type}",
                                     description=(
@@ -200,8 +200,8 @@ class RAGAuthBypassCheck(ServiceIteratingCheck):
                         )
                         if bypass:
                             bypass_results.append(bypass)
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Vector store auth bypass via common header: {store_type}",
                                     description=(
@@ -231,8 +231,8 @@ class RAGAuthBypassCheck(ServiceIteratingCheck):
                         )
                         if bypass:
                             bypass_results.append(bypass)
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Vector store auth bypass via IP spoofing: {store_type}",
                                     description=(
@@ -253,8 +253,8 @@ class RAGAuthBypassCheck(ServiceIteratingCheck):
 
                     # If no bypass found
                     if not any(b["store_type"] == store_type for b in bypass_results):
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Vector store authentication enforced: {store_type}",
                                 description=f"Authentication on {store_type} appears properly enforced.",

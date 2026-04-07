@@ -4,7 +4,7 @@ app/scenario_services/ai/agent.py
 AI Agent orchestration service template.
 
 This service simulates an AI agent with tools, memory, and delegation
-capabilities. It exposes common agent security findings.
+capabilities. It exposes common agent security observations.
 
 Configurable via environment variables:
     BRAND_NAME          Display name (default: from scenario.json)
@@ -12,7 +12,7 @@ Configurable via environment variables:
     CHAT_SERVICE_URL    URL to chat service (default: http://localhost:8081)
     API_SERVICE_URL     URL to API service (default: http://localhost:8080)
 
-Planted findings:
+Planted observations:
     agent_config_leak       X-Agent-Model header reveals model info
     tool_chain_exposed      Full tool metadata visible
     no_session_isolation    Can list/access other sessions
@@ -36,7 +36,7 @@ from pydantic import BaseModel
 from app.scenario_services.common.config import (
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -127,14 +127,14 @@ AGENT_TOOLS = [
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
-    """Add headers based on active findings."""
+    """Add headers based on active observations."""
     response = await call_next(request)
 
     brand = get_brand_name().lower().replace(" ", "-")
     response.headers["X-Agent-Service"] = f"{brand}-agent"
 
-    # Finding: agent_config_leak - reveal model info
-    if is_finding_active("agent_config_leak"):
+    # Observation: agent_config_leak - reveal model info
+    if is_observation_active("agent_config_leak"):
         response.headers["X-Agent-Model"] = AGENT_MODEL
 
     return response
@@ -173,10 +173,10 @@ async def list_tools():
     """
     List available agent tools.
 
-    Finding: tool_chain_exposed
+    Observation: tool_chain_exposed
     When active, returns full tool metadata including sensitive flags.
     """
-    if is_finding_active("tool_chain_exposed"):
+    if is_observation_active("tool_chain_exposed"):
         return {"tools": AGENT_TOOLS, "count": len(AGENT_TOOLS)}
 
     # Hide sensitive metadata
@@ -202,10 +202,10 @@ async def list_sessions():
     """
     List active sessions.
 
-    Finding: no_session_isolation
+    Observation: no_session_isolation
     When active, returns list of all sessions.
     """
-    if is_finding_active("no_session_isolation"):
+    if is_observation_active("no_session_isolation"):
         return {"sessions": list(MEMORY_STORE.keys()), "count": len(MEMORY_STORE)}
 
     return {"sessions": [], "message": "Session listing requires authentication"}
@@ -216,17 +216,17 @@ async def get_memory(session_id: str | None = None):
     """
     Get memory/history.
 
-    Finding: memory_endpoint_exposed
+    Observation: memory_endpoint_exposed
     When active, endpoint is accessible.
 
-    Finding: no_session_isolation
+    Observation: no_session_isolation
     When active, allows accessing any session's memory.
     """
-    if not is_finding_active("memory_endpoint_exposed"):
+    if not is_observation_active("memory_endpoint_exposed"):
         raise HTTPException(404, "Endpoint not available")
 
     # Specific session requested
-    if session_id and is_finding_active("no_session_isolation"):
+    if session_id and is_observation_active("no_session_isolation"):
         entries = MEMORY_STORE.get(session_id, [])
         return {
             "session_id": session_id,
@@ -234,7 +234,7 @@ async def get_memory(session_id: str | None = None):
         }
 
     # Return all sessions if no isolation
-    if is_finding_active("no_session_isolation"):
+    if is_observation_active("no_session_isolation"):
         all_entries = []
         for _sid, entries in MEMORY_STORE.items():
             all_entries.extend([e.model_dump() for e in entries])
@@ -251,10 +251,10 @@ async def get_config():
     """
     Get agent configuration.
 
-    Finding: agent_config_leak
+    Observation: agent_config_leak
     When active, returns detailed configuration.
     """
-    if not is_finding_active("agent_config_leak"):
+    if not is_observation_active("agent_config_leak"):
         raise HTTPException(404, "Endpoint not available")
 
     return {

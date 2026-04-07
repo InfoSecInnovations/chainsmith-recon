@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ class GeoIpCheck(BaseCheck):
                 entry = self._lookup_ip(ip, city_reader, asn_reader)
                 geoip_data[ip] = entry
 
-                self._generate_findings(
+                self._generate_observations(
                     result, ip, hostnames, entry, context.get("base_domain", "")
                 )
 
@@ -268,7 +268,7 @@ class GeoIpCheck(BaseCheck):
 
         return entry
 
-    def _generate_findings(
+    def _generate_observations(
         self,
         result: CheckResult,
         ip: str,
@@ -276,7 +276,7 @@ class GeoIpCheck(BaseCheck):
         entry: dict,
         base_domain: str,
     ) -> None:
-        """Generate findings based on GeoIP/ASN data for an IP."""
+        """Generate observations based on GeoIP/ASN data for an IP."""
         host_label = hostnames[0] if hostnames else ip
         location_parts = [
             p for p in [entry.get("country_code"), entry.get("region"), entry.get("city")] if p
@@ -287,10 +287,10 @@ class GeoIpCheck(BaseCheck):
         asn_str = f"AS{asn}" if asn else "unknown ASN"
         classification = entry.get("classification", "unknown")
 
-        # Base info finding for every IP
+        # Base info observation for every IP
         evidence = f"IP: {ip} | Location: {location} | {org} ({asn_str})"
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"Host geo: {host_label} -> {location} ({org})",
                 description=(
@@ -304,11 +304,11 @@ class GeoIpCheck(BaseCheck):
             )
         )
 
-        # Residential IP hosting a service — notable finding
+        # Residential IP hosting a service — notable observation
         if classification == "residential":
             provider = entry.get("provider", org)
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Residential IP hosting service: {host_label}",
                     description=(
@@ -325,8 +325,8 @@ class GeoIpCheck(BaseCheck):
 
         # Non-standard hosting (ASN exists but not in our known lists)
         elif classification == "other" and asn is not None:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Non-standard hosting: {host_label}",
                     description=(

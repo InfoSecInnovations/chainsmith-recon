@@ -20,7 +20,7 @@ import time
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -85,11 +85,11 @@ class StaleContextCheck(ServiceIteratingCheck):
                     if ttl_result:
                         stale_results.append(ttl_result)
 
-                    # Generate findings
+                    # Generate observations
                     for sr in stale_results:
                         severity = self._determine_severity(sr)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=self._build_title(sr),
                                 description=self._build_description(sr),
@@ -272,7 +272,7 @@ class StaleContextCheck(ServiceIteratingCheck):
             return {"test_id": test_id, "stale_detected": False, "error": str(e)}
 
     def _determine_severity(self, stale_result: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if stale_result.get("stale_detected"):
             test_id = stale_result.get("test_id", "")
             if test_id == "role_context":
@@ -286,7 +286,7 @@ class StaleContextCheck(ServiceIteratingCheck):
         return "info"
 
     def _build_title(self, stale_result: dict) -> str:
-        """Build finding title."""
+        """Build observation title."""
         test_id = stale_result.get("test_id", "unknown")
 
         if stale_result.get("stale_detected"):
@@ -298,7 +298,7 @@ class StaleContextCheck(ServiceIteratingCheck):
         return "Cache properly expires entries (stale context not detected)"
 
     def _build_description(self, stale_result: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         if stale_result.get("stale_detected"):
             test_id = stale_result.get("test_id", "")
             if test_id == "role_context":

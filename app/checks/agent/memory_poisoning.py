@@ -12,7 +12,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Benign poisoning payloads (detectable but not harmful)
@@ -105,8 +105,8 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
                     poisoning_results.append(res)
 
                     if res["poisoned"]:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Memory poisoning successful: {payload['id']}",
                                 description=(
@@ -130,8 +130,8 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
                             )
                         )
                     elif res["acknowledged"]:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Memory poisoning partially successful: {payload['id']}",
                                 description=(
@@ -157,8 +157,8 @@ class AgentMemoryPoisoningCheck(ServiceIteratingCheck):
                 if state_res:
                     poisoning_results.append(state_res)
                     if state_res["writable"]:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Agent state writable: PUT /state accepted",
                                 description=(

@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -81,7 +81,7 @@ class ToolDiscoveryCheck(BaseCheck):
 
             try:
                 dr = await self._probe_endpoint(url, service, api_format)
-                result.findings.extend(dr.findings)
+                result.observations.extend(dr.observations)
                 result.outputs.update(dr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -125,8 +125,8 @@ class ToolDiscoveryCheck(BaseCheck):
         if tools:
             severity = "high" if any(t in self.HIGH_RISK_TOOLS for t in tools) else "medium"
 
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Tools discovered ({len(tools)})",
                     description="Chatbot revealed available tools through conversation",

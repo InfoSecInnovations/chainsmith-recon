@@ -42,7 +42,7 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
 
     state.status = "running"
     state.phase = "scanning"
-    state.findings = []
+    state.observations = []
     state.error_message = None
     state.checks_completed = 0
     state.current_check = None
@@ -70,7 +70,7 @@ async def get_scan_status():
     return ScanStatus(
         status=state.status,
         phase=state.phase,
-        findings_count=len(state.findings),
+        observations_count=len(state.observations),
         checks_total=state.checks_total,
         checks_completed=state.checks_completed,
         current_check=state.current_check,

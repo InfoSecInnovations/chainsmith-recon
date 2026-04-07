@@ -154,7 +154,7 @@ class TestLLMEndpointCheckService:
         ):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) == 1
+        assert len(result.observations) == 1
         assert "chat_endpoints" in result.outputs
 
     async def test_skips_404_endpoints(self, sample_service):
@@ -172,7 +172,7 @@ class TestLLMEndpointCheckService:
         ):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     async def test_detects_api_format_openai(self, sample_service):
         """Detects OpenAI API format."""
@@ -217,7 +217,7 @@ class TestEmbeddingEndpointCheck:
         ):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) == 1
+        assert len(result.observations) == 1
         assert "embedding_endpoints" in result.outputs
 
 

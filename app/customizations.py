@@ -5,17 +5,17 @@ Manages severity overrides stored in ~/.chainsmith/customizations/:
   - severity_overrides.yaml: pre-run policy overrides (check-level, check+title-level)
   - scan_overrides/<scan_id>.yaml: post-run per-scan adjustments
 
-Core principle: the DB stores raw findings as checks produced them.
+Core principle: the DB stores raw observations as checks produced them.
 Overrides are applied as a read-time layer. Original severity is always preserved.
 
 Usage:
     from app.customizations import apply_pre_run_override, apply_scan_overrides
 
-    # Pre-run: mutate finding dict before persistence
-    apply_pre_run_override(finding_dict)
+    # Pre-run: mutate observation dict before persistence
+    apply_pre_run_override(observation_dict)
 
-    # Post-run: apply overrides when reading findings from DB
-    findings = apply_scan_overrides(findings, scan_id)
+    # Post-run: apply overrides when reading observations from DB
+    observations = apply_scan_overrides(observations, scan_id)
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.lib.findings import validate_severity
+from app.lib.observations import validate_severity
 
 try:
     import yaml as _yaml
@@ -231,37 +231,37 @@ def remove_check_title_override(check_name: str, title: str) -> bool:
     return True
 
 
-def apply_pre_run_override(finding_dict: dict) -> dict:
+def apply_pre_run_override(observation_dict: dict) -> dict:
     """
-    Apply pre-run severity overrides to a finding dict.
+    Apply pre-run severity overrides to a observation dict.
 
     Precedence: check+title > check-level > original.
     Stores original_severity in raw_data for audit trail.
 
     Args:
-        finding_dict: Mutable finding dict (modified in place)
+        observation_dict: Mutable observation dict (modified in place)
 
     Returns:
         The same dict (for chaining convenience)
     """
     config = load_severity_overrides()
     if not config.check_level and not config.check_title_level:
-        return finding_dict
+        return observation_dict
 
-    check_name = finding_dict.get("check_name", "")
-    title = finding_dict.get("title", "")
-    original = finding_dict.get("severity", "info")
+    check_name = observation_dict.get("check_name", "")
+    title = observation_dict.get("title", "")
+    original = observation_dict.get("severity", "info")
 
     new_severity = _resolve_override(
         check_name, title, config.check_level, config.check_title_level
     )
 
     if new_severity and new_severity != original:
-        finding_dict["severity"] = new_severity
-        raw = finding_dict.get("raw_data") or {}
+        observation_dict["severity"] = new_severity
+        raw = observation_dict.get("raw_data") or {}
         raw["original_severity"] = original
         raw["severity_override_source"] = "pre_run"
-        finding_dict["raw_data"] = raw
+        observation_dict["raw_data"] = raw
         logger.debug(
             "Pre-run override: %s / %s: %s -> %s",
             check_name,
@@ -270,7 +270,7 @@ def apply_pre_run_override(finding_dict: dict) -> dict:
             new_severity,
         )
 
-    return finding_dict
+    return observation_dict
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -366,9 +366,9 @@ def remove_scan_override(scan_id: str, scope: dict) -> bool:
     return True
 
 
-def apply_scan_overrides(findings: list[dict], scan_id: str) -> list[dict]:
+def apply_scan_overrides(observations: list[dict], scan_id: str) -> list[dict]:
     """
-    Apply scan-specific severity overrides to a list of finding dicts.
+    Apply scan-specific severity overrides to a list of observation dicts.
 
     Overrides are matched by scope (narrowest wins):
       1. {check_name, title} — both must match
@@ -376,10 +376,10 @@ def apply_scan_overrides(findings: list[dict], scan_id: str) -> list[dict]:
       3. {check_name} — check_name must match
 
     Adds original_severity, severity_override_reason, and override_source
-    to each overridden finding.
+    to each overridden observation.
 
     Args:
-        findings: List of finding dicts (modified in place)
+        observations: List of observation dicts (modified in place)
         scan_id: The scan to load overrides for
 
     Returns:
@@ -387,40 +387,40 @@ def apply_scan_overrides(findings: list[dict], scan_id: str) -> list[dict]:
     """
     rules = load_scan_overrides(scan_id)
     if not rules:
-        return findings
+        return observations
 
     # Pre-sort rules by specificity: most specific first
     # Specificity = number of non-empty scope keys
     sorted_rules = sorted(rules, key=lambda r: -len(r.scope))
 
-    for finding in findings:
-        check_name = finding.get("check_name", "")
-        title = finding.get("title", "")
-        original = finding.get("severity", "info")
+    for observation in observations:
+        check_name = observation.get("check_name", "")
+        title = observation.get("title", "")
+        original = observation.get("severity", "info")
 
         matched_rule = _match_scan_rule(check_name, title, sorted_rules)
         if matched_rule and matched_rule.severity != original:
-            finding["severity"] = matched_rule.severity
-            finding["original_severity"] = original
-            finding["severity_override_reason"] = matched_rule.reason
-            finding["override_source"] = "post_run"
+            observation["severity"] = matched_rule.severity
+            observation["original_severity"] = original
+            observation["severity_override_reason"] = matched_rule.reason
+            observation["override_source"] = "post_run"
 
-    return findings
+    return observations
 
 
 def preview_scan_override(
-    findings: list[dict],
+    observations: list[dict],
     scope: dict,
     new_severity: str,
 ) -> list[dict]:
     """
-    Dry-run: return findings that would be affected by an override without persisting.
+    Dry-run: return observations that would be affected by an override without persisting.
 
-    Returns list of affected finding summaries with before/after severity.
+    Returns list of affected observation summaries with before/after severity.
     """
     new_severity = validate_severity(new_severity)
     affected = []
-    for f in findings:
+    for f in observations:
         if _scope_matches(f, scope):
             affected.append(
                 {
@@ -475,11 +475,11 @@ def _match_scan_rule(
     return None
 
 
-def _scope_matches(finding: dict, scope: dict) -> bool:
-    """Check if a finding matches a scope dict."""
+def _scope_matches(observation: dict, scope: dict) -> bool:
+    """Check if an observation matches a scope dict."""
     return _scope_matches_values(
-        finding.get("check_name", ""),
-        finding.get("title", ""),
+        observation.get("check_name", ""),
+        observation.get("title", ""),
         scope,
     )
 

@@ -86,7 +86,7 @@ class TestErrorPageCheck:
         ):
             result = await check.check_service(service, {})
 
-        django = [f for f in result.findings if "django" in (f.id or "")]
+        django = [f for f in result.observations if "django" in (f.id or "")]
         assert len(django) == 1
         assert django[0].severity == "medium"
         assert "Debug mode" in django[0].title
@@ -107,7 +107,7 @@ class TestErrorPageCheck:
         ):
             result = await check.check_service(service, {})
 
-        werkzeug = [f for f in result.findings if "werkzeug" in (f.id or "")]
+        werkzeug = [f for f in result.observations if "werkzeug" in (f.id or "")]
         assert len(werkzeug) >= 1
         assert werkzeug[0].severity == "high"
 
@@ -125,7 +125,7 @@ class TestErrorPageCheck:
         ):
             result = await check.check_service(service, {})
 
-        spring = [f for f in result.findings if "spring-boot" in (f.id or "")]
+        spring = [f for f in result.observations if "spring-boot" in (f.id or "")]
         assert len(spring) == 1
         assert spring[0].severity == "low"
         assert "Framework identified" in spring[0].title
@@ -144,7 +144,7 @@ class TestErrorPageCheck:
         ):
             result = await check.check_service(service, {})
 
-        express = [f for f in result.findings if "express" in (f.id or "")]
+        express = [f for f in result.observations if "express" in (f.id or "")]
         assert len(express) == 1
 
     @pytest.mark.asyncio
@@ -161,7 +161,7 @@ class TestErrorPageCheck:
         ):
             result = await check.check_service(service, {})
 
-        fastapi = [f for f in result.findings if "fastapi" in (f.id or "")]
+        fastapi = [f for f in result.observations if "fastapi" in (f.id or "")]
         assert len(fastapi) == 1
         assert fastapi[0].severity == "info"
 
@@ -182,12 +182,12 @@ class TestErrorPageCheck:
         ):
             result = await check.check_service(service, {})
 
-        stack = [f for f in result.findings if "stack-trace" in (f.id or "")]
+        stack = [f for f in result.observations if "stack-trace" in (f.id or "")]
         assert len(stack) == 1
 
     @pytest.mark.asyncio
     async def test_custom_error_pages(self, service):
-        """Custom error pages with no framework signature produce info finding."""
+        """Custom error pages with no framework signature produce info observation."""
         check = ErrorPageCheck()
         body = "<html><body><h1>Page Not Found</h1><p>Sorry, we could not find that page.</p></body></html>"
 
@@ -199,7 +199,7 @@ class TestErrorPageCheck:
         ):
             result = await check.check_service(service, {})
 
-        custom = [f for f in result.findings if "custom-errors" in (f.id or "")]
+        custom = [f for f in result.observations if "custom-errors" in (f.id or "")]
         assert len(custom) == 1
         assert custom[0].severity == "info"
 
@@ -234,7 +234,7 @@ class TestErrorPageCheck:
         ):
             result = await check.check_service(service, {})
 
-        asp = [f for f in result.findings if "asp.net" in (f.id or "")]
+        asp = [f for f in result.observations if "asp.net" in (f.id or "")]
         assert len(asp) == 1
 
     @pytest.mark.asyncio
@@ -259,7 +259,7 @@ class TestErrorPageCheck:
 
     @pytest.mark.asyncio
     async def test_connection_error_handled(self, service):
-        """Connection errors produce no findings."""
+        """Connection errors produce no observations."""
         check = ErrorPageCheck()
 
         with patch(

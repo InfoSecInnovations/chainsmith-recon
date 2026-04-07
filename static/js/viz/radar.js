@@ -12,17 +12,17 @@
     /**
      * Build radar data: risk score per suite.
      */
-    function buildRadarData(findingsList) {
+    function buildRadarData(observationsList) {
         var scores = {};
 
-        findingsList.forEach(function (f) {
+        observationsList.forEach(function (f) {
             var suite = f.suite || ns.inferSuite(f.check_name);
-            if (!scores[suite]) scores[suite] = { score: 0, breakdown: {}, findings: [] };
+            if (!scores[suite]) scores[suite] = { score: 0, breakdown: {}, observations: [] };
             var entry  = scores[suite];
             var weight = SEV_WEIGHTS[f.severity] || 0;
             entry.score += weight;
             entry.breakdown[f.severity] = (entry.breakdown[f.severity] || 0) + 1;
-            entry.findings.push(f);
+            entry.observations.push(f);
         });
 
         var suites = KNOWN_SUITES.filter(function (s) { return scores[s]; });
@@ -41,14 +41,14 @@
     /**
      * Render the radar visualization.
      */
-    ns.renderRadar = function (findings, openModal) {
+    ns.renderRadar = function (observations, openModal) {
         var emptyEl   = document.getElementById('radar-empty');
         var contentEl = document.getElementById('radar-content');
         var tooltipEl = document.getElementById('radar-tooltip');
         var legendEl  = document.getElementById('radar-legend');
         var tip       = ns.tooltip(tooltipEl);
 
-        if (findings.length === 0) {
+        if (observations.length === 0) {
             emptyEl.style.display  = 'flex';
             contentEl.style.display = 'none';
             return;
@@ -59,7 +59,7 @@
         contentEl.style.flexDirection = 'column';
         contentEl.style.alignItems   = 'center';
 
-        var data   = buildRadarData(findings);
+        var data   = buildRadarData(observations);
         var suites = data.suites;
         var scores = data.scores;
 
@@ -145,7 +145,7 @@
                 suite: suite,
                 score: scores[suite].score,
                 breakdown: scores[suite].breakdown,
-                findings: scores[suite].findings,
+                observations: scores[suite].observations,
             };
         });
 
@@ -192,7 +192,7 @@
                     '<div class="modal-section">' +
                     '<div class="modal-section-title">' + d.suite.charAt(0).toUpperCase() + d.suite.slice(1) + ' \u2014 Risk Score: ' + d.score + '</div>' +
                     '<div class="modal-section-content">' +
-                    d.findings.map(function (f) {
+                    d.observations.map(function (f) {
                         return '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
                             '<span class="severity-badge severity-' + f.severity + '">' + f.severity + '</span>' +
                             '<span style="margin-left:8px">' + f.title + '</span>' +
@@ -200,7 +200,7 @@
                             '</div>';
                     }).join('') +
                     '</div></div>';
-                openModal(d.suite.charAt(0).toUpperCase() + d.suite.slice(1) + ' Findings', content);
+                openModal(d.suite.charAt(0).toUpperCase() + d.suite.slice(1) + ' Observations', content);
             });
     };
 

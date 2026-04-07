@@ -26,7 +26,7 @@ from app.checks.mcp.invocation_safety import (
     is_payload_safe,
     log_invocation,
 )
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -113,8 +113,8 @@ class MCPToolInvocationCheck(BaseCheck):
                     invocation_results.append(inv_log)
 
                     if resp.error:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Tool invocation failed: {tool_name} returned error for test payload",
                                 description=f"Tool '{tool_name}' returned an error when invoked with a safe test payload.",
@@ -156,8 +156,8 @@ class MCPToolInvocationCheck(BaseCheck):
         status = resp.status_code
 
         if status == 401 or status == 403:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Tool executes but requires auth: '{tool_name}' returned permission denied",
                     description=f"Tool '{tool_name}' is protected by authentication/authorization.",
@@ -171,8 +171,8 @@ class MCPToolInvocationCheck(BaseCheck):
             return
 
         if status != 200:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Tool invocation failed: {tool_name} (status {status})",
                     description=f"Tool '{tool_name}' returned non-200 status.",
@@ -189,13 +189,13 @@ class MCPToolInvocationCheck(BaseCheck):
         tool_result = self._extract_tool_result(resp.body)
         result_text = str(tool_result)[:500] if tool_result else ""
 
-        # Determine finding based on probe type and response
+        # Determine observation based on probe type and response
         if probe_type == "exec" and tool_result:
             if "chainsmith-probe" in result_text or any(
                 kw in result_text.lower() for kw in ["root", "uid=", "hostname", "\\users\\"]
             ):
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Tool executes commands: '{tool_name}' returned real output",
                         description=(
@@ -213,8 +213,8 @@ class MCPToolInvocationCheck(BaseCheck):
 
         elif probe_type == "file" and tool_result:
             if result_text and len(result_text) > 5:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Tool reads files: '{tool_name}' returned file contents",
                         description=(
@@ -232,8 +232,8 @@ class MCPToolInvocationCheck(BaseCheck):
 
         elif probe_type == "fetch" and tool_result:
             if any(kw in result_text.lower() for kw in ["origin", "headers", "url", "http"]):
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Tool makes HTTP requests: '{tool_name}' fetched external URL (SSRF risk)",
                         description=(
@@ -251,8 +251,8 @@ class MCPToolInvocationCheck(BaseCheck):
 
         elif probe_type == "search" and tool_result:
             if result_text and len(result_text) > 10:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Tool queries database: '{tool_name}' returned real data",
                         description=f"Tool '{tool_name}' returned data from a query/search operation.",
@@ -267,8 +267,8 @@ class MCPToolInvocationCheck(BaseCheck):
 
         # Generic: tool responded with data
         if tool_result and result_text:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Tool '{tool_name}' executed successfully with test payload",
                     description=f"Tool '{tool_name}' returned a result for the probe payload.",

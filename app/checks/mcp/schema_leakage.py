@@ -17,7 +17,7 @@ import re
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 # Patterns that indicate sensitive defaults
 SENSITIVE_DEFAULT_PATTERNS = [
@@ -218,13 +218,13 @@ class ToolSchemaLeakageCheck(BaseCheck):
                             }
                         )
 
-            # Generate findings for this tool's leaks
+            # Generate observations for this tool's leaks
             for leak in leaks:
                 all_leaks.append(leak)
-                severity, title, desc_text, evidence = self._leak_to_finding(leak)
+                severity, title, desc_text, evidence = self._leak_to_observation(leak)
 
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=title,
                         description=desc_text,
@@ -237,8 +237,8 @@ class ToolSchemaLeakageCheck(BaseCheck):
                 )
 
         if not all_leaks:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Tool schemas contain no sensitive information",
                     description="No information leakage detected in MCP tool schemas.",
@@ -254,7 +254,7 @@ class ToolSchemaLeakageCheck(BaseCheck):
 
         return result
 
-    def _leak_to_finding(self, leak: dict) -> tuple[str, str, str, str]:
+    def _leak_to_observation(self, leak: dict) -> tuple[str, str, str, str]:
         """Convert a leak dict to (severity, title, description, evidence)."""
         tool = leak["tool"]
         leak_type = leak["type"]

@@ -13,7 +13,7 @@ Configurable via environment variables:
     API_VERSION         API version (default: 2.1.0)
     VPN_DOMAIN          VPN hostname for redirect traps (default: vpn.<domain>)
 
-Planted findings:
+Planted observations:
     header_vllm_version         X-Powered-By header leak
     cors_misconfigured          Wildcard CORS headers
     stack_trace_disclosure      Verbose stack traces on errors
@@ -41,7 +41,7 @@ from app.scenario_services.common.config import (
     get_brand_domain,
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -77,10 +77,10 @@ app = FastAPI(
 @app.exception_handler(Exception)
 async def verbose_exception_handler(request: Request, exc: Exception):
     """
-    Finding: stack_trace_disclosure
+    Observation: stack_trace_disclosure
     When active, returns full stack traces on errors.
     """
-    if VERBOSE_ERRORS and is_finding_active("stack_trace_disclosure"):
+    if VERBOSE_ERRORS and is_observation_active("stack_trace_disclosure"):
         tb = traceback.format_exc()
         return JSONResponse(
             status_code=500,
@@ -101,18 +101,18 @@ async def verbose_exception_handler(request: Request, exc: Exception):
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
-    """Add headers based on active findings."""
+    """Add headers based on active observations."""
     response = await call_next(request)
 
-    # Finding: header_vllm_version - leak AI infrastructure
-    if is_finding_active("header_vllm_version"):
+    # Observation: header_vllm_version - leak AI infrastructure
+    if is_observation_active("header_vllm_version"):
         response.headers["X-Powered-By"] = "vLLM/0.4.1"
 
     # API version
     response.headers["X-API-Version"] = API_VERSION
 
-    # Finding: cors_misconfigured - wildcard CORS
-    if is_finding_active("cors_misconfigured"):
+    # Observation: cors_misconfigured - wildcard CORS
+    if is_observation_active("cors_misconfigured"):
         response.headers["Access-Control-Allow-Origin"] = "*"
 
     return response
@@ -213,7 +213,7 @@ async def get_products():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# UNDOCUMENTED v2 ENDPOINTS (findings)
+# UNDOCUMENTED v2 ENDPOINTS (observations)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -235,10 +235,10 @@ async def v2_embeddings():
     """
     Embedding endpoint.
 
-    Finding: embedding_endpoint_exposed
-    Only available when this finding is active.
+    Observation: embedding_endpoint_exposed
+    Only available when this observation is active.
     """
-    if not is_finding_active("embedding_endpoint_exposed"):
+    if not is_observation_active("embedding_endpoint_exposed"):
         raise HTTPException(status_code=404, detail="Not found")
 
     return {
@@ -254,10 +254,10 @@ async def v2_model_info():
     """
     Model card disclosure.
 
-    Finding: model_card_disclosure
-    Only available when this finding is active.
+    Observation: model_card_disclosure
+    Only available when this observation is active.
     """
-    if not is_finding_active("model_card_disclosure"):
+    if not is_observation_active("model_card_disclosure"):
         raise HTTPException(status_code=404, detail="Not found")
 
     return {
@@ -278,10 +278,10 @@ async def v2_tools():
     """
     Tool schema disclosure.
 
-    Finding: tool_schema_disclosure
-    Only available when this finding is active.
+    Observation: tool_schema_disclosure
+    Only available when this observation is active.
     """
-    if not is_finding_active("tool_schema_disclosure"):
+    if not is_observation_active("tool_schema_disclosure"):
         raise HTTPException(status_code=404, detail="Not found")
 
     return {

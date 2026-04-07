@@ -23,7 +23,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 DIMENSION_MAP = {
@@ -147,14 +147,14 @@ class RAGEmbeddingFingerprintCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        # Generate finding
+        # Generate observation
         if model_info["dimensions"] or model_info["model_name"]:
             title = f"Embedding model identified: {model_info['model_name'] or 'unknown'}"
             if model_info["dimensions"]:
                 title += f" ({model_info['dimensions']}d)"
 
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=title,
                     description=(
@@ -173,8 +173,8 @@ class RAGEmbeddingFingerprintCheck(ServiceIteratingCheck):
 
             result.outputs["embedding_model"] = model_info
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Embedding model not identified",
                     description="Could not determine the embedding model in use.",

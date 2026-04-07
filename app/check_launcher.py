@@ -5,7 +5,7 @@ Dead simple check execution with dependency resolution.
 No scenario logic here — that happens before checks reach the launcher.
 
 Supports on_critical behavior:
-- When a check produces critical findings, the affected hosts are tracked.
+- When a check produces critical observations, the affected hosts are tracked.
 - Before running downstream checks, the launcher resolves on_critical for
   that check's suite and applies annotate/skip/stop behavior per host.
 
@@ -13,7 +13,7 @@ Usage:
     from app.check_launcher import CheckLauncher
 
     launcher = CheckLauncher(checks, context)
-    findings = launcher.run_all()
+    observations = launcher.run_all()
 """
 
 import logging
@@ -36,7 +36,7 @@ class CheckLauncher:
     1. Finds checks whose conditions are met
     2. Runs them
     3. Updates context with their outputs
-    4. Tracks critical findings per host per suite
+    4. Tracks critical observations per host per suite
     5. Before running a check, applies on_critical behavior
     6. Repeats until nothing can run
     """
@@ -52,11 +52,11 @@ class CheckLauncher:
         self.completed: set[str] = set()
         self.failed: set[str] = set()
         self.skipped: set[str] = set()
-        self.findings: list = []
+        self.observations: list = []
         self.scan_stopped: bool = False
 
-        # critical_hosts tracks hosts with critical findings, keyed by host.
-        # Each entry is a list of {suite, check_name, finding_title, finding_id}.
+        # critical_hosts tracks hosts with critical observations, keyed by host.
+        # Each entry is a list of {suite, check_name, observation_title, observation_id}.
         self.critical_hosts: dict[str, list[dict]] = {}
 
         logger.info("=" * 60)
@@ -71,10 +71,10 @@ class CheckLauncher:
 
         Args:
             on_check_start: Optional callback(check_name) before each check
-            on_check_complete: Optional callback(check_name, success, findings_count)
+            on_check_complete: Optional callback(check_name, success, observations_count)
 
         Returns:
-            List of all findings from all checks
+            List of all observations from all checks
         """
         iteration = 0
         max_iterations = len(self.checks) + 1  # Safety limit
@@ -120,10 +120,10 @@ class CheckLauncher:
         # Store critical_hosts in context for downstream consumers
         self.context["critical_hosts"] = self.critical_hosts
 
-        logger.info(f"Completed after {iteration} iterations. {len(self.findings)} total findings.")
+        logger.info(f"Completed after {iteration} iterations. {len(self.observations)} total observations.")
         self._log_final_state()
 
-        return self.findings
+        return self.observations
 
     def _get_runnable(self) -> list:
         """Get checks that are pending and have all conditions met."""
@@ -182,7 +182,7 @@ class CheckLauncher:
         Execute a single check and update context.
 
         Returns:
-            (success: bool, findings_count: int)
+            (success: bool, observations_count: int)
         """
         name = check.name
         logger.info(f"Running: {name}")
@@ -206,45 +206,45 @@ class CheckLauncher:
                         f"  Context[{key}] = {self._summarize(new_val)} (was: {self._summarize(old_val)})"
                     )
 
-            # Collect findings and track critical ones
-            findings = getattr(result, "findings", []) or []
+            # Collect observations and track critical ones
+            observations = getattr(result, "observations", []) or getattr(result, "findings", []) or []
             check_suite = self._infer_suite(name)
 
-            for f in findings:
+            for obs in observations:
                 # Extract host from the original object before dict conversion
-                host = self._extract_host(f)
+                host = self._extract_host(obs)
 
-                if hasattr(f, "to_dict"):
-                    finding_dict = f.to_dict()
-                elif isinstance(f, dict):
-                    finding_dict = f
+                if hasattr(obs, "to_dict"):
+                    obs_dict = obs.to_dict()
+                elif isinstance(obs, dict):
+                    obs_dict = obs
                 else:
-                    finding_dict = {"title": str(f)}
+                    obs_dict = {"title": str(obs)}
 
                 # Ensure host is in the dict for downstream use
-                if host and "host" not in finding_dict:
-                    finding_dict["host"] = host
+                if host and "host" not in obs_dict:
+                    obs_dict["host"] = host
 
                 # Ensure raw_data dict exists
-                if "raw_data" not in finding_dict or finding_dict["raw_data"] is None:
-                    raw = getattr(f, "raw_data", None)
-                    finding_dict["raw_data"] = dict(raw) if raw else {}
+                if "raw_data" not in obs_dict or obs_dict["raw_data"] is None:
+                    raw = getattr(obs, "raw_data", None)
+                    obs_dict["raw_data"] = dict(raw) if raw else {}
 
-                # Annotate finding if host has prior critical findings from another suite
-                self._annotate_finding_if_needed(finding_dict, check_suite)
+                # Annotate observation if host has prior critical observations from another suite
+                self._annotate_observation_if_needed(obs_dict, check_suite)
 
                 # Apply pre-run severity overrides from user customizations
-                apply_pre_run_override(finding_dict)
+                apply_pre_run_override(obs_dict)
 
-                self.findings.append(finding_dict)
+                self.observations.append(obs_dict)
 
-                # Track critical findings for on_critical behavior
-                severity = finding_dict.get("severity", "").lower()
+                # Track critical observations for on_critical behavior
+                severity = obs_dict.get("severity", "").lower()
                 if severity == "critical" and host:
-                    self._record_critical(host, check_suite, name, finding_dict)
+                    self._record_critical(host, check_suite, name, obs_dict)
 
-            logger.info(f"  Completed: {name} — {len(findings)} findings")
-            return (True, len(findings))
+            logger.info(f"  Completed: {name} — {len(observations)} observations")
+            return (True, len(observations))
 
         except Exception as e:
             logger.error(f"  Failed: {name} — {e}")
@@ -253,19 +253,19 @@ class CheckLauncher:
 
     # ── on_critical helpers ────────────────────────────────────────
 
-    def _record_critical(self, host: str, suite: str, check_name: str, finding_dict: dict) -> None:
-        """Record a critical finding for a host."""
+    def _record_critical(self, host: str, suite: str, check_name: str, obs_dict: dict) -> None:
+        """Record a critical observation for a host."""
         if host not in self.critical_hosts:
             self.critical_hosts[host] = []
 
         entry = {
             "suite": suite,
             "check_name": check_name,
-            "finding_title": finding_dict.get("title", ""),
-            "finding_id": finding_dict.get("id", ""),
+            "observation_title": obs_dict.get("title", ""),
+            "observation_id": obs_dict.get("id", ""),
         }
         self.critical_hosts[host].append(entry)
-        logger.info(f"  Critical finding recorded: {host} from {suite}/{check_name}")
+        logger.info(f"  Critical observation recorded: {host} from {suite}/{check_name}")
 
         # Check if on_critical for this suite is "stop"
         on_critical = self._resolve_on_critical(suite)
@@ -277,7 +277,7 @@ class CheckLauncher:
         """
         Check if a check should be skipped due to on_critical='skip_downstream'.
 
-        Only skips if ALL service hosts for this check have critical findings
+        Only skips if ALL service hosts for this check have critical observations
         from an earlier suite. Returns a reason string if skipping, None otherwise.
         """
         if not self.critical_hosts:
@@ -285,13 +285,13 @@ class CheckLauncher:
 
         check_suite = self._infer_suite(check.name)
 
-        # Find which suites produced critical findings
+        # Find which suites produced critical observations
         critical_suites = set()
         for entries in self.critical_hosts.values():
             for entry in entries:
                 critical_suites.add(entry["suite"])
 
-        # Only skip if a DIFFERENT (earlier) suite produced the critical findings
+        # Only skip if a DIFFERENT (earlier) suite produced the critical observations
         # and that suite's on_critical is skip_downstream
         for critical_suite in critical_suites:
             if critical_suite == check_suite:
@@ -304,34 +304,34 @@ class CheckLauncher:
                 # the individual check level via annotations.
                 return (
                     f"on_critical='skip_downstream' from {critical_suite} suite — "
-                    f"critical findings on hosts: {list(self.critical_hosts.keys())}"
+                    f"critical observations on hosts: {list(self.critical_hosts.keys())}"
                 )
 
         return None
 
-    def _annotate_finding_if_needed(self, finding_dict: dict, check_suite: str) -> None:
-        """Annotate a finding if its host has critical findings from an earlier suite."""
+    def _annotate_observation_if_needed(self, obs_dict: dict, check_suite: str) -> None:
+        """Annotate an observation if its host has critical observations from an earlier suite."""
         if not self.critical_hosts:
             return
 
-        host = finding_dict.get("host") or ""
+        host = obs_dict.get("host") or ""
         if not host:
             # Try to extract from target
-            target = finding_dict.get("target")
+            target = obs_dict.get("target")
             if isinstance(target, dict):
                 host = target.get("host", "")
 
         if host and host in self.critical_hosts:
-            # Check if any critical finding is from a different suite
+            # Check if any critical observation is from a different suite
             for entry in self.critical_hosts[host]:
                 if entry["suite"] != check_suite:
-                    if "raw_data" not in finding_dict or finding_dict["raw_data"] is None:
-                        finding_dict["raw_data"] = {}
-                    finding_dict["raw_data"]["critical_finding_on_host"] = True
-                    finding_dict["raw_data"]["critical_finding_source"] = {
+                    if "raw_data" not in obs_dict or obs_dict["raw_data"] is None:
+                        obs_dict["raw_data"] = {}
+                    obs_dict["raw_data"]["critical_observation_on_host"] = True
+                    obs_dict["raw_data"]["critical_observation_source"] = {
                         "suite": entry["suite"],
                         "check_name": entry["check_name"],
-                        "finding_title": entry["finding_title"],
+                        "observation_title": entry["observation_title"],
                     }
                     break  # One annotation is enough
 
@@ -345,22 +345,22 @@ class CheckLauncher:
         except Exception:
             return "annotate"  # Safe default
 
-    def _extract_host(self, finding_obj) -> str | None:
-        """Extract host from a finding object or dict."""
-        # Try finding object attributes first
-        if hasattr(finding_obj, "host"):
-            return finding_obj.host
-        if hasattr(finding_obj, "target") and finding_obj.target:
-            target = finding_obj.target
+    def _extract_host(self, obs_obj) -> str | None:
+        """Extract host from an observation object or dict."""
+        # Try observation object attributes first
+        if hasattr(obs_obj, "host"):
+            return obs_obj.host
+        if hasattr(obs_obj, "target") and obs_obj.target:
+            target = obs_obj.target
             if hasattr(target, "host"):
                 return target.host
 
         # Fall back to dict access
-        if isinstance(finding_obj, dict):
-            host = finding_obj.get("host")
+        if isinstance(obs_obj, dict):
+            host = obs_obj.get("host")
             if host:
                 return host
-            target = finding_obj.get("target")
+            target = obs_obj.get("target")
             if isinstance(target, dict):
                 return target.get("host")
         return None

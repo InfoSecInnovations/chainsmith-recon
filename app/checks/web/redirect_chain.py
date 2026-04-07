@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
@@ -80,8 +80,8 @@ class RedirectChainCheck(ServiceIteratingCheck):
                     redirect_info["chain_length"] = len(chain)
 
                     if len(chain) > 3:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Long redirect chain: {len(chain)} hops",
                                 description=f"Redirect chain from {service.url} traverses {len(chain)} hops before reaching final destination",
@@ -102,8 +102,8 @@ class RedirectChainCheck(ServiceIteratingCheck):
                             domains.add(parsed.hostname)
                     external = domains - {service.host}
                     if external:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Cross-domain redirect to: {', '.join(sorted(external))}",
                                 description="Redirect chain passes through external domain(s)",
@@ -143,8 +143,8 @@ class RedirectChainCheck(ServiceIteratingCheck):
             location = resp.headers.get("location", "")
             if location.startswith("https://"):
                 info["https_redirect"] = True
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"HTTP to HTTPS redirect present: {service.host}",
                         description="HTTP requests are redirected to HTTPS (good)",
@@ -159,8 +159,8 @@ class RedirectChainCheck(ServiceIteratingCheck):
 
         # HTTP service serves content without redirecting to HTTPS
         info["https_redirect"] = False
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"No HTTP to HTTPS redirect: {service.host}",
                 description="HTTP requests are not redirected to HTTPS, content is served over plain HTTP",
@@ -224,8 +224,8 @@ class RedirectChainCheck(ServiceIteratingCheck):
                 location = resp.headers.get("location", "")
                 if OPEN_REDIRECT_TARGET in location:
                     open_redirects.append(path)
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Open redirect: {service.host}{path_template.split('?')[0]}",
                             description="Endpoint accepts arbitrary redirect destination via URL parameter",

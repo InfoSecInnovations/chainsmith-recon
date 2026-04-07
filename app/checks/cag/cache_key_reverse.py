@@ -19,7 +19,7 @@ import time
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Query variation pairs to test which components are in the cache key
@@ -136,8 +136,8 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
                         if sys_result:
                             key_results.append(sys_result)
 
-                    # Generate findings from results
-                    self._generate_findings(result, key_results, service, url)
+                    # Generate observations from results
+                    self._generate_observations(result, key_results, service, url)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -283,10 +283,10 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
         except Exception:
             return None
 
-    def _generate_findings(
+    def _generate_observations(
         self, result: CheckResult, key_results: list[dict], service: Service, url: str
     ) -> None:
-        """Generate findings from key analysis results."""
+        """Generate observations from key analysis results."""
         if not key_results:
             return
 
@@ -294,8 +294,8 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
         sys_tests = [r for r in key_results if r["test_id"] == "system_prompt"]
         for r in sys_tests:
             if r.get("cache_hit_on_variant"):
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="Cache key excludes system prompt: different system messages share cache",
                         description=(
@@ -318,8 +318,8 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
         for r in key_results:
             if r["test_id"] in ("capitalization", "whitespace", "punctuation"):
                 if r.get("cache_hit_on_variant"):
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Cache key is {r['description'].lower()}-insensitive",
                             description=(
@@ -336,11 +336,11 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
                         )
                     )
 
-        # Summary finding if all components are in key
+        # Summary observation if all components are in key
         all_in_key = all(r.get("component_in_key", False) for r in key_results)
         if all_in_key:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Cache key includes most query components (detailed key)",
                     description="All tested query components are part of the cache key, reducing collision risk.",

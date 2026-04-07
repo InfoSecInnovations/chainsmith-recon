@@ -1,4 +1,4 @@
-"""Tests for IPv6DiscoveryCheck: AAAA resolution, dual-stack analysis, and IPv6 findings."""
+"""Tests for IPv6DiscoveryCheck: AAAA resolution, dual-stack analysis, and IPv6 observations."""
 
 import socket
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -117,7 +117,7 @@ class TestIPv6DiscoveryCheckRun:
             }
             result = await check.run(context)
             assert result.outputs["ipv6_data"] == {}
-            assert len(result.findings) == 0
+            assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_dual_stack_detection(self):
@@ -136,11 +136,11 @@ class TestIPv6DiscoveryCheckRun:
             assert entry["ipv6_only"] is False
 
 
-class TestIPv6DiscoveryFindings:
-    """Test finding generation from IPv6 discovery."""
+class TestIPv6DiscoveryObservations:
+    """Test observation generation from IPv6 discovery."""
 
     @pytest.mark.asyncio
-    async def test_ipv6_info_finding(self):
+    async def test_ipv6_info_observation(self):
         from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
 
         check = IPv6DiscoveryCheck()
@@ -151,11 +151,11 @@ class TestIPv6DiscoveryFindings:
                 "dns_records": {"www.example.com": "1.2.3.4"},
             }
             result = await check.run(context)
-            info_findings = [f for f in result.findings if f.severity == "info"]
-            assert any("ipv6" in f.title.lower() for f in info_findings)
+            info_observations = [f for f in result.observations if f.severity == "info"]
+            assert any("ipv6" in f.title.lower() for f in info_observations)
 
     @pytest.mark.asyncio
-    async def test_ipv6_only_medium_finding(self):
+    async def test_ipv6_only_medium_observation(self):
         from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
 
         check = IPv6DiscoveryCheck()
@@ -166,13 +166,13 @@ class TestIPv6DiscoveryFindings:
                 "dns_records": {},  # No IPv4 record
             }
             result = await check.run(context)
-            medium_findings = [f for f in result.findings if f.severity == "medium"]
+            medium_observations = [f for f in result.observations if f.severity == "medium"]
             assert any(
-                "ipv6" in f.title.lower() and "ipv4" in f.title.lower() for f in medium_findings
+                "ipv6" in f.title.lower() and "ipv4" in f.title.lower() for f in medium_observations
             )
 
     @pytest.mark.asyncio
-    async def test_ula_finding(self):
+    async def test_ula_observation(self):
         from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
 
         check = IPv6DiscoveryCheck()
@@ -183,9 +183,9 @@ class TestIPv6DiscoveryFindings:
                 "dns_records": {"internal.example.com": "10.0.0.1"},
             }
             result = await check.run(context)
-            low_findings = [f for f in result.findings if f.severity == "low"]
+            low_observations = [f for f in result.observations if f.severity == "low"]
             assert any(
-                "ula" in f.title.lower() or "unique local" in f.title.lower() for f in low_findings
+                "ula" in f.title.lower() or "unique local" in f.title.lower() for f in low_observations
             )
 
     @pytest.mark.asyncio
@@ -202,8 +202,8 @@ class TestIPv6DiscoveryFindings:
             result = await check.run(context)
             entry = result.outputs["ipv6_data"]["cdn.example.com"]
             assert len(entry["ipv6_addresses"]) == 4
-            # Info finding should mention count
-            info = [f for f in result.findings if f.severity == "info"]
+            # Info observation should mention count
+            info = [f for f in result.observations if f.severity == "info"]
             assert any("4" in f.description for f in info)
 
 

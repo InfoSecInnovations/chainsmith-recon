@@ -14,7 +14,7 @@ import logging
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 
@@ -134,8 +134,8 @@ class HttpMethodEnumCheck(BaseCheck):
             http_methods_data[endpoint] = method_info
             result.targets_checked += 1
 
-            # Generate findings
-            self._generate_findings(result, svc, method_info)
+            # Generate observations
+            self._generate_observations(result, svc, method_info)
 
         result.outputs["http_methods"] = http_methods_data
         return result
@@ -202,22 +202,22 @@ class HttpMethodEnumCheck(BaseCheck):
         except Exception:
             return False
 
-    def _generate_findings(
+    def _generate_observations(
         self,
         result: CheckResult,
         svc: Service,
         method_info: dict[str, Any],
     ) -> None:
-        """Generate findings from method enumeration results."""
+        """Generate observations from method enumeration results."""
         endpoint = f"{svc.host}:{svc.port}"
         allowed = method_info.get("allowed", [])
         dangerous = method_info.get("dangerous", [])
         webdav = method_info.get("webdav", [])
 
-        # Info finding: allowed methods summary
+        # Info observation: allowed methods summary
         if allowed:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Allowed methods: {endpoint}",
                     description=(
@@ -232,11 +232,11 @@ class HttpMethodEnumCheck(BaseCheck):
                 )
             )
 
-        # Dangerous method findings
+        # Dangerous method observations
         for method in dangerous:
             meta = DANGEROUS_METHODS[method]
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"{method} method enabled: {endpoint}",
                     description=meta["desc"],
@@ -250,10 +250,10 @@ class HttpMethodEnumCheck(BaseCheck):
                 )
             )
 
-        # WebDAV methods finding
+        # WebDAV methods observation
         if webdav:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"WebDAV methods enabled: {endpoint}",
                     description=(

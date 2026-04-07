@@ -8,7 +8,7 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.ai_helpers import fmt_endpoint_probe_evidence
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -76,8 +76,8 @@ class LLMEndpointCheck(ServiceIteratingCheck):
 
                     api_format = self._detect_api_format(path)
 
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"LLM endpoint: {path}",
                             description=f"Chat/completion endpoint discovered ({api_format} format)",
@@ -178,8 +178,8 @@ class EmbeddingEndpointCheck(ServiceIteratingCheck):
                     if resp.error or resp.status_code in (404, 405):
                         continue
 
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Embedding endpoint: {path}",
                             description="Embedding/vector endpoint discovered",

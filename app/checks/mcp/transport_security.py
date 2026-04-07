@@ -15,7 +15,7 @@ References:
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -46,7 +46,7 @@ class TransportSecurityCheck(BaseCheck):
     async def run(self, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
         mcp_servers = context.get("mcp_servers", [])
-        transport_findings = []
+        transport_observations = []
 
         cfg = HttpConfig(timeout_seconds=10.0, verify_ssl=False)
 
@@ -68,8 +68,8 @@ class TransportSecurityCheck(BaseCheck):
             # Test 1: Plain HTTP check
             if scheme != "https":
                 server_transport["issues"].append("no_tls")
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="MCP served over plain HTTP (no TLS)",
                         description=(
@@ -104,24 +104,24 @@ class TransportSecurityCheck(BaseCheck):
             except Exception as e:
                 result.errors.append(f"Transport security test: {e}")
 
-            transport_findings.append(server_transport)
+            transport_observations.append(server_transport)
 
-        if not any(t["issues"] for t in transport_findings) and transport_findings:
-            host = transport_findings[0]["host"]
-            result.findings.append(
-                build_finding(
+        if not any(t["issues"] for t in transport_observations) and transport_observations:
+            host = transport_observations[0]["host"]
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Transport security adequate: TLS + origin validation",
                     description="MCP transport layer security checks passed.",
                     severity="info",
-                    evidence=f"Servers tested: {len(transport_findings)}",
+                    evidence=f"Servers tested: {len(transport_observations)}",
                     host=host,
                     discriminator="transport-ok",
                 )
             )
 
-        if transport_findings:
-            result.outputs["mcp_transport_security"] = transport_findings
+        if transport_observations:
+            result.outputs["mcp_transport_security"] = transport_observations
 
         return result
 
@@ -150,8 +150,8 @@ class TransportSecurityCheck(BaseCheck):
 
         if acao == "*":
             server_transport["issues"].append("cors_wildcard")
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="MCP endpoint allows cross-origin requests from any origin (CORS: *)",
                     description=(
@@ -168,8 +168,8 @@ class TransportSecurityCheck(BaseCheck):
             )
         elif acao == "https://evil.attacker.com":
             server_transport["issues"].append("cors_reflects_origin")
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="MCP endpoint reflects arbitrary Origin in CORS response",
                     description=(
@@ -209,8 +209,8 @@ class TransportSecurityCheck(BaseCheck):
         # If the server returns 200 with data despite foreign origin, it's not validating
         if resp.status_code == 200 and resp.body and '"tools"' in (resp.body or "").lower():
             server_transport["issues"].append("no_origin_validation")
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="MCP endpoint does not validate Origin header",
                     description=(
@@ -247,8 +247,8 @@ class TransportSecurityCheck(BaseCheck):
 
         if resp.status_code == 200 and "text/event-stream" in content_type:
             server_transport["issues"].append("sse_no_auth")
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="SSE stream accessible without per-connection authentication",
                     description=(

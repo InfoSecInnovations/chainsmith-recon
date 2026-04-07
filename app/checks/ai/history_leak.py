@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -72,7 +72,7 @@ class ConversationHistoryLeakCheck(BaseCheck):
 
             try:
                 hr = await self._test_history_leak(url, service, api_format)
-                result.findings.extend(hr.findings)
+                result.observations.extend(hr.observations)
                 result.outputs.update(hr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -148,8 +148,8 @@ class ConversationHistoryLeakCheck(BaseCheck):
         }
 
         if canary_found:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Conversation history leak: canary recovered from separate session",
                     description=(
@@ -167,8 +167,8 @@ class ConversationHistoryLeakCheck(BaseCheck):
                 )
             )
         elif leak_indicators_found:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Shared context detected: model references prior interactions ({len(leak_indicators_found)} indicators)",
                     description="Model responses reference previous conversations not from this session",
@@ -183,8 +183,8 @@ class ConversationHistoryLeakCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No cross-session leakage detected",
                     description=f"Tested {len(self.LEAK_PROBES)} probes, no history leakage indicators found",

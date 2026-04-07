@@ -26,7 +26,7 @@ from app.routes import (
     compliance_router,
     customizations_router,
     engagements_router,
-    findings_router,
+    observations_router,
     preferences_router,
     scan_router,
     scans_router,
@@ -95,7 +95,7 @@ app.include_router(scope_router)
 app.include_router(scan_router)
 app.include_router(scans_router)
 app.include_router(engagements_router)
-app.include_router(findings_router)
+app.include_router(observations_router)
 app.include_router(checks_router)
 app.include_router(chains_router)
 app.include_router(adjudication_router)
@@ -128,10 +128,10 @@ async def scan_page():
     return FileResponse(f"{_static_dir}/scan.html")
 
 
-@app.get("/findings.html")
-async def findings_page():
-    """Serve findings page."""
-    return FileResponse(f"{_static_dir}/findings.html")
+@app.get("/observations.html")
+async def observations_page():
+    """Serve observations page."""
+    return FileResponse(f"{_static_dir}/observations.html")
 
 
 @app.get("/settings.html")

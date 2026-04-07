@@ -12,7 +12,7 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -24,14 +24,14 @@ class DefaultCredsCheck(ServiceIteratingCheck):
     intrusive = True
 
     conditions = [CheckCondition("services", "truthy")]
-    produces = ["default_creds_findings"]
+    produces = ["default_creds_observations"]
     service_types = ["http", "html", "api"]
 
     timeout_seconds = 60.0
     delay_between_targets = 0.5
 
     reason = (
-        "Admin panels with default credentials supersede all AI-specific findings on the same host"
+        "Admin panels with default credentials supersede all AI-specific observations on the same host"
     )
     references = ["OWASP WSTG-ATHN-02", "CWE-798", "CWE-1392"]
     techniques = ["default credential testing", "authentication bypass"]
@@ -119,8 +119,8 @@ class DefaultCredsCheck(ServiceIteratingCheck):
                     if not has_login:
                         # No login form — admin panel may require no auth
                         if self._looks_like_admin_content(resp.body):
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Admin panel requires no authentication: {service.host}{path}",
                                     description=f"Admin panel at {path} is accessible without any login",
@@ -142,8 +142,8 @@ class DefaultCredsCheck(ServiceIteratingCheck):
                         cred_display = (
                             f"{username}/{password}" if password else f"{username}/(empty)"
                         )
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Default credentials accepted: {cred_display} at {service.host}{path}",
                                 description=f"Login with default credentials succeeded at {path}",
@@ -157,8 +157,8 @@ class DefaultCredsCheck(ServiceIteratingCheck):
                             )
                         )
                     else:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Login form detected: {service.host}{path}",
                                 description=f"Admin login form found at {path} — default credentials rejected",

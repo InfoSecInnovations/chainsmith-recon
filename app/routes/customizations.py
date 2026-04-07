@@ -4,7 +4,7 @@ app/routes/customizations.py - Pre-Run Severity Override Routes
 Endpoints for managing severity overrides stored in
 ~/.chainsmith/customizations/severity_overrides.yaml.
 
-These overrides are applied during check execution, before findings
+These overrides are applied during check execution, before observations
 are persisted. They let users set policy-level severity adjustments
 at the check level or check+title level.
 """

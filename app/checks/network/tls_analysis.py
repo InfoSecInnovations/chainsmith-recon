@@ -22,7 +22,7 @@ import ssl
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class TlsAnalysisCheck(BaseCheck):
         "TLS certificates reveal additional hostnames via SANs that subdomain "
         "enumeration may have missed (internal names, staging environments). "
         "Weak TLS configurations and expired/self-signed certificates are "
-        "security findings in themselves."
+        "security observations in themselves."
     )
     references = [
         "OWASP WSTG-CRYP-01 — Testing for Weak TLS/SSL Ciphers",
@@ -123,8 +123,8 @@ class TlsAnalysisCheck(BaseCheck):
             tls_data[endpoint] = cert_info
             result.targets_checked += 1
 
-            # Generate findings
-            self._generate_cert_findings(result, host, port, cert_info, base_domain)
+            # Generate observations
+            self._generate_cert_observations(result, host, port, cert_info, base_domain)
 
             # Collect SANs as additional hosts
             for san in cert_info.get("sans", []):
@@ -141,7 +141,7 @@ class TlsAnalysisCheck(BaseCheck):
                 continue
             protocols = await self._probe_protocols(host, port)
             tls_data[endpoint]["protocols"] = protocols
-            self._generate_protocol_findings(result, host, port, protocols)
+            self._generate_protocol_observations(result, host, port, protocols)
 
         result.outputs["tls_data"] = tls_data
         result.outputs["tls_hosts"] = sorted(all_san_hosts)
@@ -245,7 +245,7 @@ class TlsAnalysisCheck(BaseCheck):
                 continue
         return date_str
 
-    def _generate_cert_findings(
+    def _generate_cert_observations(
         self,
         result: CheckResult,
         host: str,
@@ -253,7 +253,7 @@ class TlsAnalysisCheck(BaseCheck):
         cert_info: dict,
         base_domain: str,
     ) -> None:
-        """Generate findings from certificate inspection."""
+        """Generate observations from certificate inspection."""
         endpoint = f"{host}:{port}"
         subject = cert_info.get("subject", {})
         issuer = cert_info.get("issuer", {})
@@ -261,13 +261,13 @@ class TlsAnalysisCheck(BaseCheck):
         subject_cn = subject.get("commonName", host)
         sans = cert_info.get("sans", [])
 
-        # Info finding: certificate summary
+        # Info observation: certificate summary
         san_str = ", ".join(sans[:10])
         if len(sans) > 10:
             san_str += f" (+{len(sans) - 10} more)"
         evidence = f"Subject: {subject_cn} | Issuer: {issuer_cn} | SANs: {san_str or 'none'}"
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"TLS certificate: {endpoint} ({issuer_cn})",
                 description=(
@@ -285,8 +285,8 @@ class TlsAnalysisCheck(BaseCheck):
         # SANs with new hostnames
         new_sans = [s for s in sans if s != host and not s.startswith("*.")]
         if new_sans:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Certificate SANs discovered: {endpoint}",
                     description=(
@@ -303,8 +303,8 @@ class TlsAnalysisCheck(BaseCheck):
 
         # Self-signed certificate
         if cert_info.get("self_signed"):
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Self-signed certificate: {endpoint}",
                     description=(
@@ -329,8 +329,8 @@ class TlsAnalysisCheck(BaseCheck):
                 days_left = (expiry - now).days
 
                 if days_left < self.EXPIRY_CRITICAL_DAYS:
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Expired certificate: {endpoint}",
                             description=(
@@ -344,8 +344,8 @@ class TlsAnalysisCheck(BaseCheck):
                         )
                     )
                 elif days_left <= self.EXPIRY_WARNING_DAYS:
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Certificate expires soon: {endpoint}",
                             description=(
@@ -425,20 +425,20 @@ class TlsAnalysisCheck(BaseCheck):
             pass
         return versions
 
-    def _generate_protocol_findings(
+    def _generate_protocol_observations(
         self,
         result: CheckResult,
         host: str,
         port: int,
         protocols: list[str],
     ) -> None:
-        """Generate findings for deprecated TLS versions."""
+        """Generate observations for deprecated TLS versions."""
         endpoint = f"{host}:{port}"
 
         deprecated = [p for p in protocols if p in ("TLS 1.0", "TLS 1.1")]
         for proto in deprecated:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"{proto} supported: {endpoint}",
                     description=(

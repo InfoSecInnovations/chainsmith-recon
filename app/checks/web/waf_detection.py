@@ -14,7 +14,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # ── WAF/CDN signature database ──────────────────────────────────────
@@ -131,14 +131,14 @@ class WAFDetectionCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        # ── Build findings ──
+        # ── Build observations ──
         is_waf = False
         for product, info in detected.items():
             product_type = info.get("type", "CDN/WAF")
             is_waf = is_waf or "waf" in product_type.lower()
 
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"{product_type} detected: {product}",
                     description=f"{product} identified on {service.host} via {info.get('method', 'header analysis')}",
@@ -151,8 +151,8 @@ class WAFDetectionCheck(ServiceIteratingCheck):
             )
 
         if is_waf:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"WAF may affect scan accuracy: {service.host}",
                     description="A WAF was detected — downstream AI/injection check results "

@@ -8,7 +8,7 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_cors_evidence
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import extract_headers_dict
 
@@ -20,7 +20,7 @@ class CorsCheck(ServiceIteratingCheck):
     description = "Test for overly permissive CORS configurations"
 
     conditions = [CheckCondition("services", "truthy")]
-    produces = ["cors_findings"]
+    produces = ["cors_observations"]
     service_types = ["http", "html", "api", "ai"]
 
     timeout_seconds = 30.0
@@ -60,8 +60,8 @@ class CorsCheck(ServiceIteratingCheck):
 
                     if acao == "*":
                         severity = "high" if acac == "true" else "medium"
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="CORS wildcard origin",
                                 description="Server allows any origin — may allow cross-origin data theft",
@@ -78,8 +78,8 @@ class CorsCheck(ServiceIteratingCheck):
 
                     elif acao == origin and origin != "null":
                         severity = "high" if acac == "true" else "medium"
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="CORS reflects arbitrary origin",
                                 description=f"Server reflects attacker-controlled origin: {origin}",
@@ -95,8 +95,8 @@ class CorsCheck(ServiceIteratingCheck):
                         break
 
                     elif acao == "null":
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="CORS allows null origin",
                                 description="Server accepts 'null' origin — sandbox iframe bypass possible",

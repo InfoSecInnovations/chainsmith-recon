@@ -8,7 +8,7 @@ model parameter values.
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -94,7 +94,7 @@ class ModelEnumerationCheck(BaseCheck):
 
             try:
                 er = await self._enumerate_models(url, service, api_format, context)
-                result.findings.extend(er.findings)
+                result.observations.extend(er.observations)
                 result.outputs.update(er.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -146,8 +146,8 @@ class ModelEnumerationCheck(BaseCheck):
         internal_models = [m for m in available if m in ("staging", "test", "internal", "base")]
 
         if internal_models:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Internal/staging model accessible: {', '.join(internal_models)}",
                     description="Internal or staging models are accessible and may have weaker guardrails",
@@ -162,8 +162,8 @@ class ModelEnumerationCheck(BaseCheck):
             )
 
         if available:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"{len(available)} models available",
                     description=f"Enumerated models: {', '.join(available)}",
@@ -180,8 +180,8 @@ class ModelEnumerationCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Single model available (no enumeration possible)",
                     description="Model parameter is not accepted or only one model is configured",

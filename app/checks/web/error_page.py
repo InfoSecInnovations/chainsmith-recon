@@ -17,7 +17,7 @@ import uuid
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
@@ -126,8 +126,8 @@ class ErrorPageCheck(ServiceIteratingCheck):
                     )
                     if self._has_stack_trace(resp_404.body):
                         debug_detected = True
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Stack trace in 404 response: {service.host}",
                                 description="Error response contains a stack trace, leaking internal code structure",
@@ -173,8 +173,8 @@ class ErrorPageCheck(ServiceIteratingCheck):
 
         # If no framework was identified but we got responses
         if not detected_frameworks and not debug_detected:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Custom error pages (framework not identified): {service.host}",
                     description="Error pages do not reveal framework identity",
@@ -226,8 +226,8 @@ class ErrorPageCheck(ServiceIteratingCheck):
                     title = f"Framework identified from error page: {framework}"
                     description = f"{framework} identified from error response signatures"
 
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=title,
                         description=description,

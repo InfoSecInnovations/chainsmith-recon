@@ -4,8 +4,8 @@ app/scenario_services/common/config.py
 Shared configuration system for scenario services.
 
 This module provides:
-- Session management with randomized findings
-- Finding activation checks (is_finding_active)
+- Session management with randomized observations
+- Observation activation checks (is_observation_active)
 - Environment-based configuration
 - Scenario-aware configuration loading
 
@@ -16,12 +16,12 @@ Configuration sources (in order of precedence):
 
 Usage in services:
     from app.scenario_services.common.config import (
-        is_finding_active,
+        is_observation_active,
         get_or_create_session,
         get_config,
     )
 
-    if is_finding_active("cors_misconfigured"):
+    if is_observation_active("cors_misconfigured"):
         response.headers["Access-Control-Allow-Origin"] = "*"
 """
 
@@ -66,7 +66,7 @@ SERVICE_PORT = int(os.getenv("SERVICE_PORT", "8080"))
 
 # Behavior flags
 VERBOSE_ERRORS = _env_bool("VERBOSE_ERRORS", True)
-RANDOMIZE_FINDINGS = _env_bool("RANDOMIZE_FINDINGS", True)
+RANDOMIZE_OBSERVATIONS = _env_bool("RANDOMIZE_OBSERVATIONS", True)
 RATE_LIMIT_ENABLED = _env_bool("RATE_LIMIT_ENABLED", False)
 WAF_ENABLED = _env_bool("WAF_ENABLED", False)
 HONEYPOT_ENABLED = _env_bool("HONEYPOT_ENABLED", False)
@@ -83,8 +83,8 @@ BRAND_DOMAIN = os.getenv("BRAND_DOMAIN", "")
 
 
 @dataclass
-class FindingsConfig:
-    """Configuration for findings randomization."""
+class ObservationsConfig:
+    """Configuration for observations randomization."""
 
     certain: list[str] = field(default_factory=list)
     random_pool: list[str] = field(default_factory=list)
@@ -101,24 +101,24 @@ class ScenarioConfig:
     version: str = "1.0.0"
     brand_name: str = ""
     brand_domain: str = ""
-    findings: FindingsConfig = field(default_factory=FindingsConfig)
+    observations: ObservationsConfig = field(default_factory=ObservationsConfig)
     # Raw data for extensions
     raw: dict = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict) -> ScenarioConfig:
         """Parse scenario.json into ScenarioConfig."""
-        findings_raw = data.get("findings", {})
+        observations_raw = data.get("observations", data.get("findings", {}))
 
-        # Handle both flat list and structured findings config
-        if isinstance(findings_raw, list):
-            # Legacy: findings is just a list of certain findings
-            findings = FindingsConfig(certain=findings_raw)
+        # Handle both flat list and structured observations config
+        if isinstance(observations_raw, list):
+            # Legacy: observations is just a list of certain observations
+            observations = ObservationsConfig(certain=observations_raw)
         else:
-            random_count = findings_raw.get("random_count", {})
-            findings = FindingsConfig(
-                certain=findings_raw.get("certain", []),
-                random_pool=findings_raw.get("random_pool", []),
+            random_count = observations_raw.get("random_count", {})
+            observations = ObservationsConfig(
+                certain=observations_raw.get("certain", []),
+                random_pool=observations_raw.get("random_pool", []),
                 random_min=random_count.get("min", 2),
                 random_max=random_count.get("max", 5),
             )
@@ -129,7 +129,7 @@ class ScenarioConfig:
             version=data.get("version", "1.0.0"),
             brand_name=data.get("brand_name", data.get("name", "")),
             brand_domain=data.get("brand_domain", ""),
-            findings=findings,
+            observations=observations,
             raw=data,
         )
 
@@ -194,12 +194,12 @@ def get_config(key: str, default: Any = None) -> Any:
 @dataclass
 class SessionState:
     """
-    Tracks which findings are active for this session.
+    Tracks which observations are active for this session.
     Persisted to SESSION_STATE_PATH so all containers share the same state.
     """
 
     session_id: str
-    active_findings: list[str]
+    active_observations: list[str]
     active_hallucinations: list[str] = field(default_factory=list)
     created_at: str = ""
     # Range mode fields
@@ -210,7 +210,7 @@ class SessionState:
     def to_dict(self) -> dict:
         return {
             "session_id": self.session_id,
-            "active_findings": self.active_findings,
+            "active_observations": self.active_observations,
             "active_hallucinations": self.active_hallucinations,
             "created_at": self.created_at,
             "range_mode": self.range_mode,
@@ -222,7 +222,7 @@ class SessionState:
     def from_dict(cls, data: dict) -> SessionState:
         return cls(
             session_id=data.get("session_id", ""),
-            active_findings=data.get("active_findings", []),
+            active_observations=data.get("active_observations", []),
             active_hallucinations=data.get("active_hallucinations", []),
             created_at=data.get("created_at", ""),
             range_mode=data.get("range_mode", False),
@@ -240,19 +240,19 @@ def _generate_session_id() -> str:
     return hashlib.sha256(os.urandom(32)).hexdigest()[:16]
 
 
-def _select_random_findings(config: ScenarioConfig) -> list[str]:
-    """Select random findings from the pool based on config."""
-    findings = list(config.findings.certain)
+def _select_random_observations(config: ScenarioConfig) -> list[str]:
+    """Select random observations from the pool based on config."""
+    observations = list(config.observations.certain)
 
-    pool = config.findings.random_pool
-    if pool and RANDOMIZE_FINDINGS:
+    pool = config.observations.random_pool
+    if pool and RANDOMIZE_OBSERVATIONS:
         count = random.randint(
-            config.findings.random_min, min(config.findings.random_max, len(pool))
+            config.observations.random_min, min(config.observations.random_max, len(pool))
         )
         if count > 0:
-            findings.extend(random.sample(pool, k=count))
+            observations.extend(random.sample(pool, k=count))
 
-    return findings
+    return observations
 
 
 def _select_hallucinations() -> list[str]:
@@ -263,12 +263,12 @@ def _select_hallucinations() -> list[str]:
 
 
 def _create_session() -> SessionState:
-    """Create a new session with randomized findings."""
+    """Create a new session with randomized observations."""
     config = get_scenario_config()
 
     session = SessionState(
         session_id=_generate_session_id(),
-        active_findings=_select_random_findings(config),
+        active_observations=_select_random_observations(config),
         active_hallucinations=_select_hallucinations(),
         created_at=datetime.now(UTC).isoformat(),
         range_mode=RANGE_MODE,
@@ -362,29 +362,29 @@ def reload_session() -> SessionState:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# FINDING CHECKS
+# OBSERVATION CHECKS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def is_finding_active(finding_id: str) -> bool:
+def is_observation_active(observation_id: str) -> bool:
     """
-    Check if a specific finding is active in current session.
+    Check if a specific observation is active in current session.
 
     This is the primary API for services to check whether to expose
     a vulnerability or security misconfiguration.
 
     Usage:
-        if is_finding_active("cors_misconfigured"):
+        if is_observation_active("cors_misconfigured"):
             response.headers["Access-Control-Allow-Origin"] = "*"
     """
     session = get_or_create_session()
-    return finding_id in session.active_findings
+    return observation_id in session.active_observations
 
 
-def get_active_findings() -> list[str]:
-    """Get list of all active finding IDs for current session."""
+def get_active_observations() -> list[str]:
+    """Get list of all active observation IDs for current session."""
     session = get_or_create_session()
-    return list(session.active_findings)
+    return list(session.active_observations)
 
 
 def get_active_hallucinations() -> list[str]:

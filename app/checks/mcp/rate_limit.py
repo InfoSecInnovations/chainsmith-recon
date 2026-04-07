@@ -15,7 +15,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import build_safe_payload
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -134,8 +134,8 @@ class ToolRateLimitCheck(BaseCheck):
                 rate_limit_status.append(status)
 
                 if rate_limited > 0:
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Tool rate limiting detected: {tool_name} limited to ~{success_count}/{self.BURST_SIZE} in {elapsed:.1f}s",
                             description=(
@@ -154,8 +154,8 @@ class ToolRateLimitCheck(BaseCheck):
                         )
                     )
                 elif success_count == self.BURST_SIZE:
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"No per-tool rate limiting: {tool_name} accepts unlimited rapid invocations",
                             description=(

@@ -14,7 +14,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Queries designed to elicit cited responses
@@ -139,14 +139,14 @@ class RAGSourceAttributionCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        # Generate findings
+        # Generate observations
         if citation_info["has_citations"]:
             urls = citation_info.get("urls_found", [])
             suspicious = [u for u in urls if any(p.search(u) for p in SUSPICIOUS_URL_PATTERNS)]
 
             if suspicious:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="Citation URLs not validated: suspicious URLs in sources",
                         description=(
@@ -164,8 +164,8 @@ class RAGSourceAttributionCheck(ServiceIteratingCheck):
                 )
 
             if citation_info["structured_sources"]:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="Source attribution present with structured citations",
                         description=(
@@ -181,8 +181,8 @@ class RAGSourceAttributionCheck(ServiceIteratingCheck):
                     )
                 )
             else:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="Source attribution present but document origin not verified",
                         description="Citations found in text but no structured source verification.",
@@ -195,8 +195,8 @@ class RAGSourceAttributionCheck(ServiceIteratingCheck):
                     )
                 )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No source attribution in RAG responses",
                     description="RAG responses do not include source citations.",

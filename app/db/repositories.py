@@ -21,9 +21,9 @@ from app.db.models import (
     Chain,
     CheckLog,
     Engagement,
-    Finding,
-    FindingOverride,
-    FindingStatusHistory,
+    ObservationOverride,
+    ObservationRecord,
+    ObservationStatusHistory,
     Scan,
     ScanComparison,
 )
@@ -46,7 +46,7 @@ class _RepositoryBase:
 
 def _generate_fingerprint(check_name: str, host: str, title: str, evidence: str = "") -> str:
     """
-    Generate a stable fingerprint for deduplicating findings across scans.
+    Generate a stable fingerprint for deduplicating observations across scans.
 
     The fingerprint is a hash of (check_name, host, title, key_evidence).
     Strips timestamps and request IDs from evidence before hashing.
@@ -95,7 +95,7 @@ class ScanRepository(_RepositoryBase):
         checks_total: int = 0,
         checks_completed: int = 0,
         checks_failed: int = 0,
-        findings_count: int = 0,
+        observations_count: int = 0,
         duration_ms: int | None = None,
         error_message: str | None = None,
     ) -> None:
@@ -111,11 +111,11 @@ class ScanRepository(_RepositoryBase):
             scan.checks_total = checks_total
             scan.checks_completed = checks_completed
             scan.checks_failed = checks_failed
-            scan.findings_count = findings_count
+            scan.observations_count = observations_count
             scan.duration_ms = duration_ms
             scan.error_message = error_message
             await session.commit()
-        logger.info(f"Scan {scan_id} updated (status={status}, findings={findings_count})")
+        logger.info(f"Scan {scan_id} updated (status={status}, observations={observations_count})")
 
     async def get_scan(self, scan_id: str) -> dict | None:
         """Get a scan by ID. Returns dict or None."""
@@ -169,7 +169,7 @@ class ScanRepository(_RepositoryBase):
 
             # Delete related data first, then the scan
             await session.execute(
-                delete(FindingStatusHistory).where(FindingStatusHistory.scan_id == scan_id)
+                delete(ObservationStatusHistory).where(ObservationStatusHistory.scan_id == scan_id)
             )
             await session.execute(
                 delete(ScanComparison).where(
@@ -178,7 +178,7 @@ class ScanRepository(_RepositoryBase):
             )
             await session.execute(delete(CheckLog).where(CheckLog.scan_id == scan_id))
             await session.execute(delete(Chain).where(Chain.scan_id == scan_id))
-            await session.execute(delete(Finding).where(Finding.scan_id == scan_id))
+            await session.execute(delete(ObservationRecord).where(ObservationRecord.scan_id == scan_id))
             await session.execute(delete(Scan).where(Scan.id == scan_id))
             await session.commit()
 
@@ -200,7 +200,7 @@ def _scan_to_dict(scan: Scan) -> dict:
         "checks_total": scan.checks_total,
         "checks_completed": scan.checks_completed,
         "checks_failed": scan.checks_failed,
-        "findings_count": scan.findings_count,
+        "observations_count": scan.observations_count,
         "scope": scan.scope,
         "settings": scan.settings,
         "profile_name": scan.profile_name,
@@ -209,22 +209,22 @@ def _scan_to_dict(scan: Scan) -> dict:
     }
 
 
-class FindingRepository(_RepositoryBase):
-    """Persist scan findings."""
+class ObservationRepository(_RepositoryBase):
+    """Persist scan observations."""
 
-    async def bulk_create(self, scan_id: str, findings: list[dict]) -> int:
+    async def bulk_create(self, scan_id: str, observations: list[dict]) -> int:
         """
-        Insert findings from a completed scan. Returns count inserted.
+        Insert observations from a completed scan. Returns count inserted.
 
-        Each finding dict is expected to have the shape produced by checks
+        Each observation dict is expected to have the shape produced by checks
         (title, description, severity, check_name, etc.).
         """
-        if not findings:
+        if not observations:
             return 0
 
         rows = []
-        for f in findings:
-            finding_id = f.get("id") or uuid.uuid4().hex[:12]
+        for f in observations:
+            observation_id = f.get("id") or uuid.uuid4().hex[:12]
             host = f.get("host") or f.get("target_url", "")
             fingerprint = _generate_fingerprint(
                 check_name=f.get("check_name", f.get("check", "")),
@@ -233,8 +233,8 @@ class FindingRepository(_RepositoryBase):
                 evidence=f.get("evidence", ""),
             )
             rows.append(
-                Finding(
-                    id=finding_id,
+                ObservationRecord(
+                    id=observation_id,
                     scan_id=scan_id,
                     title=f.get("title", "Untitled"),
                     description=f.get("description"),
@@ -256,66 +256,66 @@ class FindingRepository(_RepositoryBase):
             session.add_all(rows)
             await session.commit()
 
-        logger.info(f"Persisted {len(rows)} findings for scan {scan_id}")
+        logger.info(f"Persisted {len(rows)} observations for scan {scan_id}")
         return len(rows)
 
-    async def get_findings(
+    async def get_observations(
         self,
         scan_id: str,
         severity: str | None = None,
         host: str | None = None,
     ) -> list[dict]:
-        """Get findings for a scan with optional filters.
+        """Get observations for a scan with optional filters.
 
         Severity overrides from user customizations are applied before
         filtering, so the severity parameter filters on effective severity.
         """
-        query = select(Finding).where(Finding.scan_id == scan_id)
+        query = select(ObservationRecord).where(ObservationRecord.scan_id == scan_id)
         # Host filter can still be applied at query level
         if host:
-            query = query.where(Finding.host == host)
+            query = query.where(ObservationRecord.host == host)
 
         async with self._session() as session:
             result = await session.execute(query)
-            findings = [_finding_to_dict(f) for f in result.scalars().all()]
+            observations = [_observation_to_dict(f) for f in result.scalars().all()]
 
         # Apply scan-specific severity overrides from user customizations
         from app.customizations import apply_scan_overrides
 
-        findings = apply_scan_overrides(findings, scan_id)
+        observations = apply_scan_overrides(observations, scan_id)
 
         # Filter by severity AFTER overrides so filtering sees effective severity
         if severity:
-            findings = [f for f in findings if f["severity"] == severity]
+            observations = [f for f in observations if f["severity"] == severity]
 
-        return findings
+        return observations
 
-    async def get_findings_by_host(self, scan_id: str) -> list[dict]:
-        """Get findings for a scan grouped by host.
+    async def get_observations_by_host(self, scan_id: str) -> list[dict]:
+        """Get observations for a scan grouped by host.
 
         Severity overrides from user customizations are applied.
         """
         async with self._session() as session:
-            result = await session.execute(select(Finding).where(Finding.scan_id == scan_id))
-            finding_dicts = [_finding_to_dict(f) for f in result.scalars().all()]
+            result = await session.execute(select(ObservationRecord).where(ObservationRecord.scan_id == scan_id))
+            observation_dicts = [_observation_to_dict(f) for f in result.scalars().all()]
 
         # Apply scan-specific severity overrides
         from app.customizations import apply_scan_overrides
 
-        finding_dicts = apply_scan_overrides(finding_dicts, scan_id)
+        observation_dicts = apply_scan_overrides(observation_dicts, scan_id)
 
         hosts: dict[str, list[dict]] = {}
-        for f in finding_dicts:
+        for f in observation_dicts:
             host = f.get("host") or "unknown"
             if host not in hosts:
                 hosts[host] = []
             hosts[host].append(f)
 
-        return [{"name": host, "findings": flist} for host, flist in hosts.items()]
+        return [{"name": host, "observations": flist} for host, flist in hosts.items()]
 
 
-def _finding_to_dict(f: Finding) -> dict:
-    """Convert a Finding ORM object to a JSON-safe dict.
+def _observation_to_dict(f: ObservationRecord) -> dict:
+    """Convert an ObservationRecord ORM object to a JSON-safe dict.
 
     Override fields (original_severity, severity_override_reason, override_source)
     default to None and are populated by apply_scan_overrides() at read time.
@@ -362,7 +362,7 @@ class ChainRepository(_RepositoryBase):
                     description=c.get("description"),
                     severity=c.get("severity", "info"),
                     source=c.get("source", "rule-based"),
-                    finding_ids=c.get("finding_ids") or c.get("findings"),
+                    observation_ids=c.get("observation_ids") or c.get("observations"),
                 )
             )
 
@@ -389,7 +389,7 @@ def _chain_to_dict(c: Chain) -> dict:
         "description": c.description,
         "severity": c.severity,
         "source": c.source,
-        "finding_ids": c.finding_ids,
+        "observation_ids": c.observation_ids,
         "created_at": c.created_at.isoformat() if c.created_at else None,
     }
 
@@ -410,7 +410,7 @@ class CheckLogRepository(_RepositoryBase):
                     check_name=entry.get("check", "unknown"),
                     suite=entry.get("suite"),
                     event=entry.get("event", "unknown"),
-                    findings_count=entry.get("findings", 0),
+                    observations_count=entry.get("observations", 0),
                     duration_ms=entry.get("duration_ms"),
                     error_message=entry.get("error_message"),
                 )
@@ -438,7 +438,7 @@ def _check_log_to_dict(entry: CheckLog) -> dict:
         "check": entry.check_name,
         "suite": entry.suite,
         "event": entry.event,
-        "findings": entry.findings_count,
+        "observations": entry.observations_count,
         "duration_ms": entry.duration_ms,
         "error_message": entry.error_message,
         "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
@@ -566,12 +566,12 @@ def _engagement_to_dict(eng: Engagement) -> dict:
 
 
 class ComparisonRepository(_RepositoryBase):
-    """Compute and store finding status tracking and scan comparisons."""
+    """Compute and store observation status tracking and scan comparisons."""
 
-    async def compute_finding_statuses(self, scan_id: str) -> dict:
+    async def compute_observation_statuses(self, scan_id: str) -> dict:
         """
         Compare the current scan's fingerprints against the previous scan
-        for the same target (or engagement). Writes FindingStatusHistory
+        for the same target (or engagement). Writes ObservationStatusHistory
         entries and a ScanComparison record.
 
         Returns {new, recurring, resolved, regressed, previous_scan_id}.
@@ -599,15 +599,15 @@ class ComparisonRepository(_RepositoryBase):
 
             # Get all current fingerprints (used for first-scan path)
             result = await session.execute(
-                select(Finding.fingerprint).where(Finding.scan_id == scan_id)
+                select(ObservationRecord.fingerprint).where(ObservationRecord.scan_id == scan_id)
             )
             all_current_fps = {row[0] for row in result.all() if row[0]}
 
             if previous_scan is None:
-                # First scan — all findings are new
+                # First scan — all observations are new
                 for fp in all_current_fps:
                     session.add(
-                        FindingStatusHistory(
+                        ObservationStatusHistory(
                             fingerprint=fp,
                             scan_id=scan_id,
                             status="new",
@@ -626,7 +626,7 @@ class ComparisonRepository(_RepositoryBase):
 
             # -- Check-aware comparison --
             # Get checks that actually executed (completed or failed, not skipped)
-            # in both scans. Only compare findings from this common set.
+            # in both scans. Only compare observations from this common set.
             executed_events = ("completed", "failed")
 
             result = await session.execute(
@@ -645,37 +645,37 @@ class ComparisonRepository(_RepositoryBase):
 
             common_checks = current_checks & previous_checks
 
-            # Get fingerprints only for findings whose check ran in both scans
+            # Get fingerprints only for observations whose check ran in both scans
             if common_checks:
                 result = await session.execute(
-                    select(Finding.fingerprint)
-                    .where(Finding.scan_id == scan_id)
-                    .where(Finding.check_name.in_(common_checks))
+                    select(ObservationRecord.fingerprint)
+                    .where(ObservationRecord.scan_id == scan_id)
+                    .where(ObservationRecord.check_name.in_(common_checks))
                 )
                 current_fps = {row[0] for row in result.all() if row[0]}
 
                 result = await session.execute(
-                    select(Finding.fingerprint)
-                    .where(Finding.scan_id == previous_scan.id)
-                    .where(Finding.check_name.in_(common_checks))
+                    select(ObservationRecord.fingerprint)
+                    .where(ObservationRecord.scan_id == previous_scan.id)
+                    .where(ObservationRecord.check_name.in_(common_checks))
                 )
                 previous_fps = {row[0] for row in result.all() if row[0]}
             else:
                 # No common checks (edge case) — fall back to all fingerprints
                 current_fps = all_current_fps
                 result = await session.execute(
-                    select(Finding.fingerprint).where(Finding.scan_id == previous_scan.id)
+                    select(ObservationRecord.fingerprint).where(ObservationRecord.scan_id == previous_scan.id)
                 )
                 previous_fps = {row[0] for row in result.all() if row[0]}
 
-            # Findings from checks that only ran in current scan are "new"
+            # Observations from checks that only ran in current scan are "new"
             # (we can't compare them — no prior baseline)
             current_only_checks = current_checks - previous_checks
             if current_only_checks:
                 result = await session.execute(
-                    select(Finding.fingerprint)
-                    .where(Finding.scan_id == scan_id)
-                    .where(Finding.check_name.in_(current_only_checks))
+                    select(ObservationRecord.fingerprint)
+                    .where(ObservationRecord.scan_id == scan_id)
+                    .where(ObservationRecord.check_name.in_(current_only_checks))
                 )
                 current_only_fps = {row[0] for row in result.all() if row[0]}
             else:
@@ -683,9 +683,9 @@ class ComparisonRepository(_RepositoryBase):
 
             # Check for regressed: was resolved in a prior comparison but is back now
             result = await session.execute(
-                select(FindingStatusHistory.fingerprint)
-                .where(FindingStatusHistory.status == "resolved")
-                .where(FindingStatusHistory.fingerprint.in_(current_fps | current_only_fps))
+                select(ObservationStatusHistory.fingerprint)
+                .where(ObservationStatusHistory.status == "resolved")
+                .where(ObservationStatusHistory.fingerprint.in_(current_fps | current_only_fps))
             )
             previously_resolved = {row[0] for row in result.all()}
 
@@ -699,7 +699,7 @@ class ComparisonRepository(_RepositoryBase):
             # Write status history entries
             for fp in new_fps:
                 session.add(
-                    FindingStatusHistory(
+                    ObservationStatusHistory(
                         fingerprint=fp,
                         scan_id=scan_id,
                         status="new",
@@ -709,7 +709,7 @@ class ComparisonRepository(_RepositoryBase):
                 )
             for fp in recurring_fps:
                 session.add(
-                    FindingStatusHistory(
+                    ObservationStatusHistory(
                         fingerprint=fp,
                         scan_id=scan_id,
                         status="recurring",
@@ -718,7 +718,7 @@ class ComparisonRepository(_RepositoryBase):
                 )
             for fp in resolved_fps:
                 session.add(
-                    FindingStatusHistory(
+                    ObservationStatusHistory(
                         fingerprint=fp,
                         scan_id=scan_id,
                         status="resolved",
@@ -727,7 +727,7 @@ class ComparisonRepository(_RepositoryBase):
                 )
             for fp in regressed_fps:
                 session.add(
-                    FindingStatusHistory(
+                    ObservationStatusHistory(
                         fingerprint=fp,
                         scan_id=scan_id,
                         status="regressed",
@@ -739,7 +739,7 @@ class ComparisonRepository(_RepositoryBase):
             comparison = ScanComparison(
                 scan_a_id=previous_scan.id,
                 scan_b_id=scan_id,
-                new_findings=len(new_fps) + len(regressed_fps),
+                new_observations=len(new_fps) + len(regressed_fps),
                 resolved=len(resolved_fps),
                 recurring=len(recurring_fps),
                 regressed=len(regressed_fps),
@@ -754,13 +754,13 @@ class ComparisonRepository(_RepositoryBase):
             "regressed": len(regressed_fps),
             "previous_scan_id": previous_scan.id,
         }
-        logger.info(f"Finding statuses for scan {scan_id}: {stats}")
+        logger.info(f"Observation statuses for scan {scan_id}: {stats}")
         return stats
 
     async def compare_scans(self, scan_a_id: str, scan_b_id: str) -> dict:
         """
         Compare two scans by fingerprint. Returns comparison stats and
-        finding lists. Checks for a cached comparison first.
+        observation lists. Checks for a cached comparison first.
         """
         async with self._session() as session:
             # Check cache
@@ -792,34 +792,34 @@ class ComparisonRepository(_RepositoryBase):
             common_checks = checks_a & checks_b
 
             # Get fingerprints scoped to common checks (or all if no log data)
-            fp_filter_a = [Finding.scan_id == scan_a_id]
-            fp_filter_b = [Finding.scan_id == scan_b_id]
+            fp_filter_a = [ObservationRecord.scan_id == scan_a_id]
+            fp_filter_b = [ObservationRecord.scan_id == scan_b_id]
             if common_checks:
-                fp_filter_a.append(Finding.check_name.in_(common_checks))
-                fp_filter_b.append(Finding.check_name.in_(common_checks))
+                fp_filter_a.append(ObservationRecord.check_name.in_(common_checks))
+                fp_filter_b.append(ObservationRecord.check_name.in_(common_checks))
 
             result_a = await session.execute(
-                select(Finding.fingerprint, Finding.title, Finding.severity).where(*fp_filter_a)
+                select(ObservationRecord.fingerprint, ObservationRecord.title, ObservationRecord.severity).where(*fp_filter_a)
             )
             fps_a = {
                 row[0]: {"title": row[1], "severity": row[2]} for row in result_a.all() if row[0]
             }
 
             result_b = await session.execute(
-                select(Finding.fingerprint, Finding.title, Finding.severity).where(*fp_filter_b)
+                select(ObservationRecord.fingerprint, ObservationRecord.title, ObservationRecord.severity).where(*fp_filter_b)
             )
             fps_b = {
                 row[0]: {"title": row[1], "severity": row[2]} for row in result_b.all() if row[0]
             }
 
-            # Also get findings from checks only in scan B (new checks = all new findings)
+            # Also get observations from checks only in scan B (new checks = all new observations)
             b_only_checks = checks_b - checks_a
             fps_b_only = {}
             if b_only_checks:
                 result = await session.execute(
-                    select(Finding.fingerprint, Finding.title, Finding.severity)
-                    .where(Finding.scan_id == scan_b_id)
-                    .where(Finding.check_name.in_(b_only_checks))
+                    select(ObservationRecord.fingerprint, ObservationRecord.title, ObservationRecord.severity)
+                    .where(ObservationRecord.scan_id == scan_b_id)
+                    .where(ObservationRecord.check_name.in_(b_only_checks))
                 )
                 fps_b_only = {
                     row[0]: {"title": row[1], "severity": row[2]} for row in result.all() if row[0]
@@ -836,20 +836,20 @@ class ComparisonRepository(_RepositoryBase):
             "new_count": len(new_fps),
             "resolved_count": len(resolved_fps),
             "recurring_count": len(recurring_fps),
-            "new_findings": [all_b[fp] for fp in new_fps],
-            "resolved_findings": [fps_a[fp] for fp in resolved_fps],
+            "new_observations": [all_b[fp] for fp in new_fps],
+            "resolved_observations": [fps_a[fp] for fp in resolved_fps],
             "checks_compared": len(common_checks),
             "checks_only_in_a": len(checks_a - checks_b),
             "checks_only_in_b": len(b_only_checks),
         }
 
-    async def get_finding_history(self, fingerprint: str) -> list[dict]:
-        """Get status history for a finding fingerprint across scans."""
+    async def get_observation_history(self, fingerprint: str) -> list[dict]:
+        """Get status history for an observation fingerprint across scans."""
         async with self._session() as session:
             result = await session.execute(
-                select(FindingStatusHistory)
-                .where(FindingStatusHistory.fingerprint == fingerprint)
-                .order_by(FindingStatusHistory.created_at)
+                select(ObservationStatusHistory)
+                .where(ObservationStatusHistory.fingerprint == fingerprint)
+                .order_by(ObservationStatusHistory.created_at)
             )
             return [
                 {
@@ -864,8 +864,8 @@ class ComparisonRepository(_RepositoryBase):
             ]
 
 
-class FindingOverrideRepository(_RepositoryBase):
-    """Manage manual finding overrides (accepted risk, false positive)."""
+class ObservationOverrideRepository(_RepositoryBase):
+    """Manage manual observation overrides (accepted risk, false positive)."""
 
     VALID_STATUSES = {"accepted", "false_positive"}
 
@@ -875,7 +875,7 @@ class FindingOverrideRepository(_RepositoryBase):
         status: str,
         reason: str | None = None,
     ) -> dict:
-        """Set or update an override for a finding fingerprint. Upserts."""
+        """Set or update an override for an observation fingerprint. Upserts."""
         if status not in self.VALID_STATUSES:
             raise ValueError(
                 f"Invalid override status: {status}. Must be one of {self.VALID_STATUSES}"
@@ -884,7 +884,7 @@ class FindingOverrideRepository(_RepositoryBase):
         now = datetime.now(UTC)
         async with self._session() as session:
             result = await session.execute(
-                select(FindingOverride).where(FindingOverride.fingerprint == fingerprint)
+                select(ObservationOverride).where(ObservationOverride.fingerprint == fingerprint)
             )
             existing = result.scalar_one_or_none()
             if existing:
@@ -892,7 +892,7 @@ class FindingOverrideRepository(_RepositoryBase):
                 existing.reason = reason
                 existing.updated_at = now
             else:
-                existing = FindingOverride(
+                existing = ObservationOverride(
                     fingerprint=fingerprint,
                     status=status,
                     reason=reason,
@@ -904,16 +904,16 @@ class FindingOverrideRepository(_RepositoryBase):
             return _override_to_dict(existing)
 
     async def remove_override(self, fingerprint: str) -> bool:
-        """Remove an override (reopen the finding). Returns True if existed."""
+        """Remove an override (reopen the observation). Returns True if existed."""
         async with self._session() as session:
             result = await session.execute(
-                select(FindingOverride).where(FindingOverride.fingerprint == fingerprint)
+                select(ObservationOverride).where(ObservationOverride.fingerprint == fingerprint)
             )
             existing = result.scalar_one_or_none()
             if existing is None:
                 return False
             await session.execute(
-                delete(FindingOverride).where(FindingOverride.fingerprint == fingerprint)
+                delete(ObservationOverride).where(ObservationOverride.fingerprint == fingerprint)
             )
             await session.commit()
         logger.info(f"Removed override for fingerprint {fingerprint}")
@@ -923,19 +923,19 @@ class FindingOverrideRepository(_RepositoryBase):
         """Get override for a fingerprint, or None."""
         async with self._session() as session:
             result = await session.execute(
-                select(FindingOverride).where(FindingOverride.fingerprint == fingerprint)
+                select(ObservationOverride).where(ObservationOverride.fingerprint == fingerprint)
             )
             override = result.scalar_one_or_none()
             return _override_to_dict(override) if override else None
 
     async def list_overrides(self, status: str | None = None) -> dict:
         """List all overrides with optional status filter."""
-        query = select(FindingOverride)
-        count_query = select(func.count()).select_from(FindingOverride)
+        query = select(ObservationOverride)
+        count_query = select(func.count()).select_from(ObservationOverride)
         if status:
-            query = query.where(FindingOverride.status == status)
-            count_query = count_query.where(FindingOverride.status == status)
-        query = query.order_by(FindingOverride.updated_at.desc())
+            query = query.where(ObservationOverride.status == status)
+            count_query = count_query.where(ObservationOverride.status == status)
+        query = query.order_by(ObservationOverride.updated_at.desc())
 
         async with self._session() as session:
             total_result = await session.execute(count_query)
@@ -946,8 +946,8 @@ class FindingOverrideRepository(_RepositoryBase):
         return {"total": total, "overrides": overrides}
 
 
-def _override_to_dict(o: FindingOverride) -> dict:
-    """Convert a FindingOverride ORM object to a JSON-safe dict."""
+def _override_to_dict(o: ObservationOverride) -> dict:
+    """Convert an ObservationOverride ORM object to a JSON-safe dict."""
     return {
         "fingerprint": o.fingerprint,
         "status": o.status,
@@ -1062,7 +1062,7 @@ class TrendRepository(_RepositoryBase):
         """Build per-scan trend data points."""
         # Get all overridden fingerprints to exclude
         async with self._session() as session:
-            result = await session.execute(select(FindingOverride.fingerprint))
+            result = await session.execute(select(ObservationOverride.fingerprint))
             overridden_fps = {row[0] for row in result.all()}
 
         data_points = []
@@ -1085,27 +1085,27 @@ class TrendRepository(_RepositoryBase):
             if scan is None:
                 return None
 
-            # Get findings, excluding overridden ones
+            # Get observations, excluding overridden ones
             result = await session.execute(
-                select(Finding.severity, Finding.suite, Finding.fingerprint).where(
-                    Finding.scan_id == scan_id
+                select(ObservationRecord.severity, ObservationRecord.suite, ObservationRecord.fingerprint).where(
+                    ObservationRecord.scan_id == scan_id
                 )
             )
-            all_findings = result.all()
+            all_observations = result.all()
 
-        # Filter out overridden findings
-        findings = [(sev, suite, fp) for sev, suite, fp in all_findings if fp not in overridden_fps]
+        # Filter out overridden observations
+        observations = [(sev, suite, fp) for sev, suite, fp in all_observations if fp not in overridden_fps]
 
         # Count by severity
         severity_counts = dict.fromkeys(SEVERITY_LEVELS, 0)
-        for sev, _, _ in findings:
+        for sev, _, _ in observations:
             key = sev.lower() if sev else "info"
             if key in severity_counts:
                 severity_counts[key] += 1
 
         # Count by suite
         suite_counts: dict[str, int] = {}
-        for _, suite, _ in findings:
+        for _, suite, _ in observations:
             s = suite or "unknown"
             suite_counts[s] = suite_counts.get(s, 0) + 1
 
@@ -1114,15 +1114,15 @@ class TrendRepository(_RepositoryBase):
             SEVERITY_WEIGHTS.get(level, 0) * count for level, count in severity_counts.items()
         )
 
-        # Get new/resolved/regressed from FindingStatusHistory
+        # Get new/resolved/regressed from ObservationStatusHistory
         new_count = 0
         resolved_count = 0
         regressed_count = 0
         async with self._session() as session:
             result = await session.execute(
-                select(FindingStatusHistory.status, func.count())
-                .where(FindingStatusHistory.scan_id == scan_id)
-                .group_by(FindingStatusHistory.status)
+                select(ObservationStatusHistory.status, func.count())
+                .where(ObservationStatusHistory.scan_id == scan_id)
+                .group_by(ObservationStatusHistory.status)
             )
             for status, count in result.all():
                 if status == "new":
@@ -1136,7 +1136,7 @@ class TrendRepository(_RepositoryBase):
             "scan_id": scan_id,
             "date": scan.started_at.isoformat() if scan.started_at else None,
             "target_domain": scan.target_domain,
-            "total": len(findings),
+            "total": len(observations),
             **severity_counts,
             "new": new_count,
             "resolved": resolved_count,
@@ -1179,7 +1179,7 @@ class TrendRepository(_RepositoryBase):
     async def compute_metrics(self, scan_ids: list[str]) -> dict:
         """Compute regression rate and MTTR for a set of scans.
 
-        Regression rate: % of previously-resolved findings that reappeared.
+        Regression rate: % of previously-resolved observations that reappeared.
         MTTR: mean time from first_seen to resolved, broken down by severity.
         """
         if not scan_ids:
@@ -1190,18 +1190,18 @@ class TrendRepository(_RepositoryBase):
             # Total resolved across these scans
             result = await session.execute(
                 select(func.count())
-                .select_from(FindingStatusHistory)
-                .where(FindingStatusHistory.scan_id.in_(scan_ids))
-                .where(FindingStatusHistory.status == "resolved")
+                .select_from(ObservationStatusHistory)
+                .where(ObservationStatusHistory.scan_id.in_(scan_ids))
+                .where(ObservationStatusHistory.status == "resolved")
             )
             total_resolved = result.scalar() or 0
 
             # Total regressed across these scans
             result = await session.execute(
                 select(func.count())
-                .select_from(FindingStatusHistory)
-                .where(FindingStatusHistory.scan_id.in_(scan_ids))
-                .where(FindingStatusHistory.status == "regressed")
+                .select_from(ObservationStatusHistory)
+                .where(ObservationStatusHistory.scan_id.in_(scan_ids))
+                .where(ObservationStatusHistory.status == "regressed")
             )
             total_regressed = result.scalar() or 0
 
@@ -1215,13 +1215,13 @@ class TrendRepository(_RepositoryBase):
             # scan where it was resolved.
             result = await session.execute(
                 select(
-                    FindingStatusHistory.fingerprint,
-                    FindingStatusHistory.first_seen_scan,
-                    FindingStatusHistory.scan_id,
+                    ObservationStatusHistory.fingerprint,
+                    ObservationStatusHistory.first_seen_scan,
+                    ObservationStatusHistory.scan_id,
                 )
-                .where(FindingStatusHistory.scan_id.in_(scan_ids))
-                .where(FindingStatusHistory.status == "resolved")
-                .where(FindingStatusHistory.first_seen_scan.isnot(None))
+                .where(ObservationStatusHistory.scan_id.in_(scan_ids))
+                .where(ObservationStatusHistory.status == "resolved")
+                .where(ObservationStatusHistory.first_seen_scan.isnot(None))
             )
             resolved_entries = result.all()
 
@@ -1244,8 +1244,8 @@ class TrendRepository(_RepositoryBase):
             fp_severity = {}
             if resolved_fps:
                 result = await session.execute(
-                    select(Finding.fingerprint, Finding.severity)
-                    .where(Finding.fingerprint.in_(resolved_fps))
+                    select(ObservationRecord.fingerprint, ObservationRecord.severity)
+                    .where(ObservationRecord.fingerprint.in_(resolved_fps))
                     .distinct()
                 )
                 for fp, sev in result.all():
@@ -1299,7 +1299,7 @@ class AdjudicationRepository(_RepositoryBase):
                 AdjudicationResult(
                     id=r.get("id") or uuid.uuid4().hex[:12],
                     scan_id=scan_id,
-                    finding_id=r["finding_id"],
+                    observation_id=r["observation_id"],
                     original_severity=r["original_severity"],
                     adjudicated_severity=r["adjudicated_severity"],
                     confidence=r["confidence"],
@@ -1325,13 +1325,13 @@ class AdjudicationRepository(_RepositoryBase):
             )
             return [_adjudication_to_dict(r) for r in result.scalars().all()]
 
-    async def get_result_for_finding(self, scan_id: str, finding_id: str) -> dict | None:
-        """Get adjudication result for a specific finding in a scan."""
+    async def get_result_for_observation(self, scan_id: str, observation_id: str) -> dict | None:
+        """Get adjudication result for a specific observation in a scan."""
         async with self._session() as session:
             result = await session.execute(
                 select(AdjudicationResult).where(
                     AdjudicationResult.scan_id == scan_id,
-                    AdjudicationResult.finding_id == finding_id,
+                    AdjudicationResult.observation_id == observation_id,
                 )
             )
             row = result.scalar_one_or_none()
@@ -1343,7 +1343,7 @@ def _adjudication_to_dict(r: AdjudicationResult) -> dict:
     return {
         "id": r.id,
         "scan_id": r.scan_id,
-        "finding_id": r.finding_id,
+        "observation_id": r.observation_id,
         "original_severity": r.original_severity,
         "adjudicated_severity": r.adjudicated_severity,
         "confidence": r.confidence,

@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -91,7 +91,7 @@ class ModelBehaviorFingerprintCheck(BaseCheck):
 
             try:
                 fr = await self._fingerprint_model(url, service, api_format, context)
-                result.findings.extend(fr.findings)
+                result.observations.extend(fr.observations)
                 result.outputs.update(fr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -146,9 +146,9 @@ class ModelBehaviorFingerprintCheck(BaseCheck):
             str(framework.get("framework", "")).lower()
 
         if identity.get("model_family"):
-            # Self-identification finding
-            result.findings.append(
-                build_finding(
+            # Self-identification observation
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Model self-identifies as: {identity['model_family']}",
                     description=f"Behavioral fingerprinting suggests {identity['model_family']}",
@@ -164,8 +164,8 @@ class ModelBehaviorFingerprintCheck(BaseCheck):
 
             # Check misrepresentation
             if identity.get("possible_mismatch"):
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Model misrepresents identity: {identity['mismatch_detail']}",
                         description="Behavioral patterns inconsistent with claimed model identity",
@@ -180,8 +180,8 @@ class ModelBehaviorFingerprintCheck(BaseCheck):
                 )
 
         if identity.get("knowledge_cutoff"):
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Knowledge cutoff: {identity['knowledge_cutoff']}",
                     description="Model reports a training data cutoff date",

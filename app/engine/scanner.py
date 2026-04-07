@@ -124,14 +124,14 @@ async def run_scan(
                 }
             )
 
-        def on_complete(name: str, success: bool, findings_count: int):
+        def on_complete(name: str, success: bool, observations_count: int):
             state.checks_completed += 1
             state.check_statuses[name] = "completed" if success else "failed"
             state.check_log.append(
                 {
                     "check": name,
                     "event": "completed" if success else "failed",
-                    "findings": findings_count,
+                    "observations": observations_count,
                 }
             )
 
@@ -147,7 +147,7 @@ async def run_scan(
             runner = SwarmRunner(checks, context, coordinator)
             state.runner = runner
 
-            findings = await runner.run_all(
+            observations = await runner.run_all(
                 on_check_start=on_start,
                 on_check_complete=on_complete,
             )
@@ -156,18 +156,18 @@ async def run_scan(
             launcher = CheckLauncher(checks, context)
             state.runner = launcher
 
-            findings = await launcher.run_all(
+            observations = await launcher.run_all(
                 on_check_start=on_start,
                 on_check_complete=on_complete,
             )
 
-        # Store findings in state
-        state.findings = findings
+        # Store observations in state
+        state.observations = observations
         state.status = "complete"
         state.phase = "done"
         state.current_check = None
 
-        logger.info(f"Scan complete. {len(findings)} findings.")
+        logger.info(f"Scan complete. {len(observations)} observations.")
 
         # Run scan advisor if enabled (only for local CheckLauncher, not swarm)
         local_launcher = state.runner if not cfg.swarm.enabled else None

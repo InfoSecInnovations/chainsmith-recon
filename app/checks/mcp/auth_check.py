@@ -17,7 +17,7 @@ import json
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Common default API keys to test
@@ -143,8 +143,8 @@ class MCPAuthCheck(BaseCheck):
             has_tools = self._response_has_tools(resp.body)
 
             if has_tools:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="MCP server requires no authentication: tools accessible without credentials",
                         description=(
@@ -159,8 +159,8 @@ class MCPAuthCheck(BaseCheck):
                     )
                 )
             else:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="MCP endpoint accessible without authentication",
                         description=(
@@ -177,8 +177,8 @@ class MCPAuthCheck(BaseCheck):
 
         elif not resp.error and resp.status_code == 401:
             test_result["accessible"] = False
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="MCP server enforces authentication",
                     description="The MCP server correctly returns 401 for unauthenticated requests.",
@@ -222,8 +222,8 @@ class MCPAuthCheck(BaseCheck):
                         }
                     )
 
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Default API key accepted: '{key or '(empty)'}' grants MCP access",
                             description=(
@@ -283,8 +283,8 @@ class MCPAuthCheck(BaseCheck):
 
         if init_requires_auth and not tools_requires_auth:
             test_result["scope_mismatch"] = True
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Auth bypass: initialize requires auth but tools/list does not",
                     description=(
@@ -359,8 +359,8 @@ class MCPAuthCheck(BaseCheck):
 
         if not reuse_resp.error and reuse_resp.status_code == 200:
             test_result["session_reusable"] = True
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Session reuse: MCP session ID accepted from different client context",
                     description=(
@@ -408,8 +408,8 @@ class MCPAuthCheck(BaseCheck):
 
         if acao == "*" or acao == "https://evil.attacker.com":
             test_result["allows_any_origin"] = True
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="MCP endpoint allows cross-origin requests: browser-based MCP access possible",
                     description=(

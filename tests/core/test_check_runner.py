@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from app.checks.base import BaseCheck, CheckCondition, CheckResult, Finding, Service
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Observation, Service
 from app.checks.runner import CheckRunner
 
 pytestmark = pytest.mark.unit
@@ -52,31 +52,31 @@ class DependentCheck(BaseCheck):
         return CheckResult(success=True, outputs={"dependent_output": "dependent_result"})
 
 
-class FindingProducingCheck(BaseCheck):
-    """Check that produces findings."""
+class ObservationProducingCheck(BaseCheck):
+    """Check that produces observations."""
 
-    name = "finding_check"
-    description = "Produces findings"
+    name = "observation_check"
+    description = "Produces observations"
     conditions = []
 
-    def __init__(self, finding_count: int = 1, preset_ids: bool = False):
+    def __init__(self, observation_count: int = 1, preset_ids: bool = False):
         super().__init__()
-        self.finding_count = finding_count
+        self.observation_count = observation_count
         self.preset_ids = preset_ids
 
     async def run(self, context: dict[str, Any]) -> CheckResult:
-        findings = []
-        for i in range(self.finding_count):
-            findings.append(
-                Finding(
+        observations = []
+        for i in range(self.observation_count):
+            observations.append(
+                Observation(
                     id=f"PRESET-{i}" if self.preset_ids else "",
-                    title=f"Finding {i}",
+                    title=f"Observation {i}",
                     description=f"Description {i}",
                     severity="medium",
                     evidence=f"Evidence {i}",
                 )
             )
-        return CheckResult(success=True, findings=findings)
+        return CheckResult(success=True, observations=observations)
 
 
 class ServiceDiscoveringCheck(BaseCheck):
@@ -142,7 +142,7 @@ class TestCheckRunnerInit:
         assert runner.excluded_domains == []
         assert runner.checks == []
         assert runner.context == {}
-        assert runner.findings == []
+        assert runner.observations == []
         assert runner.is_running is False
         assert runner.is_paused is False
 

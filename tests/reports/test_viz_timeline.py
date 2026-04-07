@@ -8,7 +8,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestTimelineTabPresence:
-    """Verify timeline tab and panel exist in findings.html."""
+    """Verify timeline tab and panel exist in observations.html."""
 
     def test_timeline_tab_exists(self):
         content = _all_viz_content()
@@ -56,7 +56,7 @@ class TestTimelineTabPresence:
 
 
 class TestTimelineJavaScript:
-    """Verify timeline JS functions and constants exist in findings.html."""
+    """Verify timeline JS functions and constants exist in observations.html."""
 
     def test_render_timeline_function(self):
         content = _all_viz_content()
@@ -160,12 +160,12 @@ class TestTimelineDataLogic:
         return "other"
 
     @classmethod
-    def build_timeline_data(cls, findings_list, group_by="host"):
+    def build_timeline_data(cls, observations_list, group_by="host"):
         """Python mirror of the JS buildTimelineData."""
         lanes = {}
         points = []
 
-        for index, f in enumerate(findings_list):
+        for index, f in enumerate(observations_list):
             raw_host = f.get("host") or f.get("target_url") or "unknown"
             host = cls.normalize_host(raw_host)
             suite = f.get("suite") or cls.infer_suite(f.get("check_name"))
@@ -176,7 +176,7 @@ class TestTimelineDataLogic:
 
             point = {
                 "index": index,
-                "finding": f,
+                "observation": f,
                 "lane": lane,
                 "host": host,
                 "suite": suite,
@@ -196,34 +196,34 @@ class TestTimelineDataLogic:
 
         return {"points": points, "lanes": lanes, "laneKeys": lane_keys}
 
-    def test_empty_findings(self):
+    def test_empty_observations(self):
         result = self.build_timeline_data([])
         assert result["points"] == []
         assert result["lanes"] == {}
         assert result["laneKeys"] == []
 
-    def test_single_finding_by_host(self):
-        findings = [{"host": "example.com", "suite": "web", "severity": "high", "title": "XSS"}]
-        result = self.build_timeline_data(findings, "host")
+    def test_single_observation_by_host(self):
+        observations = [{"host": "example.com", "suite": "web", "severity": "high", "title": "XSS"}]
+        result = self.build_timeline_data(observations, "host")
         assert len(result["points"]) == 1
         assert result["points"][0]["index"] == 0
         assert result["points"][0]["lane"] == "example.com"
         assert result["points"][0]["severity"] == "high"
         assert result["laneKeys"] == ["example.com"]
 
-    def test_single_finding_by_suite(self):
-        findings = [{"host": "example.com", "suite": "web", "severity": "high", "title": "XSS"}]
-        result = self.build_timeline_data(findings, "suite")
+    def test_single_observation_by_suite(self):
+        observations = [{"host": "example.com", "suite": "web", "severity": "high", "title": "XSS"}]
+        result = self.build_timeline_data(observations, "suite")
         assert result["points"][0]["lane"] == "web"
         assert result["laneKeys"] == ["web"]
 
-    def test_multiple_findings_preserve_order(self):
-        findings = [
+    def test_multiple_observations_preserve_order(self):
+        observations = [
             {"host": "a.com", "suite": "web", "severity": "high", "title": "First"},
             {"host": "a.com", "suite": "web", "severity": "low", "title": "Second"},
             {"host": "a.com", "suite": "web", "severity": "info", "title": "Third"},
         ]
-        result = self.build_timeline_data(findings, "host")
+        result = self.build_timeline_data(observations, "host")
         assert result["points"][0]["title"] == "First"
         assert result["points"][1]["title"] == "Second"
         assert result["points"][2]["title"] == "Third"
@@ -232,28 +232,28 @@ class TestTimelineDataLogic:
         assert result["points"][2]["index"] == 2
 
     def test_multiple_hosts_creates_lanes(self):
-        findings = [
+        observations = [
             {"host": "a.com", "suite": "web", "severity": "high", "title": "A"},
             {"host": "b.com", "suite": "network", "severity": "low", "title": "B"},
             {"host": "c.com", "suite": "ai", "severity": "info", "title": "C"},
         ]
-        result = self.build_timeline_data(findings, "host")
+        result = self.build_timeline_data(observations, "host")
         assert sorted(result["laneKeys"]) == ["a.com", "b.com", "c.com"]
         assert len(result["lanes"]["a.com"]) == 1
         assert len(result["lanes"]["b.com"]) == 1
 
     def test_suite_grouping_uses_known_order(self):
-        findings = [
+        observations = [
             {"host": "h", "suite": "cag", "severity": "low", "title": "A"},
             {"host": "h", "suite": "web", "severity": "low", "title": "B"},
             {"host": "h", "suite": "ai", "severity": "low", "title": "C"},
         ]
-        result = self.build_timeline_data(findings, "suite")
+        result = self.build_timeline_data(observations, "suite")
         assert result["laneKeys"].index("web") < result["laneKeys"].index("ai")
         assert result["laneKeys"].index("ai") < result["laneKeys"].index("cag")
 
     def test_host_normalization(self):
-        findings = [
+        observations = [
             {
                 "host": "http://api.example.com/path",
                 "suite": "web",
@@ -262,49 +262,49 @@ class TestTimelineDataLogic:
             },
             {"host": "api.example.com:8080", "suite": "web", "severity": "low", "title": "B"},
         ]
-        result = self.build_timeline_data(findings, "host")
+        result = self.build_timeline_data(observations, "host")
         assert result["laneKeys"] == ["api.example.com"]
         assert len(result["lanes"]["api.example.com"]) == 2
 
     def test_infer_suite_when_no_suite_field(self):
-        findings = [
+        observations = [
             {"host": "h", "check_name": "dns_lookup", "severity": "info", "title": "A"},
             {"host": "h", "check_name": "header_check", "severity": "low", "title": "B"},
         ]
-        result = self.build_timeline_data(findings, "suite")
+        result = self.build_timeline_data(observations, "suite")
         assert "network" in result["laneKeys"]
         assert "web" in result["laneKeys"]
 
     def test_unknown_suite_appended_after_known(self):
-        findings = [
+        observations = [
             {"host": "h", "suite": "web", "severity": "low", "title": "A"},
             {"host": "h", "suite": "custom", "severity": "info", "title": "B"},
         ]
-        result = self.build_timeline_data(findings, "suite")
+        result = self.build_timeline_data(observations, "suite")
         assert result["laneKeys"].index("web") < result["laneKeys"].index("custom")
 
     def test_default_group_by_is_host(self):
-        findings = [{"host": "h.com", "suite": "web", "severity": "info", "title": "T"}]
-        result = self.build_timeline_data(findings)
+        observations = [{"host": "h.com", "suite": "web", "severity": "info", "title": "T"}]
+        result = self.build_timeline_data(observations)
         assert result["points"][0]["lane"] == "h.com"
 
     def test_missing_host_falls_back_to_unknown(self):
-        findings = [{"suite": "web", "severity": "info", "title": "T"}]
-        result = self.build_timeline_data(findings, "host")
+        observations = [{"suite": "web", "severity": "info", "title": "T"}]
+        result = self.build_timeline_data(observations, "host")
         assert "unknown" in result["laneKeys"]
 
     def test_missing_severity_defaults_to_info(self):
-        findings = [{"host": "h", "suite": "web", "title": "T"}]
-        result = self.build_timeline_data(findings, "host")
+        observations = [{"host": "h", "suite": "web", "title": "T"}]
+        result = self.build_timeline_data(observations, "host")
         assert result["points"][0]["severity"] == "info"
 
     def test_lanes_contain_correct_points(self):
-        findings = [
+        observations = [
             {"host": "a.com", "suite": "web", "severity": "high", "title": "A"},
             {"host": "b.com", "suite": "network", "severity": "low", "title": "B"},
             {"host": "a.com", "suite": "ai", "severity": "info", "title": "C"},
         ]
-        result = self.build_timeline_data(findings, "host")
+        result = self.build_timeline_data(observations, "host")
         assert len(result["lanes"]["a.com"]) == 2
         assert len(result["lanes"]["b.com"]) == 1
         assert result["lanes"]["a.com"][0]["title"] == "A"

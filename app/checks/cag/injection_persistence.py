@@ -22,7 +22,7 @@ import uuid
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Prompt injection patterns to test
@@ -65,7 +65,7 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
     timeout_seconds = 120.0
     delay_between_targets = 0.5
 
-    reason = "This is the highest-impact CAG finding — a single prompt injection cached and served to all users creates persistent multi-user compromise"
+    reason = "This is the highest-impact CAG observation — a single prompt injection cached and served to all users creates persistent multi-user compromise"
     references = [
         "https://portswigger.net/web-security/web-cache-poisoning",
         "OWASP LLM Top 10 - LLM01 Prompt Injection",
@@ -99,8 +99,8 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
                             persistence_results.append(test_result)
 
                             severity = self._determine_severity(test_result)
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=self._build_title(test_result),
                                     description=self._build_description(test_result),
@@ -118,8 +118,8 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
                         elif test_result and test_result.get("injection_worked"):
                             persistence_results.append(test_result)
 
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Injection response cached but cross-user delivery unconfirmed ({pattern['id']})",
                                     description=self._build_description(test_result),
@@ -143,8 +143,8 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
                             persistence_results.append(semantic_result)
                             n = semantic_result.get("variations_affected", 0)
 
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Semantic cache amplifies injection: poisoned response served to {n} variations",
                                     description=self._build_description(semantic_result),
@@ -168,9 +168,9 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
         if persistence_results:
             result.outputs["injection_persistence_results"] = persistence_results
         else:
-            # Info finding: no injection persistence
-            result.findings.append(
-                build_finding(
+            # Info observation: no injection persistence
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Injection responses not cached",
                     description="Prompt injection attempts did not result in cached responses being served to other users.",
@@ -318,7 +318,7 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
                 )
 
     def _determine_severity(self, test_result: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if test_result.get("persistence_detected"):
             return "critical"
         if test_result.get("injection_worked"):
@@ -326,7 +326,7 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
         return "info"
 
     def _build_title(self, test_result: dict) -> str:
-        """Build finding title."""
+        """Build observation title."""
         pattern_id = test_result.get("pattern_id", "unknown")
 
         if test_result.get("persistence_detected"):
@@ -336,7 +336,7 @@ class InjectionPersistenceCheck(ServiceIteratingCheck):
         return "Injection responses not cached"
 
     def _build_description(self, test_result: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         if test_result.get("test_id") == "semantic_amplification":
             n = test_result.get("variations_affected", 0)
             return (

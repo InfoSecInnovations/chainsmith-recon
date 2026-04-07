@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
@@ -111,7 +111,7 @@ class SRICheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"SRI check error: {e}")
 
-        # Generate findings
+        # Generate observations
         if external_without_sri:
             # Group by host to reduce noise
             hosts_without_sri = set()
@@ -122,8 +122,8 @@ class SRICheck(ServiceIteratingCheck):
             count = len(external_without_sri)
             severity = "medium" if count >= 3 else "low"
 
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"{count} external resource(s) without SRI: {service.host}",
                     description=f"{count} external scripts/stylesheets loaded without integrity verification. "
@@ -139,10 +139,10 @@ class SRICheck(ServiceIteratingCheck):
                 )
             )
 
-            # Individual findings for the first few
+            # Individual observations for the first few
             for resource in external_without_sri[:5]:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"External {resource['type']} without SRI: {resource['url'][:80]}",
                         description=f"External {resource['type']} loaded from {resource['url']} without an integrity attribute",
@@ -156,8 +156,8 @@ class SRICheck(ServiceIteratingCheck):
                     )
                 )
         elif total_external > 0:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"All external resources use SRI: {service.host}",
                     description=f"All {total_external} external resource(s) have integrity attributes",
@@ -169,8 +169,8 @@ class SRICheck(ServiceIteratingCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"No external resources found: {service.host}",
                     description="No external scripts or stylesheets detected in HTML responses",
@@ -249,7 +249,7 @@ class SRICheck(ServiceIteratingCheck):
 
 
 def _url_slug(url: str) -> str:
-    """Create a short slug from a URL for finding discriminators."""
+    """Create a short slug from a URL for observation discriminators."""
     parsed = urlparse(url)
     host = parsed.netloc or parsed.path
     # Take just the host and first path segment

@@ -19,7 +19,7 @@ from app.db.repositories import (
     ChainRepository,
     CheckLogRepository,
     ComparisonRepository,
-    FindingRepository,
+    ObservationRepository,
     ScanRepository,
 )
 
@@ -39,7 +39,7 @@ def _make_repos(db: Database | None = None):
     """Create a set of repositories, optionally bound to a specific Database."""
     return (
         ScanRepository(db),
-        FindingRepository(db),
+        ObservationRepository(db),
         ChainRepository(db),
         CheckLogRepository(db),
         ComparisonRepository(db),
@@ -93,21 +93,21 @@ async def on_scan_complete(
     db: Database | None = None,
 ) -> None:
     """
-    Called when a scan completes (success or error). Persists findings,
+    Called when a scan completes (success or error). Persists observations,
     chains, and check log, then updates the scan record.
     """
     if scan_id is None or not _is_enabled():
         return
 
     duration_ms = int((time.time() - started_at) * 1000)
-    scan_repo, finding_repo, chain_repo, check_log_repo, comparison_repo, _ = _make_repos(db)
+    scan_repo, observation_repo, chain_repo, check_log_repo, comparison_repo, _ = _make_repos(db)
 
     try:
         # Count failed checks
         checks_failed = sum(1 for s in state.check_statuses.values() if s == "failed")
 
-        # Persist findings
-        await finding_repo.bulk_create(scan_id, state.findings)
+        # Persist observations
+        await observation_repo.bulk_create(scan_id, state.observations)
 
         # Persist chains (if any were analyzed)
         await chain_repo.bulk_create(scan_id, state.chains)
@@ -122,27 +122,27 @@ async def on_scan_complete(
             checks_total=state.checks_total,
             checks_completed=state.checks_completed,
             checks_failed=checks_failed,
-            findings_count=len(state.findings),
+            observations_count=len(state.observations),
             duration_ms=duration_ms,
             error_message=state.error_message,
         )
 
-        # Compute finding statuses (new/recurring/resolved/regressed)
-        if state.status == "complete" and state.findings:
+        # Compute observation statuses (new/recurring/resolved/regressed)
+        if state.status == "complete" and state.observations:
             try:
-                statuses = await comparison_repo.compute_finding_statuses(scan_id)
+                statuses = await comparison_repo.compute_observation_statuses(scan_id)
                 logger.info(
-                    f"Finding statuses for scan {scan_id}: "
+                    f"Observation statuses for scan {scan_id}: "
                     f"{statuses.get('new', 0)} new, "
                     f"{statuses.get('recurring', 0)} recurring, "
                     f"{statuses.get('resolved', 0)} resolved, "
                     f"{statuses.get('regressed', 0)} regressed"
                 )
             except Exception:
-                logger.warning("Failed to compute finding statuses", exc_info=True)
+                logger.warning("Failed to compute observation statuses", exc_info=True)
 
         logger.info(
-            f"Scan {scan_id} persisted: {len(state.findings)} findings, "
+            f"Scan {scan_id} persisted: {len(state.observations)} observations, "
             f"{len(state.chains)} chains, {len(state.check_log)} log entries"
         )
     except Exception:

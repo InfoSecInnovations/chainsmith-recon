@@ -1,8 +1,8 @@
 """
 app/db/models.py - SQLAlchemy ORM models for persistent storage.
 
-Core tables: scans, findings, chains, check_log (Phase 1).
-Engagement and tracking tables: engagements, finding_status_history,
+Core tables: scans, observations, chains, check_log (Phase 1).
+Engagement and tracking tables: engagements, observation_status_history,
 scan_comparisons (Phase 3).
 """
 
@@ -54,7 +54,7 @@ class Scan(Base):
     checks_total = Column(Integer, nullable=True)
     checks_completed = Column(Integer, nullable=True)
     checks_failed = Column(Integer, nullable=True)
-    findings_count = Column(Integer, nullable=True)
+    observations_count = Column(Integer, nullable=True)
     scope = Column(JSON, nullable=True)
     settings = Column(JSON, nullable=True)
     profile_name = Column(String, nullable=True)
@@ -63,8 +63,8 @@ class Scan(Base):
     metadata_ = Column("metadata", JSON, nullable=True)
 
 
-class Finding(Base):
-    __tablename__ = "findings"
+class ObservationRecord(Base):
+    __tablename__ = "observations"
 
     id = Column(String, primary_key=True)
     scan_id = Column(String, nullable=False)
@@ -85,10 +85,10 @@ class Finding(Base):
     metadata_ = Column("metadata", JSON, nullable=True)
 
     __table_args__ = (
-        Index("idx_findings_scan_id", "scan_id"),
-        Index("idx_findings_severity", "severity"),
-        Index("idx_findings_host", "host"),
-        Index("idx_findings_fingerprint", "fingerprint"),
+        Index("idx_observations_scan_id", "scan_id"),
+        Index("idx_observations_severity", "severity"),
+        Index("idx_observations_host", "host"),
+        Index("idx_observations_fingerprint", "fingerprint"),
     )
 
 
@@ -101,7 +101,7 @@ class Chain(Base):
     description = Column(Text, nullable=True)
     severity = Column(String, nullable=False)
     source = Column(String, nullable=False)  # rule-based, llm, both
-    finding_ids = Column(JSON, nullable=True)
+    observation_ids = Column(JSON, nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     metadata_ = Column("metadata", JSON, nullable=True)
 
@@ -116,7 +116,7 @@ class CheckLog(Base):
     check_name = Column(String, nullable=False)
     suite = Column(String, nullable=True)
     event = Column(String, nullable=False)  # started, completed, failed, skipped
-    findings_count = Column(Integer, default=0)
+    observations_count = Column(Integer, default=0)
     duration_ms = Column(Integer, nullable=True)
     error_message = Column(Text, nullable=True)
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
@@ -124,8 +124,8 @@ class CheckLog(Base):
     __table_args__ = (Index("idx_check_log_scan_id", "scan_id"),)
 
 
-class FindingStatusHistory(Base):
-    __tablename__ = "finding_status_history"
+class ObservationStatusHistory(Base):
+    __tablename__ = "observation_status_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     fingerprint = Column(String, nullable=False)
@@ -136,13 +136,13 @@ class FindingStatusHistory(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
     __table_args__ = (
-        Index("idx_fsh_fingerprint", "fingerprint"),
-        Index("idx_fsh_scan_id", "scan_id"),
+        Index("idx_osh_fingerprint", "fingerprint"),
+        Index("idx_osh_scan_id", "scan_id"),
     )
 
 
-class FindingOverride(Base):
-    __tablename__ = "finding_overrides"
+class ObservationOverride(Base):
+    __tablename__ = "observation_overrides"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     fingerprint = Column(String, nullable=False, unique=True)
@@ -151,7 +151,7 @@ class FindingOverride(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
-    __table_args__ = (Index("idx_finding_overrides_fingerprint", "fingerprint"),)
+    __table_args__ = (Index("idx_observation_overrides_fingerprint", "fingerprint"),)
 
 
 class SwarmApiKey(Base):
@@ -169,7 +169,7 @@ class AdjudicationResult(Base):
 
     id = Column(String, primary_key=True)
     scan_id = Column(String, nullable=False)
-    finding_id = Column(String, nullable=False)
+    observation_id = Column(String, nullable=False)
     original_severity = Column(String, nullable=False)
     adjudicated_severity = Column(String, nullable=False)
     confidence = Column(Float, nullable=False)
@@ -181,7 +181,7 @@ class AdjudicationResult(Base):
 
     __table_args__ = (
         Index("idx_adjudication_scan_id", "scan_id"),
-        Index("idx_adjudication_finding_id", "finding_id"),
+        Index("idx_adjudication_observation_id", "observation_id"),
     )
 
 
@@ -191,7 +191,7 @@ class ScanComparison(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     scan_a_id = Column(String, nullable=False)
     scan_b_id = Column(String, nullable=False)
-    new_findings = Column(Integer, nullable=True)
+    new_observations = Column(Integer, nullable=True)
     resolved = Column(Integer, nullable=True)
     recurring = Column(Integer, nullable=True)
     regressed = Column(Integer, nullable=True)

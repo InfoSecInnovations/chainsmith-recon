@@ -17,7 +17,7 @@ import time
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Headers that reveal cache node identity
@@ -88,8 +88,8 @@ class DistributedCacheCheck(ServiceIteratingCheck):
                         dist_results.append(topo_info)
 
                         severity = self._determine_severity(topo_info)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=self._build_title(topo_info),
                                 description=self._build_description(topo_info),
@@ -214,7 +214,7 @@ class DistributedCacheCheck(ServiceIteratingCheck):
         return "random"
 
     def _determine_severity(self, topo_info: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if not topo_info.get("content_consistent") and topo_info.get("node_count", 0) > 1:
             return "medium"
         if topo_info.get("node_count", 0) > 1:
@@ -222,7 +222,7 @@ class DistributedCacheCheck(ServiceIteratingCheck):
         return "info"
 
     def _build_title(self, topo_info: dict) -> str:
-        """Build finding title."""
+        """Build observation title."""
         n = topo_info.get("node_count", 0)
 
         if not topo_info.get("content_consistent") and n > 1:
@@ -232,7 +232,7 @@ class DistributedCacheCheck(ServiceIteratingCheck):
         return "Single cache node or consistent replication"
 
     def _build_description(self, topo_info: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         n = topo_info.get("node_count", 0)
 
         if not topo_info.get("content_consistent") and n > 1:

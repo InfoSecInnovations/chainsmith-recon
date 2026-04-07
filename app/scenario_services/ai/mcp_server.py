@@ -4,14 +4,14 @@ app/scenario_services/ai/mcp_server.py
 Model Context Protocol (MCP) server service template.
 
 This service implements an MCP server with configurable tools, resources,
-and security findings. It supports the MCP JSON-RPC protocol and SSE.
+and security observations. It supports the MCP JSON-RPC protocol and SSE.
 
 Configurable via environment variables:
     BRAND_NAME          Display name (default: from scenario.json)
     MCP_SERVER_NAME     Server identifier (default: <brand>-mcp)
     MCP_VERSION         Protocol version (default: 2024-11-05)
 
-Planted findings:
+Planted observations:
     mcp_endpoint_exposed        /.well-known/mcp is accessible, sensitive tools visible
     dynamic_tool_loading        Dynamic tool registration enabled
     resource_list_exposed       Sensitive resources in resources/list
@@ -38,7 +38,7 @@ from pydantic import BaseModel
 from app.scenario_services.common.config import (
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -176,8 +176,8 @@ def handle_initialize(params: dict) -> dict:
 
     capabilities = {"tools": {}, "resources": {}}
 
-    # Finding: dynamic_tool_loading - enables shadow tool registration
-    if is_finding_active("dynamic_tool_loading"):
+    # Observation: dynamic_tool_loading - enables shadow tool registration
+    if is_observation_active("dynamic_tool_loading"):
         capabilities["tools"]["dynamicRegistration"] = True
 
     return {
@@ -191,8 +191,8 @@ def handle_tools_list(params: dict) -> dict:
     """Handle tools/list request."""
     tools = list(MCP_TOOLS)
 
-    # Finding: mcp_endpoint_exposed - include sensitive tools
-    if is_finding_active("mcp_endpoint_exposed"):
+    # Observation: mcp_endpoint_exposed - include sensitive tools
+    if is_observation_active("mcp_endpoint_exposed"):
         tools.extend(SENSITIVE_TOOLS)
 
     # Include dynamically registered tools
@@ -218,10 +218,10 @@ def handle_tools_register(params: dict) -> dict:
     """
     Handle dynamic tool registration.
 
-    Finding: dynamic_tool_loading
+    Observation: dynamic_tool_loading
     When active, allows registering arbitrary tools.
     """
-    if not is_finding_active("dynamic_tool_loading"):
+    if not is_observation_active("dynamic_tool_loading"):
         raise HTTPException(403, "Dynamic tool registration disabled")
 
     tool = params.get("tool", {})
@@ -239,8 +239,8 @@ def handle_resources_list(params: dict) -> dict:
     """Handle resources/list request."""
     resources = list(MCP_RESOURCES)
 
-    # Finding: resource_list_exposed - include sensitive resources
-    if is_finding_active("resource_list_exposed"):
+    # Observation: resource_list_exposed - include sensitive resources
+    if is_observation_active("resource_list_exposed"):
         resources.extend(SENSITIVE_RESOURCES)
 
     return {"resources": resources}
@@ -263,7 +263,7 @@ def handle_resources_read(params: dict) -> dict:
         }
 
     # Sensitive resources
-    if uri.startswith("internal://") and is_finding_active("resource_list_exposed"):
+    if uri.startswith("internal://") and is_observation_active("resource_list_exposed"):
         return {
             "contents": [
                 {
@@ -383,10 +383,10 @@ async def mcp_discovery():
     """
     MCP discovery endpoint.
 
-    Finding: mcp_endpoint_exposed
+    Observation: mcp_endpoint_exposed
     When active, this endpoint is accessible and reveals server capabilities.
     """
-    if not is_finding_active("mcp_endpoint_exposed"):
+    if not is_observation_active("mcp_endpoint_exposed"):
         raise HTTPException(404, "Not found")
 
     server_name = _get_server_name()
@@ -398,6 +398,6 @@ async def mcp_discovery():
         "capabilities": {
             "tools": True,
             "resources": True,
-            "dynamic_tools": is_finding_active("dynamic_tool_loading"),
+            "dynamic_tools": is_observation_active("dynamic_tool_loading"),
         },
     }

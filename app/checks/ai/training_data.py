@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -87,7 +87,7 @@ class TrainingDataExtractionCheck(BaseCheck):
 
             try:
                 tr = await self._test_extraction(url, service, api_format)
-                result.findings.extend(tr.findings)
+                result.observations.extend(tr.observations)
                 result.outputs.update(tr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -185,8 +185,8 @@ class TrainingDataExtractionCheck(BaseCheck):
         }
 
         if pii_found:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Training data memorization: PII patterns found in response",
                     description="Model response to repetition attack contained PII-like patterns",
@@ -202,8 +202,8 @@ class TrainingDataExtractionCheck(BaseCheck):
             )
 
         if diverged_text:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Possible memorization: repetition probe triggered diverse output",
                     description="Repetition attack caused model to diverge into non-repetitive content",
@@ -218,8 +218,8 @@ class TrainingDataExtractionCheck(BaseCheck):
             )
 
         if not pii_found and not diverged_text:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No memorization detected",
                     description=f"Tested {len(self.COMPLETION_PROBES)} completion probes and {len(self.REPETITION_PROBES)} repetition probes",

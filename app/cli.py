@@ -26,10 +26,10 @@ import click
 from app.cli_client import ChainsmithAPIError, ChainsmithClient
 from app.cli_formatters import (
     SUITE_COLORS,
-    findings_to_json,
-    findings_to_markdown,
-    findings_to_sarif,
-    output_findings,
+    observations_to_json,
+    observations_to_markdown,
+    observations_to_sarif,
+    output_observations,
     print_checks_list,
     print_execution_plan,
     print_preferences_dict,
@@ -110,7 +110,7 @@ def _handle_api_error(e: ChainsmithAPIError):
     help="Output format",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
-@click.option("--quiet", "-q", is_flag=True, help="Quiet mode (only findings)")
+@click.option("--quiet", "-q", is_flag=True, help="Quiet mode (only observations)")
 @click.option("--no-color", is_flag=True, help="Disable colored output")
 @click.option("--no-llm", is_flag=True, help="Disable LLM-based chain analysis")
 @click.option(
@@ -296,18 +296,18 @@ def scan(
             click.echo(style(f"Scan error: {result.get('error', 'unknown')}", fg="red"), err=True)
             sys.exit(1)
 
-        # 7. Get findings
-        findings_resp = client.get_findings()
-        findings = findings_resp.get("findings", [])
+        # 7. Get observations
+        observations_resp = client.get_observations()
+        observations = observations_resp.get("observations", [])
 
         # Summary
         if not quiet:
             click.echo()
-            click.echo(style(f"Scan complete: {len(findings)} findings", fg="green", bold=True))
+            click.echo(style(f"Scan complete: {len(observations)} observations", fg="green", bold=True))
             click.echo()
 
         # 8. Output
-        output_findings(findings, target, fmt, output, verbose, quiet, no_color)
+        output_observations(observations, target, fmt, output, verbose, quiet, no_color)
 
     except ChainsmithAPIError as e:
         _handle_api_error(e)
@@ -560,10 +560,10 @@ def scenarios_info(ctx, name: str):
         if len(simulations) > 10:
             click.echo(f"  ... and {len(simulations) - 10} more")
 
-        expected = scenario.get("expected_findings", [])
+        expected = scenario.get("expected_observations", [])
         if expected:
             click.echo()
-            click.echo(f"Expected findings: {len(expected)}")
+            click.echo(f"Expected observations: {len(expected)}")
 
         # Clear the loaded scenario
         client.clear_scenario()
@@ -588,38 +588,38 @@ def scenarios_info(ctx, name: str):
 )
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.option(
-    "--input", "-i", "input_file", type=click.Path(exists=True), help="Input JSON findings file"
+    "--input", "-i", "input_file", type=click.Path(exists=True), help="Input JSON observations file"
 )
 def export(fmt: str, output: str | None, input_file: str | None):
-    """Export findings to various formats.
+    """Export observations to various formats.
 
-    Reads findings from stdin (JSON) or a file, and exports to the specified format.
+    Reads observations from stdin (JSON) or a file, and exports to the specified format.
 
     Examples:
 
         chainsmith scan example.com -f json | chainsmith export -f md -o report.md
 
-        chainsmith export -i findings.json -f sarif -o findings.sarif
+        chainsmith export -i observations.json -f sarif -o observations.sarif
     """
     # Read input
     if input_file:
         data = json.loads(Path(input_file).read_text())
     else:
         if sys.stdin.isatty():
-            click.echo("Reading findings from stdin (paste JSON, then Ctrl+D)...")
+            click.echo("Reading observations from stdin (paste JSON, then Ctrl+D)...")
         data = json.loads(sys.stdin.read())
 
     # data is already a list of dicts
-    findings = data if isinstance(data, list) else data.get("findings", data)
-    target = findings[0].get("target_url", "unknown") if findings else "unknown"
+    observations = data if isinstance(data, list) else data.get("observations", data)
+    target = observations[0].get("target_url", "unknown") if observations else "unknown"
 
     # Format output
     if fmt == "json":
-        result = findings_to_json(findings)
+        result = observations_to_json(observations)
     elif fmt == "md":
-        result = findings_to_markdown(findings, target)
+        result = observations_to_markdown(observations, target)
     elif fmt == "sarif":
-        result = findings_to_sarif(findings, target)
+        result = observations_to_sarif(observations, target)
 
     # Write output
     if output:
@@ -1241,7 +1241,7 @@ def scans_list(ctx, target: str | None, limit: int, as_json: bool):
                 f"  {click.style(s['id'], bold=True)}  "
                 f"{s['target_domain']}  "
                 f"{click.style(s['status'], fg=status_color)}  "
-                f"findings: {s.get('findings_count', 0)}  "
+                f"observations: {s.get('observations_count', 0)}  "
                 f"{s.get('started_at', '')[:19]}"
             )
 
@@ -1278,7 +1278,7 @@ def scans_show(ctx, scan_id: str, as_json: bool):
         click.echo(f"  Status:   {scan['status']}")
         click.echo(f"  Started:  {scan.get('started_at', 'N/A')}")
         click.echo(f"  Duration: {scan.get('duration_ms', 'N/A')}ms")
-        click.echo(f"  Findings: {scan.get('findings_count', 0)}")
+        click.echo(f"  Observations: {scan.get('observations_count', 0)}")
         click.echo(f"  Checks:   {scan.get('checks_completed', 0)}/{scan.get('checks_total', 0)}")
         if scan.get("engagement_id"):
             click.echo(f"  Engagement: {scan['engagement_id']}")
@@ -1319,24 +1319,24 @@ def scans_compare(ctx, scan_a: str, scan_b: str, as_json: bool):
         click.echo(f"  B: {scan_b}")
         click.echo()
         click.echo(
-            f"  {click.style(str(result.get('new_count', 0)), fg='green')} new findings in B"
+            f"  {click.style(str(result.get('new_count', 0)), fg='green')} new observations in B"
         )
         click.echo(
             f"  {click.style(str(result.get('resolved_count', 0)), fg='blue')} resolved (in A, not B)"
         )
         click.echo(f"  {result.get('recurring_count', 0)} recurring")
 
-        new_findings = result.get("new_findings", [])
-        if new_findings:
+        new_observations = result.get("new_observations", [])
+        if new_observations:
             click.echo()
-            click.echo(click.style("New findings:", bold=True))
-            for f in new_findings[:10]:
+            click.echo(click.style("New observations:", bold=True))
+            for f in new_observations[:10]:
                 click.echo(f"    [{f.get('severity', '?')}] {f.get('title', 'Untitled')}")
 
-        resolved = result.get("resolved_findings", [])
+        resolved = result.get("resolved_observations", [])
         if resolved:
             click.echo()
-            click.echo(click.style("Resolved findings:", bold=True))
+            click.echo(click.style("Resolved observations:", bold=True))
             for f in resolved[:10]:
                 click.echo(f"    [{f.get('severity', '?')}] {f.get('title', 'Untitled')}")
 
@@ -1417,7 +1417,7 @@ def scans_trend(ctx, target: str, as_json: bool):
             click.echo(
                 f"  {dp.get('date', '')[:10]}  "
                 f"scan {dp['scan_id'][:8]}  "
-                f"findings: {dp.get('total', 0)}  "
+                f"observations: {dp.get('total', 0)}  "
                 f"risk: {click.style(str(dp.get('risk_score', 0)), fg=risk_color)}  "
                 f"+{dp.get('new', 0)} new  "
                 f"-{dp.get('resolved', 0)} resolved"
@@ -1428,7 +1428,7 @@ def scans_trend(ctx, target: str, as_json: bool):
             click.echo()
             click.echo(click.style("  Averages:", bold=True))
             click.echo(
-                f"    findings: {avgs.get('total', 0)}  "
+                f"    observations: {avgs.get('total', 0)}  "
                 f"risk: {avgs.get('risk_score', 0)}  "
                 f"C:{avgs.get('critical', 0)} H:{avgs.get('high', 0)} "
                 f"M:{avgs.get('medium', 0)} L:{avgs.get('low', 0)}"
@@ -1580,7 +1580,7 @@ def engagements_show(ctx, engagement_id: str, as_json: bool):
         for s in scans[:10]:
             click.echo(
                 f"    {s['id']}  {s['status']}  "
-                f"findings: {s.get('findings_count', 0)}  "
+                f"observations: {s.get('observations_count', 0)}  "
                 f"{s.get('started_at', '')[:19]}"
             )
 
@@ -1666,7 +1666,7 @@ def engagements_trend(ctx, engagement_id: str, as_json: bool):
                 f"  {dp.get('date', '')[:10]}  "
                 f"scan {dp['scan_id'][:8]}  "
                 f"{dp.get('target_domain', '')}  "
-                f"findings: {dp.get('total', 0)}  "
+                f"observations: {dp.get('total', 0)}  "
                 f"risk: {click.style(str(dp.get('risk_score', 0)), fg=risk_color)}  "
                 f"+{dp.get('new', 0)} new  "
                 f"-{dp.get('resolved', 0)} resolved"
@@ -1677,7 +1677,7 @@ def engagements_trend(ctx, engagement_id: str, as_json: bool):
             click.echo()
             click.echo(click.style("  Averages:", bold=True))
             click.echo(
-                f"    findings: {avgs.get('total', 0)}  "
+                f"    observations: {avgs.get('total', 0)}  "
                 f"risk: {avgs.get('risk_score', 0)}  "
                 f"C:{avgs.get('critical', 0)} H:{avgs.get('high', 0)} "
                 f"M:{avgs.get('medium', 0)} L:{avgs.get('low', 0)}"
@@ -1688,26 +1688,26 @@ def engagements_trend(ctx, engagement_id: str, as_json: bool):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Finding Override Commands
+# Observation Override Commands
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-@cli.group("findings")
-def findings_group():
-    """Manage finding overrides (accept, false-positive, reopen)."""
+@cli.group("observations")
+def observations_group():
+    """Manage observation overrides (accept, false-positive, reopen)."""
     pass
 
 
-@findings_group.command("accept")
+@observations_group.command("accept")
 @click.argument("fingerprint")
 @click.option("--reason", "-r", default=None, help="Reason for accepting the risk")
 @click.pass_context
-def findings_accept(ctx, fingerprint: str, reason: str):
-    """Mark a finding as accepted risk.
+def observations_accept(ctx, fingerprint: str, reason: str):
+    """Mark an observation as accepted risk.
 
     Examples:
 
-        chainsmith findings accept abc123def456 --reason "Accepted per CISO"
+        chainsmith observations accept abc123def456 --reason "Accepted per CISO"
     """
     try:
         client = _get_client(ctx)
@@ -1716,24 +1716,24 @@ def findings_accept(ctx, fingerprint: str, reason: str):
         sys.exit(1)
 
     try:
-        result = client.set_finding_override(fingerprint, "accepted", reason=reason)
-        click.echo(click.style(f"Finding {fingerprint} marked as accepted", fg="green"))
+        result = client.set_observation_override(fingerprint, "accepted", reason=reason)
+        click.echo(click.style(f"Observation {fingerprint} marked as accepted", fg="green"))
         if result.get("reason"):
             click.echo(f"  Reason: {result['reason']}")
     except ChainsmithAPIError as e:
         _handle_api_error(e)
 
 
-@findings_group.command("false-positive")
+@observations_group.command("false-positive")
 @click.argument("fingerprint")
 @click.option("--reason", "-r", default=None, help="Reason for marking as false positive")
 @click.pass_context
-def findings_false_positive(ctx, fingerprint: str, reason: str):
-    """Mark a finding as a false positive.
+def observations_false_positive(ctx, fingerprint: str, reason: str):
+    """Mark an observation as a false positive.
 
     Examples:
 
-        chainsmith findings false-positive abc123def456 --reason "Test endpoint only"
+        chainsmith observations false-positive abc123def456 --reason "Test endpoint only"
     """
     try:
         client = _get_client(ctx)
@@ -1742,23 +1742,23 @@ def findings_false_positive(ctx, fingerprint: str, reason: str):
         sys.exit(1)
 
     try:
-        result = client.set_finding_override(fingerprint, "false_positive", reason=reason)
-        click.echo(click.style(f"Finding {fingerprint} marked as false positive", fg="green"))
+        result = client.set_observation_override(fingerprint, "false_positive", reason=reason)
+        click.echo(click.style(f"Observation {fingerprint} marked as false positive", fg="green"))
         if result.get("reason"):
             click.echo(f"  Reason: {result['reason']}")
     except ChainsmithAPIError as e:
         _handle_api_error(e)
 
 
-@findings_group.command("reopen")
+@observations_group.command("reopen")
 @click.argument("fingerprint")
 @click.pass_context
-def findings_reopen(ctx, fingerprint: str):
-    """Reopen a finding by removing its override.
+def observations_reopen(ctx, fingerprint: str):
+    """Reopen an observation by removing its override.
 
     Examples:
 
-        chainsmith findings reopen abc123def456
+        chainsmith observations reopen abc123def456
     """
     try:
         client = _get_client(ctx)
@@ -1767,13 +1767,13 @@ def findings_reopen(ctx, fingerprint: str):
         sys.exit(1)
 
     try:
-        client.remove_finding_override(fingerprint)
-        click.echo(click.style(f"Finding {fingerprint} reopened", fg="green"))
+        client.remove_observation_override(fingerprint)
+        click.echo(click.style(f"Observation {fingerprint} reopened", fg="green"))
     except ChainsmithAPIError as e:
         _handle_api_error(e)
 
 
-@findings_group.command("overrides")
+@observations_group.command("overrides")
 @click.option(
     "--status",
     "-s",
@@ -1783,14 +1783,14 @@ def findings_reopen(ctx, fingerprint: str):
 )
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def findings_overrides(ctx, status: str, as_json: bool):
-    """List all finding overrides.
+def observations_overrides(ctx, status: str, as_json: bool):
+    """List all observation overrides.
 
     Examples:
 
-        chainsmith findings overrides
+        chainsmith observations overrides
 
-        chainsmith findings overrides --status accepted
+        chainsmith observations overrides --status accepted
     """
     try:
         client = _get_client(ctx)
@@ -1799,7 +1799,7 @@ def findings_overrides(ctx, status: str, as_json: bool):
         sys.exit(1)
 
     try:
-        resp = client.list_finding_overrides(status=status)
+        resp = client.list_observation_overrides(status=status)
         overrides = resp.get("overrides", [])
 
         if as_json:
@@ -1811,7 +1811,7 @@ def findings_overrides(ctx, status: str, as_json: bool):
             return
 
         click.echo(
-            click.style(f"Finding Overrides ({resp.get('total', 0)} total)", fg="cyan", bold=True)
+            click.style(f"Observation Overrides ({resp.get('total', 0)} total)", fg="cyan", bold=True)
         )
         click.echo()
 
@@ -2264,7 +2264,7 @@ def swarm_status(ctx):
     click.echo(f"    Complete:    {data.get('tasks_complete', 0)}")
     click.echo(f"    Failed:      {data.get('tasks_failed', 0)}")
     click.echo()
-    click.echo(f"  Findings:      {data.get('findings_count', 0)}")
+    click.echo(f"  Observations:  {data.get('observations_count', 0)}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

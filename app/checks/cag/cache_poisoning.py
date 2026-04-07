@@ -22,7 +22,7 @@ import uuid
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -79,8 +79,8 @@ class CachePoisoningCheck(ServiceIteratingCheck):
                         poisoning_results.append(exact_result)
 
                         severity = self._determine_severity(exact_result)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=self._build_title(exact_result),
                                 description=self._build_description(exact_result),
@@ -100,8 +100,8 @@ class CachePoisoningCheck(ServiceIteratingCheck):
                     if semantic_result and semantic_result.get("poisoning_detected"):
                         poisoning_results.append(semantic_result)
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Semantic cache amplifies poisoning: {semantic_result.get('variations_poisoned', 0)} query variations affected",
                                 description=self._build_description(semantic_result),
@@ -300,7 +300,7 @@ class CachePoisoningCheck(ServiceIteratingCheck):
                 await client.post(url, json={}, headers={"Content-Type": "application/json"})
 
     def _determine_severity(self, poison_result: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if poison_result.get("poisoning_detected"):
             if poison_result.get("marker_in_cross_session"):
                 return "critical"
@@ -314,7 +314,7 @@ class CachePoisoningCheck(ServiceIteratingCheck):
         return "info"
 
     def _build_title(self, poison_result: dict) -> str:
-        """Build finding title."""
+        """Build observation title."""
         if poison_result.get("marker_in_cross_session"):
             return "Cache poisoning confirmed: injected content served to different session"
         if poison_result.get("poisoning_detected"):
@@ -326,7 +326,7 @@ class CachePoisoningCheck(ServiceIteratingCheck):
         )
 
     def _build_description(self, poison_result: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         test_id = poison_result.get("test_id", "")
 
         if test_id == "semantic_poisoning" and poison_result.get("poisoning_detected"):

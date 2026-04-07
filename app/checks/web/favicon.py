@@ -12,7 +12,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
@@ -145,8 +145,8 @@ class FaviconCheck(ServiceIteratingCheck):
                         framework, detail = match_info
                         if framework not in identified:
                             identified[framework] = detail
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Framework identified via favicon: {framework}",
                                     description=f"{detail}. Identified by matching favicon hash against known signatures.",
@@ -168,8 +168,8 @@ class FaviconCheck(ServiceIteratingCheck):
             result.errors.append(f"Favicon check error: {e}")
 
         if not identified:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"No favicon found: {service.host}",
                     description="No favicon was accessible or returned a valid response",

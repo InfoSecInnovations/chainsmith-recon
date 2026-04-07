@@ -2,7 +2,7 @@
 app/swarm/agent.py - Swarm agent client.
 
 Runs as a standalone process, connects to a coordinator, polls for
-tasks, executes checks locally, and reports findings back.
+tasks, executes checks locally, and reports observations back.
 
 Usage:
     agent = SwarmAgent(coordinator_url="http://10.0.0.1:8000", api_key="...", name="dmz-01")
@@ -206,7 +206,7 @@ class SwarmAgent:
                     json={
                         "agent_id": self.agent_id,
                         "success": result["success"],
-                        "findings": result["findings"],
+                        "observations": result["observations"],
                         "outputs": result["outputs"],
                         "services": result["services"],
                         "errors": result["errors"],
@@ -214,10 +214,10 @@ class SwarmAgent:
                     },
                 )
                 logger.info(
-                    "Task %s (%s) complete: %d findings",
+                    "Task %s (%s) complete: %d observations",
                     task_id,
                     check_name,
-                    len(result["findings"]),
+                    len(result["observations"]),
                 )
             except Exception as e:
                 logger.error("Task %s (%s) failed: %s", task_id, check_name, e, exc_info=True)
@@ -238,7 +238,7 @@ class SwarmAgent:
         """
         Instantiate and run the check for this task.
 
-        Returns a dict with: success, findings, outputs, services, errors, duration_ms
+        Returns a dict with: success, observations, outputs, services, errors, duration_ms
         """
         check_name = task_data["check_name"]
         check = self._checks_by_name.get(check_name)
@@ -277,7 +277,7 @@ class SwarmAgent:
 
         return {
             "success": result.success,
-            "findings": [f.to_dict() for f in result.findings],
+            "observations": [f.to_dict() for f in result.observations],
             "outputs": self._serialize_outputs(result.outputs),
             "services": [s.to_dict() for s in result.services],
             "errors": result.errors,

@@ -181,7 +181,7 @@ class TestAuthBypass:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
         assert "no authentication" in critical[0].title.lower()
 
@@ -211,7 +211,7 @@ class TestAuthBypass:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert len(high) >= 1
         assert "default" in high[0].title.lower()
 
@@ -230,7 +230,7 @@ class TestAuthBypass:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1
         assert "enforced" in info[0].title.lower()
 
@@ -259,9 +259,9 @@ class TestCachePoisoning:
         assert result.success
         assert result.outputs["rag_cache_behavior"]["caching_detected"]
         assert result.outputs["rag_cache_behavior"]["identical_responses"]
-        # Should have a medium+ finding about caching
-        cache_findings = [f for f in result.findings if f.severity in ("medium", "high")]
-        assert len(cache_findings) >= 1
+        # Should have a medium+ observation about caching
+        cache_observations = [f for f in result.observations if f.severity in ("medium", "high")]
+        assert len(cache_observations) >= 1
 
     @pytest.mark.asyncio
     async def test_no_caching(self, sample_service, rag_context):
@@ -279,7 +279,7 @@ class TestCachePoisoning:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1
 
     @pytest.mark.asyncio
@@ -296,7 +296,7 @@ class TestCachePoisoning:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert len(high) >= 1
         assert "poison" in high[0].title.lower()
 
@@ -324,7 +324,7 @@ class TestCorpusPoisoning:
 
         assert result.success
         assert "ingestion_endpoints" in result.outputs
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
         assert (
             "unauthenticated" in critical[0].title.lower() or "corpus" in critical[0].title.lower()
@@ -347,7 +347,7 @@ class TestCorpusPoisoning:
         assert result.success
         # Should find endpoint but not critical
         if result.outputs.get("ingestion_endpoints"):
-            assert all(f.severity != "critical" for f in result.findings)
+            assert all(f.severity != "critical" for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_no_ingestion_endpoints(self, sample_service, rag_context):
@@ -358,7 +358,7 @@ class TestCorpusPoisoning:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1
 
 
@@ -396,7 +396,7 @@ class TestMetadataInjection:
 
         assert result.success
         # Should detect metadata fields in response
-        assert len(result.findings) >= 1
+        assert len(result.observations) >= 1
 
     @pytest.mark.asyncio
     async def test_active_injection_with_ingestion(self, sample_service, ingestion_context):
@@ -431,7 +431,7 @@ class TestMetadataInjection:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1
 
 
@@ -461,7 +461,7 @@ class TestChunkBoundary:
             result = await check.check_service(sample_service, ingestion_context)
 
         assert result.success
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert len(high) >= 1
 
     @pytest.mark.asyncio
@@ -480,7 +480,7 @@ class TestChunkBoundary:
             result = await check.check_service(sample_service, ingestion_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1
 
 
@@ -512,12 +512,12 @@ class TestMultimodalInjection:
 
         assert result.success
         # Should detect file upload capability
-        upload_findings = [
+        upload_observations = [
             f
-            for f in result.findings
+            for f in result.observations
             if "upload" in f.title.lower() or "multimodal" in f.title.lower()
         ]
-        assert len(upload_findings) >= 1
+        assert len(upload_observations) >= 1
 
     @pytest.mark.asyncio
     async def test_no_upload(self, sample_service, rag_context):
@@ -528,7 +528,7 @@ class TestMultimodalInjection:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1
         assert "not accept" in info[0].title.lower() or "no" in info[0].title.lower()
 
@@ -582,7 +582,7 @@ class TestAdversarialEmbedding:
 
         assert result.success
         # Should detect some form of retrieval steering
-        assert len(result.findings) >= 1
+        assert len(result.observations) >= 1
 
     @pytest.mark.asyncio
     async def test_not_effective(self, sample_service, rag_context):
@@ -604,7 +604,7 @@ class TestAdversarialEmbedding:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1
 
 

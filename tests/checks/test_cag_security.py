@@ -110,8 +110,8 @@ class TestCrossUserLeakageCheck:
             result = await check.check_service(sample_service, cag_endpoint_context)
 
         assert result.success
-        critical_findings = [f for f in result.findings if f.severity == "critical"]
-        assert len(critical_findings) > 0
+        critical_observations = [f for f in result.observations if f.severity == "critical"]
+        assert len(critical_observations) > 0
 
     @pytest.mark.asyncio
     async def test_no_leakage_detected(self, check, sample_service, cag_endpoint_context):
@@ -131,14 +131,14 @@ class TestCrossUserLeakageCheck:
             result = await check.check_service(sample_service, cag_endpoint_context)
 
         assert result.success
-        info_findings = [f for f in result.findings if f.severity == "info"]
-        assert len(info_findings) > 0
+        info_observations = [f for f in result.observations if f.severity == "info"]
+        assert len(info_observations) > 0
 
     @pytest.mark.asyncio
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -159,7 +159,7 @@ class TestCacheKeyReverseCheck:
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -180,7 +180,7 @@ class TestSemanticThresholdCheck:
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -202,7 +202,7 @@ class TestSideChannelCheck:
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -223,7 +223,7 @@ class TestStaleContextCheck:
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -267,14 +267,14 @@ class TestCachePoisoningCheck:
                 result = await check.check_service(sample_service, cag_endpoint_context)
 
         assert result.success
-        # Should have findings (at minimum the exact poisoning test)
-        assert len(result.findings) > 0
+        # Should have observations (at minimum the exact poisoning test)
+        assert len(result.observations) > 0
 
     @pytest.mark.asyncio
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -294,7 +294,7 @@ class TestInjectionPersistenceCheck:
 
     @pytest.mark.asyncio
     async def test_no_injection(self, check, sample_service, cag_endpoint_context):
-        """No injection = info finding."""
+        """No injection = info observation."""
         client = make_mock_client(
             post=AsyncMock(
                 return_value=make_response(
@@ -308,14 +308,14 @@ class TestInjectionPersistenceCheck:
                 result = await check.check_service(sample_service, cag_endpoint_context)
 
         assert result.success
-        info_findings = [f for f in result.findings if f.severity == "info"]
-        assert len(info_findings) > 0
+        info_observations = [f for f in result.observations if f.severity == "info"]
+        assert len(info_observations) > 0
 
     @pytest.mark.asyncio
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -354,7 +354,7 @@ class TestSerializationCheck:
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -398,7 +398,7 @@ class TestDistributedCacheCheck:
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

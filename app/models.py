@@ -1,7 +1,7 @@
 """
 Pydantic Models for Recon Agent
 
-Data models for findings, chains, scope, and agent state.
+Data models for observations, chains, scope, and agent state.
 """
 
 from datetime import datetime
@@ -19,7 +19,7 @@ class AgentType(StrEnum):
     ADJUDICATOR = "adjudicator"
 
 
-class FindingSeverity(StrEnum):
+class ObservationSeverity(StrEnum):
     INFO = "info"
     LOW = "low"
     MEDIUM = "medium"
@@ -27,7 +27,7 @@ class FindingSeverity(StrEnum):
     CRITICAL = "critical"
 
 
-class FindingStatus(StrEnum):
+class ObservationStatus(StrEnum):
     PENDING = "pending"
     VERIFIED = "verified"
     REJECTED = "rejected"
@@ -39,9 +39,9 @@ class EventType(StrEnum):
     AGENT_COMPLETE = "agent_complete"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
-    FINDING_DISCOVERED = "finding_discovered"
-    FINDING_VERIFIED = "finding_verified"
-    FINDING_REJECTED = "finding_rejected"
+    OBSERVATION_DISCOVERED = "observation_discovered"
+    OBSERVATION_VERIFIED = "observation_verified"
+    OBSERVATION_REJECTED = "observation_rejected"
     HALLUCINATION_CAUGHT = "hallucination_caught"
     CHAIN_IDENTIFIED = "chain_identified"
     SCOPE_VIOLATION = "scope_violation"
@@ -58,7 +58,7 @@ class EventType(StrEnum):
 class EventImportance(StrEnum):
     """Visual hierarchy for UI display."""
 
-    HIGH = "high"  # 🔴 Red - significant findings
+    HIGH = "high"  # 🔴 Red - significant observations
     MEDIUM = "medium"  # 🟡 Yellow - under verification
     LOW = "low"  # ⚪ Gray - routine enumeration
 
@@ -106,7 +106,7 @@ class ScopeDefinition(BaseModel):
         return not (self.allowed_techniques and technique not in self.allowed_techniques)
 
 
-# ─── Finding Models ────────────────────────────────────────────
+# ─── Observation Models ────────────────────────────────────────
 
 
 class RawEvidence(BaseModel):
@@ -122,15 +122,15 @@ class RawEvidence(BaseModel):
     response_time_ms: float | None = None
 
 
-class Finding(BaseModel):
-    """A discovered finding from reconnaissance."""
+class Observation(BaseModel):
+    """A discovered observation from reconnaissance."""
 
     id: str
-    finding_type: str
+    observation_type: str
     title: str
     description: str
-    severity: FindingSeverity
-    status: FindingStatus = FindingStatus.PENDING
+    severity: ObservationSeverity
+    status: ObservationStatus = ObservationStatus.PENDING
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
 
     # Source information
@@ -177,11 +177,11 @@ class AdjudicationApproach(StrEnum):
 
 
 class AdjudicatedRisk(BaseModel):
-    """Result of severity adjudication for a single finding."""
+    """Result of severity adjudication for a single observation."""
 
-    finding_id: str
-    original_severity: FindingSeverity
-    adjudicated_severity: FindingSeverity
+    observation_id: str
+    original_severity: ObservationSeverity
+    adjudicated_severity: ObservationSeverity
     confidence: float = Field(ge=0.0, le=1.0)
     approach_used: AdjudicationApproach
     rationale: str
@@ -212,19 +212,19 @@ class OperatorContext(BaseModel):
 
 
 class AttackChain(BaseModel):
-    """An attack chain combining multiple findings."""
+    """An attack chain combining multiple observations."""
 
     id: str
     title: str
     description: str
     impact_statement: str
 
-    # Component findings
-    finding_ids: list[str]
+    # Component observations
+    observation_ids: list[str]
 
     # Severity
-    individual_severities: list[FindingSeverity]
-    combined_severity: FindingSeverity
+    individual_severities: list[ObservationSeverity]
+    combined_severity: ObservationSeverity
     severity_reasoning: str
 
     # Attack path
@@ -257,7 +257,7 @@ class AgentEvent(BaseModel):
     details: dict[str, Any] | None = None
 
     # Related objects
-    finding_id: str | None = None
+    observation_id: str | None = None
     chain_id: str | None = None
     tool_name: str | None = None
 
@@ -285,8 +285,8 @@ class SessionState(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
-    # Findings
-    findings: list[Finding] = Field(default_factory=list)
+    # Observations
+    observations: list[Observation] = Field(default_factory=list)
     chains: list[AttackChain] = Field(default_factory=list)
 
     # Stats
@@ -295,7 +295,7 @@ class SessionState(BaseModel):
     scope_violations: int = 0
 
     # Active randomizations
-    active_findings: list[str] = Field(default_factory=list)
+    active_observations: list[str] = Field(default_factory=list)
     active_hallucinations: list[str] = Field(default_factory=list)
 
 
@@ -344,10 +344,10 @@ class DirectiveResponse(BaseModel):
     message: str
 
 
-class FindingsResponse(BaseModel):
-    """Response containing findings."""
+class ObservationsResponse(BaseModel):
+    """Response containing observations."""
 
-    findings: list[Finding]
+    observations: list[Observation]
     total: int
     verified: int
     pending: int
@@ -368,5 +368,5 @@ class ExportResponse(BaseModel):
     generated_at: datetime
 
 
-# Resolve forward reference for Finding.adjudicated_risk
-Finding.model_rebuild()
+# Resolve forward reference for Observation.adjudicated_risk
+Observation.model_rebuild()

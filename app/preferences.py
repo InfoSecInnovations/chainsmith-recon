@@ -116,7 +116,7 @@ class AdvancedPreferences:
     payload_mutation: bool = True
     timing_analysis: bool = True
     cache_responses: bool = True
-    max_finding_evidence_bytes: int = 10000
+    max_observation_evidence_bytes: int = 10000
     waf_evasion: bool = False
 
 
@@ -661,7 +661,7 @@ PREFERENCE_METADATA = {
     },
     "checks.on_critical": {
         "type": "str",
-        "description": "Behavior when critical finding discovered (annotate, skip_downstream, stop)",
+        "description": "Behavior when critical observation discovered (annotate, skip_downstream, stop)",
         "choices": ["annotate", "skip_downstream", "stop"],
         "advanced": False,
     },
@@ -714,7 +714,7 @@ PREFERENCE_METADATA = {
     },
     "checks.verification_level": {
         "type": "str",
-        "description": "Finding verification level (none, sample, all)",
+        "description": "Observation verification level (none, sample, all)",
         "choices": ["none", "sample", "all"],
         "advanced": False,
     },
@@ -751,7 +751,7 @@ PREFERENCE_METADATA = {
     },
     "llm.verification": {
         "type": "bool",
-        "description": "Enable LLM-based finding verification",
+        "description": "Enable LLM-based observation verification",
         "advanced": False,
     },
     "advanced.payload_mutation": {
@@ -769,9 +769,9 @@ PREFERENCE_METADATA = {
         "description": "Cache HTTP responses during scan",
         "advanced": True,
     },
-    "advanced.max_finding_evidence_bytes": {
+    "advanced.max_observation_evidence_bytes": {
         "type": "int",
-        "description": "Maximum evidence bytes per finding",
+        "description": "Maximum evidence bytes per observation",
         "min": 100,
         "max": 1000000,
         "advanced": True,

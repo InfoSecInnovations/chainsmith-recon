@@ -13,7 +13,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Large filler text to consume context
@@ -111,8 +111,8 @@ class AgentContextOverflowCheck(ServiceIteratingCheck):
                 }
 
                 if post_fill["succeeded"] and not baseline["succeeded"]:
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title="Context overflow weakens guardrails",
                             description=(
@@ -134,8 +134,8 @@ class AgentContextOverflowCheck(ServiceIteratingCheck):
                         )
                     )
                 elif role_changed:
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title="Agent drops system prompt after context overflow",
                             description=(

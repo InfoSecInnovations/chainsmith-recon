@@ -137,10 +137,10 @@ class ChainsmithClient:
                 return status
             time.sleep(interval)
 
-    # ─── Findings ─────────────────────────────────────────────
+    # ─── Observations ─────────────────────────────────────────
 
-    def get_findings(self) -> dict:
-        return self._request("GET", "/api/v1/findings")
+    def get_observations(self) -> dict:
+        return self._request("GET", "/api/v1/observations")
 
     # ─── Checks ───────────────────────────────────────────────
 
@@ -226,8 +226,8 @@ class ChainsmithClient:
     def get_scan_detail(self, scan_id: str) -> dict:
         return self._request("GET", f"/api/v1/scans/{scan_id}")
 
-    def get_scan_findings(self, scan_id: str) -> dict:
-        return self._request("GET", f"/api/v1/scans/{scan_id}/findings")
+    def get_scan_observations(self, scan_id: str) -> dict:
+        return self._request("GET", f"/api/v1/scans/{scan_id}/observations")
 
     def delete_scan_by_id(self, scan_id: str) -> dict:
         return self._request("DELETE", f"/api/v1/scans/{scan_id}")
@@ -265,22 +265,22 @@ class ChainsmithClient:
     def get_target_trend(self, target_domain: str) -> dict:
         return self._request("GET", f"/api/v1/targets/{target_domain}/trend")
 
-    # ─── Finding Overrides ────────────────────────────────────
+    # ─── Observation Overrides ────────────────────────────────
 
-    def set_finding_override(self, fingerprint: str, status: str, reason: str = None) -> dict:
+    def set_observation_override(self, fingerprint: str, status: str, reason: str = None) -> dict:
         body = {"status": status}
         if reason:
             body["reason"] = reason
-        return self._request("PUT", f"/api/v1/findings/{fingerprint}/override", json=body)
+        return self._request("PUT", f"/api/v1/observations/{fingerprint}/override", json=body)
 
-    def remove_finding_override(self, fingerprint: str) -> dict:
-        return self._request("DELETE", f"/api/v1/findings/{fingerprint}/override")
+    def remove_observation_override(self, fingerprint: str) -> dict:
+        return self._request("DELETE", f"/api/v1/observations/{fingerprint}/override")
 
-    def list_finding_overrides(self, status: str = None) -> dict:
+    def list_observation_overrides(self, status: str = None) -> dict:
         params = {}
         if status:
             params["status"] = status
-        return self._request("GET", "/api/v1/findings/overrides", params=params)
+        return self._request("GET", "/api/v1/observations/overrides", params=params)
 
     # ─── Reports ─────────────────────────────────────────────
 

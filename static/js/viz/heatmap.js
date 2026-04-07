@@ -11,12 +11,12 @@
     /**
      * Build heatmap data: host × suite matrix with worst severity per cell.
      */
-    function buildHeatmapData(findingsList) {
-        var matrix = {};   // host -> suite -> { worst, count, findings }
+    function buildHeatmapData(observationsList) {
+        var matrix = {};   // host -> suite -> { worst, count, observations }
         var hosts  = new Set();
         var suites = new Set();
 
-        findingsList.forEach(function (f) {
+        observationsList.forEach(function (f) {
             var rawHost = f.host || f.target_url || 'unknown';
             var host  = ns.normalizeHost(rawHost);
             var suite = f.suite || ns.inferSuite(f.check_name);
@@ -24,11 +24,11 @@
             suites.add(suite);
 
             if (!matrix[host]) matrix[host] = {};
-            if (!matrix[host][suite]) matrix[host][suite] = { worst: null, count: 0, findings: [] };
+            if (!matrix[host][suite]) matrix[host][suite] = { worst: null, count: 0, observations: [] };
 
             var cell = matrix[host][suite];
             cell.count++;
-            cell.findings.push(f);
+            cell.observations.push(f);
 
             var sevIdx   = SEV_ORDER.indexOf(f.severity);
             var worstIdx = cell.worst ? SEV_ORDER.indexOf(cell.worst) : SEV_ORDER.length;
@@ -54,14 +54,14 @@
     /**
      * Render the heatmap visualization.
      */
-    ns.renderHeatmap = function (findings, openModal) {
+    ns.renderHeatmap = function (observations, openModal) {
         var container = document.getElementById('heatmap-container');
         var emptyEl   = document.getElementById('heatmap-empty');
         var contentEl = document.getElementById('heatmap-content');
         var tooltipEl = document.getElementById('heatmap-tooltip');
         var tip       = ns.tooltip(tooltipEl);
 
-        if (findings.length === 0) {
+        if (observations.length === 0) {
             emptyEl.style.display  = 'flex';
             contentEl.style.display = 'none';
             return;
@@ -70,7 +70,7 @@
         emptyEl.style.display  = 'none';
         contentEl.style.display = 'block';
 
-        var data   = buildHeatmapData(findings);
+        var data   = buildHeatmapData(observations);
         var matrix = data.matrix;
         var hosts  = data.hosts;
         var suites = data.suites;
@@ -136,7 +136,7 @@
                     suite: suite,
                     worst: cell ? cell.worst || 'none' : 'none',
                     count: cell ? cell.count : 0,
-                    findings: cell ? cell.findings : [],
+                    observations: cell ? cell.observations : [],
                 });
             });
         });
@@ -159,7 +159,7 @@
                 if (d.count === 0) return;
                 tip.show(
                     '<strong>' + d.host + ' / ' + d.suite + '</strong>' +
-                    '<div class="heatmap-tip-count">' + d.count + ' finding' + (d.count !== 1 ? 's' : '') + '</div>' +
+                    '<div class="heatmap-tip-count">' + d.count + ' observation' + (d.count !== 1 ? 's' : '') + '</div>' +
                     '<div>Worst: <span style="color:' + SEV_COLORS[d.worst] + '">' + d.worst + '</span></div>',
                     event
                 );
@@ -176,7 +176,7 @@
                     '<div class="modal-section">' +
                     '<div class="modal-section-title">Suite: ' + d.suite + '</div>' +
                     '<div class="modal-section-content">' +
-                    d.findings.map(function (f) {
+                    d.observations.map(function (f) {
                         return '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
                             '<span class="severity-badge severity-' + f.severity + '">' + f.severity + '</span>' +
                             '<span style="margin-left:8px">' + f.title + '</span>' +

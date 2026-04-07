@@ -4,14 +4,14 @@ app/scenario_services/ai/ml_serving.py
 ML model serving service template.
 
 This service simulates an ML model serving endpoint (similar to vLLM, TGI, etc.)
-with embeddings and completions APIs. It includes configurable security findings.
+with embeddings and completions APIs. It includes configurable security observations.
 
 Configurable via environment variables:
     BRAND_NAME          Display name (default: from scenario.json)
     ML_VERSION          Service version (default: 2.1.0)
     MODEL_ID            Model identifier (default: <brand>-llm-v2)
 
-Planted findings:
+Planted observations:
     framework_fingerprint       X-Serving-Engine and X-Model-Backend headers
     model_version_leak          X-Model-Version header
     model_info_endpoint         /v1/models returns detailed model info
@@ -38,7 +38,7 @@ from pydantic import BaseModel
 from app.scenario_services.common.config import (
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -89,16 +89,16 @@ class InferenceRequest(BaseModel):
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
-    """Add headers based on active findings."""
+    """Add headers based on active observations."""
     response = await call_next(request)
 
-    # Finding: framework_fingerprint - leak serving infrastructure
-    if is_finding_active("framework_fingerprint"):
+    # Observation: framework_fingerprint - leak serving infrastructure
+    if is_observation_active("framework_fingerprint"):
         response.headers["X-Serving-Engine"] = "vLLM/0.4.1"
         response.headers["X-Model-Backend"] = "transformers"
 
-    # Finding: model_version_leak - leak model version
-    if is_finding_active("model_version_leak"):
+    # Observation: model_version_leak - leak model version
+    if is_observation_active("model_version_leak"):
         model_id = _get_model_id()
         response.headers["X-Model-Version"] = f"{model_id}-v2.3.1-ft"
 
@@ -139,10 +139,10 @@ async def list_models():
     """
     Model listing endpoint.
 
-    Finding: model_info_endpoint
+    Observation: model_info_endpoint
     When active, returns detailed model information.
 
-    Finding: model_config_exposed
+    Observation: model_config_exposed
     When active, includes training configuration.
     """
     model_id = _get_model_id()
@@ -156,8 +156,8 @@ async def list_models():
         }
     ]
 
-    # Finding: model_info_endpoint - leak detailed model info
-    if is_finding_active("model_info_endpoint"):
+    # Observation: model_info_endpoint - leak detailed model info
+    if is_observation_active("model_info_endpoint"):
         models[0].update(
             {
                 "architecture": "llama-7b-hf",
@@ -168,8 +168,8 @@ async def list_models():
             }
         )
 
-    # Finding: model_config_exposed - leak training config
-    if is_finding_active("model_config_exposed"):
+    # Observation: model_config_exposed - leak training config
+    if is_observation_active("model_config_exposed"):
         models[0]["training_config"] = {
             "dataset": f"s3://{brand}-ml/training/customer-interactions-2024/",
             "epochs": 3,
@@ -184,24 +184,24 @@ async def create_embedding(request: EmbeddingRequest):
     """
     Embedding endpoint.
 
-    Finding: no_rate_limit
+    Observation: no_rate_limit
     When not active, limits to 10 texts per request.
 
-    Finding: bulk_query_allowed
+    Observation: bulk_query_allowed
     When not active, prevents bulk queries.
 
-    Finding: embedding_endpoint_exposed
+    Observation: embedding_endpoint_exposed
     When active, includes debug info in response.
     """
     model_id = request.model or f"{_get_model_id()}-embed-v1"
     texts = request.text if isinstance(request.text, list) else [request.text]
 
     # Check rate limiting
-    if not is_finding_active("no_rate_limit") and len(texts) > 10:
+    if not is_observation_active("no_rate_limit") and len(texts) > 10:
         raise HTTPException(429, "Rate limit exceeded: max 10 texts per request")
 
     # Check bulk query
-    if not is_finding_active("bulk_query_allowed") and len(texts) > 1:
+    if not is_observation_active("bulk_query_allowed") and len(texts) > 1:
         raise HTTPException(400, "Bulk queries not allowed")
 
     # Generate fake embeddings (384-dimensional)
@@ -216,8 +216,8 @@ async def create_embedding(request: EmbeddingRequest):
         },
     }
 
-    # Finding: embedding_endpoint_exposed - include debug info
-    if is_finding_active("embedding_endpoint_exposed"):
+    # Observation: embedding_endpoint_exposed - include debug info
+    if is_observation_active("embedding_endpoint_exposed"):
         response["_debug"] = {
             "model_path": f"/models/{_get_model_id()}-embed-v1",
             "dimension": 384,
@@ -256,10 +256,10 @@ async def debug_config():
     """
     Debug config endpoint.
 
-    Finding: model_config_exposed
-    Only available when this finding is active.
+    Observation: model_config_exposed
+    Only available when this observation is active.
     """
-    if not is_finding_active("model_config_exposed"):
+    if not is_observation_active("model_config_exposed"):
         raise HTTPException(404, "Not found")
 
     model_id = _get_model_id()
@@ -289,10 +289,10 @@ async def metrics():
     """
     Prometheus-style metrics endpoint.
 
-    Finding: model_config_exposed
-    Only available when this finding is active.
+    Observation: model_config_exposed
+    Only available when this observation is active.
     """
-    if not is_finding_active("model_config_exposed"):
+    if not is_observation_active("model_config_exposed"):
         raise HTTPException(404, "Not found")
 
     model_id = _get_model_id()

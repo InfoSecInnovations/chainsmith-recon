@@ -135,17 +135,17 @@ window.ChainsmithViz = window.ChainsmithViz || {};
     };
 
     // ─── Severity helpers ──────────────────────────────────────────
-    ns.worstSeverity = function (findings) {
+    ns.worstSeverity = function (observations) {
         for (var i = 0; i < ns.SEV_ORDER.length; i++) {
             var sev = ns.SEV_ORDER[i];
-            if (findings.some(function (f) { return f.severity === sev; })) return sev;
+            if (observations.some(function (f) { return f.severity === sev; })) return sev;
         }
         return 'info';
     };
 
-    ns.severityBreakdown = function (findings) {
+    ns.severityBreakdown = function (observations) {
         var counts = {};
-        findings.forEach(function (f) {
+        observations.forEach(function (f) {
             var s = f.severity || 'info';
             counts[s] = (counts[s] || 0) + 1;
         });
@@ -157,9 +157,9 @@ window.ChainsmithViz = window.ChainsmithViz || {};
             .join(', ');
     };
 
-    ns.countBySeverity = function (hostFindings) {
+    ns.countBySeverity = function (hostObservations) {
         var counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-        hostFindings.forEach(function (f) {
+        hostObservations.forEach(function (f) {
             if (counts.hasOwnProperty(f.severity)) {
                 counts[f.severity]++;
             }

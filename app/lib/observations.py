@@ -1,7 +1,7 @@
 """
-app/lib/findings.py - Finding Builder
+app/lib/observations.py - Observation Builder
 
-Stable finding ID generation and structured finding construction.
+Stable observation ID generation and structured observation construction.
 
 ID Format: {check_id}-{host}-{discriminator}
   - check_id:      check name, e.g. "headers"
@@ -18,11 +18,11 @@ Examples:
 import hashlib
 import re
 
-from app.checks.base import Finding, Service
+from app.checks.base import Observation, Service
 
 
 def _slugify(value: str) -> str:
-    """Convert a value to a safe slug for use in finding IDs."""
+    """Convert a value to a safe slug for use in observation IDs."""
     value = value.lower().strip()
     # Replace colons and slashes (ports, paths) with dashes
     value = re.sub(r"[:/]", "-", value)
@@ -33,18 +33,18 @@ def _slugify(value: str) -> str:
     return value.strip("-")
 
 
-def make_finding_id(
+def make_observation_id(
     check_id: str,
     host: str,
     discriminator: str | None = None,
 ) -> str:
     """
-    Generate a stable, human-readable finding ID.
+    Generate a stable, human-readable observation ID.
 
     Args:
         check_id:      The check's name attribute (e.g. "dns_enumeration")
         host:          The target host (e.g. "www.example.com" or "10.0.0.1:8080")
-        discriminator: Optional per-finding qualifier (e.g. "missing-csp")
+        discriminator: Optional per-observation qualifier (e.g. "missing-csp")
 
     Returns:
         e.g. "dns_enumeration-www.example.com"
@@ -56,27 +56,27 @@ def make_finding_id(
     return "-".join(p for p in parts if p)
 
 
-def make_finding_id_hashed(
+def make_observation_id_hashed(
     check_id: str,
     host: str,
     discriminator: str | None = None,
     extra: str | None = None,
 ) -> str:
     """
-    Generate a stable ID with a short hash suffix for high-cardinality findings.
+    Generate a stable ID with a short hash suffix for high-cardinality observations.
 
-    Useful when discriminators might collide (e.g. many path findings on same host).
+    Useful when discriminators might collide (e.g. many path observations on same host).
 
     Returns:
         e.g. "paths-www.example.com-admin-a3f2"
     """
-    base = make_finding_id(check_id, host, discriminator)
+    base = make_observation_id(check_id, host, discriminator)
     payload = f"{check_id}:{host}:{discriminator or ''}:{extra or ''}"
     suffix = hashlib.sha256(payload.encode()).hexdigest()[:4]
     return f"{base}-{suffix}"
 
 
-def build_finding(
+def build_observation(
     check_name: str,
     title: str,
     description: str,
@@ -88,13 +88,13 @@ def build_finding(
     target_url: str | None = None,
     raw_data: dict | None = None,
     references: list[str] | None = None,
-) -> Finding:
+) -> Observation:
     """
-    Construct a Finding with a stable ID.
+    Construct an Observation with a stable ID.
 
     Args:
         check_name:    The check's name (used for ID prefix)
-        title:         Brief description of the finding
+        title:         Brief description of the observation
         description:   Detailed explanation
         severity:      info | low | medium | high | critical
         evidence:      Raw proof (header value, response snippet, etc.)
@@ -106,12 +106,12 @@ def build_finding(
         references:    CVE, OWASP, etc. (optional)
 
     Returns:
-        Finding with stable ID assigned
+        Observation with stable ID assigned
     """
-    finding_id = make_finding_id(check_name, host, discriminator)
+    observation_id = make_observation_id(check_name, host, discriminator)
 
-    return Finding(
-        id=finding_id,
+    return Observation(
+        id=observation_id,
         title=title,
         description=description,
         severity=severity,

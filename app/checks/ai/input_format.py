@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -93,7 +93,7 @@ class InputFormatInjectionCheck(BaseCheck):
 
             try:
                 ir = await self._test_injections(url, service, api_format, context)
-                result.findings.extend(ir.findings)
+                result.observations.extend(ir.observations)
                 result.outputs.update(ir.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -168,8 +168,8 @@ class InputFormatInjectionCheck(BaseCheck):
 
         if successful:
             severity = "high"
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Input format injection successful ({len(successful)} techniques)",
                     description=(
@@ -187,8 +187,8 @@ class InputFormatInjectionCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Input format injection techniques all rejected",
                     description="Model did not interpret formatting markers as role boundaries",

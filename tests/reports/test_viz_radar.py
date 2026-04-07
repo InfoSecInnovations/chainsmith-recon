@@ -8,7 +8,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestRadarTabPresence:
-    """Verify radar tab and panel exist in findings.html."""
+    """Verify radar tab and panel exist in observations.html."""
 
     def test_radar_tab_exists(self):
         content = _all_viz_content()
@@ -44,7 +44,7 @@ class TestRadarTabPresence:
 
 
 class TestRadarJavaScript:
-    """Verify radar JS functions and constants exist in findings.html."""
+    """Verify radar JS functions and constants exist in observations.html."""
 
     def test_render_radar_function(self):
         content = _all_viz_content()
@@ -127,18 +127,18 @@ class TestRadarDataLogic:
         return "other"
 
     @classmethod
-    def build_radar_data(cls, findings_list):
+    def build_radar_data(cls, observations_list):
         """Python mirror of the JS buildRadarData."""
         scores = {}
-        for f in findings_list:
+        for f in observations_list:
             suite = f.get("suite") or cls.infer_suite(f.get("check_name"))
             if suite not in scores:
-                scores[suite] = {"score": 0, "breakdown": {}, "findings": []}
+                scores[suite] = {"score": 0, "breakdown": {}, "observations": []}
             entry = scores[suite]
             weight = cls.RISK_WEIGHTS.get(f["severity"], 0)
             entry["score"] += weight
             entry["breakdown"][f["severity"]] = entry["breakdown"].get(f["severity"], 0) + 1
-            entry["findings"].append(f)
+            entry["observations"].append(f)
 
         suites = [s for s in cls.KNOWN_SUITES if s in scores]
         for s in sorted(scores.keys()):
@@ -147,63 +147,63 @@ class TestRadarDataLogic:
 
         return {"suites": suites, "scores": scores}
 
-    def test_empty_findings(self):
+    def test_empty_observations(self):
         result = self.build_radar_data([])
         assert result["suites"] == []
         assert result["scores"] == {}
 
-    def test_single_finding_score(self):
-        findings = [{"suite": "web", "severity": "high", "title": "XSS"}]
-        result = self.build_radar_data(findings)
+    def test_single_observation_score(self):
+        observations = [{"suite": "web", "severity": "high", "title": "XSS"}]
+        result = self.build_radar_data(observations)
         assert result["scores"]["web"]["score"] == 8
         assert result["scores"]["web"]["breakdown"] == {"high": 1}
 
-    def test_multiple_findings_same_suite(self):
-        findings = [
+    def test_multiple_observations_same_suite(self):
+        observations = [
             {"suite": "web", "severity": "critical", "title": "A"},
             {"suite": "web", "severity": "high", "title": "B"},
             {"suite": "web", "severity": "info", "title": "C"},
         ]
-        result = self.build_radar_data(findings)
+        result = self.build_radar_data(observations)
         # 16 + 8 + 1 = 25
         assert result["scores"]["web"]["score"] == 25
 
     def test_multiple_suites(self):
-        findings = [
+        observations = [
             {"suite": "web", "severity": "high", "title": "A"},
             {"suite": "network", "severity": "medium", "title": "B"},
             {"suite": "ai", "severity": "critical", "title": "C"},
         ]
-        result = self.build_radar_data(findings)
+        result = self.build_radar_data(observations)
         assert result["scores"]["web"]["score"] == 8
         assert result["scores"]["network"]["score"] == 4
         assert result["scores"]["ai"]["score"] == 16
 
     def test_suite_order_follows_known_suites(self):
-        findings = [
+        observations = [
             {"suite": "cag", "severity": "low", "title": "A"},
             {"suite": "web", "severity": "low", "title": "B"},
             {"suite": "ai", "severity": "low", "title": "C"},
         ]
-        result = self.build_radar_data(findings)
+        result = self.build_radar_data(observations)
         assert result["suites"].index("web") < result["suites"].index("ai")
         assert result["suites"].index("ai") < result["suites"].index("cag")
 
     def test_unknown_suite_appended(self):
-        findings = [
+        observations = [
             {"suite": "web", "severity": "low", "title": "A"},
             {"suite": "custom", "severity": "info", "title": "B"},
         ]
-        result = self.build_radar_data(findings)
+        result = self.build_radar_data(observations)
         assert "custom" in result["suites"]
         assert result["suites"].index("web") < result["suites"].index("custom")
 
     def test_infer_suite_from_check_name(self):
-        findings = [
+        observations = [
             {"check_name": "dns_lookup", "severity": "info", "title": "A"},
             {"check_name": "header_check", "severity": "low", "title": "B"},
         ]
-        result = self.build_radar_data(findings)
+        result = self.build_radar_data(observations)
         assert "network" in result["scores"]
         assert "web" in result["scores"]
         assert result["scores"]["network"]["score"] == 1
@@ -212,29 +212,29 @@ class TestRadarDataLogic:
     def test_risk_weight_computation_all_severities(self):
         """Verify each severity maps to the correct weight."""
         for sev, expected_weight in self.RISK_WEIGHTS.items():
-            findings = [{"suite": "web", "severity": sev, "title": "T"}]
-            result = self.build_radar_data(findings)
+            observations = [{"suite": "web", "severity": sev, "title": "T"}]
+            result = self.build_radar_data(observations)
             assert result["scores"]["web"]["score"] == expected_weight, (
                 f"{sev} should have weight {expected_weight}"
             )
 
     def test_breakdown_counts_per_severity(self):
-        findings = [
+        observations = [
             {"suite": "ai", "severity": "critical", "title": "A"},
             {"suite": "ai", "severity": "critical", "title": "B"},
             {"suite": "ai", "severity": "low", "title": "C"},
         ]
-        result = self.build_radar_data(findings)
+        result = self.build_radar_data(observations)
         assert result["scores"]["ai"]["breakdown"]["critical"] == 2
         assert result["scores"]["ai"]["breakdown"]["low"] == 1
 
-    def test_findings_stored_in_scores(self):
-        findings = [
+    def test_observations_stored_in_scores(self):
+        observations = [
             {"suite": "mcp", "severity": "medium", "title": "A"},
             {"suite": "mcp", "severity": "info", "title": "B"},
         ]
-        result = self.build_radar_data(findings)
-        assert len(result["scores"]["mcp"]["findings"]) == 2
+        result = self.build_radar_data(observations)
+        assert len(result["scores"]["mcp"]["observations"]) == 2
 
 
 class TestRadarCSS:

@@ -480,7 +480,7 @@
                     </div>
                     <div class="setting-item">
                         <div class="setting-info">
-                            <div class="setting-name">On Critical Finding</div>
+                            <div class="setting-name">On Critical Observation</div>
                             <div class="setting-desc">What happens when a suite discovers a critical vulnerability</div>
                         </div>
                         <div class="setting-control">
@@ -506,7 +506,7 @@
                     <div class="setting-item">
                         <div class="setting-info">
                             <div class="setting-name">Verification Level</div>
-                            <div class="setting-desc">Re-verify findings after discovery</div>
+                            <div class="setting-desc">Re-verify observations after discovery</div>
                         </div>
                         <div class="setting-control">
                             <select id="checks-verification">
@@ -632,7 +632,7 @@
                     <div class="setting-item">
                         <div class="setting-info">
                             <div class="setting-name">Max Evidence Bytes</div>
-                            <div class="setting-desc">Maximum evidence size per finding</div>
+                            <div class="setting-desc">Maximum evidence size per observation</div>
                         </div>
                         <div class="setting-control">
                             <input type="number" id="adv-evidence" min="100" max="1000000" step="100">
@@ -733,7 +733,7 @@
                 document.getElementById('adv-timing').checked = prefs.advanced.timing_analysis;
                 document.getElementById('adv-cache').checked = prefs.advanced.cache_responses;
                 document.getElementById('adv-waf').checked = prefs.advanced.waf_evasion;
-                document.getElementById('adv-evidence').value = prefs.advanced.max_finding_evidence_bytes;
+                document.getElementById('adv-evidence').value = prefs.advanced.max_observation_evidence_bytes;
 
                 hasChanges = false;
                 updateUnsavedIndicator();
@@ -772,7 +772,7 @@
                     timing_analysis: document.getElementById('adv-timing').checked,
                     cache_responses: document.getElementById('adv-cache').checked,
                     waf_evasion: document.getElementById('adv-waf').checked,
-                    max_finding_evidence_bytes: parseInt(document.getElementById('adv-evidence').value)
+                    max_observation_evidence_bytes: parseInt(document.getElementById('adv-evidence').value)
                 }
             };
         }

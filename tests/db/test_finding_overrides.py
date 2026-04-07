@@ -1,18 +1,18 @@
 """
-Tests for finding manual overrides (Phase 4a).
+Tests for observation manual overrides (Phase 4a).
 
-Covers FindingOverrideRepository CRUD and the override API endpoints.
+Covers ObservationOverrideRepository CRUD and the override API endpoints.
 """
 
 import pytest
 from sqlalchemy import func, select
 
 from app.db.engine import close_db, get_session, init_db
-from app.db.models import Finding, FindingOverride
+from app.db.models import ObservationRecord, ObservationOverride
 from app.db.repositories import (
     ComparisonRepository,
-    FindingOverrideRepository,
-    FindingRepository,
+    ObservationOverrideRepository,
+    ObservationRepository,
     ScanRepository,
 )
 
@@ -31,7 +31,7 @@ async def db(tmp_path):
 
 @pytest.fixture
 def override_repo():
-    return FindingOverrideRepository()
+    return ObservationOverrideRepository()
 
 
 @pytest.fixture
@@ -40,8 +40,8 @@ def scan_repo():
 
 
 @pytest.fixture
-def finding_repo():
-    return FindingRepository()
+def observation_repo():
+    return ObservationRepository()
 
 
 @pytest.fixture
@@ -55,7 +55,7 @@ SAMPLE_FP = "abc123def456dead"
 # --- Repository CRUD Tests ---------------------------------------------------
 
 
-class TestFindingOverrideCRUD:
+class TestObservationOverrideCRUD:
     @pytest.mark.asyncio
     async def test_set_override_accepted(self, db, override_repo):
         result = await override_repo.set_override(
@@ -95,7 +95,7 @@ class TestFindingOverrideCRUD:
 
         # Only one row in DB
         async with get_session() as session:
-            count = await session.execute(select(func.count()).select_from(FindingOverride))
+            count = await session.execute(select(func.count()).select_from(ObservationOverride))
             assert count.scalar() == 1
 
     @pytest.mark.asyncio
@@ -162,7 +162,7 @@ class TestFindingOverrideCRUD:
         assert expected_keys == set(result.keys())
 
 
-# --- Override + Finding History Integration -----------------------------------
+# --- Override + Observation History Integration -----------------------------------
 
 
 class TestOverrideWithHistory:
@@ -171,18 +171,18 @@ class TestOverrideWithHistory:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         override_repo,
     ):
-        """Override info can be retrieved alongside finding history."""
-        # Create a scan with a finding
+        """Override info can be retrieved alongside observation history."""
+        # Create a scan with a observation
         await scan_repo.create_scan(
             scan_id="ov-scan-1",
             session_id="s1",
             target_domain="example.com",
         )
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "ov-scan-1",
             [
                 {
@@ -194,19 +194,19 @@ class TestOverrideWithHistory:
                 },
             ],
         )
-        await scan_repo.complete_scan("ov-scan-1", status="complete", findings_count=1)
-        await comparison_repo.compute_finding_statuses("ov-scan-1")
+        await scan_repo.complete_scan("ov-scan-1", status="complete", observations_count=1)
+        await comparison_repo.compute_observation_statuses("ov-scan-1")
 
         # Get the fingerprint
         async with get_session() as session:
-            result = await session.execute(select(Finding.fingerprint).where(Finding.id == "ov-f1"))
+            result = await session.execute(select(ObservationRecord.fingerprint).where(ObservationRecord.id == "ov-f1"))
             fp = result.scalar_one()
 
         # Set override
         await override_repo.set_override(fp, "accepted", reason="Known risk")
 
         # Verify both history and override are accessible
-        history = await comparison_repo.get_finding_history(fp)
+        history = await comparison_repo.get_observation_history(fp)
         assert len(history) >= 1
 
         override = await override_repo.get_override(fp)
@@ -218,7 +218,7 @@ class TestOverrideWithHistory:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         comparison_repo,
         override_repo,
     ):
@@ -228,7 +228,7 @@ class TestOverrideWithHistory:
             session_id="s1",
             target_domain="example.com",
         )
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "reopen-scan",
             [
                 {
@@ -240,10 +240,10 @@ class TestOverrideWithHistory:
                 },
             ],
         )
-        await scan_repo.complete_scan("reopen-scan", status="complete", findings_count=1)
+        await scan_repo.complete_scan("reopen-scan", status="complete", observations_count=1)
 
         async with get_session() as session:
-            result = await session.execute(select(Finding.fingerprint).where(Finding.id == "ro-f1"))
+            result = await session.execute(select(ObservationRecord.fingerprint).where(ObservationRecord.id == "ro-f1"))
             fp = result.scalar_one()
 
         # Accept then reopen

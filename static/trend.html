@@ -243,7 +243,7 @@
             padding: 8px 0;
         }
 
-        .export-finding {
+        .export-observation {
             display: flex;
             align-items: flex-start;
             gap: 10px;
@@ -253,23 +253,23 @@
             border-bottom: 1px solid var(--border);
         }
 
-        .export-finding:hover { background: var(--bg-tertiary); }
+        .export-observation:hover { background: var(--bg-tertiary); }
 
-        .export-finding input[type="checkbox"] {
+        .export-observation input[type="checkbox"] {
             margin-top: 3px;
             accent-color: var(--accent);
             flex-shrink: 0;
         }
 
-        .export-finding-info { flex: 1; min-width: 0; }
+        .export-observation-info { flex: 1; min-width: 0; }
 
-        .export-finding-title {
+        .export-observation-title {
             font-size: 0.8125rem;
             font-weight: 500;
             color: var(--text-primary);
         }
 
-        .export-finding-meta {
+        .export-observation-meta {
             font-size: 0.6875rem;
             color: var(--text-secondary);
             margin-top: 2px;
@@ -361,7 +361,7 @@
     <nav class="nav">
         <a href="index.html" class="nav-item" id="nav-scope">Scope</a>
         <a href="scan.html" class="nav-item" id="nav-scan">Scan</a>
-        <a href="findings.html" class="nav-item" id="nav-results">Results</a>
+        <a href="observations.html" class="nav-item" id="nav-observations">Observations</a>
         <a href="engagements.html" class="nav-item">Engagements</a>
         <a href="trend.html" class="nav-item active">Trends</a>
         <a href="reports.html" class="nav-item">Reports</a>
@@ -499,7 +499,7 @@
     <div class="export-panel" id="export-panel">
         <div class="export-panel-header">
             <div>
-                <div class="export-panel-title" id="export-title">Findings</div>
+                <div class="export-panel-title" id="export-title">Observations</div>
                 <div class="export-panel-meta" id="export-meta"></div>
             </div>
             <button class="btn btn-small" id="btn-close-export" title="Close">
@@ -509,7 +509,7 @@
                 </svg>
             </button>
         </div>
-        <div class="export-panel-body" id="export-findings-list">
+        <div class="export-panel-body" id="export-observations-list">
         </div>
         <div class="export-panel-footer">
             <div class="export-footer-row" style="justify-content:space-between">
@@ -655,7 +655,7 @@
                     <div class="scan-item${i === dataPoints.length - 1 ? ' active' : ''}" data-index="${i}" data-scan-id="${dp.scan_id}">
                         <div class="scan-item-date">${date}</div>
                         <div class="scan-item-meta">
-                            <span>${dp.total} findings</span>
+                            <span>${dp.total} observations</span>
                             <span class="scan-item-risk ${riskClass}">risk: ${dp.risk_score}</span>
                             <span style="color:var(--success)">+${dp.new}</span>
                             <span style="color:var(--error)">-${dp.resolved}</span>
@@ -713,9 +713,9 @@
             const t = avgs.this_target;
             const a = avgs.all_targets || {};
             content.innerHTML = `
-                <div class="avg-row"><span>This target avg:</span><span>${t.total} findings, risk ${t.risk_score}</span></div>
+                <div class="avg-row"><span>This target avg:</span><span>${t.total} observations, risk ${t.risk_score}</span></div>
                 <div class="avg-row"><span style="margin-left:8px">C:${t.critical} H:${t.high} M:${t.medium} L:${t.low}</span></div>
-                ${a.total !== undefined ? `<div class="avg-row" style="margin-top:4px"><span>All targets avg:</span><span>${a.total} findings, risk ${a.risk_score}</span></div>` : ''}
+                ${a.total !== undefined ? `<div class="avg-row" style="margin-top:4px"><span>All targets avg:</span><span>${a.total} observations, risk ${a.risk_score}</span></div>` : ''}
             `;
         }
 
@@ -740,7 +740,7 @@
             } else {
                 regEl.textContent = 'N/A';
                 regEl.style.color = 'var(--text-muted)';
-                regDetail.textContent = 'No resolved findings yet';
+                regDetail.textContent = 'No resolved observations yet';
             }
 
             // MTTR overall
@@ -820,7 +820,7 @@
         }
 
         // ─── Export Panel ────────────────────────────────────────
-        let exportFindings = [];
+        let exportObservations = [];
         let exportFormat = 'html';
 
         function initExportPanel() {
@@ -828,11 +828,11 @@
             document.getElementById('export-overlay').addEventListener('click', closeExportPanel);
 
             document.getElementById('export-select-all').addEventListener('click', () => {
-                document.querySelectorAll('#export-findings-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+                document.querySelectorAll('#export-observations-list input[type="checkbox"]').forEach(cb => cb.checked = true);
                 updateExportCount();
             });
             document.getElementById('export-select-none').addEventListener('click', () => {
-                document.querySelectorAll('#export-findings-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+                document.querySelectorAll('#export-observations-list input[type="checkbox"]').forEach(cb => cb.checked = false);
                 updateExportCount();
             });
 
@@ -850,50 +850,50 @@
         async function openExportPanel(scanId, label) {
             const panel = document.getElementById('export-panel');
             const overlay = document.getElementById('export-overlay');
-            const list = document.getElementById('export-findings-list');
+            const list = document.getElementById('export-observations-list');
 
-            document.getElementById('export-title').textContent = `Findings — ${label}`;
+            document.getElementById('export-title').textContent = `Observations — ${label}`;
             document.getElementById('export-meta').textContent = `Scan: ${scanId.substring(0, 8)}`;
-            list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Loading findings...</div>';
+            list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">Loading observations...</div>';
 
             panel.classList.add('open');
             overlay.classList.add('open');
 
             try {
-                const data = await api.getScanFindings(scanId);
-                exportFindings = data.findings || [];
-                renderExportFindings();
+                const data = await api.getScanObservations(scanId);
+                exportObservations = data.observations || [];
+                renderExportObservations();
             } catch (e) {
-                list.innerHTML = `<div style="padding:16px;color:var(--error)">Failed to load findings: ${e.message}</div>`;
+                list.innerHTML = `<div style="padding:16px;color:var(--error)">Failed to load observations: ${e.message}</div>`;
             }
         }
 
         function closeExportPanel() {
             document.getElementById('export-panel').classList.remove('open');
             document.getElementById('export-overlay').classList.remove('open');
-            exportFindings = [];
+            exportObservations = [];
         }
 
-        function renderExportFindings() {
-            const list = document.getElementById('export-findings-list');
-            if (!exportFindings.length) {
-                list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">No findings in this scan.</div>';
+        function renderExportObservations() {
+            const list = document.getElementById('export-observations-list');
+            if (!exportObservations.length) {
+                list.innerHTML = '<div style="padding:16px;color:var(--text-muted)">No observations in this scan.</div>';
                 updateExportCount();
                 return;
             }
 
-            list.innerHTML = exportFindings.map((f, i) => {
+            list.innerHTML = exportObservations.map((f, i) => {
                 const sev = (f.severity || 'info').toLowerCase();
                 const sevColor = SEV_COLORS[sev] || '#6b7280';
                 return `
-                    <label class="export-finding" data-index="${i}">
+                    <label class="export-observation" data-index="${i}">
                         <input type="checkbox" checked data-fp="${f.fingerprint || ''}" data-index="${i}">
-                        <div class="export-finding-info">
-                            <div class="export-finding-title">
+                        <div class="export-observation-info">
+                            <div class="export-observation-title">
                                 <span style="color:${sevColor};font-weight:600;font-size:0.6875rem;text-transform:uppercase;margin-right:6px">${sev}</span>
                                 ${escapeHtml(f.title || 'Untitled')}
                             </div>
-                            <div class="export-finding-meta">
+                            <div class="export-observation-meta">
                                 ${f.check_name || ''} ${f.host ? '| ' + f.host : ''}
                             </div>
                         </div>
@@ -908,13 +908,13 @@
         }
 
         function updateExportCount() {
-            const checked = document.querySelectorAll('#export-findings-list input[type="checkbox"]:checked');
+            const checked = document.querySelectorAll('#export-observations-list input[type="checkbox"]:checked');
             document.getElementById('export-count').textContent = `${checked.length} selected`;
             document.getElementById('btn-export-selected').disabled = checked.length === 0;
         }
 
         async function doExport() {
-            const checked = document.querySelectorAll('#export-findings-list input[type="checkbox"]:checked');
+            const checked = document.querySelectorAll('#export-observations-list input[type="checkbox"]:checked');
             const fingerprints = [];
             checked.forEach(cb => {
                 const fp = cb.dataset.fp;
@@ -922,7 +922,7 @@
             });
 
             if (!fingerprints.length) {
-                alert('No findings selected.');
+                alert('No observations selected.');
                 return;
             }
 

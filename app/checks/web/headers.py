@@ -14,7 +14,7 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_cors_evidence, fmt_header_evidence
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import (
     extract_cors_headers,
@@ -31,7 +31,7 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
     description = "Analyze HTTP headers for technology disclosure and security misconfigurations"
 
     conditions = [CheckCondition("services", "truthy")]
-    produces = ["header_findings"]
+    produces = ["header_observations"]
     service_types = ["http", "html", "api", "ai"]
 
     timeout_seconds = 60.0
@@ -91,8 +91,8 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
                 (h, msg) for h, msg in self.SECURITY_HEADERS.items() if security.get(h) is None
             ]
             if missing:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Missing security headers ({len(missing)})",
                         description="\n".join(f"- {h}: {msg}" for h, msg in missing),
@@ -135,8 +135,8 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
             acac = (cors.get("access-control-allow-credentials") or "").lower()
             if acao == "*":
                 severity = "high" if acac == "true" else "medium"
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="CORS allows any origin",
                         description="Wildcard CORS policy may allow cross-origin attacks",
@@ -152,8 +152,8 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
             # ── Server version disclosure ─────────────────────────
             server = extract_server_header(resp.headers) or ""
             if server and any(c.isdigit() for c in server):
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Server version disclosed: {server}",
                         description="Server header reveals version information",
@@ -196,8 +196,8 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
             issues.append("missing default-src")
 
         if issues:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Weak CSP policy ({len(issues)} issue{'s' if len(issues) != 1 else ''})",
                     description="Content-Security-Policy contains weak directives:\n"
@@ -233,8 +233,8 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
             issues.append("missing includeSubDomains directive")
 
         if issues:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Weak HSTS configuration ({len(issues)} issue{'s' if len(issues) != 1 else ''})",
                     description="Strict-Transport-Security header is present but weak:\n"
@@ -254,8 +254,8 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
         """Grade X-Frame-Options header value."""
         xfo_upper = xfo.strip().upper()
         if xfo_upper.startswith("ALLOW-FROM"):
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="X-Frame-Options uses deprecated ALLOW-FROM",
                     description="ALLOW-FROM is deprecated and ignored by modern browsers — "
@@ -279,8 +279,8 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
         grade = self.REFERRER_GRADES.get(effective, "unknown")
 
         if grade == "weak":
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Weak Referrer-Policy: {effective}",
                     description=f"Referrer-Policy '{effective}' may leak full URLs to external sites",
@@ -309,8 +309,8 @@ class HeaderAnalysisCheck(ServiceIteratingCheck):
                 permissive.append(feature)
 
         if permissive:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Permissive Permissions-Policy ({len(permissive)} feature{'s' if len(permissive) != 1 else ''})",
                     description="Permissions-Policy allows all origins for sensitive features:\n"

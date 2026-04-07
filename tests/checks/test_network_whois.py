@@ -1,4 +1,4 @@
-"""Tests for WhoisLookupCheck: WHOIS domain registration, parsing, ASN/RDAP lookup, and findings."""
+"""Tests for WhoisLookupCheck: WHOIS domain registration, parsing, ASN/RDAP lookup, and observations."""
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
@@ -262,11 +262,11 @@ class TestWhoisDomainAgeDays:
         assert 10 <= days <= 20
 
 
-class TestWhoisDomainFindings:
-    """Test finding generation from domain WHOIS data."""
+class TestWhoisDomainObservations:
+    """Test observation generation from domain WHOIS data."""
 
     @pytest.mark.asyncio
-    async def test_registration_info_finding(self):
+    async def test_registration_info_observation(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -293,11 +293,11 @@ class TestWhoisDomainFindings:
                 "base_domain": "example.com",
             }
             result = await check.run(context)
-            info_findings = [f for f in result.findings if f.severity == "info"]
-            assert any("registrar" in f.title.lower() for f in info_findings)
+            info_observations = [f for f in result.observations if f.severity == "info"]
+            assert any("registrar" in f.title.lower() for f in info_observations)
 
     @pytest.mark.asyncio
-    async def test_recent_registration_finding(self):
+    async def test_recent_registration_observation(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -325,13 +325,13 @@ class TestWhoisDomainFindings:
                 "base_domain": "newsite.com",
             }
             result = await check.run(context)
-            low_findings = [f for f in result.findings if f.severity == "low"]
+            low_observations = [f for f in result.observations if f.severity == "low"]
             assert any(
-                "registered within" in f.title.lower() or "90 days" in f.title for f in low_findings
+                "registered within" in f.title.lower() or "90 days" in f.title for f in low_observations
             )
 
     @pytest.mark.asyncio
-    async def test_redacted_finding(self):
+    async def test_redacted_observation(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -358,14 +358,14 @@ class TestWhoisDomainFindings:
                 "base_domain": "example.com",
             }
             result = await check.run(context)
-            assert any("redacted" in f.title.lower() for f in result.findings)
+            assert any("redacted" in f.title.lower() for f in result.observations)
 
 
-class TestWhoisAsnFindings:
-    """Test finding generation from ASN/RDAP data."""
+class TestWhoisAsnObservations:
+    """Test observation generation from ASN/RDAP data."""
 
     @pytest.mark.asyncio
-    async def test_asn_info_finding(self):
+    async def test_asn_info_observation(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -390,11 +390,11 @@ class TestWhoisAsnFindings:
                 "base_domain": "example.com",
             }
             result = await check.run(context)
-            info_findings = [f for f in result.findings if f.severity == "info"]
-            assert any("AS16509" in f.title for f in info_findings)
+            info_observations = [f for f in result.observations if f.severity == "info"]
+            assert any("AS16509" in f.title for f in info_observations)
 
     @pytest.mark.asyncio
-    async def test_private_ip_finding(self):
+    async def test_private_ip_observation(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -410,7 +410,7 @@ class TestWhoisAsnFindings:
                 "base_domain": "example.com",
             }
             result = await check.run(context)
-            assert any("private" in f.title.lower() for f in result.findings)
+            assert any("private" in f.title.lower() for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_no_ipwhois_reports_error(self):

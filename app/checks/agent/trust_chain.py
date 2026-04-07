@@ -13,7 +13,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # False authority assertions (factual-sounding, not injection syntax)
@@ -154,8 +154,8 @@ class AgentTrustChainCheck(ServiceIteratingCheck):
 
                     if analysis["exploited"]:
                         severity = "critical" if is_multi_agent else "high"
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Trust chain exploitation: {assertion['id']}",
                                 description=(
@@ -175,8 +175,8 @@ class AgentTrustChainCheck(ServiceIteratingCheck):
                             )
                         )
                     elif analysis["partially_accepted"]:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Trust assertion partially accepted: {assertion['id']}",
                                 description=(

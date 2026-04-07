@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -89,8 +89,8 @@ class RobotsTxtCheck(ServiceIteratingCheck):
                     sitemaps.append(sitemap)
 
             if interesting:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Sensitive paths in robots.txt ({len(interesting)})",
                         description="robots.txt reveals potentially sensitive paths",
@@ -105,8 +105,8 @@ class RobotsTxtCheck(ServiceIteratingCheck):
                 )
 
             if sitemaps:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Sitemaps disclosed ({len(sitemaps)})",
                         description="robots.txt reveals sitemap locations",

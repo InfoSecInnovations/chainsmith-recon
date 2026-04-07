@@ -7,11 +7,11 @@ from sqlalchemy import func, select
 
 import app.db.engine as _engine_module
 from app.db.engine import Database
-from app.db.models import Chain, CheckLog, Finding, Scan
+from app.db.models import Chain, CheckLog, ObservationRecord, Scan
 from app.db.repositories import (
     ChainRepository,
     CheckLogRepository,
-    FindingRepository,
+    ObservationRepository,
     ScanRepository,
 )
 
@@ -38,8 +38,8 @@ def scan_repo(db):
 
 
 @pytest.fixture
-def finding_repo(db):
-    return FindingRepository(db)
+def observation_repo(db):
+    return ObservationRepository(db)
 
 
 @pytest.fixture
@@ -53,8 +53,8 @@ def check_log_repo(db):
 
 
 @pytest.fixture
-def sample_findings():
-    """Realistic findings as produced by checks."""
+def sample_observations():
+    """Realistic observations as produced by checks."""
     return [
         {
             "title": "Cross-Site Scripting in Search",
@@ -95,14 +95,14 @@ def sample_chains():
             "description": "Reflected XSS can steal session cookies",
             "severity": "high",
             "source": "rule-based",
-            "finding_ids": ["f1", "f2"],
+            "observation_ids": ["f1", "f2"],
         },
         {
             "title": "Missing Headers Enable Attack",
             "description": "Lack of CSP allows XSS exploitation",
             "severity": "medium",
             "source": "llm",
-            "findings": ["f2", "f3"],
+            "observations": ["f2", "f3"],
         },
     ]
 
@@ -112,11 +112,11 @@ def sample_check_log():
     """Realistic check log entries."""
     return [
         {"check": "port_scan", "event": "started", "suite": "network"},
-        {"check": "port_scan", "event": "completed", "findings": 1, "suite": "network"},
+        {"check": "port_scan", "event": "completed", "observations": 1, "suite": "network"},
         {"check": "xss_reflected", "event": "started", "suite": "web"},
-        {"check": "xss_reflected", "event": "completed", "findings": 1, "suite": "web"},
+        {"check": "xss_reflected", "event": "completed", "observations": 1, "suite": "web"},
         {"check": "header_analysis", "event": "started", "suite": "web"},
-        {"check": "header_analysis", "event": "completed", "findings": 1, "suite": "web"},
+        {"check": "header_analysis", "event": "completed", "observations": 1, "suite": "web"},
     ]
 
 
@@ -177,7 +177,7 @@ class TestScanRepository:
             checks_total=10,
             checks_completed=9,
             checks_failed=1,
-            findings_count=5,
+            observations_count=5,
             duration_ms=12345,
         )
 
@@ -188,7 +188,7 @@ class TestScanRepository:
             assert scan.checks_total == 10
             assert scan.checks_completed == 9
             assert scan.checks_failed == 1
-            assert scan.findings_count == 5
+            assert scan.observations_count == 5
             assert scan.duration_ms == 12345
             assert scan.completed_at is not None
 
@@ -219,56 +219,56 @@ class TestScanRepository:
         await scan_repo.complete_scan(scan_id="nonexistent", status="complete")
 
 
-# ─── FindingRepository Tests ─────────────────────────────────────────────────
+# ─── ObservationRepository Tests ─────────────────────────────────────────────────
 
 
-class TestFindingRepository:
-    """Tests for finding persistence."""
+class TestObservationRepository:
+    """Tests for observation persistence."""
 
     @pytest.mark.asyncio
-    async def test_bulk_create(self, db, finding_repo, sample_findings):
-        """bulk_create inserts all findings and returns count."""
-        count = await finding_repo.bulk_create("scan-001", sample_findings)
+    async def test_bulk_create(self, db, observation_repo, sample_observations):
+        """bulk_create inserts all observations and returns count."""
+        count = await observation_repo.bulk_create("scan-001", sample_observations)
         assert count == 3
 
         async with db.session() as session:
             result = await session.execute(
-                select(func.count()).select_from(Finding).where(Finding.scan_id == "scan-001")
+                select(func.count()).select_from(ObservationRecord).where(ObservationRecord.scan_id == "scan-001")
             )
             assert result.scalar() == 3
 
     @pytest.mark.asyncio
-    async def test_bulk_create_empty(self, db, finding_repo):
+    async def test_bulk_create_empty(self, db, observation_repo):
         """bulk_create with empty list returns 0."""
-        count = await finding_repo.bulk_create("scan-001", [])
+        count = await observation_repo.bulk_create("scan-001", [])
         assert count == 0
 
     @pytest.mark.asyncio
-    async def test_findings_have_fingerprints(self, db, finding_repo, sample_findings):
-        """Each finding gets a fingerprint assigned."""
-        await finding_repo.bulk_create("scan-001", sample_findings)
+    async def test_observations_have_fingerprints(self, db, observation_repo, sample_observations):
+        """Each observation gets a fingerprint assigned."""
+        await observation_repo.bulk_create("scan-001", sample_observations)
 
         async with db.session() as session:
-            result = await session.execute(select(Finding).where(Finding.scan_id == "scan-001"))
-            findings = result.scalars().all()
-            for f in findings:
+            result = await session.execute(select(ObservationRecord).where(ObservationRecord.scan_id == "scan-001"))
+            observations = result.scalars().all()
+            for f in observations:
                 assert f.fingerprint is not None
                 assert len(f.fingerprint) == 16
 
     @pytest.mark.asyncio
-    async def test_findings_have_unique_ids(self, db, finding_repo, sample_findings):
-        """Each finding gets a unique ID."""
-        await finding_repo.bulk_create("scan-001", sample_findings)
+    async def test_observations_have_unique_ids(self, db, observation_repo, sample_observations):
+        """Each observation gets a unique ID."""
+        await observation_repo.bulk_create("scan-001", sample_observations)
 
         async with db.session() as session:
-            result = await session.execute(select(Finding.id).where(Finding.scan_id == "scan-001"))
+            result = await session.execute(select(ObservationRecord.id).where(ObservationRecord.scan_id == "scan-001"))
             ids = [row[0] for row in result.all()]
             assert len(ids) == len(set(ids))
 
     @pytest.mark.asyncio
-    async def test_finding_fields_mapped(self, db, finding_repo):
-        """Finding fields are correctly mapped from dict."""
-        await finding_repo.bulk_create(
+    async def test_observation_fields_mapped(self, db, observation_repo):
+        """Observation fields are correctly mapped from dict."""
+        await observation_repo.bulk_create(
             "scan-001",
             [
                 {
@@ -287,7 +287,7 @@ class TestFindingRepository:
         )
 
         async with db.session() as session:
-            result = await session.execute(select(Finding).where(Finding.scan_id == "scan-001"))
+            result = await session.execute(select(ObservationRecord).where(ObservationRecord.scan_id == "scan-001"))
             f = result.scalar_one()
             assert f.title == "Test XSS"
             assert f.description == "Reflected XSS"
@@ -301,9 +301,9 @@ class TestFindingRepository:
             assert f.confidence == 0.95
 
     @pytest.mark.asyncio
-    async def test_finding_uses_check_fallback(self, db, finding_repo):
-        """Finding maps 'check' key when 'check_name' is missing."""
-        await finding_repo.bulk_create(
+    async def test_observation_uses_check_fallback(self, db, observation_repo):
+        """Observation maps 'check' key when 'check_name' is missing."""
+        await observation_repo.bulk_create(
             "scan-001",
             [
                 {
@@ -315,14 +315,14 @@ class TestFindingRepository:
         )
 
         async with db.session() as session:
-            result = await session.execute(select(Finding).where(Finding.scan_id == "scan-001"))
+            result = await session.execute(select(ObservationRecord).where(ObservationRecord.scan_id == "scan-001"))
             f = result.scalar_one()
             assert f.check_name == "legacy_check_name"
 
     @pytest.mark.asyncio
-    async def test_finding_preserves_existing_id(self, db, finding_repo):
-        """If a finding has an 'id' field, it is used as-is."""
-        await finding_repo.bulk_create(
+    async def test_observation_preserves_existing_id(self, db, observation_repo):
+        """If a observation has an 'id' field, it is used as-is."""
+        await observation_repo.bulk_create(
             "scan-001",
             [
                 {
@@ -335,7 +335,7 @@ class TestFindingRepository:
         )
 
         async with db.session() as session:
-            result = await session.execute(select(Finding).where(Finding.id == "custom-id-123"))
+            result = await session.execute(select(ObservationRecord).where(ObservationRecord.id == "custom-id-123"))
             f = result.scalar_one()
             assert f.id == "custom-id-123"
 
@@ -375,7 +375,7 @@ class TestChainRepository:
                     "description": "A test chain",
                     "severity": "critical",
                     "source": "llm",
-                    "finding_ids": ["f1", "f2", "f3"],
+                    "observation_ids": ["f1", "f2", "f3"],
                 }
             ],
         )
@@ -386,11 +386,11 @@ class TestChainRepository:
             assert c.title == "Test Chain"
             assert c.severity == "critical"
             assert c.source == "llm"
-            assert c.finding_ids == ["f1", "f2", "f3"]
+            assert c.observation_ids == ["f1", "f2", "f3"]
 
     @pytest.mark.asyncio
-    async def test_chain_findings_fallback(self, db, chain_repo):
-        """Chain maps 'findings' key when 'finding_ids' is missing."""
+    async def test_chain_observations_fallback(self, db, chain_repo):
+        """Chain maps 'observations' key when 'observation_ids' is missing."""
         await chain_repo.bulk_create(
             "scan-001",
             [
@@ -398,7 +398,7 @@ class TestChainRepository:
                     "title": "Test",
                     "severity": "high",
                     "source": "rule-based",
-                    "findings": ["a", "b"],
+                    "observations": ["a", "b"],
                 }
             ],
         )
@@ -406,7 +406,7 @@ class TestChainRepository:
         async with db.session() as session:
             result = await session.execute(select(Chain).where(Chain.scan_id == "scan-001"))
             c = result.scalar_one()
-            assert c.finding_ids == ["a", "b"]
+            assert c.observation_ids == ["a", "b"]
 
 
 # ─── CheckLogRepository Tests ───────────────────────────────────────────────
@@ -442,7 +442,7 @@ class TestCheckLogRepository:
                 {
                     "check": "port_scan",
                     "event": "completed",
-                    "findings": 3,
+                    "observations": 3,
                     "suite": "network",
                     "duration_ms": 1500,
                 }
@@ -454,7 +454,7 @@ class TestCheckLogRepository:
             entry = result.scalar_one()
             assert entry.check_name == "port_scan"
             assert entry.event == "completed"
-            assert entry.findings_count == 3
+            assert entry.observations_count == 3
             assert entry.suite == "network"
             assert entry.duration_ms == 1500
 
@@ -496,7 +496,7 @@ class TestPersistOrchestrator:
             "xss_check": "completed",
             "header_check": "failed",
         }
-        state.findings = [
+        state.observations = [
             {
                 "title": "XSS Found",
                 "severity": "high",
@@ -508,7 +508,7 @@ class TestPersistOrchestrator:
             {"title": "Attack Chain", "severity": "high", "source": "rule-based"},
         ]
         state.check_log = [
-            {"check": "port_scan", "event": "completed", "findings": 0},
+            {"check": "port_scan", "event": "completed", "observations": 0},
         ]
         return state
 
@@ -557,7 +557,7 @@ class TestPersistOrchestrator:
 
     @pytest.mark.asyncio
     async def test_on_scan_complete_persists_all(self, db, mock_state):
-        """on_scan_complete writes findings, chains, log, and updates scan."""
+        """on_scan_complete writes observations, chains, log, and updates scan."""
         import time
 
         from app.db.persist import on_scan_complete, on_scan_start
@@ -573,13 +573,13 @@ class TestPersistOrchestrator:
             result = await session.execute(select(Scan).where(Scan.id == scan_id))
             scan = result.scalar_one()
             assert scan.status == "complete"
-            assert scan.findings_count == 1
+            assert scan.observations_count == 1
             assert scan.checks_failed == 1
             assert scan.duration_ms >= 5000
 
-            # Findings persisted
+            # Observations persisted
             result = await session.execute(
-                select(func.count()).select_from(Finding).where(Finding.scan_id == scan_id)
+                select(func.count()).select_from(ObservationRecord).where(ObservationRecord.scan_id == scan_id)
             )
             assert result.scalar() == 1
 
@@ -606,7 +606,7 @@ class TestPersistOrchestrator:
         await on_scan_complete(mock_state, None, time.time(), db=db)
 
         async with db.session() as session:
-            result = await session.execute(select(func.count()).select_from(Finding))
+            result = await session.execute(select(func.count()).select_from(ObservationRecord))
             assert result.scalar() == 0
 
     @pytest.mark.asyncio

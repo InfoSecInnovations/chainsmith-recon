@@ -1,5 +1,5 @@
 /**
- * Chainsmith Viz — Host Table (expandable host/findings rows).
+ * Chainsmith Viz — Host Table (expandable host/observations rows).
  * Requires: viz-common.js
  */
 (function (ns) {
@@ -12,7 +12,7 @@
      * Render the host-table visualization.
      */
     ns.renderHostTable = async function (openModal) {
-        var data    = await api.getFindingsByHost();
+        var data    = await api.getObservationsByHost();
         var emptyEl   = document.getElementById('hosts-empty');
         var contentEl = document.getElementById('hosts-content');
 
@@ -33,15 +33,15 @@
         data.hosts.forEach(function (host) {
             var hostName = normalizeHost(host.name);
             if (!hostMap.has(hostName)) hostMap.set(hostName, new Map());
-            var findingsMap = hostMap.get(hostName);
-            host.findings.forEach(function (f) {
+            var observationsMap = hostMap.get(hostName);
+            host.observations.forEach(function (f) {
                 var key = f.id || (f.title + '-' + f.check_name);
-                if (!findingsMap.has(key)) findingsMap.set(key, f);
+                if (!observationsMap.has(key)) observationsMap.set(key, f);
             });
         });
 
         var hostData = Array.from(hostMap.entries()).map(function (entry) {
-            return { name: entry[0], findings: Array.from(entry[1].values()) };
+            return { name: entry[0], observations: Array.from(entry[1].values()) };
         });
 
         // Store on namespace for expand-all access
@@ -51,16 +51,16 @@
         renderHostsTable(hostData, openModal);
     };
 
-    function getWorstSeverity(hostFindings) {
+    function getWorstSeverity(hostObservations) {
         for (var i = 0; i < severityOrder.length; i++) {
-            if (hostFindings.some(function (f) { return f.severity === severityOrder[i]; })) return severityOrder[i];
+            if (hostObservations.some(function (f) { return f.severity === severityOrder[i]; })) return severityOrder[i];
         }
         return 'info';
     }
 
     function renderSummaryBar(hostData) {
-        var allFindings = hostData.reduce(function (acc, h) { return acc.concat(h.findings); }, []);
-        var counts = ns.countBySeverity(allFindings);
+        var allObservations = hostData.reduce(function (acc, h) { return acc.concat(h.observations); }, []);
+        var counts = ns.countBySeverity(allObservations);
 
         document.getElementById('summary-bar').innerHTML =
             '<div class="summary-item">' +
@@ -79,7 +79,7 @@
             '<div class="summary-count" style="color: ' + hostSeverityColors.info + '">' + counts.info + '</div>' +
             '<div class="summary-label">Info</div></div>' +
             '<div class="summary-item">' +
-            '<div class="summary-count">' + allFindings.length + '</div>' +
+            '<div class="summary-count">' + allObservations.length + '</div>' +
             '<div class="summary-label">Total</div></div>';
     }
 
@@ -87,15 +87,15 @@
         var container = document.getElementById('hosts-table');
 
         var sortedHosts = hostData.slice().sort(function (a, b) {
-            return severityOrder.indexOf(getWorstSeverity(a.findings)) -
-                   severityOrder.indexOf(getWorstSeverity(b.findings));
+            return severityOrder.indexOf(getWorstSeverity(a.observations)) -
+                   severityOrder.indexOf(getWorstSeverity(b.observations));
         });
 
         container.innerHTML = sortedHosts.map(function (host) {
-            var counts   = ns.countBySeverity(host.findings);
-            var worstSev = getWorstSeverity(host.findings);
+            var counts   = ns.countBySeverity(host.observations);
+            var worstSev = getWorstSeverity(host.observations);
 
-            var sortedFindings = host.findings.slice().sort(function (a, b) {
+            var sortedObservations = host.observations.slice().sort(function (a, b) {
                 return severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity);
             });
 
@@ -111,14 +111,14 @@
                 (counts.low ? '<div class="severity-dot sev-low" style="background:' + hostSeverityColors.low + '">' + counts.low + '</div>' : '') +
                 (counts.info ? '<div class="severity-dot sev-info" style="background:' + hostSeverityColors.info + '">' + counts.info + '</div>' : '') +
                 '</div>' +
-                '<div class="host-finding-count">' + host.findings.length + ' findings</div>' +
+                '<div class="host-observation-count">' + host.observations.length + ' observations</div>' +
                 '</div>' +
-                '<div class="findings-list-container">' +
-                sortedFindings.map(function (f) {
-                    return '<div class="finding-item" data-finding-id="' + (f.id || '') + '" data-finding=\'' + JSON.stringify(f).replace(/'/g, "&#39;") + '\'>' +
-                        '<div class="finding-severity-dot" style="background: ' + hostSeverityColors[f.severity] + '"></div>' +
-                        '<div class="finding-title">' + f.title + '</div>' +
-                        '<div class="finding-badge sev-' + f.severity + '" style="background: ' + hostSeverityColors[f.severity] + '">' + f.severity + '</div>' +
+                '<div class="observations-list-container">' +
+                sortedObservations.map(function (f) {
+                    return '<div class="observation-item" data-observation-id="' + (f.id || '') + '" data-observation=\'' + JSON.stringify(f).replace(/'/g, "&#39;") + '\'>' +
+                        '<div class="observation-severity-dot" style="background: ' + hostSeverityColors[f.severity] + '"></div>' +
+                        '<div class="observation-title">' + f.title + '</div>' +
+                        '<div class="observation-badge sev-' + f.severity + '" style="background: ' + hostSeverityColors[f.severity] + '">' + f.severity + '</div>' +
                         '</div>';
                 }).join('') +
                 '</div></div>';
@@ -130,14 +130,14 @@
             });
         });
 
-        container.querySelectorAll('.finding-item').forEach(function (item) {
+        container.querySelectorAll('.observation-item').forEach(function (item) {
             item.addEventListener('click', function (e) {
                 e.stopPropagation();
                 try {
-                    var finding = JSON.parse(item.dataset.finding.replace(/&#39;/g, "'"));
-                    openModal(finding.title, getFindingModalContent(finding));
+                    var observation = JSON.parse(item.dataset.observation.replace(/&#39;/g, "'"));
+                    openModal(observation.title, getObservationModalContent(observation));
                 } catch (err) {
-                    console.error('Failed to parse finding:', err);
+                    console.error('Failed to parse observation:', err);
                 }
             });
         });

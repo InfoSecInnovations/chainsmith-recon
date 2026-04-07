@@ -98,10 +98,10 @@ class TestHeaderCSPGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        csp_findings = [f for f in result.findings if "csp" in f.id.lower()]
-        assert len(csp_findings) == 1
-        assert csp_findings[0].severity == "medium"
-        assert "'unsafe-inline'" in csp_findings[0].description
+        csp_observations = [f for f in result.observations if "csp" in f.id.lower()]
+        assert len(csp_observations) == 1
+        assert csp_observations[0].severity == "medium"
+        assert "'unsafe-inline'" in csp_observations[0].description
 
     @pytest.mark.asyncio
     async def test_weak_csp_unsafe_eval(self, service):
@@ -119,9 +119,9 @@ class TestHeaderCSPGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        csp_findings = [f for f in result.findings if "csp" in f.id.lower()]
-        assert len(csp_findings) == 1
-        assert "'unsafe-eval'" in csp_findings[0].description
+        csp_observations = [f for f in result.observations if "csp" in f.id.lower()]
+        assert len(csp_observations) == 1
+        assert "'unsafe-eval'" in csp_observations[0].description
 
     @pytest.mark.asyncio
     async def test_csp_wildcard_source(self, service):
@@ -139,9 +139,9 @@ class TestHeaderCSPGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        csp_findings = [f for f in result.findings if "csp" in f.id.lower()]
-        assert len(csp_findings) == 1
-        assert "wildcard" in csp_findings[0].description.lower()
+        csp_observations = [f for f in result.observations if "csp" in f.id.lower()]
+        assert len(csp_observations) == 1
+        assert "wildcard" in csp_observations[0].description.lower()
 
     @pytest.mark.asyncio
     async def test_csp_missing_default_src(self, service):
@@ -159,12 +159,12 @@ class TestHeaderCSPGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        csp_findings = [f for f in result.findings if "csp" in f.id.lower()]
-        assert len(csp_findings) == 1
-        assert "default-src" in csp_findings[0].description
+        csp_observations = [f for f in result.observations if "csp" in f.id.lower()]
+        assert len(csp_observations) == 1
+        assert "default-src" in csp_observations[0].description
 
     @pytest.mark.asyncio
-    async def test_strict_csp_no_finding(self, service):
+    async def test_strict_csp_no_observation(self, service):
         check = HeaderAnalysisCheck()
         headers = {
             "Content-Security-Policy": "default-src 'self'",
@@ -179,8 +179,8 @@ class TestHeaderCSPGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        csp_findings = [f for f in result.findings if "csp" in (f.id or "").lower()]
-        assert len(csp_findings) == 0
+        csp_observations = [f for f in result.observations if "csp" in (f.id or "").lower()]
+        assert len(csp_observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -205,10 +205,10 @@ class TestHeaderHSTSGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        hsts_findings = [f for f in result.findings if "hsts" in (f.id or "").lower()]
-        assert len(hsts_findings) == 1
-        assert hsts_findings[0].severity == "low"
-        assert "max-age too short" in hsts_findings[0].description
+        hsts_observations = [f for f in result.observations if "hsts" in (f.id or "").lower()]
+        assert len(hsts_observations) == 1
+        assert hsts_observations[0].severity == "low"
+        assert "max-age too short" in hsts_observations[0].description
 
     @pytest.mark.asyncio
     async def test_hsts_missing_include_subdomains(self, service):
@@ -226,12 +226,12 @@ class TestHeaderHSTSGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        hsts_findings = [f for f in result.findings if "hsts" in (f.id or "").lower()]
-        assert len(hsts_findings) == 1
-        assert "includeSubDomains" in hsts_findings[0].description
+        hsts_observations = [f for f in result.observations if "hsts" in (f.id or "").lower()]
+        assert len(hsts_observations) == 1
+        assert "includeSubDomains" in hsts_observations[0].description
 
     @pytest.mark.asyncio
-    async def test_strong_hsts_no_finding(self, service):
+    async def test_strong_hsts_no_observation(self, service):
         check = HeaderAnalysisCheck()
         headers = {
             "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
@@ -246,8 +246,8 @@ class TestHeaderHSTSGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        hsts_findings = [f for f in result.findings if "hsts" in (f.id or "").lower()]
-        assert len(hsts_findings) == 0
+        hsts_observations = [f for f in result.observations if "hsts" in (f.id or "").lower()]
+        assert len(hsts_observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -272,13 +272,13 @@ class TestHeaderXFOGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        xfo_findings = [f for f in result.findings if "xfo" in (f.id or "").lower()]
-        assert len(xfo_findings) == 1
-        assert xfo_findings[0].severity == "medium"
-        assert "deprecated" in xfo_findings[0].description.lower()
+        xfo_observations = [f for f in result.observations if "xfo" in (f.id or "").lower()]
+        assert len(xfo_observations) == 1
+        assert xfo_observations[0].severity == "medium"
+        assert "deprecated" in xfo_observations[0].description.lower()
 
     @pytest.mark.asyncio
-    async def test_xfo_deny_no_finding(self, service):
+    async def test_xfo_deny_no_observation(self, service):
         check = HeaderAnalysisCheck()
         headers = {
             "X-Frame-Options": "DENY",
@@ -293,8 +293,8 @@ class TestHeaderXFOGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        xfo_findings = [f for f in result.findings if "xfo" in (f.id or "").lower()]
-        assert len(xfo_findings) == 0
+        xfo_observations = [f for f in result.observations if "xfo" in (f.id or "").lower()]
+        assert len(xfo_observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -319,12 +319,12 @@ class TestHeaderReferrerPolicyGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        rp_findings = [f for f in result.findings if "referrer" in (f.id or "").lower()]
-        assert len(rp_findings) == 1
-        assert rp_findings[0].severity == "low"
+        rp_observations = [f for f in result.observations if "referrer" in (f.id or "").lower()]
+        assert len(rp_observations) == 1
+        assert rp_observations[0].severity == "low"
 
     @pytest.mark.asyncio
-    async def test_strict_referrer_policy_no_finding(self, service):
+    async def test_strict_referrer_policy_no_observation(self, service):
         check = HeaderAnalysisCheck()
         headers = {
             "Referrer-Policy": "no-referrer",
@@ -339,8 +339,8 @@ class TestHeaderReferrerPolicyGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        rp_findings = [f for f in result.findings if "referrer" in (f.id or "").lower()]
-        assert len(rp_findings) == 0
+        rp_observations = [f for f in result.observations if "referrer" in (f.id or "").lower()]
+        assert len(rp_observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -366,13 +366,13 @@ class TestHeaderPermissionsPolicyGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        pp_findings = [f for f in result.findings if "permissions" in (f.id or "").lower()]
-        assert len(pp_findings) == 1
-        assert "camera" in pp_findings[0].description
-        assert "microphone" in pp_findings[0].description
+        pp_observations = [f for f in result.observations if "permissions" in (f.id or "").lower()]
+        assert len(pp_observations) == 1
+        assert "camera" in pp_observations[0].description
+        assert "microphone" in pp_observations[0].description
 
     @pytest.mark.asyncio
-    async def test_restricted_permissions_policy_no_finding(self, service):
+    async def test_restricted_permissions_policy_no_observation(self, service):
         check = HeaderAnalysisCheck()
         headers = {
             "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
@@ -388,5 +388,5 @@ class TestHeaderPermissionsPolicyGrading:
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
             result = await check.check_service(service, {})
-        pp_findings = [f for f in result.findings if "permissions" in (f.id or "").lower()]
-        assert len(pp_findings) == 0
+        pp_observations = [f for f in result.observations if "permissions" in (f.id or "").lower()]
+        assert len(pp_observations) == 0

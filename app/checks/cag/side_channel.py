@@ -19,7 +19,7 @@ import time
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Sensitive topics to probe (report capability, not specifics)
@@ -86,8 +86,8 @@ class SideChannelCheck(ServiceIteratingCheck):
                         side_channel_results.append(sc_info)
 
                         severity = self._determine_severity(sc_info)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=self._build_title(sc_info),
                                 description=self._build_description(sc_info),
@@ -202,7 +202,7 @@ class SideChannelCheck(ServiceIteratingCheck):
         }
 
     def _determine_severity(self, sc_info: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         hits = sc_info.get("cache_hits", 0)
         total = sc_info.get("topics_tested", 0)
 
@@ -213,7 +213,7 @@ class SideChannelCheck(ServiceIteratingCheck):
         return "info"
 
     def _build_title(self, sc_info: dict) -> str:
-        """Build finding title."""
+        """Build observation title."""
         hits = sc_info.get("cache_hits", 0)
         total = sc_info.get("topics_tested", 0)
 
@@ -224,7 +224,7 @@ class SideChannelCheck(ServiceIteratingCheck):
         return "Timing analysis inconclusive (no clear cache hit/miss pattern)"
 
     def _build_description(self, sc_info: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         hits = sc_info.get("cache_hits", 0)
 
         if hits > 0:

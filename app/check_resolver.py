@@ -241,7 +241,7 @@ def get_real_checks() -> list:
         SitemapCheck(),
         ErrorPageCheck(),
         OpenAPICheck(),
-        # Web critical findings (Phase 6a — depends on services, some use path_probe output)
+        # Web critical observations (Phase 6a — depends on services, some use path_probe output)
         WebDAVCheck(),
         VCSExposureCheck(),
         ConfigExposureCheck(),

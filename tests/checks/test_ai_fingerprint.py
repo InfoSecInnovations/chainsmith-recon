@@ -148,8 +148,8 @@ class TestAIFrameworkFingerprintCheckService:
         ):
             result = await check.check_service(sample_service, {})
 
-        framework_findings = [f for f in result.findings if "vllm" in f.title.lower()]
-        assert len(framework_findings) == 1
+        framework_observations = [f for f in result.observations if "vllm" in f.title.lower()]
+        assert len(framework_observations) == 1
 
     async def test_detects_ollama_by_endpoint(self, sample_service):
         """Detects Ollama by endpoint and body pattern (score-threshold aware)."""
@@ -169,7 +169,7 @@ class TestAIFrameworkFingerprintCheckService:
             result = await check.check_service(sample_service, {})
 
         assert result.success
-        assert any("ollama" in f.title.lower() for f in result.findings)
+        assert any("ollama" in f.title.lower() for f in result.observations)
 
     async def test_detects_framework_by_body_pattern(self, sample_service):
         """Detects framework by body pattern."""
@@ -185,11 +185,11 @@ class TestAIFrameworkFingerprintCheckService:
             result = await check.check_service(sample_service, {})
 
         # vllm should be detected
-        if result.findings:
-            assert result.findings[0].severity == "medium"
+        if result.observations:
+            assert result.observations[0].severity == "medium"
 
     async def test_no_framework_detected(self, sample_service):
-        """No finding when no framework detected."""
+        """No observation when no framework detected."""
         check = AIFrameworkFingerprintCheck()
 
         responses = {
@@ -201,7 +201,7 @@ class TestAIFrameworkFingerprintCheckService:
         ):
             result = await check.check_service(sample_service, {})
 
-        # Should not crash, may have 0 findings
+        # Should not crash, may have 0 observations
         assert result.success is True
 
 
@@ -243,8 +243,8 @@ class TestEmbeddingExtractionCheckRun:
         ):
             result = await check.run(embedding_endpoint_context)
 
-        dim_findings = [f for f in result.findings if "1536" in f.title]
-        assert len(dim_findings) == 1
+        dim_observations = [f for f in result.observations if "1536" in f.title]
+        assert len(dim_observations) == 1
 
     async def test_identifies_model_from_dimensions(self, embedding_endpoint_context):
         check = EmbeddingExtractionCheck()
@@ -262,9 +262,9 @@ class TestEmbeddingExtractionCheckRun:
         ):
             result = await check.run(embedding_endpoint_context)
 
-        model_findings = [f for f in result.findings if "identified" in f.title.lower()]
-        assert len(model_findings) == 1
-        assert "ada-002" in model_findings[0].title
+        model_observations = [f for f in result.observations if "identified" in f.title.lower()]
+        assert len(model_observations) == 1
+        assert "ada-002" in model_observations[0].title
 
     async def test_detects_extra_metadata(self, embedding_endpoint_context):
         check = EmbeddingExtractionCheck()
@@ -281,8 +281,8 @@ class TestEmbeddingExtractionCheckRun:
         ):
             result = await check.run(embedding_endpoint_context)
 
-        meta_findings = [f for f in result.findings if "metadata" in f.title.lower()]
-        assert len(meta_findings) == 1
+        meta_observations = [f for f in result.observations if "metadata" in f.title.lower()]
+        assert len(meta_observations) == 1
 
 
 class TestStreamingAnalysisCheckInit:
@@ -310,8 +310,8 @@ class TestStreamingAnalysisCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        stream_findings = [f for f in result.findings if "supported" in f.title.lower()]
-        assert len(stream_findings) == 1
+        stream_observations = [f for f in result.observations if "supported" in f.title.lower()]
+        assert len(stream_observations) == 1
 
     async def test_no_streaming_support(self, chat_endpoint_context):
         check = StreamingAnalysisCheck()
@@ -327,7 +327,7 @@ class TestStreamingAnalysisCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        no_stream = [f for f in result.findings if "not supported" in f.title.lower()]
+        no_stream = [f for f in result.observations if "not supported" in f.title.lower()]
         assert len(no_stream) >= 1
 
 
@@ -361,11 +361,11 @@ class TestModelBehaviorFingerprintCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        id_findings = [f for f in result.findings if "self-identifies" in f.title.lower()]
-        assert len(id_findings) == 1
-        assert "gpt-4" in id_findings[0].title.lower()
+        id_observations = [f for f in result.observations if "self-identifies" in f.title.lower()]
+        assert len(id_observations) == 1
+        assert "gpt-4" in id_observations[0].title.lower()
 
-    async def test_no_response_no_findings(self, chat_endpoint_context):
+    async def test_no_response_no_observations(self, chat_endpoint_context):
         check = ModelBehaviorFingerprintCheck()
         check.FINGERPRINT_TESTS = [
             ("self_identify", "What model are you?", "_analyze_self_id"),
@@ -379,4 +379,4 @@ class TestModelBehaviorFingerprintCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0

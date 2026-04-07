@@ -12,7 +12,7 @@ Configurable via environment variables:
     LITELLM_BASE_URL    LLM API endpoint (default: http://localhost:4000/v1)
     LITELLM_MODEL       Model to use (default: gpt-4o-mini)
 
-Planted findings:
+Planted observations:
     header_vllm_version         X-Powered-By header leak
     model_temperature_exposed   X-Model-Config header leak
     chatbot_tool_leak           Verbose errors expose tool names
@@ -52,7 +52,7 @@ from app.scenario_services.common.config import (
     WAF_ENABLED,
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -113,8 +113,8 @@ async def add_headers_and_check_limits(request: Request, call_next):
         # Clean old entries (last 60 seconds)
         request_counts[client_ip] = [t for t in request_counts[client_ip] if now - t < 60]
 
-        # Finding: rate_limit_bypass - X-Forwarded-For bypasses limits
-        if is_finding_active("rate_limit_bypass"):
+        # Observation: rate_limit_bypass - X-Forwarded-For bypasses limits
+        if is_observation_active("rate_limit_bypass"):
             forwarded_for = request.headers.get("X-Forwarded-For")
             if forwarded_for:
                 client_ip = forwarded_for  # Bypass!
@@ -155,15 +155,15 @@ async def add_headers_and_check_limits(request: Request, call_next):
 
     response = await call_next(request)
 
-    # Finding: header_vllm_version - leak AI infrastructure
-    if is_finding_active("header_vllm_version"):
+    # Observation: header_vllm_version - leak AI infrastructure
+    if is_observation_active("header_vllm_version"):
         response.headers["X-Powered-By"] = "vLLM/0.4.1"
 
     get_brand_name()
     response.headers["X-Chatbot-Version"] = CHATBOT_VERSION
 
-    # Finding: model_temperature_exposed - leak model config
-    if is_finding_active("model_temperature_exposed"):
+    # Observation: model_temperature_exposed - leak model config
+    if is_observation_active("model_temperature_exposed"):
         response.headers["X-Model-Config"] = f"model={LITELLM_MODEL};temp=0.7;max_tokens=1024"
 
     return response
@@ -179,19 +179,19 @@ async def verbose_exception_handler(request: Request, exc: Exception):
     """
     Verbose error handler that leaks tool information.
 
-    Finding: chatbot_tool_leak
+    Observation: chatbot_tool_leak
     When active, error messages expose available tool names.
     """
-    if VERBOSE_ERRORS and is_finding_active("chatbot_tool_leak"):
+    if VERBOSE_ERRORS and is_observation_active("chatbot_tool_leak"):
         tb = traceback.format_exc()
 
         # Leak tool names in error message
         all_tool_names = [t["function"]["name"] for t in TOOL_DEFINITIONS]
-        if is_finding_active("customer_lookup_tool"):
+        if is_observation_active("customer_lookup_tool"):
             all_tool_names.append("lookup_customer_by_email")
-        if is_finding_active("internal_announcement_tool"):
+        if is_observation_active("internal_announcement_tool"):
             all_tool_names.append("get_internal_announcements")
-        if is_finding_active("fetch_document_tool"):
+        if is_observation_active("fetch_document_tool"):
             all_tool_names.append("fetch_document")
 
         return JSONResponse(
@@ -391,10 +391,10 @@ async def debug_tools():
     """
     Debug endpoint - exposes tool list.
 
-    Finding: tool_schema_disclosure
-    Only available when this finding is active.
+    Observation: tool_schema_disclosure
+    Only available when this observation is active.
     """
-    if not is_finding_active("tool_schema_disclosure"):
+    if not is_observation_active("tool_schema_disclosure"):
         raise HTTPException(status_code=404, detail="Not found")
 
     return {"active_tools": get_active_tools(), "total_tools": len(get_active_tools())}

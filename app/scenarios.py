@@ -36,7 +36,7 @@ scenario.json schema:
         "network/dns_fakobanko.yaml",
         "web/headers_fakobanko.yaml"
       ],
-      "expected_findings": ["dns_enumeration-fakobanko.local"],
+      "expected_observations": ["dns_enumeration-fakobanko.local"],
       "expected_chains": ["ai_service_prompt_injection"]
     }
 
@@ -93,7 +93,7 @@ class Scenario:
     version: str = "1.0.0"
     target: ScenarioTarget = field(default_factory=ScenarioTarget)
     simulations: list[str] = field(default_factory=list)
-    expected_findings: list[str] = field(default_factory=list)
+    expected_observations: list[str] = field(default_factory=list)
     expected_chains: list[str] = field(default_factory=list)
     source_path: Path | None = None  # scenario.json path
 
@@ -114,7 +114,7 @@ class Scenario:
                 "notes": self.target.notes,
             },
             "simulations": self.simulations,
-            "expected_findings": self.expected_findings,
+            "expected_observations": self.expected_observations,
             "expected_chains": self.expected_chains,
             "source_path": str(self.source_path) if self.source_path else None,
             "directory": str(self.directory) if self.directory else None,
@@ -155,7 +155,7 @@ def _parse_scenario(data: dict, source_path: Path) -> Scenario:
         version=str(data.get("version", "1.0.0")),
         target=target,
         simulations=[str(s) for s in simulations],
-        expected_findings=list(data.get("expected_findings", [])),
+        expected_observations=list(data.get("expected_observations", data.get("expected_findings", []))),
         expected_chains=list(data.get("expected_chains", [])),
         source_path=source_path,
     )

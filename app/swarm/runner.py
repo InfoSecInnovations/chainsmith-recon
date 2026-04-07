@@ -54,5 +54,5 @@ class SwarmRunner:
         while self.coordinator.is_running:
             await asyncio.sleep(POLL_INTERVAL)
 
-        logger.info("SwarmRunner done: %d findings", len(self.coordinator.findings))
-        return self.coordinator.findings
+        logger.info("SwarmRunner done: %d observations", len(self.coordinator.observations))
+        return self.coordinator.observations

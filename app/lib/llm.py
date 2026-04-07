@@ -13,7 +13,7 @@ Usage:
     client = get_llm_client()  # Auto-detects from env/config
 
     if client.is_available():
-        response = await client.chat("Analyze these findings...")
+        response = await client.chat("Analyze these observations...")
     else:
         # Graceful degradation - skip LLM features
         pass

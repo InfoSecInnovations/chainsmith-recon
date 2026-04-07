@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlparse
 
-from app.checks.base import BaseCheck, CheckStatus, Finding, Service
+from app.checks.base import BaseCheck, CheckStatus, Observation, Service
 from app.lib.targets import host_matches_pattern
 
 
@@ -44,8 +44,8 @@ class CheckRunner:
 
         self.checks: list[BaseCheck] = []
         self.context: dict[str, Any] = {}
-        self.findings: list[Finding] = []
-        self.finding_counter = 0
+        self.observations: list[Observation] = []
+        self.observation_counter = 0
 
         self.is_running = False
         self.is_paused = False
@@ -100,7 +100,7 @@ class CheckRunner:
         """Check if host matches a domain pattern (supports wildcards)."""
         return host_matches_pattern(host, pattern)
 
-    async def run(self, initial_context: dict[str, Any] = None) -> list[Finding]:
+    async def run(self, initial_context: dict[str, Any] = None) -> list[Observation]:
         """
         Run all applicable checks starting from initial context.
 
@@ -108,12 +108,12 @@ class CheckRunner:
             initial_context: Starting context (scope info, etc.)
 
         Returns:
-            List of all findings discovered
+            List of all observations discovered
         """
         self.is_running = True
         self.context = initial_context.copy() if initial_context else {}
-        self.findings = []
-        self.finding_counter = 0
+        self.observations = []
+        self.observation_counter = 0
         self.checks_run = 0
         self.checks_skipped = 0
         self.checks_failed = 0
@@ -157,7 +157,7 @@ class CheckRunner:
                     await self._run_single_check(check)
 
         self.is_running = False
-        return self.findings
+        return self.observations
 
     def _get_runnable_checks(self) -> list[BaseCheck]:
         """Get checks that are pending and have conditions satisfied."""
@@ -210,14 +210,14 @@ class CheckRunner:
 
             self.context["services"] = existing_services
 
-        # Process findings
-        for finding in result.findings:
-            self.finding_counter += 1
-            # Preserve stable IDs from lib/findings.build_finding(); only
-            # assign a sequential fallback if the check left the ID empty.
-            if not finding.id:
-                finding.id = f"F-{self.finding_counter:03d}"
-            self.findings.append(finding)
+        # Process observations
+        for observation in result.observations:
+            self.observation_counter += 1
+            # Preserve stable IDs from lib/observations.build_observation();
+            # only assign a sequential fallback if the check left the ID empty.
+            if not observation.id:
+                observation.id = f"F-{self.observation_counter:03d}"
+            self.observations.append(observation)
 
         # Track failures
         if not result.success:
@@ -247,14 +247,14 @@ class CheckRunner:
         return {
             "context_keys": list(self.context.keys()),
             "services_count": len(self.context.get("services", [])),
-            "findings_count": len(self.findings),
+            "observations_count": len(self.observations),
             "checks": [
                 {
                     "name": check.name,
                     "status": check.status.value,
                     "can_run": check.can_run(self.context),
                     "missing_conditions": check.get_missing_conditions(self.context),
-                    "findings_produced": len(check.result.findings) if check.result else 0,
+                    "observations_produced": len(check.result.observations) if check.result else 0,
                     "errors": check.result.errors if check.result else [],
                 }
                 for check in self.checks

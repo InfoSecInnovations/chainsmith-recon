@@ -14,7 +14,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Cross-agent injection payloads
@@ -153,8 +153,8 @@ class AgentCrossInjectionCheck(ServiceIteratingCheck):
                     if marker_preserved and len(indicators_matched) >= 2:
                         # Full cross-agent injection potential
                         severity = "critical" if is_multi_agent else "high"
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Cross-agent injection: {payload['id']}",
                                 description=(
@@ -181,8 +181,8 @@ class AgentCrossInjectionCheck(ServiceIteratingCheck):
                         )
                     elif marker_preserved:
                         # Delivery vector confirmed
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Injection payload preserved: {payload['id']}",
                                 description=(

@@ -351,7 +351,7 @@ class TestAgentGoalInjectionCheck:
         result = await check.check_service(sample_service, {})
 
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_handles_errors_gracefully(self, check, sample_service, agent_endpoint_context):

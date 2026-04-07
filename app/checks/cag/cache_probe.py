@@ -27,7 +27,7 @@ import time
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Cache probe payloads
@@ -145,8 +145,8 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
 
                             severity = self._determine_severity(test_result)
 
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Cache vulnerability: {test_result['test_id']}",
                                     description=self._build_description(test_result),
@@ -161,8 +161,8 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
                                 )
                             )
                         elif test_result.get("potential_issue"):
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Potential cache issue: {test_result['test_id']}",
                                     description=self._build_description(test_result),
@@ -459,7 +459,7 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
             }
 
     def _determine_severity(self, test_result: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         category = test_result.get("category", "")
 
         if category == "information_leakage" or category == "cache_poisoning":
@@ -472,7 +472,7 @@ class CAGCacheProbeCheck(ServiceIteratingCheck):
         return "medium"
 
     def _build_description(self, test_result: dict) -> str:
-        """Build description for finding."""
+        """Build description for observation."""
         parts = []
 
         if test_result.get("vulnerability_detected"):

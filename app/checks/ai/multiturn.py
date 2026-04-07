@@ -10,7 +10,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_multiturn_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -98,7 +98,7 @@ class MultiTurnInjectionCheck(BaseCheck):
 
             try:
                 mr = await self._test_sequences(url, service, api_format)
-                result.findings.extend(mr.findings)
+                result.observations.extend(mr.observations)
                 result.outputs.update(mr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -162,8 +162,8 @@ class MultiTurnInjectionCheck(BaseCheck):
             )
             severity = "critical" if has_secrets else "high"
 
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Multi-turn prompt extraction ({len(leaks)} sequences leaked)",
                     description=(
@@ -181,8 +181,8 @@ class MultiTurnInjectionCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Multi-turn extraction techniques all blocked",
                     description="No system prompt leakage detected across multi-turn sequences",

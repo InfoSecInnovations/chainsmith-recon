@@ -4,7 +4,7 @@ Tests for Phase 8B: Reports Hardening + Targeted Export.
 Covers:
 - SARIF output format for all 5 report types
 - Capabilities endpoint (PDF availability detection)
-- Targeted export from selected findings
+- Targeted export from selected observations
 - Report history UI elements (SARIF button, delete button)
 """
 
@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from app.db.models import Finding
+from app.db.models import ObservationRecord
 from app.reports import (
     generate_compliance_report,
     generate_delta_report,
@@ -28,15 +28,15 @@ pytestmark = pytest.mark.integration
 
 
 async def _create_populated_scan(
-    scan_repo, finding_repo, chain_repo, check_log_repo, scan_id="sarif-scan", target="example.com"
+    scan_repo, observation_repo, chain_repo, check_log_repo, scan_id="sarif-scan", target="example.com"
 ):
-    """Create a scan with findings, chains, and log entries."""
+    """Create a scan with observations, chains, and log entries."""
     await scan_repo.create_scan(
         scan_id=scan_id,
         session_id=f"s-{scan_id}",
         target_domain=target,
     )
-    await finding_repo.bulk_create(
+    await observation_repo.bulk_create(
         scan_id,
         [
             {
@@ -86,7 +86,7 @@ async def _create_populated_scan(
                 "severity": "critical",
                 "source": "rule-based",
                 "description": "XSS enables session theft",
-                "finding_ids": ["f1", "f2"],
+                "observation_ids": ["f1", "f2"],
             },
         ],
     )
@@ -98,7 +98,7 @@ async def _create_populated_scan(
                 "check": "xss_reflected",
                 "suite": "web",
                 "event": "completed",
-                "findings": 1,
+                "observations": 1,
                 "duration_ms": 500,
             },
             {"check": "sqli", "suite": "web", "event": "started"},
@@ -106,7 +106,7 @@ async def _create_populated_scan(
                 "check": "sqli",
                 "suite": "web",
                 "event": "completed",
-                "findings": 1,
+                "observations": 1,
                 "duration_ms": 800,
             },
             {"check": "header_analysis", "suite": "web", "event": "started"},
@@ -114,7 +114,7 @@ async def _create_populated_scan(
                 "check": "header_analysis",
                 "suite": "web",
                 "event": "completed",
-                "findings": 1,
+                "observations": 1,
                 "duration_ms": 200,
             },
             {"check": "server_header", "suite": "network", "event": "started"},
@@ -122,7 +122,7 @@ async def _create_populated_scan(
                 "check": "server_header",
                 "suite": "network",
                 "event": "completed",
-                "findings": 1,
+                "observations": 1,
                 "duration_ms": 100,
             },
             {"check": "port_scan", "suite": "network", "event": "started"},
@@ -137,7 +137,7 @@ async def _create_populated_scan(
     await scan_repo.complete_scan(
         scan_id,
         status="complete",
-        findings_count=4,
+        observations_count=4,
         checks_total=5,
         checks_completed=4,
         duration_ms=2000,
@@ -151,8 +151,8 @@ async def _create_populated_scan(
 
 class TestTechnicalReportSARIF:
     @pytest.mark.asyncio
-    async def test_sarif_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_sarif_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
 
         assert result["format"] == "sarif"
@@ -164,8 +164,8 @@ class TestTechnicalReportSARIF:
         assert len(sarif["runs"]) == 1
 
     @pytest.mark.asyncio
-    async def test_sarif_results(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_sarif_results(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
 
@@ -179,8 +179,8 @@ class TestTechnicalReportSARIF:
         assert "note" in levels  # info maps to note
 
     @pytest.mark.asyncio
-    async def test_sarif_rules(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_sarif_rules(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
 
@@ -192,8 +192,8 @@ class TestTechnicalReportSARIF:
         assert "server_header" in rule_ids
 
     @pytest.mark.asyncio
-    async def test_sarif_tool_info(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_sarif_tool_info(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
 
@@ -202,12 +202,12 @@ class TestTechnicalReportSARIF:
         assert driver["version"] == "1.3.0"
 
     @pytest.mark.asyncio
-    async def test_sarif_locations(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_sarif_locations(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
 
-        # XSS finding should have a location with target_url
+        # XSS observation should have a location with target_url
         results = sarif["runs"][0]["results"]
         xss_result = next(r for r in results if r["ruleId"] == "xss_reflected")
         assert "locations" in xss_result
@@ -218,26 +218,26 @@ class TestTechnicalReportSARIF:
 
     @pytest.mark.asyncio
     async def test_sarif_fingerprints(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
     ):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
 
-        # All findings should have fingerprints
+        # All observations should have fingerprints
         for r in sarif["runs"][0]["results"]:
             assert "fingerprints" in r
             assert "chainsmith/v1" in r["fingerprints"]
 
     @pytest.mark.asyncio
     async def test_sarif_evidence_attachments(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
     ):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
 
-        # XSS finding has evidence
+        # XSS observation has evidence
         results = sarif["runs"][0]["results"]
         xss_result = next(r for r in results if r["ruleId"] == "xss_reflected")
         assert "attachments" in xss_result
@@ -245,9 +245,9 @@ class TestTechnicalReportSARIF:
 
     @pytest.mark.asyncio
     async def test_sarif_invocation_props(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
     ):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
 
@@ -260,8 +260,8 @@ class TestTechnicalReportSARIF:
         assert props["chainCount"] == 1
 
     @pytest.mark.asyncio
-    async def test_sarif_help_uri(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_sarif_help_uri(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
 
@@ -272,9 +272,9 @@ class TestTechnicalReportSARIF:
 
 class TestDeltaReportSARIF:
     @pytest.fixture
-    async def two_scans(self, db, scan_repo, finding_repo):
+    async def two_scans(self, db, scan_repo, observation_repo):
         await scan_repo.create_scan(scan_id="ds-a", session_id="s1", target_domain="sarif.com")
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "ds-a",
             [
                 {
@@ -293,10 +293,10 @@ class TestDeltaReportSARIF:
                 },
             ],
         )
-        await scan_repo.complete_scan("ds-a", status="complete", findings_count=2)
+        await scan_repo.complete_scan("ds-a", status="complete", observations_count=2)
 
         await scan_repo.create_scan(scan_id="ds-b", session_id="s2", target_domain="sarif.com")
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "ds-b",
             [
                 {
@@ -315,7 +315,7 @@ class TestDeltaReportSARIF:
                 },
             ],
         )
-        await scan_repo.complete_scan("ds-b", status="complete", findings_count=2)
+        await scan_repo.complete_scan("ds-b", status="complete", observations_count=2)
 
     @pytest.mark.asyncio
     async def test_sarif_structure(self, two_scans):
@@ -325,11 +325,11 @@ class TestDeltaReportSARIF:
         assert sarif["version"] == "2.1.0"
 
     @pytest.mark.asyncio
-    async def test_sarif_contains_new_findings_only(self, two_scans):
+    async def test_sarif_contains_new_observations_only(self, two_scans):
         result = await generate_delta_report("ds-a", "ds-b", "sarif")
         sarif = json.loads(result["content"])
         results = sarif["runs"][0]["results"]
-        # Only new findings (CSRF) should appear
+        # Only new observations (CSRF) should appear
         assert len(results) == 1
         assert "CSRF" in results[0]["message"]["text"]
 
@@ -345,32 +345,32 @@ class TestDeltaReportSARIF:
 
 class TestExecutiveReportSARIF:
     @pytest.mark.asyncio
-    async def test_sarif_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_sarif_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("sarif-scan", "sarif")
         assert result["format"] == "sarif"
         sarif = json.loads(result["content"])
         assert sarif["version"] == "2.1.0"
-        # Executive shows top 5 findings
+        # Executive shows top 5 observations
         assert len(sarif["runs"][0]["results"]) <= 5
 
     @pytest.mark.asyncio
     async def test_sarif_invocation_metadata(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
     ):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_executive_report("sarif-scan", "sarif")
         sarif = json.loads(result["content"])
         props = sarif["runs"][0]["invocations"][0]["properties"]
         assert props["reportType"] == "executive"
         assert props["riskScore"] == 17
-        assert props["activeFindings"] == 4
+        assert props["activeObservations"] == 4
 
 
 class TestComplianceReportSARIF:
     @pytest.mark.asyncio
-    async def test_sarif_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_sarif_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_compliance_report("sarif-scan", "sarif")
         assert result["format"] == "sarif"
         sarif = json.loads(result["content"])
@@ -381,18 +381,18 @@ class TestComplianceReportSARIF:
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         chain_repo,
         check_log_repo,
         override_repo,
     ):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
 
         from sqlalchemy import select
 
         async with db.session() as session:
             result = await session.execute(
-                select(Finding.fingerprint).where(Finding.title == "Missing CSP")
+                select(ObservationRecord.fingerprint).where(ObservationRecord.title == "Missing CSP")
             )
             fp = result.scalar_one()
 
@@ -408,10 +408,10 @@ class TestComplianceReportSARIF:
 
 class TestTrendReportSARIF:
     @pytest.fixture
-    async def target_scans(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
+    async def target_scans(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
         await _create_populated_scan(
             scan_repo,
-            finding_repo,
+            observation_repo,
             chain_repo,
             check_log_repo,
             scan_id="ts-1",
@@ -444,13 +444,13 @@ class TestTrendReportSARIF:
 
 
 @pytest.fixture
-async def targeted_setup(db, scan_repo, finding_repo, chain_repo, check_log_repo):
-    """Set up a scan with findings and return (fingerprints, db)."""
-    await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+async def targeted_setup(db, scan_repo, observation_repo, chain_repo, check_log_repo):
+    """Set up a scan with observations and return (fingerprints, db)."""
+    await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
     from sqlalchemy import select
 
     async with db.session() as session:
-        result = await session.execute(select(Finding.fingerprint))
+        result = await session.execute(select(ObservationRecord.fingerprint))
         fps = [row[0] for row in result.all()]
     return fps, db
 
@@ -464,7 +464,7 @@ async def test_targeted_markdown_export(targeted_setup):
     assert result["filename"].endswith(".md")
     content = result["content"]
     assert "# Targeted Export" in content
-    assert "**Findings:** 2" in content
+    assert "**Observations:** 2" in content
 
 
 async def test_targeted_json_export(targeted_setup):
@@ -474,7 +474,7 @@ async def test_targeted_json_export(targeted_setup):
     assert result["format"] == "json"
     report = json.loads(result["content"])
     assert report["report_type"] == "targeted"
-    assert report["summary"]["total_findings"] == 4
+    assert report["summary"]["total_observations"] == 4
 
 
 async def test_targeted_html_export(targeted_setup):
@@ -500,12 +500,12 @@ async def test_targeted_sarif_export(targeted_setup):
 
 async def test_targeted_custom_title(targeted_setup):
     fps, db = targeted_setup
-    result = await generate_targeted_export(fps[:1], "md", title="Critical Findings Only", db=db)
-    assert "# Critical Findings Only" in result["content"]
+    result = await generate_targeted_export(fps[:1], "md", title="Critical Observations Only", db=db)
+    assert "# Critical Observations Only" in result["content"]
 
 
-async def test_targeted_no_findings_raises(db):
-    with pytest.raises(ValueError, match="No findings found"):
+async def test_targeted_no_observations_raises(db):
+    with pytest.raises(ValueError, match="No observations found"):
         await generate_targeted_export(["nonexistent-fp"], "md", db=db)
 
 
@@ -558,27 +558,27 @@ class TestReportsUIPhase8B:
         assert "generateTargetedExport" in content
         assert "/api/v1/reports/targeted" in content
 
-    def test_api_js_has_scan_findings(self):
+    def test_api_js_has_scan_observations(self):
         import pathlib
 
         content = pathlib.Path("static/js/api.js").read_text()
-        assert "getScanFindings" in content
+        assert "getScanObservations" in content
 
     def test_trend_html_has_export_panel(self):
         import pathlib
 
         content = pathlib.Path("static/trend.html").read_text()
         assert "export-panel" in content
-        assert "export-findings-list" in content
+        assert "export-observations-list" in content
         assert "btn-export-selected" in content
         assert "openExportPanel" in content
 
     def test_trend_html_has_click_to_export(self):
         import pathlib
 
-        # "Click to view findings" lives in the chart rendering JS, not trend.html
+        # "Click to view observations" lives in the chart rendering JS, not trend.html
         content = pathlib.Path("static/js/viz/trend-charts.js").read_text()
-        assert "Click to view findings" in content
+        assert "Click to view observations" in content
 
     def test_scans_routes_has_capabilities(self):
         import pathlib

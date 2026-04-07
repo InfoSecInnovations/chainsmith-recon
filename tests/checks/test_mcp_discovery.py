@@ -157,7 +157,7 @@ class TestMCPProtocolVersionCheck:
 
         assert result.success
         assert "mcp_protocol_versions" in result.outputs
-        downgrade = [f for f in result.findings if "downgrade" in f.title.lower()]
+        downgrade = [f for f in result.observations if "downgrade" in f.title.lower()]
         assert len(downgrade) > 0
 
 
@@ -185,7 +185,7 @@ class TestTransportSecurityCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert any("plain http" in f.title.lower() or "no tls" in f.title.lower() for f in high)
 
     @pytest.mark.asyncio
@@ -200,5 +200,5 @@ class TestTransportSecurityCheck:
         with patch("app.checks.mcp.transport_security.AsyncHttpClient", return_value=mock):
             result = await check.run(mcp_server_context)
 
-        cors = [f for f in result.findings if "cors" in f.title.lower()]
+        cors = [f for f in result.observations if "cors" in f.title.lower()]
         assert len(cors) > 0

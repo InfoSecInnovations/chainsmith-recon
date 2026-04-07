@@ -146,9 +146,9 @@ class TestVectorStoreAccess:
 
         assert result.success
         assert "accessible_stores" in result.outputs
-        assert len(result.findings) >= 1
+        assert len(result.observations) >= 1
         # Document dump = critical
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
 
     @pytest.mark.asyncio
@@ -203,7 +203,7 @@ class TestCollectionEnumeration:
 
         assert result.success
         assert "knowledge_base_structure" in result.outputs
-        assert len(result.findings) >= 1
+        assert len(result.observations) >= 1
 
     @pytest.mark.asyncio
     async def test_flags_sensitive_names(self, sample_service, accessible_store_context):
@@ -216,11 +216,11 @@ class TestCollectionEnumeration:
         # hr_policies should be flagged as sensitive
         [
             f
-            for f in result.findings
+            for f in result.observations
             if "sensitive" in f.description.lower() or "hr" in f.description.lower()
         ]
         # The collections list includes "hr_policies" which should trigger
-        assert len(result.findings) >= 1
+        assert len(result.observations) >= 1
 
 
 class TestEmbeddingFingerprint:
@@ -292,5 +292,5 @@ class TestEmbeddingFingerprint:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1

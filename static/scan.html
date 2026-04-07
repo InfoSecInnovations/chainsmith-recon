@@ -259,7 +259,7 @@
     <nav class="nav">
         <a href="index.html" class="nav-item" id="nav-scope">Scope</a>
         <a href="scan.html" class="nav-item active">Scan</a>
-        <a href="findings.html" class="nav-item" id="nav-findings">Results</a>
+        <a href="observations.html" class="nav-item" id="nav-observations">Observations</a>
         <a href="engagements.html" class="nav-item">Engagements</a>
         <a href="trend.html" class="nav-item" id="nav-trends">Trends</a>
         <a href="reports.html" class="nav-item" id="nav-reports">Reports</a>
@@ -357,38 +357,38 @@
                 </button>
             </div>
             <div class="action-bar" id="action-bar" style="display: none;">
-                <a href="findings.html" class="btn btn-primary" id="btn-view-findings">
-                    View Findings
+                <a href="observations.html" class="btn btn-primary" id="btn-view-observations">
+                    View Observations
                 </a>
             </div>
         </div>
 
-        <!-- Findings Preview Panel -->
+        <!-- Observations Preview Panel -->
         <div class="scan-panel">
             <div class="panel-header">
-                <span class="panel-title">Findings</span>
+                <span class="panel-title">Observations</span>
                 <div style="display:flex;align-items:center;gap:8px;">
-                    <span id="findings-severity-summary" style="display:none;"></span>
-                    <span class="progress-text" id="findings-count">0 found</span>
+                    <span id="observations-severity-summary" style="display:none;"></span>
+                    <span class="progress-text" id="observations-count">0 found</span>
                 </div>
             </div>
             <div class="panel-content">
-                <table class="data-table" id="findings-table" style="display: none;">
+                <table class="data-table" id="observations-table" style="display: none;">
                     <thead>
                         <tr>
                             <th>Severity</th>
                             <th>Title</th>
                         </tr>
                     </thead>
-                    <tbody id="findings-body"></tbody>
+                    <tbody id="observations-body"></tbody>
                 </table>
-                <div class="empty-state" id="findings-empty">
+                <div class="empty-state" id="observations-empty">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <circle cx="11" cy="11" r="8"></circle>
                         <path d="M21 21l-4.35-4.35"></path>
                     </svg>
-                    <h3>No findings yet</h3>
-                    <p>Findings will appear after the scan completes</p>
+                    <h3>No observations yet</h3>
+                    <p>Observations will appear after the scan completes</p>
                 </div>
             </div>
         </div>
@@ -439,7 +439,7 @@
             <div class="setting-row">
                 <div>
                     <div class="setting-label">Verification Level</div>
-                    <div class="setting-desc">Re-verify findings</div>
+                    <div class="setting-desc">Re-verify observations</div>
                 </div>
                 <select class="form-input" id="setting-verification" style="width: 120px;">
                     <option value="none">None</option>
@@ -451,7 +451,7 @@
             <div class="setting-row">
                 <div>
                     <div class="setting-label">Auto-redirect on Complete</div>
-                    <div class="setting-desc">Go to Findings when done</div>
+                    <div class="setting-desc">Go to Observations when done</div>
                 </div>
                 <label class="toggle">
                     <input type="checkbox" id="setting-auto-redirect">
@@ -525,7 +525,7 @@
     <script src="/static/js/api.js"></script>
     <script>
         let pollInterval = null;
-        let findings = [];
+        let observations = [];
         let isPaused = false;
         let lastPhase = 'discovery';
         let checkPhases = new Map(); // Track which phase each check belongs to
@@ -550,8 +550,8 @@
             const sessionId = getSessionId();
             if (sessionId) {
                 document.getElementById('nav-scope').href = `index.html?session=${sessionId}`;
-                document.getElementById('nav-findings').href = `findings.html?session=${sessionId}`;
-                document.getElementById('btn-view-findings').href = `findings.html?session=${sessionId}`;
+                document.getElementById('nav-observations').href = `observations.html?session=${sessionId}`;
+                document.getElementById('btn-view-observations').href = `observations.html?session=${sessionId}`;
             }
         }
 
@@ -650,7 +650,7 @@
 
                     // Auto-redirect if enabled
                     if (localStorage.getItem('autoRedirect') === 'true') {
-                        setTimeout(() => navigateTo('findings.html'), 1000);
+                        setTimeout(() => navigateTo('observations.html'), 1000);
                     }
                 }
             } catch (err) {
@@ -745,7 +745,7 @@
                 textEl.textContent = 'Scan paused';
             } else if (status.status === 'verifying') {
                 activityEl.classList.add('active');
-                textEl.textContent = 'Verifying findings...';
+                textEl.textContent = 'Verifying observations...';
             } else if (status.status === 'complete') {
                 activityEl.classList.remove('active');
                 textEl.textContent = 'Scan complete';
@@ -828,10 +828,10 @@
             // Check list
             updateCheckList(activeChecks);
 
-            // Findings
-            const findingsData = await api.getFindings();
-            findings = findingsData.findings;
-            updateFindings(findings);
+            // Observations
+            const observationsData = await api.getObservations();
+            observations = observationsData.observations;
+            updateObservations(observations);
 
             // Update header status
             updateHeaderStatus();
@@ -873,18 +873,18 @@
             });
         }
 
-        function updateFindings(findingsData) {
-            const table = document.getElementById('findings-table');
-            const body = document.getElementById('findings-body');
-            const empty = document.getElementById('findings-empty');
-            const count = document.getElementById('findings-count');
-            const severitySummary = document.getElementById('findings-severity-summary');
+        function updateObservations(observationsData) {
+            const table = document.getElementById('observations-table');
+            const body = document.getElementById('observations-body');
+            const empty = document.getElementById('observations-empty');
+            const count = document.getElementById('observations-count');
+            const severitySummary = document.getElementById('observations-severity-summary');
 
-            count.textContent = `${findingsData.length} found`;
+            count.textContent = `${observationsData.length} found`;
 
             // Calculate severity counts
             const severityCounts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-            findingsData.forEach(f => {
+            observationsData.forEach(f => {
                 if (severityCounts.hasOwnProperty(f.severity)) {
                     severityCounts[f.severity]++;
                 }
@@ -905,7 +905,7 @@
                 severitySummary.style.display = 'none';
             }
 
-            if (findingsData.length === 0) {
+            if (observationsData.length === 0) {
                 table.style.display = 'none';
                 empty.style.display = 'flex';
                 return;
@@ -914,8 +914,8 @@
             table.style.display = 'table';
             empty.style.display = 'none';
 
-            body.innerHTML = findingsData.map(f => `
-                <tr data-finding="${f.id}">
+            body.innerHTML = observationsData.map(f => `
+                <tr data-observation="${f.id}">
                     <td><span class="severity-badge severity-${f.severity}">${f.severity}</span></td>
                     <td>${f.title}</td>
                 </tr>
@@ -923,9 +923,9 @@
 
             body.querySelectorAll('tr').forEach(row => {
                 row.addEventListener('click', () => {
-                    const finding = findings.find(f => f.id === row.dataset.finding);
-                    if (finding) {
-                        openModal(finding.title, getFindingModalContent(finding));
+                    const finding = observations.find(f => f.id === row.dataset.finding);
+                    if (observation) {
+                        openModal(observation.title, getObservationModalContent(observation));
                     }
                 });
             });

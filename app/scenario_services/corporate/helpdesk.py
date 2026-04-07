@@ -4,14 +4,14 @@ app/scenario_services/corporate/helpdesk.py
 IT helpdesk landing page service template.
 
 This service provides an internal IT support portal with version disclosure
-and security header findings. It simulates a typical corporate helpdesk.
+and security header observations. It simulates a typical corporate helpdesk.
 
 Configurable via environment variables:
     BRAND_NAME          Display name (default: HelpDesk Portal)
     HELPDESK_VERSION    Service version (default: 2.4.1)
     CHAT_URL            URL to chat service (default: http://localhost:8201)
 
-Planted findings:
+Planted observations:
     version_disclosure          X-Powered-By and Server headers
     missing_security_headers    No CSP, X-Frame-Options, HSTS
     robots_sensitive_paths      robots.txt exposes internal paths
@@ -35,7 +35,7 @@ from app.scenario_services.common.config import (
     VERBOSE_ERRORS,
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -54,7 +54,7 @@ app = FastAPI(
     title="HelpDesk Portal",
     description="IT support portal",
     version=HELPDESK_VERSION,
-    # /docs and /openapi.json intentionally enabled - unauthed_docs finding
+    # /docs and /openapi.json intentionally enabled - unauthed_docs observation
 )
 
 
@@ -65,7 +65,7 @@ app = FastAPI(
 
 @app.middleware("http")
 async def add_response_headers(request: Request, call_next):
-    """Add headers based on active findings."""
+    """Add headers based on active observations."""
     try:
         response = await call_next(request)
     except Exception as exc:
@@ -81,12 +81,12 @@ async def add_response_headers(request: Request, call_next):
             )
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
-    # Finding: version_disclosure - leak versions in headers
-    if is_finding_active("version_disclosure"):
+    # Observation: version_disclosure - leak versions in headers
+    if is_observation_active("version_disclosure"):
         response.headers["X-Powered-By"] = "FastAPI/0.111.0"
         response.headers["Server"] = f"helpdesk-portal/{HELPDESK_VERSION}"
 
-    # Finding: missing_security_headers - intentionally NOT adding these
+    # Observation: missing_security_headers - intentionally NOT adding these
     # CSP, X-Frame-Options, HSTS are missing
 
     return response
@@ -158,7 +158,7 @@ async def home():
 @app.get("/robots.txt", response_class=PlainTextResponse)
 async def robots():
     """
-    Finding: robots_sensitive_paths
+    Observation: robots_sensitive_paths
     Discloses internal and admin paths.
     """
     return """User-agent: *

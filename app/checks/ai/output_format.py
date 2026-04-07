@@ -14,7 +14,7 @@ from app.lib.ai_helpers import (
     format_chat_request,
     format_chat_request_with_extra,
 )
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -80,7 +80,7 @@ class OutputFormatManipulationCheck(BaseCheck):
 
             try:
                 fr = await self._test_formats(url, service, api_format)
-                result.findings.extend(fr.findings)
+                result.observations.extend(fr.observations)
                 result.outputs.update(fr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -155,8 +155,8 @@ class OutputFormatManipulationCheck(BaseCheck):
         host = service.host
 
         if manipulable:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Output format manipulable ({len(manipulable)} techniques)",
                     description=(
@@ -174,8 +174,8 @@ class OutputFormatManipulationCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Output format constrained by service",
                     description="Model output could not be coerced into unexpected formats",

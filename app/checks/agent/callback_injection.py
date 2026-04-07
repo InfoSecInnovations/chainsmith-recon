@@ -12,7 +12,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Callback parameter names to inject
@@ -141,8 +141,8 @@ class AgentCallbackInjectionCheck(ServiceIteratingCheck):
                                     "echoed": param_echoed,
                                 }
                             )
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Webhook parameter accepted: {param}",
                                     description=(
@@ -195,8 +195,8 @@ class AgentCallbackInjectionCheck(ServiceIteratingCheck):
                                     "accepted": True,
                                 }
                             )
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title="Agent acknowledges callback capability",
                                     description=(
@@ -216,7 +216,7 @@ class AgentCallbackInjectionCheck(ServiceIteratingCheck):
                                     references=self.references,
                                 )
                             )
-                            break  # One finding is enough
+                            break  # One observation is enough
 
                     # 3. Check LangServe config_schema for callback fields
                     config_url = service.with_path("/config_schema")
@@ -231,8 +231,8 @@ class AgentCallbackInjectionCheck(ServiceIteratingCheck):
                                     "fields": cb_fields,
                                 }
                             )
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Config schema contains callback fields: {', '.join(cb_fields)}",
                                     description=(

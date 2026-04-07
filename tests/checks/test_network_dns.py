@@ -48,7 +48,7 @@ class TestWildcardDnsCheckRun:
         assert result.success is True
         assert result.outputs["wildcard_dns"]["detected"] is False
         assert result.outputs["wildcard_dns"]["ip"] is None
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     @patch("app.checks.network.wildcard_dns.WildcardDnsCheck._resolve")
     async def test_wildcard_detected_single_ip(self, mock_resolve):
@@ -62,8 +62,8 @@ class TestWildcardDnsCheckRun:
         assert wc["detected"] is True
         assert wc["ip"] == "1.2.3.4"
         assert wc["probes_resolved"] == 3
-        assert len(result.findings) == 1
-        assert "Wildcard DNS detected" in result.findings[0].title
+        assert len(result.observations) == 1
+        assert "Wildcard DNS detected" in result.observations[0].title
 
     @patch("app.checks.network.wildcard_dns.WildcardDnsCheck._resolve")
     async def test_wildcard_detected_multiple_ips(self, mock_resolve):
@@ -77,8 +77,8 @@ class TestWildcardDnsCheckRun:
         assert wc["ip"] is None  # Not a single consistent IP
         assert len(wc["resolved_ips"]) == 2
         assert (
-            "round-robin" in result.findings[0].description.lower()
-            or "geo-DNS" in result.findings[0].description
+            "round-robin" in result.observations[0].description.lower()
+            or "geo-DNS" in result.observations[0].description
         )
 
     @patch("app.checks.network.wildcard_dns.WildcardDnsCheck._resolve")
@@ -146,9 +146,9 @@ class TestDnsRecordCheckRun:
 
         assert result.success is True
         assert "mail.example.com" in result.outputs["dns_extra_hosts"]
-        mx_findings = [f for f in result.findings if "MX record" in f.title]
-        assert len(mx_findings) == 1
-        assert "mail.example.com" in mx_findings[0].title
+        mx_observations = [f for f in result.observations if "MX record" in f.title]
+        assert len(mx_observations) == 1
+        assert "mail.example.com" in mx_observations[0].title
 
     @pytest.mark.skipif(not HAS_DNSPYTHON, reason="dnspython not installed")
     @patch("app.checks.network.dns_records.dns.resolver.Resolver")
@@ -168,10 +168,10 @@ class TestDnsRecordCheckRun:
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
 
-        spf_findings = [f for f in result.findings if "SPF" in f.title]
-        assert len(spf_findings) == 1
-        assert "Google Workspace" in spf_findings[0].title
-        assert spf_findings[0].severity == "low"
+        spf_observations = [f for f in result.observations if "SPF" in f.title]
+        assert len(spf_observations) == 1
+        assert "Google Workspace" in spf_observations[0].title
+        assert spf_observations[0].severity == "low"
 
     @pytest.mark.skipif(not HAS_DNSPYTHON, reason="dnspython not installed")
     @patch("app.checks.network.dns_records.dns.resolver.Resolver")
@@ -191,14 +191,14 @@ class TestDnsRecordCheckRun:
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
 
-        verify_findings = [f for f in result.findings if "verification" in f.title.lower()]
-        assert len(verify_findings) == 1
-        assert verify_findings[0].severity == "low"
+        verify_observations = [f for f in result.observations if "verification" in f.title.lower()]
+        assert len(verify_observations) == 1
+        assert verify_observations[0].severity == "low"
 
     @pytest.mark.skipif(not HAS_DNSPYTHON, reason="dnspython not installed")
     @patch("app.checks.network.dns_records.dns.resolver.Resolver")
     async def test_ns_record(self, MockResolver):
-        """NS records generate info findings."""
+        """NS records generate info observations."""
         mock_resolver = MagicMock()
         MockResolver.return_value = mock_resolver
 
@@ -213,9 +213,9 @@ class TestDnsRecordCheckRun:
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
 
-        ns_findings = [f for f in result.findings if "NS record" in f.title]
-        assert len(ns_findings) == 1
-        assert ns_findings[0].severity == "info"
+        ns_observations = [f for f in result.observations if "NS record" in f.title]
+        assert len(ns_observations) == 1
+        assert ns_observations[0].severity == "info"
 
     @pytest.mark.skipif(not HAS_DNSPYTHON, reason="dnspython not installed")
     @patch("app.checks.network.dns_records.dns.resolver.Resolver")
@@ -240,7 +240,7 @@ class TestDnsRecordCheckRun:
     @pytest.mark.skipif(not HAS_DNSPYTHON, reason="dnspython not installed")
     @patch("app.checks.network.dns_records.dns.resolver.Resolver")
     async def test_aaaa_record(self, MockResolver):
-        """AAAA records generate IPv6 findings."""
+        """AAAA records generate IPv6 observations."""
         mock_resolver = MagicMock()
         MockResolver.return_value = mock_resolver
 
@@ -255,13 +255,13 @@ class TestDnsRecordCheckRun:
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
 
-        ipv6_findings = [f for f in result.findings if "IPv6" in f.title]
-        assert len(ipv6_findings) == 1
+        ipv6_observations = [f for f in result.observations if "IPv6" in f.title]
+        assert len(ipv6_observations) == 1
 
     @pytest.mark.skipif(not HAS_DNSPYTHON, reason="dnspython not installed")
     @patch("app.checks.network.dns_records.dns.resolver.Resolver")
     async def test_soa_record(self, MockResolver):
-        """SOA records generate info findings."""
+        """SOA records generate info observations."""
         mock_resolver = MagicMock()
         MockResolver.return_value = mock_resolver
 
@@ -278,8 +278,8 @@ class TestDnsRecordCheckRun:
         check = DnsRecordCheck()
         result = await check.run({"base_domain": "example.com"})
 
-        soa_findings = [f for f in result.findings if "SOA" in f.title]
-        assert len(soa_findings) == 1
+        soa_observations = [f for f in result.observations if "SOA" in f.title]
+        assert len(soa_observations) == 1
 
     @pytest.mark.skipif(not HAS_DNSPYTHON, reason="dnspython not installed")
     @patch("app.checks.network.dns_records.dns.resolver.Resolver")

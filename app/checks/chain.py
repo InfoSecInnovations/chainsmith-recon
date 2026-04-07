@@ -26,7 +26,7 @@ Usage:
     plan = orchestrator.get_execution_plan()
 
     # Run with proper ordering
-    findings = await orchestrator.run(initial_context)
+    observations = await orchestrator.run(initial_context)
 """
 
 import asyncio
@@ -36,7 +36,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.checks.base import BaseCheck, CheckStatus, Finding, Service
+from app.checks.base import BaseCheck, CheckStatus, Observation, Service
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +128,8 @@ class ChainOrchestrator:
         self.nodes: dict[str, CheckNode] = {}
         self.suites: dict[str, list[CheckNode]] = defaultdict(list)
         self.context: dict[str, Any] = {}
-        self.findings: list[Finding] = []
-        self.finding_counter = 0
+        self.observations: list[Observation] = []
+        self.observation_counter = 0
 
         # Execution state
         self.is_running = False
@@ -323,7 +323,7 @@ class ChainOrchestrator:
 
         return phases
 
-    async def run(self, initial_context: dict[str, Any] = None) -> list[Finding]:
+    async def run(self, initial_context: dict[str, Any] = None) -> list[Observation]:
         """
         Execute all checks in dependency order.
 
@@ -331,12 +331,12 @@ class ChainOrchestrator:
             initial_context: Starting context (target hosts, scope, etc.)
 
         Returns:
-            List of all findings discovered
+            List of all observations discovered
         """
         self.is_running = True
         self.context = initial_context.copy() if initial_context else {}
-        self.findings = []
-        self.finding_counter = 0
+        self.observations = []
+        self.observation_counter = 0
         self.checks_run = 0
         self.checks_skipped = 0
         self.checks_failed = 0
@@ -405,13 +405,13 @@ class ChainOrchestrator:
         await self._emit(
             {
                 "type": "run_completed",
-                "findings_count": len(self.findings),
+                "observations_count": len(self.observations),
                 "checks_run": self.checks_run,
                 "checks_failed": self.checks_failed,
             }
         )
 
-        return self.findings
+        return self.observations
 
     async def _run_check(self, check: BaseCheck):
         """Run a single check and process results."""
@@ -458,12 +458,12 @@ class ChainOrchestrator:
         # Merge services
         self._merge_services(result.services)
 
-        # Process findings
-        for finding in result.findings:
-            self.finding_counter += 1
-            if not finding.id:
-                finding.id = f"F-{self.finding_counter:03d}"
-            self.findings.append(finding)
+        # Process observations
+        for observation in result.observations:
+            self.observation_counter += 1
+            if not observation.id:
+                observation.id = f"F-{self.observation_counter:03d}"
+            self.observations.append(observation)
 
         # Track failures
         if not result.success:
@@ -473,7 +473,7 @@ class ChainOrchestrator:
             {
                 "type": "check_completed",
                 "check": check.name,
-                "findings_count": len(result.findings),
+                "observations_count": len(result.observations),
                 "outputs": list(result.outputs.keys()),
                 "success": result.success,
             }
@@ -546,7 +546,7 @@ class ChainOrchestrator:
             "suites": {suite: [n.name for n in nodes] for suite, nodes in self.suites.items()},
             "context_keys": list(self.context.keys()),
             "services_count": len(self.context.get("services", [])),
-            "findings_count": len(self.findings),
+            "observations_count": len(self.observations),
             "checks_run": self.checks_run,
             "checks_skipped": self.checks_skipped,
             "checks_failed": self.checks_failed,

@@ -16,14 +16,14 @@ pytestmark = pytest.mark.integration
 
 class TestDeltaReportMarkdown:
     @pytest.fixture
-    async def two_scans(self, db, scan_repo, finding_repo, comparison_repo):
+    async def two_scans(self, db, scan_repo, observation_repo, comparison_repo):
         """Two scans with known overlap for comparison."""
         await scan_repo.create_scan(
             scan_id="delta-a",
             session_id="s1",
             target_domain="example.com",
         )
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "delta-a",
             [
                 {"title": "XSS", "severity": "high", "check_name": "xss", "host": "example.com"},
@@ -41,14 +41,14 @@ class TestDeltaReportMarkdown:
                 },
             ],
         )
-        await scan_repo.complete_scan("delta-a", status="complete", findings_count=3)
+        await scan_repo.complete_scan("delta-a", status="complete", observations_count=3)
 
         await scan_repo.create_scan(
             scan_id="delta-b",
             session_id="s2",
             target_domain="example.com",
         )
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "delta-b",
             [
                 {"title": "XSS", "severity": "high", "check_name": "xss", "host": "example.com"},
@@ -60,7 +60,7 @@ class TestDeltaReportMarkdown:
                 },
             ],
         )
-        await scan_repo.complete_scan("delta-b", status="complete", findings_count=2)
+        await scan_repo.complete_scan("delta-b", status="complete", observations_count=2)
 
     @pytest.mark.asyncio
     async def test_basic_structure(self, two_scans):
@@ -86,19 +86,19 @@ class TestDeltaReportMarkdown:
         assert "| Recurring |" in content
 
     @pytest.mark.asyncio
-    async def test_new_findings_listed(self, two_scans):
+    async def test_new_observations_listed(self, two_scans):
         result = await generate_delta_report("delta-a", "delta-b", "md")
         content = result["content"]
 
-        assert "New Findings" in content
+        assert "New Observations" in content
         assert "CSRF" in content
 
     @pytest.mark.asyncio
-    async def test_resolved_findings_listed(self, two_scans):
+    async def test_resolved_observations_listed(self, two_scans):
         result = await generate_delta_report("delta-a", "delta-b", "md")
         content = result["content"]
 
-        assert "Resolved Findings" in content
+        assert "Resolved Observations" in content
         assert "SQLi" in content
 
     @pytest.mark.asyncio
@@ -123,33 +123,33 @@ class TestDeltaReportMarkdown:
 
 class TestDeltaReportJSON:
     @pytest.fixture
-    async def two_scans(self, db, scan_repo, finding_repo):
+    async def two_scans(self, db, scan_repo, observation_repo):
         await scan_repo.create_scan(
             scan_id="dj-a",
             session_id="s1",
             target_domain="json.com",
         )
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "dj-a",
             [
                 {"title": "F1", "severity": "high", "check_name": "c1", "host": "json.com"},
             ],
         )
-        await scan_repo.complete_scan("dj-a", status="complete", findings_count=1)
+        await scan_repo.complete_scan("dj-a", status="complete", observations_count=1)
 
         await scan_repo.create_scan(
             scan_id="dj-b",
             session_id="s2",
             target_domain="json.com",
         )
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "dj-b",
             [
                 {"title": "F1", "severity": "high", "check_name": "c1", "host": "json.com"},
                 {"title": "F2", "severity": "low", "check_name": "c2", "host": "json.com"},
             ],
         )
-        await scan_repo.complete_scan("dj-b", status="complete", findings_count=2)
+        await scan_repo.complete_scan("dj-b", status="complete", observations_count=2)
 
     @pytest.mark.asyncio
     async def test_json_structure(self, two_scans):
@@ -160,8 +160,8 @@ class TestDeltaReportJSON:
         assert report["scan_a"]["id"] == "dj-a"
         assert report["scan_b"]["id"] == "dj-b"
         assert "summary" in report
-        assert "new_findings" in report
-        assert "resolved_findings" in report
+        assert "new_observations" in report
+        assert "resolved_observations" in report
 
 
 class TestDeltaReportErrors:
@@ -183,25 +183,25 @@ class TestDeltaReportErrors:
 
 class TestDeltaReportHTML:
     @pytest.fixture
-    async def two_scans(self, db, scan_repo, finding_repo):
+    async def two_scans(self, db, scan_repo, observation_repo):
         await scan_repo.create_scan(scan_id="dh-a", session_id="s1", target_domain="html.com")
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "dh-a",
             [
                 {"title": "F1", "severity": "high", "check_name": "c1", "host": "html.com"},
             ],
         )
-        await scan_repo.complete_scan("dh-a", status="complete", findings_count=1)
+        await scan_repo.complete_scan("dh-a", status="complete", observations_count=1)
 
         await scan_repo.create_scan(scan_id="dh-b", session_id="s2", target_domain="html.com")
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "dh-b",
             [
                 {"title": "F1", "severity": "high", "check_name": "c1", "host": "html.com"},
                 {"title": "F2", "severity": "medium", "check_name": "c2", "host": "html.com"},
             ],
         )
-        await scan_repo.complete_scan("dh-b", status="complete", findings_count=2)
+        await scan_repo.complete_scan("dh-b", status="complete", observations_count=2)
 
     @pytest.mark.asyncio
     async def test_html_structure(self, two_scans):
@@ -215,9 +215,9 @@ class TestDeltaReportHTML:
         assert "dh-b" in content
 
     @pytest.mark.asyncio
-    async def test_html_new_findings(self, two_scans):
+    async def test_html_new_observations(self, two_scans):
         result = await generate_delta_report("dh-a", "dh-b", "html")
-        assert "New Findings" in result["content"]
+        assert "New Observations" in result["content"]
         assert "F2" in result["content"]
 
 
@@ -225,9 +225,9 @@ class TestDeltaReportPDF:
     xhtml2pdf = pytest.importorskip("xhtml2pdf")
 
     @pytest.fixture
-    async def two_scans(self, db, scan_repo, finding_repo):
+    async def two_scans(self, db, scan_repo, observation_repo):
         await scan_repo.create_scan(scan_id="dp-a", session_id="s1", target_domain="pdf.com")
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "dp-a",
             [
                 {
@@ -239,10 +239,10 @@ class TestDeltaReportPDF:
                 },
             ],
         )
-        await scan_repo.complete_scan("dp-a", status="complete", findings_count=1)
+        await scan_repo.complete_scan("dp-a", status="complete", observations_count=1)
 
         await scan_repo.create_scan(scan_id="dp-b", session_id="s2", target_domain="pdf.com")
-        await finding_repo.bulk_create(
+        await observation_repo.bulk_create(
             "dp-b",
             [
                 {
@@ -261,7 +261,7 @@ class TestDeltaReportPDF:
                 },
             ],
         )
-        await scan_repo.complete_scan("dp-b", status="complete", findings_count=2)
+        await scan_repo.complete_scan("dp-b", status="complete", observations_count=2)
 
     @pytest.mark.asyncio
     async def test_pdf_output(self, two_scans):

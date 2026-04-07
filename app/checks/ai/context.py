@@ -8,7 +8,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import fmt_context_evidence, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -51,7 +51,7 @@ class ContextWindowCheck(BaseCheck):
 
             try:
                 cr = await self._probe_context(url, service, api_format)
-                result.findings.extend(cr.findings)
+                result.observations.extend(cr.observations)
                 result.outputs.update(cr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -96,8 +96,8 @@ class ContextWindowCheck(BaseCheck):
             return result
 
         if ctx_info["max_successful"] > 0:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Context window: ~{ctx_info['max_successful']}+ tokens",
                     description=(

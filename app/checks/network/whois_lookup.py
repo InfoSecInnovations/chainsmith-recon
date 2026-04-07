@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,7 @@ class WhoisLookupCheck(BaseCheck):
             domain_info = await self._domain_whois(base_domain)
             if domain_info:
                 whois_data["domain"] = domain_info
-                self._generate_domain_findings(result, base_domain, domain_info)
+                self._generate_domain_observations(result, base_domain, domain_info)
 
         # Step 2: ASN/RDAP lookups for unique IPs
         if HAS_IPWHOIS:
@@ -150,7 +150,7 @@ class WhoisLookupCheck(BaseCheck):
                 asn_info = await self._asn_lookup(ip)
                 if asn_info:
                     whois_data["asn"][ip] = asn_info
-                    self._generate_asn_findings(result, ip, ip_to_hosts.get(ip, []), asn_info)
+                    self._generate_asn_observations(result, ip, ip_to_hosts.get(ip, []), asn_info)
                 result.targets_checked += 1
 
                 # Rate limiting between lookups
@@ -375,13 +375,13 @@ class WhoisLookupCheck(BaseCheck):
             logger.debug(f"Unexpected ASN lookup error for {ip}: {exc}")
             return None
 
-    def _generate_domain_findings(
+    def _generate_domain_observations(
         self,
         result: CheckResult,
         domain: str,
         info: dict[str, Any],
     ) -> None:
-        """Generate findings from domain WHOIS data."""
+        """Generate observations from domain WHOIS data."""
         registrar = info.get("registrar", "unknown")
         created = info.get("created", "unknown")
         expires = info.get("expires", "unknown")
@@ -399,8 +399,8 @@ class WhoisLookupCheck(BaseCheck):
         if nameservers:
             evidence_parts.append(f"NS: {ns_str}")
 
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"Domain registrar: {registrar or 'unknown'}",
                 description=(
@@ -420,8 +420,8 @@ class WhoisLookupCheck(BaseCheck):
         if created and created != "unknown":
             days_old = self._domain_age_days(created)
             if days_old is not None and 0 <= days_old <= RECENT_REGISTRATION_DAYS:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Domain registered within last {RECENT_REGISTRATION_DAYS} days",
                         description=(
@@ -438,8 +438,8 @@ class WhoisLookupCheck(BaseCheck):
 
         # Info: WHOIS data redacted (GDPR)
         if info.get("redacted"):
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"WHOIS data redacted (privacy/GDPR): {domain}",
                     description=(
@@ -453,18 +453,18 @@ class WhoisLookupCheck(BaseCheck):
                 )
             )
 
-    def _generate_asn_findings(
+    def _generate_asn_observations(
         self,
         result: CheckResult,
         ip: str,
         hostnames: list[str],
         info: dict[str, Any],
     ) -> None:
-        """Generate findings from ASN/RDAP data."""
+        """Generate observations from ASN/RDAP data."""
         if info.get("private"):
             host_label = hostnames[0] if hostnames else ip
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Private/reserved IP: {ip}",
                     description=(
@@ -488,8 +488,8 @@ class WhoisLookupCheck(BaseCheck):
 
         asn_str = f"AS{asn}" if asn else "unknown ASN"
 
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"IP {ip} belongs to {asn_str} ({asn_desc})",
                 description=(

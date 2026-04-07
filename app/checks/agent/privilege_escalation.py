@@ -15,7 +15,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Baseline request (no privilege claim)
@@ -165,8 +165,8 @@ class AgentPrivilegeEscalationCheck(ServiceIteratingCheck):
                         escalation_results.append(analysis)
 
                         if analysis["escalated"]:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Privilege escalation: {esc['id']}",
                                     description=(
@@ -186,8 +186,8 @@ class AgentPrivilegeEscalationCheck(ServiceIteratingCheck):
                                 )
                             )
                         elif analysis["acknowledged"]:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Agent acknowledges privilege claim: {esc['id']}",
                                     description=(
@@ -204,8 +204,8 @@ class AgentPrivilegeEscalationCheck(ServiceIteratingCheck):
                                 )
                             )
                         elif analysis["role_leaked"]:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Agent revealed role structure: {esc['id']}",
                                     description=(

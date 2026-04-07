@@ -3,7 +3,7 @@ Tests for app/checks/base.py
 
 Covers:
 - Service dataclass
-- Finding dataclass
+- Observation dataclass
 - CheckResult dataclass
 - CheckCondition evaluation
 - BaseCheck execution, timeout, error handling
@@ -20,7 +20,7 @@ from app.checks.base import (
     CheckCondition,
     CheckResult,
     CheckStatus,
-    Finding,
+    Observation,
     Service,
     ServiceIteratingCheck,
     Severity,
@@ -110,31 +110,31 @@ class TestService:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Finding Tests
+# Observation Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestFinding:
-    """Tests for Finding dataclass."""
+class TestObservation:
+    """Tests for Observation dataclass."""
 
-    def test_finding_creation(self):
-        """Finding can be created with required fields."""
-        f = Finding(
+    def test_observation_creation(self):
+        """Observation can be created with required fields."""
+        f = Observation(
             id="F-001",
-            title="Test Finding",
+            title="Test Observation",
             description="A test",
             severity="high",
             evidence="some evidence",
         )
         assert f.id == "F-001"
-        assert f.title == "Test Finding"
+        assert f.title == "Test Observation"
         assert f.severity == "high"
         assert f.target is None
         assert f.references == []
 
-    def test_finding_to_dict(self, sample_service):
-        """Finding serializes to dict correctly."""
-        f = Finding(
+    def test_observation_to_dict(self, sample_service):
+        """Observation serializes to dict correctly."""
+        f = Observation(
             id="F-002",
             title="Header Issue",
             description="Missing security headers",
@@ -304,17 +304,17 @@ class TestBaseCheck:
         assert check.status == CheckStatus.FAILED
         assert any("timed out" in e for e in result.errors)
 
-    async def test_findings_tagged_with_check_name(self, sample_service):
-        """Findings are tagged with check name after execution."""
+    async def test_observations_tagged_with_check_name(self, sample_service):
+        """Observations are tagged with check name after execution."""
 
-        class FindingCheck(BaseCheck):
-            name = "finding_check"
+        class ObservationCheck(BaseCheck):
+            name = "observation_check"
 
             async def run(self, context):
                 return CheckResult(
                     success=True,
-                    findings=[
-                        Finding(
+                    observations=[
+                        Observation(
                             id="",
                             title="Test",
                             description="Test",
@@ -324,11 +324,11 @@ class TestBaseCheck:
                     ],
                 )
 
-        check = FindingCheck()
+        check = ObservationCheck()
         result = await check.execute({})
 
-        assert len(result.findings) == 1
-        assert result.findings[0].check_name == "finding_check"
+        assert len(result.observations) == 1
+        assert result.observations[0].check_name == "observation_check"
 
     def test_can_run_no_conditions(self):
         """Check with no conditions can always run."""
@@ -386,10 +386,10 @@ class TestBaseCheck:
         assert check.is_in_scope("http://allowed.com") is True
         assert check.is_in_scope("http://blocked.com") is False
 
-    def test_create_finding_helper(self, sample_service):
-        """create_finding helper creates properly formatted finding."""
+    def test_create_observation_helper(self, sample_service):
+        """create_observation helper creates properly formatted observation."""
         check = ConcreteCheck()
-        finding = check.create_finding(
+        observation = check.create_observation(
             title="Test Issue",
             description="A test issue",
             severity="high",
@@ -398,12 +398,12 @@ class TestBaseCheck:
             references=["REF-001"],
         )
 
-        assert finding.id == ""  # Assigned by runner
-        assert finding.title == "Test Issue"
-        assert finding.severity == "high"
-        assert finding.check_name == "concrete_check"
-        assert finding.target_url == sample_service.url
-        assert "REF-001" in finding.references
+        assert observation.id == ""  # Assigned by runner
+        assert observation.title == "Test Issue"
+        assert observation.severity == "high"
+        assert observation.check_name == "concrete_check"
+        assert observation.target_url == sample_service.url
+        assert "REF-001" in observation.references
 
     def test_to_dict_serialization(self):
         """to_dict returns complete check metadata."""
@@ -442,11 +442,11 @@ class ConcreteIteratingCheck(ServiceIteratingCheck):
         self.checked_services.append(service)
         return CheckResult(
             success=True,
-            findings=[
-                Finding(
+            observations=[
+                Observation(
                     id="",
                     title=f"Found on {service.host}",
-                    description="Test finding",
+                    description="Test observation",
                     severity="info",
                     evidence="test",
                     target=service,
@@ -520,14 +520,14 @@ class TestServiceIteratingCheck:
         assert len(check.checked_services) == 1
         assert isinstance(check.checked_services[0], Service)
 
-    async def test_accumulates_findings(self, sample_services):
-        """Findings from all services are accumulated."""
+    async def test_accumulates_observations(self, sample_services):
+        """Observations from all services are accumulated."""
         check = ConcreteIteratingCheck()
         context = {"services": sample_services}
 
         result = await check.run(context)
 
-        assert len(result.findings) == 2
+        assert len(result.observations) == 2
 
     async def test_handles_per_service_exception(self, sample_services):
         """Exception in one service doesn't stop iteration."""

@@ -10,7 +10,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -21,7 +21,7 @@ class ConfigExposureCheck(ServiceIteratingCheck):
     description = "Parse accessible config files (.env, config.json, etc.) for secrets"
 
     conditions = [CheckCondition("services", "truthy")]
-    produces = ["config_findings"]
+    produces = ["config_observations"]
     service_types = ["http", "html", "api"]
 
     timeout_seconds = 60.0
@@ -152,8 +152,8 @@ class ConfigExposureCheck(ServiceIteratingCheck):
                             "critical" if any(s[2] == "critical" for s in secrets_found) else "high"
                         )
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Configuration file contains secrets: {path} at {service.host}",
                                 description=f"{len(secrets_found)} secret pattern(s) detected in {path}",
@@ -171,8 +171,8 @@ class ConfigExposureCheck(ServiceIteratingCheck):
                             )
                         )
                     else:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Configuration file accessible: {path} at {service.host}",
                                 description=f"Config file {path} is publicly accessible (no secrets detected but internal config exposed)",

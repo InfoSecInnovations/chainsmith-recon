@@ -118,7 +118,7 @@ class TestMCPDiscoveryCheck:
         assert result.success
         assert "mcp_servers" in result.outputs
         assert len(result.outputs["mcp_servers"]) > 0
-        assert len(result.findings) > 0
+        assert len(result.observations) > 0
 
     @pytest.mark.asyncio
     async def test_detects_mcp_headers(self, check, sample_service):
@@ -205,7 +205,7 @@ class TestMCPDiscoveryCheck:
 
         assert result.success
         assert len(result.outputs.get("mcp_servers", [])) == 0
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -288,9 +288,9 @@ class TestMCPToolEnumerationCheck:
         assert result.success
         high_risk = result.outputs.get("high_risk_tools", [])
         assert len(high_risk) > 0
-        # Should have critical severity findings
-        critical_findings = [f for f in result.findings if f.severity == "critical"]
-        assert len(critical_findings) > 0
+        # Should have critical severity observations
+        critical_observations = [f for f in result.observations if f.severity == "critical"]
+        assert len(critical_observations) > 0
 
     @pytest.mark.asyncio
     async def test_classifies_high_risk_tools(self, check, sample_service, mcp_server_context):
@@ -363,4 +363,4 @@ class TestMCPToolEnumerationCheck:
         result = await check.check_service(sample_service, {})
 
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0

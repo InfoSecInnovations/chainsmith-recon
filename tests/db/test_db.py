@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.db.engine import close_db, get_session, init_db
-from app.db.models import Chain, CheckLog, Finding, Scan
+from app.db.models import Chain, CheckLog, ObservationRecord, Scan
 from app.db.repositories import _generate_fingerprint
 
 pytestmark = pytest.mark.integration
@@ -65,7 +65,7 @@ class TestEngine:
         async with get_session() as session:
             # Verify we can query each table without error
             await session.execute(select(func.count()).select_from(Scan))
-            await session.execute(select(func.count()).select_from(Finding))
+            await session.execute(select(func.count()).select_from(ObservationRecord))
             await session.execute(select(func.count()).select_from(Chain))
             await session.execute(select(func.count()).select_from(CheckLog))
 
@@ -74,7 +74,7 @@ class TestEngine:
 
 
 class TestFingerprinting:
-    """Tests for finding fingerprint generation."""
+    """Tests for observation fingerprint generation."""
 
     def test_fingerprint_is_deterministic(self):
         """Same inputs produce the same fingerprint."""
@@ -90,14 +90,14 @@ class TestFingerprinting:
 
     def test_fingerprint_differs_by_check(self):
         """Different check names produce different fingerprints."""
-        fp1 = _generate_fingerprint("xss_check", "example.com", "Finding")
-        fp2 = _generate_fingerprint("sqli_check", "example.com", "Finding")
+        fp1 = _generate_fingerprint("xss_check", "example.com", "Observation")
+        fp2 = _generate_fingerprint("sqli_check", "example.com", "Observation")
         assert fp1 != fp2
 
     def test_fingerprint_differs_by_host(self):
         """Different hosts produce different fingerprints."""
-        fp1 = _generate_fingerprint("xss_check", "a.com", "Finding")
-        fp2 = _generate_fingerprint("xss_check", "b.com", "Finding")
+        fp1 = _generate_fingerprint("xss_check", "a.com", "Observation")
+        fp2 = _generate_fingerprint("xss_check", "b.com", "Observation")
         assert fp1 != fp2
 
     def test_fingerprint_differs_by_title(self):

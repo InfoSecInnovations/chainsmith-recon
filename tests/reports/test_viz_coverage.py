@@ -8,7 +8,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestCoverageTabPresence:
-    """Verify coverage tab and panel exist in findings.html."""
+    """Verify coverage tab and panel exist in observations.html."""
 
     def test_coverage_tab_exists(self):
         content = _all_viz_content()
@@ -48,7 +48,7 @@ class TestCoverageTabPresence:
 
 
 class TestCoverageJavaScript:
-    """Verify coverage JS functions and constants exist in findings.html."""
+    """Verify coverage JS functions and constants exist in observations.html."""
 
     def test_render_coverage_function(self):
         content = _all_viz_content()
@@ -127,7 +127,7 @@ class TestCoverageDataLogic:
         return re.sub(r":\d+$", "", name)
 
     @classmethod
-    def build_coverage_data(cls, findings_list, check_statuses):
+    def build_coverage_data(cls, observations_list, check_statuses):
         """Python mirror of the JS buildCoverageData."""
         checks = []
         check_status_map = {}
@@ -140,7 +140,7 @@ class TestCoverageDataLogic:
                 check_status_map[name] = cs.get("status", "completed")
                 checks.append(name)
 
-        for f in findings_list:
+        for f in observations_list:
             name = f.get("check_name")
             if name and name not in check_status_map:
                 check_status_map[name] = "completed"
@@ -149,40 +149,40 @@ class TestCoverageDataLogic:
         if not checks:
             return {"matrix": {}, "hosts": [], "checks": [], "isGlobal": True}
 
-        # Group findings by host
-        findings_by_host = {}
-        for f in findings_list:
+        # Group observations by host
+        observations_by_host = {}
+        for f in observations_list:
             raw_host = f.get("host") or f.get("target_url") or "global"
             host = cls.normalize_host(raw_host)
-            if host not in findings_by_host:
-                findings_by_host[host] = []
-            findings_by_host[host].append(f)
+            if host not in observations_by_host:
+                observations_by_host[host] = []
+            observations_by_host[host].append(f)
 
-        hosts = sorted(findings_by_host.keys())
+        hosts = sorted(observations_by_host.keys())
         is_global = len(hosts) <= 1
 
         if is_global:
             global_host = hosts[0] if hosts else "all"
             matrix = {global_host: {}}
 
-            findings_by_check = {}
-            for f in findings_list:
+            observations_by_check = {}
+            for f in observations_list:
                 cn = f.get("check_name")
                 if not cn:
                     continue
-                if cn not in findings_by_check:
-                    findings_by_check[cn] = []
-                findings_by_check[cn].append(f)
+                if cn not in observations_by_check:
+                    observations_by_check[cn] = []
+                observations_by_check[cn].append(f)
 
             for check in checks:
-                check_findings = findings_by_check.get(check, [])
+                check_observations = observations_by_check.get(check, [])
                 status = check_status_map.get(check, "not-run")
-                if check_findings and status == "completed":
+                if check_observations and status == "completed":
                     status = "found"
                 matrix[global_host][check] = {
                     "status": status,
-                    "findingCount": len(check_findings),
-                    "findings": check_findings,
+                    "observationCount": len(check_observations),
+                    "observations": check_observations,
                 }
             return {"matrix": matrix, "hosts": [global_host], "checks": checks, "isGlobal": True}
 
@@ -190,9 +190,9 @@ class TestCoverageDataLogic:
         matrix = {}
         for host in hosts:
             matrix[host] = {}
-            host_findings = findings_by_host.get(host, [])
+            host_observations = observations_by_host.get(host, [])
             host_fbc = {}
-            for f in host_findings:
+            for f in host_observations:
                 cn = f.get("check_name")
                 if not cn:
                     continue
@@ -201,14 +201,14 @@ class TestCoverageDataLogic:
                 host_fbc[cn].append(f)
 
             for check in checks:
-                check_findings = host_fbc.get(check, [])
+                check_observations = host_fbc.get(check, [])
                 status = check_status_map.get(check, "not-run")
-                if check_findings and status == "completed":
+                if check_observations and status == "completed":
                     status = "found"
                 matrix[host][check] = {
                     "status": status,
-                    "findingCount": len(check_findings),
-                    "findings": check_findings,
+                    "observationCount": len(check_observations),
+                    "observations": check_observations,
                 }
 
         return {"matrix": matrix, "hosts": hosts, "checks": checks, "isGlobal": False}
@@ -220,8 +220,8 @@ class TestCoverageDataLogic:
         assert result["matrix"] == {}
         assert result["isGlobal"] is True
 
-    def test_checks_only_no_findings(self):
-        """Check statuses with no findings still produce a global view with checks listed."""
+    def test_checks_only_no_observations(self):
+        """Check statuses with no observations still produce a global view with checks listed."""
         checks = [
             {"name": "dns_lookup", "status": "completed"},
             {"name": "header_check", "status": "skipped"},
@@ -236,7 +236,7 @@ class TestCoverageDataLogic:
         assert result["matrix"]["all"]["header_check"]["status"] == "skipped"
 
     def test_single_host_global_view(self):
-        findings = [
+        observations = [
             {"host": "example.com", "check_name": "dns_lookup", "severity": "info", "title": "A"},
             {"host": "example.com", "check_name": "header_check", "severity": "low", "title": "B"},
         ]
@@ -245,21 +245,21 @@ class TestCoverageDataLogic:
             {"name": "header_check", "status": "completed"},
             {"name": "port_scan", "status": "completed"},
         ]
-        result = self.build_coverage_data(findings, checks)
+        result = self.build_coverage_data(observations, checks)
         assert result["isGlobal"] is True
         assert len(result["hosts"]) == 1
         host = result["hosts"][0]
-        # dns_lookup produced findings -> 'found'
+        # dns_lookup produced observations -> 'found'
         assert result["matrix"][host]["dns_lookup"]["status"] == "found"
-        assert result["matrix"][host]["dns_lookup"]["findingCount"] == 1
-        # header_check produced findings -> 'found'
+        assert result["matrix"][host]["dns_lookup"]["observationCount"] == 1
+        # header_check produced observations -> 'found'
         assert result["matrix"][host]["header_check"]["status"] == "found"
-        # port_scan completed with no findings -> 'completed'
+        # port_scan completed with no observations -> 'completed'
         assert result["matrix"][host]["port_scan"]["status"] == "completed"
-        assert result["matrix"][host]["port_scan"]["findingCount"] == 0
+        assert result["matrix"][host]["port_scan"]["observationCount"] == 0
 
     def test_multi_host_view(self):
-        findings = [
+        observations = [
             {"host": "a.com", "check_name": "dns_lookup", "severity": "info", "title": "A"},
             {"host": "b.com", "check_name": "header_check", "severity": "low", "title": "B"},
         ]
@@ -267,20 +267,20 @@ class TestCoverageDataLogic:
             {"name": "dns_lookup", "status": "completed"},
             {"name": "header_check", "status": "completed"},
         ]
-        result = self.build_coverage_data(findings, checks)
+        result = self.build_coverage_data(observations, checks)
         assert result["isGlobal"] is False
         assert sorted(result["hosts"]) == ["a.com", "b.com"]
-        # a.com has dns_lookup finding
+        # a.com has dns_lookup observation
         assert result["matrix"]["a.com"]["dns_lookup"]["status"] == "found"
-        assert result["matrix"]["a.com"]["dns_lookup"]["findingCount"] == 1
-        # a.com has no header_check finding
+        assert result["matrix"]["a.com"]["dns_lookup"]["observationCount"] == 1
+        # a.com has no header_check observation
         assert result["matrix"]["a.com"]["header_check"]["status"] == "completed"
-        assert result["matrix"]["a.com"]["header_check"]["findingCount"] == 0
-        # b.com has header_check finding
+        assert result["matrix"]["a.com"]["header_check"]["observationCount"] == 0
+        # b.com has header_check observation
         assert result["matrix"]["b.com"]["header_check"]["status"] == "found"
 
     def test_skipped_and_error_statuses(self):
-        findings = [
+        observations = [
             {"host": "a.com", "check_name": "ok_check", "severity": "info", "title": "X"},
             {"host": "b.com", "check_name": "ok_check", "severity": "info", "title": "Y"},
         ]
@@ -289,37 +289,37 @@ class TestCoverageDataLogic:
             {"name": "skip_check", "status": "skipped"},
             {"name": "err_check", "status": "error"},
         ]
-        result = self.build_coverage_data(findings, checks)
+        result = self.build_coverage_data(observations, checks)
         host = result["hosts"][0]
         assert result["matrix"][host]["skip_check"]["status"] == "skipped"
         assert result["matrix"][host]["err_check"]["status"] == "error"
 
-    def test_findings_without_check_statuses(self):
-        """Findings with check_name but no checkStatuses still create coverage data."""
-        findings = [
+    def test_observations_without_check_statuses(self):
+        """Observations with check_name but no checkStatuses still create coverage data."""
+        observations = [
             {"host": "a.com", "check_name": "dns_lookup", "severity": "info", "title": "A"},
             {"host": "b.com", "check_name": "header_check", "severity": "low", "title": "B"},
         ]
-        result = self.build_coverage_data(findings, [])
+        result = self.build_coverage_data(observations, [])
         assert result["isGlobal"] is False
         assert "dns_lookup" in result["checks"]
         assert "header_check" in result["checks"]
-        # All statuses default to 'completed' then become 'found' because they have findings
+        # All statuses default to 'completed' then become 'found' because they have observations
         assert result["matrix"]["a.com"]["dns_lookup"]["status"] == "found"
 
     def test_check_name_deduplication(self):
-        """Same check name from both checkStatuses and findings shouldn't be duplicated."""
-        findings = [
+        """Same check name from both checkStatuses and observations shouldn't be duplicated."""
+        observations = [
             {"host": "h.com", "check_name": "dns_lookup", "severity": "info", "title": "A"},
         ]
         checks = [
             {"name": "dns_lookup", "status": "completed"},
         ]
-        result = self.build_coverage_data(findings, checks)
+        result = self.build_coverage_data(observations, checks)
         assert result["checks"].count("dns_lookup") == 1
 
     def test_host_normalization_in_coverage(self):
-        findings = [
+        observations = [
             {
                 "host": "http://api.example.com/path",
                 "check_name": "check_a",
@@ -337,7 +337,7 @@ class TestCoverageDataLogic:
             {"name": "check_a", "status": "completed"},
             {"name": "check_b", "status": "completed"},
         ]
-        result = self.build_coverage_data(findings, checks)
+        result = self.build_coverage_data(observations, checks)
         assert "api.example.com" in result["hosts"]
         assert result["isGlobal"] is True  # Both normalize to same host
 

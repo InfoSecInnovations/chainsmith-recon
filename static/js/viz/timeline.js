@@ -11,12 +11,12 @@
     /**
      * Build timeline data: points + swim lanes grouped by host or suite.
      */
-    function buildTimelineData(findingsList, groupBy) {
+    function buildTimelineData(observationsList, groupBy) {
         var mode  = groupBy || 'host';
         var lanes = {};
         var points = [];
 
-        findingsList.forEach(function (f, index) {
+        observationsList.forEach(function (f, index) {
             var rawHost = f.host || f.target_url || 'unknown';
             var host  = ns.normalizeHost(rawHost);
             var suite = f.suite || ns.inferSuite(f.check_name);
@@ -26,7 +26,7 @@
 
             var point = {
                 index: index,
-                finding: f,
+                observation: f,
                 lane: lane,
                 host: host,
                 suite: suite,
@@ -62,13 +62,13 @@
     /**
      * Render the timeline visualization.
      */
-    ns.renderTimeline = function (findings, openModal, timelineGroupBy) {
+    ns.renderTimeline = function (observations, openModal, timelineGroupBy) {
         var emptyEl   = document.getElementById('timeline-empty');
         var contentEl = document.getElementById('timeline-content');
         var tooltipEl = document.getElementById('timeline-tooltip');
         var tip       = ns.tooltip(tooltipEl);
 
-        if (findings.length === 0) {
+        if (observations.length === 0) {
             emptyEl.style.display  = 'flex';
             contentEl.style.display = 'none';
             return;
@@ -77,7 +77,7 @@
         emptyEl.style.display  = 'none';
         contentEl.style.display = 'block';
 
-        var data     = buildTimelineData(findings, timelineGroupBy);
+        var data     = buildTimelineData(observations, timelineGroupBy);
         var points   = data.points;
         var laneKeys = data.laneKeys;
 
@@ -162,7 +162,7 @@
             .attr('font-size', '11px')
             .text('Discovery order');
 
-        // Finding dots
+        // Observation dots
         g.selectAll('.timeline-dot')
             .data(points)
             .join('circle')
@@ -189,7 +189,7 @@
             .on('mousemove', function (event) { tip.move(event); })
             .on('mouseleave', function () { tip.hide(); })
             .on('click', function (event, d) {
-                openModal(d.finding.title, getFindingModalContent(d.finding));
+                openModal(d.observation.title, getObservationModalContent(d.observation));
             });
     };
 

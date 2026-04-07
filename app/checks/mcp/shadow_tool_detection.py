@@ -20,7 +20,7 @@ References:
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Common MCP tool names prone to collision in multi-server setups
@@ -135,8 +135,8 @@ class ShadowToolDetectionCheck(BaseCheck):
         }
 
         if namespaced and not flat:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Tools are namespaced (shadow tool resistant)",
                     description=(
@@ -151,8 +151,8 @@ class ShadowToolDetectionCheck(BaseCheck):
                 )
             )
         elif flat:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="MCP tools use flat naming (no namespace prefix) — vulnerable to shadow tool attacks",
                     description=(
@@ -179,8 +179,8 @@ class ShadowToolDetectionCheck(BaseCheck):
         shadow_risk["collision_candidates"] = sorted(collisions)
 
         if collisions:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Collision-risk tool names detected: {len(collisions)} match common MCP names",
                     description=(
@@ -259,8 +259,8 @@ class ShadowToolDetectionCheck(BaseCheck):
         }
 
         if accepted:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Server accepts client notifications/tools/list_changed",
                     description=(
@@ -328,8 +328,8 @@ class ShadowToolDetectionCheck(BaseCheck):
                 "accepted": True,
                 "status": resp2.status_code,
             }
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="MCP server accepts tool re-registration: duplicate initialize accepted",
                     description=(

@@ -8,7 +8,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, fmt_filter_evidence, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -60,7 +60,7 @@ class ContentFilterCheck(BaseCheck):
 
             try:
                 fr = await self._test_filters(url, service, api_format)
-                result.findings.extend(fr.findings)
+                result.observations.extend(fr.observations)
                 result.outputs.update(fr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -110,8 +110,8 @@ class ContentFilterCheck(BaseCheck):
         host = service.host
 
         if filter_info["detected"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Content filtering detected",
                     description=f"Blocked categories: {', '.join(filter_info['blocked'])}",
@@ -124,8 +124,8 @@ class ContentFilterCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No content filtering detected",
                     description="No obvious content filters — may be vulnerable to prompt injection",

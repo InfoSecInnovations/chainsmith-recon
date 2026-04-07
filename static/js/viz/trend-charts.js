@@ -110,7 +110,7 @@
                             '<div style="font-weight:600;margin-bottom:4px">' + (d.date ? d.date.substring(0, 10) : '') + '</div>' +
                             SEV_ORDER.map(function (s) { return '<div style="color:' + SEV_COLORS[s] + '">' + s + ': ' + d[s] + '</div>'; }).join('') +
                             '<div style="margin-top:4px;color:var(--text-secondary)">Total: ' + d.total + ' | Risk: ' + d.risk_score + '</div>' +
-                            '<div style="margin-top:2px;color:var(--accent);font-size:0.6875rem">Click to view findings</div>',
+                            '<div style="margin-top:2px;color:var(--accent);font-size:0.6875rem">Click to view observations</div>',
                             event
                         );
                     })
@@ -205,7 +205,7 @@
                     '<div style="font-weight:600;margin-bottom:4px">' + (dp.date ? dp.date.substring(0, 10) : '') + '</div>' +
                     SEV_ORDER.map(function (s) { return '<div style="color:' + SEV_COLORS[s] + '">' + s + ': ' + dp[s] + '</div>'; }).join('') +
                     '<div style="margin-top:4px;color:#4ade80;font-weight:600">Risk Score: ' + dp.risk_score + '</div>' +
-                    '<div style="margin-top:2px;color:var(--accent);font-size:0.6875rem">Click to view findings</div>',
+                    '<div style="margin-top:2px;color:var(--accent);font-size:0.6875rem">Click to view observations</div>',
                     event
                 );
             })
@@ -391,7 +391,7 @@
                         '<div style="color:' + STATUS_COLORS.resolved + '">Resolved: ' + (d.resolved || 0) + '</div>' +
                         '<div style="color:' + STATUS_COLORS.regressed + '">Regressed: ' + (d.regressed || 0) + '</div>' +
                         '<div style="margin-top:4px;color:var(--text-secondary)">Total: ' + d.total + '</div>' +
-                        '<div style="margin-top:2px;color:var(--accent);font-size:0.6875rem">Click to view findings</div>',
+                        '<div style="margin-top:2px;color:var(--accent);font-size:0.6875rem">Click to view observations</div>',
                         event
                     );
                 })
@@ -488,14 +488,14 @@
             .attr('rx', 4)
             .on('mouseover', function (event, d) {
                 var details = '';
-                var findings = d.key === 'new' ? comparison.new_findings :
-                              d.key === 'resolved' ? comparison.resolved_findings : [];
-                if (findings && findings.length) {
-                    var shown = findings.slice(0, 5);
+                var observations = d.key === 'new' ? comparison.new_observations :
+                              d.key === 'resolved' ? comparison.resolved_observations : [];
+                if (observations && observations.length) {
+                    var shown = observations.slice(0, 5);
                     details = shown.map(function (f) {
                         return '<div style="font-size:0.6875rem;color:' + (SEV_COLORS[f.severity] || '#ccc') + '">\u2022 ' + f.title + '</div>';
                     }).join('');
-                    if (findings.length > 5) details += '<div style="font-size:0.6875rem;color:var(--text-muted)">+' + (findings.length - 5) + ' more</div>';
+                    if (observations.length > 5) details += '<div style="font-size:0.6875rem;color:var(--text-muted)">+' + (observations.length - 5) + ' more</div>';
                 }
                 showTooltip(tooltip,
                     '<div style="font-weight:600;margin-bottom:4px">' + d.label + ': ' + d.count + '</div>' + details,

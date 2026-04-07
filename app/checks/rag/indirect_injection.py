@@ -27,7 +27,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.payloads import get_payloads_for_check
 
@@ -174,15 +174,15 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
                             }
                         )
 
-                    # Generate findings
+                    # Generate observations
                     for test_result in endpoint_results:
                         if test_result.get("injection_detected"):
                             severity = (
                                 "high" if test_result.get("confidence", 0) > 0.6 else "medium"
                             )
 
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Indirect injection indicator: {test_result['payload_id']}",
                                     description=self._build_description(test_result),
@@ -197,8 +197,8 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
                                 )
                             )
                         elif test_result.get("partial_indicators"):
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Potential injection vector: {test_result['payload_id']}",
                                     description=self._build_description(test_result),
@@ -369,7 +369,7 @@ class RAGIndirectInjectionCheck(ServiceIteratingCheck):
         }
 
     def _build_description(self, test_result: dict) -> str:
-        """Build description for finding."""
+        """Build description for observation."""
         parts = []
 
         if test_result.get("injection_detected"):

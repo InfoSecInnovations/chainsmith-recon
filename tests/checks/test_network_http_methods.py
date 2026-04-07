@@ -114,8 +114,8 @@ class TestHttpMethodEnumCheckRun:
         assert result.targets_checked == 1
 
     @pytest.mark.asyncio
-    async def test_trace_method_finding(self):
-        """TRACE enabled should produce medium severity finding."""
+    async def test_trace_method_observation(self):
+        """TRACE enabled should produce medium severity observation."""
         from app.checks.network.http_method_enum import HttpMethodEnumCheck
 
         check = HttpMethodEnumCheck()
@@ -134,13 +134,13 @@ class TestHttpMethodEnumCheckRun:
         with patch.object(check, "_probe_service", return_value=method_info):
             result = await check.run({"services": [svc]})
 
-        trace_findings = [f for f in result.findings if "TRACE" in f.title]
-        assert len(trace_findings) == 1
-        assert trace_findings[0].severity == "medium"
+        trace_observations = [f for f in result.observations if "TRACE" in f.title]
+        assert len(trace_observations) == 1
+        assert trace_observations[0].severity == "medium"
 
     @pytest.mark.asyncio
-    async def test_put_method_finding(self):
-        """PUT enabled should produce medium severity finding."""
+    async def test_put_method_observation(self):
+        """PUT enabled should produce medium severity observation."""
         from app.checks.network.http_method_enum import HttpMethodEnumCheck
 
         check = HttpMethodEnumCheck()
@@ -159,13 +159,13 @@ class TestHttpMethodEnumCheckRun:
         with patch.object(check, "_probe_service", return_value=method_info):
             result = await check.run({"services": [svc]})
 
-        put_findings = [f for f in result.findings if "PUT" in f.title]
-        assert len(put_findings) == 1
-        assert put_findings[0].severity == "medium"
+        put_observations = [f for f in result.observations if "PUT" in f.title]
+        assert len(put_observations) == 1
+        assert put_observations[0].severity == "medium"
 
     @pytest.mark.asyncio
-    async def test_delete_method_finding(self):
-        """DELETE enabled should produce low severity finding."""
+    async def test_delete_method_observation(self):
+        """DELETE enabled should produce low severity observation."""
         from app.checks.network.http_method_enum import HttpMethodEnumCheck
 
         check = HttpMethodEnumCheck()
@@ -184,13 +184,13 @@ class TestHttpMethodEnumCheckRun:
         with patch.object(check, "_probe_service", return_value=method_info):
             result = await check.run({"services": [svc]})
 
-        delete_findings = [f for f in result.findings if "DELETE" in f.title]
-        assert len(delete_findings) == 1
-        assert delete_findings[0].severity == "low"
+        delete_observations = [f for f in result.observations if "DELETE" in f.title]
+        assert len(delete_observations) == 1
+        assert delete_observations[0].severity == "low"
 
     @pytest.mark.asyncio
     async def test_multiple_dangerous_methods(self):
-        """Multiple dangerous methods should each produce separate findings."""
+        """Multiple dangerous methods should each produce separate observations."""
         from app.checks.network.http_method_enum import HttpMethodEnumCheck
 
         check = HttpMethodEnumCheck()
@@ -209,17 +209,17 @@ class TestHttpMethodEnumCheckRun:
         with patch.object(check, "_probe_service", return_value=method_info):
             result = await check.run({"services": [svc]})
 
-        dangerous_findings = [
+        dangerous_observations = [
             f
-            for f in result.findings
+            for f in result.observations
             if f.severity in ("medium", "low") and "method" in f.title.lower()
         ]
         # TRACE, PUT = medium; DELETE, PATCH = low
-        assert len(dangerous_findings) == 4
+        assert len(dangerous_observations) == 4
 
     @pytest.mark.asyncio
-    async def test_webdav_methods_finding(self):
-        """WebDAV methods should produce medium severity finding."""
+    async def test_webdav_methods_observation(self):
+        """WebDAV methods should produce medium severity observation."""
         from app.checks.network.http_method_enum import HttpMethodEnumCheck
 
         check = HttpMethodEnumCheck()
@@ -238,13 +238,13 @@ class TestHttpMethodEnumCheckRun:
         with patch.object(check, "_probe_service", return_value=method_info):
             result = await check.run({"services": [svc]})
 
-        webdav_findings = [f for f in result.findings if "webdav" in f.title.lower()]
-        assert len(webdav_findings) == 1
-        assert webdav_findings[0].severity == "medium"
+        webdav_observations = [f for f in result.observations if "webdav" in f.title.lower()]
+        assert len(webdav_observations) == 1
+        assert webdav_observations[0].severity == "medium"
 
     @pytest.mark.asyncio
-    async def test_no_methods_no_findings(self):
-        """No allowed methods should produce no findings."""
+    async def test_no_methods_no_observations(self):
+        """No allowed methods should produce no observations."""
         from app.checks.network.http_method_enum import HttpMethodEnumCheck
 
         check = HttpMethodEnumCheck()
@@ -264,7 +264,7 @@ class TestHttpMethodEnumCheckRun:
             result = await check.run({"services": [svc]})
 
         assert result.success is True
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_deduplication_same_host_port(self):
@@ -320,8 +320,8 @@ class TestHttpMethodEnumCheckRun:
         assert "secure.example.com:443" in result.outputs["http_methods"]
 
     @pytest.mark.asyncio
-    async def test_info_finding_includes_all_methods(self):
-        """Info finding should list all allowed methods."""
+    async def test_info_observation_includes_all_methods(self):
+        """Info observation should list all allowed methods."""
         from app.checks.network.http_method_enum import HttpMethodEnumCheck
 
         check = HttpMethodEnumCheck()
@@ -340,9 +340,9 @@ class TestHttpMethodEnumCheckRun:
         with patch.object(check, "_probe_service", return_value=method_info):
             result = await check.run({"services": [svc]})
 
-        info_findings = [f for f in result.findings if f.severity == "info"]
-        assert len(info_findings) == 1
-        assert "Allowed methods" in info_findings[0].title
+        info_observations = [f for f in result.observations if f.severity == "info"]
+        assert len(info_observations) == 1
+        assert "Allowed methods" in info_observations[0].title
 
 
 class TestHttpMethodEnumProbe:

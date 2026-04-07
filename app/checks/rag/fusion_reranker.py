@@ -13,7 +13,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 RERANKER_HEADERS = [
@@ -117,11 +117,11 @@ class RAGFusionRerankerCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        # Generate findings
+        # Generate observations
         if reranker_info["reranker_detected"]:
             if reranker_info["headers"]:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="Re-ranking detected via response headers",
                         description=(
@@ -138,8 +138,8 @@ class RAGFusionRerankerCheck(ServiceIteratingCheck):
                     )
                 )
             else:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="Re-ranking inferred from score patterns",
                         description="Score analysis suggests a re-ranking stage.",
@@ -152,8 +152,8 @@ class RAGFusionRerankerCheck(ServiceIteratingCheck):
                     )
                 )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No re-ranking detected",
                     description="No re-ranking stage detected in RAG pipeline.",

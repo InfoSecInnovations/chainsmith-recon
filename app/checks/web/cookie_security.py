@@ -13,7 +13,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Cookie names that suggest session/auth tokens
@@ -34,7 +34,7 @@ class CookieSecurityCheck(ServiceIteratingCheck):
     description = "Check cookies for missing Secure, HttpOnly, SameSite attributes"
 
     conditions = [CheckCondition("services", "truthy")]
-    produces = ["cookie_findings"]
+    produces = ["cookie_observations"]
     service_types = ["http", "html", "api", "ai"]
 
     timeout_seconds = 60.0
@@ -91,8 +91,8 @@ class CookieSecurityCheck(ServiceIteratingCheck):
         # ── Missing Secure flag ──
         if "secure" not in attrs:
             severity = "medium" if is_session else "low"
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Cookie missing Secure flag: {name}",
                     description=f"Cookie '{name}' can be sent over unencrypted HTTP connections",
@@ -108,8 +108,8 @@ class CookieSecurityCheck(ServiceIteratingCheck):
         # ── Missing HttpOnly flag ──
         if "httponly" not in attrs:
             severity = "medium" if is_session else "low"
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Cookie missing HttpOnly: {name}",
                     description=f"Cookie '{name}' is accessible to JavaScript — vulnerable to XSS theft",
@@ -125,8 +125,8 @@ class CookieSecurityCheck(ServiceIteratingCheck):
         # ── Missing or weak SameSite ──
         samesite = attrs.get("samesite", "").lower()
         if not samesite:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Cookie missing SameSite: {name}",
                     description=f"Cookie '{name}' has no SameSite attribute — browser default may vary",
@@ -139,8 +139,8 @@ class CookieSecurityCheck(ServiceIteratingCheck):
                 )
             )
         elif samesite == "none":
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Cookie SameSite=None: {name}",
                     description=f"Cookie '{name}' is sent on all cross-site requests — CSRF risk",
@@ -156,8 +156,8 @@ class CookieSecurityCheck(ServiceIteratingCheck):
         # ── Broad domain scope ──
         domain = attrs.get("domain", "")
         if domain and domain.startswith("."):
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Cookie scoped to broad domain: {domain}",
                     description=f"Cookie '{name}' is shared across all subdomains of {domain}",
@@ -175,8 +175,8 @@ class CookieSecurityCheck(ServiceIteratingCheck):
             try:
                 age_val = int(max_age)
                 if age_val > MAX_AGE_THRESHOLD:
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Long-lived session cookie: {name}",
                             description=f"Session cookie '{name}' has Max-Age={age_val} "

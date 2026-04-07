@@ -17,7 +17,7 @@ import socket
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ class BannerGrabCheck(BaseCheck):
     reason = (
         "Non-HTTP services (databases, caches, message queues) often send "
         "version banners on connect. An exposed Redis with no authentication "
-        "is a critical finding. Service version identification enables "
+        "is a critical observation. Service version identification enables "
         "vulnerability correlation."
     )
     references = [
@@ -203,7 +203,7 @@ class BannerGrabCheck(BaseCheck):
             banner_info = await self._grab_banner(svc.host, svc.port)
             if banner_info:
                 banner_data[endpoint] = banner_info
-                self._generate_findings(result, svc, banner_info)
+                self._generate_observations(result, svc, banner_info)
             result.targets_checked += 1
 
         result.outputs["banner_data"] = banner_data
@@ -374,13 +374,13 @@ class BannerGrabCheck(BaseCheck):
                 return False
         return True  # Assume auth required if unclear
 
-    def _generate_findings(
+    def _generate_observations(
         self,
         result: CheckResult,
         svc: Service,
         banner_info: dict[str, Any],
     ) -> None:
-        """Generate findings from banner grabbing results."""
+        """Generate observations from banner grabbing results."""
         endpoint = f"{svc.host}:{svc.port}"
         service_name = banner_info["service"]
         version = banner_info.get("version")
@@ -389,9 +389,9 @@ class BannerGrabCheck(BaseCheck):
 
         version_str = f" {version}" if version else ""
 
-        # Info finding: service identified
-        result.findings.append(
-            build_finding(
+        # Info observation: service identified
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"{service_name}{version_str} detected: {endpoint}",
                 description=(
@@ -416,8 +416,8 @@ class BannerGrabCheck(BaseCheck):
                     break
 
             if severity in ("critical", "high"):
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=(
                             f"{service_name} accepting commands without authentication: {endpoint}"
@@ -441,10 +441,10 @@ class BannerGrabCheck(BaseCheck):
                     )
                 )
 
-        # Version disclosure finding (if version detected on non-standard ports)
+        # Version disclosure observation (if version detected on non-standard ports)
         if version and service_name != "unknown":
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Service version disclosed: {service_name}{version_str} on {endpoint}",
                     description=(
@@ -461,8 +461,8 @@ class BannerGrabCheck(BaseCheck):
 
         # Unknown service with banner — worth investigating
         if service_name == "unknown" and banner:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Unidentified service with banner: {endpoint}",
                     description=(

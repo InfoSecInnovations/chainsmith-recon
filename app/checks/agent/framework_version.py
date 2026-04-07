@@ -21,7 +21,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Known vulnerable version ranges per framework
@@ -160,8 +160,8 @@ class AgentFrameworkVersionCheck(ServiceIteratingCheck):
         for framework, version in versions.items():
             vuln = self._check_vulnerabilities(framework, version)
             if vuln:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Vulnerable framework version: {framework} {version} ({vuln['cve'] or vuln['description']})",
                         description=(
@@ -185,8 +185,8 @@ class AgentFrameworkVersionCheck(ServiceIteratingCheck):
                     )
                 )
             else:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Framework version detected: {framework} {version}",
                         description=f"Detected {framework} version {version}. No known vulnerabilities for this version.",

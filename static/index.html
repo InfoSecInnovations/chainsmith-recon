@@ -201,7 +201,7 @@
     <nav class="nav">
         <a href="index.html" class="nav-item active">Scope</a>
         <a href="scan.html" class="nav-item" id="nav-scan">Scan</a>
-        <a href="findings.html" class="nav-item" id="nav-findings">Results</a>
+        <a href="observations.html" class="nav-item" id="nav-observations">Observations</a>
         <a href="engagements.html" class="nav-item" id="nav-engagements">Engagements</a>
         <a href="trend.html" class="nav-item" id="nav-trends">Trends</a>
         <a href="reports.html" class="nav-item" id="nav-reports">Reports</a>
@@ -258,7 +258,7 @@
                 <div class="behavior-section">
                     <div class="behavior-row">
                         <div>
-                            <div class="behavior-label">On Critical Finding</div>
+                            <div class="behavior-label">On Critical Observation</div>
                             <div class="behavior-desc">What happens when any suite discovers a critical vulnerability on a host</div>
                         </div>
                         <select class="form-input" id="on-critical-default" style="width: 220px;">
@@ -343,7 +343,7 @@
             <div class="setting-row">
                 <div>
                     <div class="setting-label">Verification Level</div>
-                    <div class="setting-desc">Re-verify findings</div>
+                    <div class="setting-desc">Re-verify observations</div>
                 </div>
                 <select class="form-input" id="setting-verification" style="width: 120px;">
                     <option value="none">None</option>
@@ -355,7 +355,7 @@
             <div class="setting-row">
                 <div>
                     <div class="setting-label">Auto-redirect on Complete</div>
-                    <div class="setting-desc">Go to Findings when done</div>
+                    <div class="setting-desc">Go to Observations when done</div>
                 </div>
                 <label class="toggle">
                     <input type="checkbox" id="setting-auto-redirect">
@@ -654,7 +654,7 @@
                         </div>
                         <div class="suite-settings">
                             <div class="suite-setting-row">
-                                <label>For critical findings from this suite:</label>
+                                <label>For critical observations from this suite:</label>
                                 <select class="form-input" id="on-critical-${key}" onchange="updateSuiteBadges('${key}')">
                                     <option value="">— use default —</option>
                                     <option value="annotate">Continue & flag downstream</option>
@@ -966,7 +966,7 @@
             const sessionId = getSessionId();
             if (sessionId) {
                 document.getElementById('nav-scan').href = `scan.html?session=${sessionId}`;
-                document.getElementById('nav-findings').href = `findings.html?session=${sessionId}`;
+                document.getElementById('nav-observations').href = `observations.html?session=${sessionId}`;
             }
         }
 

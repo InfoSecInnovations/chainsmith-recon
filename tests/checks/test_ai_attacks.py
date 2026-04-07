@@ -130,9 +130,9 @@ class TestAuthBypassCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        critical_findings = [f for f in result.findings if f.severity == "critical"]
-        assert len(critical_findings) >= 1
-        assert "no authentication" in critical_findings[0].title.lower()
+        critical_observations = [f for f in result.observations if f.severity == "critical"]
+        assert len(critical_observations) >= 1
+        assert "no authentication" in critical_observations[0].title.lower()
 
     async def test_auth_enforced(self, chat_endpoint_context):
         check = AuthBypassCheck()
@@ -144,7 +144,7 @@ class TestAuthBypassCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        enforced = [f for f in result.findings if "enforced" in f.title.lower()]
+        enforced = [f for f in result.observations if "enforced" in f.title.lower()]
         assert len(enforced) == 1
 
 
@@ -181,7 +181,7 @@ class TestFunctionCallingAbuseCheckRun:
         ):
             result = await check.run(context)
 
-        invocation = [f for f in result.findings if "invocation confirmed" in f.title.lower()]
+        invocation = [f for f in result.observations if "invocation confirmed" in f.title.lower()]
         assert len(invocation) == 1
 
     async def test_tools_blocked(self, chat_endpoint_context):
@@ -205,10 +205,10 @@ class TestFunctionCallingAbuseCheckRun:
         ):
             result = await check.run(context)
 
-        blocked = [f for f in result.findings if "blocked" in f.title.lower()]
+        blocked = [f for f in result.observations if "blocked" in f.title.lower()]
         assert len(blocked) == 1
 
-    async def test_no_tools_no_findings(self, chat_endpoint_context):
+    async def test_no_tools_no_observations(self, chat_endpoint_context):
         check = FunctionCallingAbuseCheck()
 
         context = {
@@ -256,7 +256,7 @@ class TestGuardrailConsistencyCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        lang_bypass = [f for f in result.findings if "french" in f.title.lower()]
+        lang_bypass = [f for f in result.observations if "french" in f.title.lower()]
         assert len(lang_bypass) == 1
         assert lang_bypass[0].severity == "high"
 
@@ -275,7 +275,7 @@ class TestGuardrailConsistencyCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        consistent = [f for f in result.findings if "consistent" in f.title.lower()]
+        consistent = [f for f in result.observations if "consistent" in f.title.lower()]
         assert len(consistent) == 1
 
 
@@ -312,7 +312,7 @@ class TestAdversarialInputCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        bypass = [f for f in result.findings if "bypass" in f.title.lower()]
+        bypass = [f for f in result.observations if "bypass" in f.title.lower()]
         assert len(bypass) == 1
 
     async def test_input_sanitization_robust(self, chat_endpoint_context):
@@ -330,7 +330,7 @@ class TestAdversarialInputCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        robust = [f for f in result.findings if "robust" in f.title.lower()]
+        robust = [f for f in result.observations if "robust" in f.title.lower()]
         assert len(robust) == 1
 
 
@@ -360,8 +360,8 @@ class TestResponseCachingCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        cache_findings = [f for f in result.findings if "cache" in f.title.lower()]
-        assert len(cache_findings) >= 1
+        cache_observations = [f for f in result.observations if "cache" in f.title.lower()]
+        assert len(cache_observations) >= 1
 
     async def test_no_caching_varied_responses(self, chat_endpoint_context):
         check = ResponseCachingCheck()
@@ -384,5 +384,5 @@ class TestResponseCachingCheckRun:
         ):
             result = await check.run(chat_endpoint_context)
 
-        no_cache = [f for f in result.findings if "no caching" in f.title.lower()]
+        no_cache = [f for f in result.observations if "no caching" in f.title.lower()]
         assert len(no_cache) == 1

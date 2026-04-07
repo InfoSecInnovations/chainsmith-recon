@@ -17,7 +17,7 @@ import time
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 CACHE_HEADERS = [
@@ -157,15 +157,15 @@ class RAGCachePoisoningCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        # Generate findings
+        # Generate observations
         if cache_behavior["caching_detected"]:
             # Check if injection was previously detected
             vuln_endpoints = context.get("vulnerable_rag_endpoints", [])
             has_injection = bool(vuln_endpoints)
 
             if has_injection and cache_behavior["identical_responses"]:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="RAG cache poisoning: injected response served to subsequent queries",
                         description=(
@@ -182,8 +182,8 @@ class RAGCachePoisoningCheck(ServiceIteratingCheck):
                     )
                 )
             elif cache_behavior["identical_responses"]:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="RAG caching detected: identical responses to repeated queries",
                         description=(
@@ -200,8 +200,8 @@ class RAGCachePoisoningCheck(ServiceIteratingCheck):
                     )
                 )
             else:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="RAG caching detected but responses vary",
                         description="Cache headers present but responses differ — may use session keys.",
@@ -214,8 +214,8 @@ class RAGCachePoisoningCheck(ServiceIteratingCheck):
                     )
                 )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No RAG-level caching detected",
                     description="No caching indicators found in RAG responses.",

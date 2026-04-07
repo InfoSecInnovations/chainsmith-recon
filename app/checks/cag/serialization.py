@@ -19,7 +19,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Redis detection paths
@@ -114,8 +114,8 @@ class SerializationCheck(ServiceIteratingCheck):
                     if redis_result.get("no_auth"):
                         severity = "critical" if "redis_cache" in cache_infra else "high"
 
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=self._build_redis_title(redis_result),
                             description=self._build_redis_description(redis_result),
@@ -138,8 +138,8 @@ class SerializationCheck(ServiceIteratingCheck):
                         serial_results.append(serial_info)
 
                         severity = self._determine_serialization_severity(serial_info)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=self._build_serial_title(serial_info),
                                 description=self._build_serial_description(serial_info),
@@ -162,8 +162,8 @@ class SerializationCheck(ServiceIteratingCheck):
                     if traversal_result and traversal_result.get("traversal_detected"):
                         serial_results.append(traversal_result)
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Path traversal in cache key mapping",
                                 description=(
@@ -318,7 +318,7 @@ class SerializationCheck(ServiceIteratingCheck):
         }
 
     def _determine_serialization_severity(self, serial_info: dict) -> str:
-        """Determine severity for serialization findings."""
+        """Determine severity for serialization observations."""
         if serial_info.get("has_pickle"):
             return "critical"
         if serial_info.get("has_type_confusion"):
@@ -326,7 +326,7 @@ class SerializationCheck(ServiceIteratingCheck):
         return "medium"
 
     def _build_redis_title(self, redis_result: dict) -> str:
-        """Build title for Redis finding."""
+        """Build title for Redis observation."""
         if redis_result.get("no_auth"):
             return f"Redis cache backend accessible without auth at {redis_result['path']}"
         if redis_result.get("accessible"):
@@ -334,7 +334,7 @@ class SerializationCheck(ServiceIteratingCheck):
         return "Redis cache backend detected"
 
     def _build_redis_description(self, redis_result: dict) -> str:
-        """Build description for Redis finding."""
+        """Build description for Redis observation."""
         if redis_result.get("no_auth"):
             return (
                 f"Redis cache backend is directly accessible without authentication "
@@ -344,7 +344,7 @@ class SerializationCheck(ServiceIteratingCheck):
         return f"Cache backend detected at {redis_result['path']} (HTTP {redis_result['status_code']})."
 
     def _build_serial_title(self, serial_info: dict) -> str:
-        """Build title for serialization finding."""
+        """Build title for serialization observation."""
         if serial_info.get("has_pickle"):
             return "Cache uses pickle serialization: arbitrary code execution risk"
         if serial_info.get("has_type_confusion"):
@@ -352,7 +352,7 @@ class SerializationCheck(ServiceIteratingCheck):
         return "Serialization format indicators detected"
 
     def _build_serial_description(self, serial_info: dict) -> str:
-        """Build description for serialization finding."""
+        """Build description for serialization observation."""
         if serial_info.get("has_pickle"):
             return (
                 "Cache error messages reveal pickle serialization is used. "

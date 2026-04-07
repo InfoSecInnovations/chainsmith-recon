@@ -1,4 +1,4 @@
-"""Tests for GeoIpCheck — GeoIP classification and findings."""
+"""Tests for GeoIpCheck — GeoIP classification and observations."""
 
 from unittest.mock import MagicMock, patch
 
@@ -95,15 +95,15 @@ class TestGeoIpCheckRun:
         assert data["provider"] == "Amazon AWS"
         assert data["country_code"] == "US"
 
-        # Should have one info finding (geo) and no medium findings (not residential)
-        severities = [f.severity for f in result.findings]
+        # Should have one info observation (geo) and no medium observations (not residential)
+        severities = [f.severity for f in result.observations]
         assert "info" in severities
         assert "medium" not in severities
 
     @patch("app.checks.network.geoip._find_db_file")
     @patch("app.checks.network.geoip.geoip2.database.Reader")
     async def test_residential_ip_flagged(self, MockReader, mock_find):
-        """Residential ISP IP generates a medium severity finding."""
+        """Residential ISP IP generates a medium severity observation."""
         mock_find.side_effect = lambda f: f"/fake/{f}"
 
         city_reader = MagicMock()
@@ -137,14 +137,14 @@ class TestGeoIpCheckRun:
         data = result.outputs["geoip_data"]["73.100.50.25"]
         assert data["classification"] == "residential"
 
-        residential_findings = [f for f in result.findings if f.severity == "medium"]
-        assert len(residential_findings) == 1
-        assert "Residential IP" in residential_findings[0].title
+        residential_observations = [f for f in result.observations if f.severity == "medium"]
+        assert len(residential_observations) == 1
+        assert "Residential IP" in residential_observations[0].title
 
     @patch("app.checks.network.geoip._find_db_file")
     @patch("app.checks.network.geoip.geoip2.database.Reader")
     async def test_unknown_asn_flagged_low(self, MockReader, mock_find):
-        """Unknown ASN (not in hosting or residential list) generates low finding."""
+        """Unknown ASN (not in hosting or residential list) generates low observation."""
         mock_find.side_effect = lambda f: f"/fake/{f}"
 
         city_reader = MagicMock()
@@ -177,9 +177,9 @@ class TestGeoIpCheckRun:
         data = result.outputs["geoip_data"]["185.1.2.3"]
         assert data["classification"] == "other"
 
-        low_findings = [f for f in result.findings if f.severity == "low"]
-        assert len(low_findings) == 1
-        assert "Non-standard" in low_findings[0].title
+        low_observations = [f for f in result.observations if f.severity == "low"]
+        assert len(low_observations) == 1
+        assert "Non-standard" in low_observations[0].title
 
     @patch("app.checks.network.geoip._find_db_file")
     @patch("app.checks.network.geoip.geoip2.database.Reader")

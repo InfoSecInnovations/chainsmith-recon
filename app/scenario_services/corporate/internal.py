@@ -5,13 +5,13 @@ Internal employee portal service template.
 
 This service provides an internal-facing portal with employee directory,
 announcements, and administrative features. It includes CORS misconfigurations
-and access control bypass findings.
+and access control bypass observations.
 
 Configurable via environment variables:
     BRAND_NAME          Display name (default: from scenario.json)
     PORTAL_VERSION      Service version (default: 3.2.1)
 
-Planted findings:
+Planted observations:
     cors_wildcard               Wildcard CORS with credentials
     no_auth_internal            Authentication bypass
     internal_endpoints_exposed  Endpoint list in headers
@@ -36,7 +36,7 @@ from app.scenario_services.common.config import (
     get_brand_domain,
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -172,10 +172,10 @@ def _get_employees() -> list[Employee]:
 @app.on_event("startup")
 async def configure_cors():
     """
-    Finding: cors_wildcard
+    Observation: cors_wildcard
     When active, adds dangerous CORS configuration with credentials.
     """
-    if is_finding_active("cors_wildcard"):
+    if is_observation_active("cors_wildcard"):
         app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -192,14 +192,14 @@ async def configure_cors():
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
-    """Add headers based on active findings."""
+    """Add headers based on active observations."""
     response = await call_next(request)
 
     response.headers["X-Internal-Service"] = "true"
     response.headers["X-Portal-Version"] = PORTAL_VERSION
 
-    # Finding: internal_endpoints_exposed - leak endpoint list
-    if is_finding_active("internal_endpoints_exposed"):
+    # Observation: internal_endpoints_exposed - leak endpoint list
+    if is_observation_active("internal_endpoints_exposed"):
         response.headers["X-Debug-Endpoints"] = "/api/employees,/api/announcements,/api/directory"
 
     return response
@@ -214,10 +214,10 @@ def check_internal_auth(request: Request) -> bool:
     """
     Check if request is authorized for internal access.
 
-    Finding: no_auth_internal
+    Observation: no_auth_internal
     When active, all requests are authorized (auth bypass).
     """
-    if is_finding_active("no_auth_internal"):
+    if is_observation_active("no_auth_internal"):
         return True  # Auth bypass!
 
     auth_header = request.headers.get("Authorization")
@@ -282,7 +282,7 @@ async def get_directory(request: Request):
     """
     Employee directory.
 
-    Finding: employee_directory_exposed
+    Observation: employee_directory_exposed
     When active, returns full employee details including email.
     Otherwise, returns limited info (name and department only).
     """
@@ -291,7 +291,7 @@ async def get_directory(request: Request):
 
     employees = _get_employees()
 
-    if is_finding_active("employee_directory_exposed"):
+    if is_observation_active("employee_directory_exposed"):
         return {
             "employees": [e.model_dump() for e in employees],
             "total": len(employees),
@@ -315,13 +315,13 @@ async def get_org_chart(request: Request):
     """
     Organization chart.
 
-    Finding: employee_directory_exposed
+    Observation: employee_directory_exposed
     When active, includes reporting structure.
     """
     if not check_internal_auth(request):
         raise HTTPException(403, "Access denied. Internal network required.")
 
-    if not is_finding_active("employee_directory_exposed"):
+    if not is_observation_active("employee_directory_exposed"):
         raise HTTPException(404, "Not found")
 
     return {

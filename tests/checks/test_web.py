@@ -97,19 +97,19 @@ class TestHeaderAnalysisCheckService:
     """Tests for HeaderAnalysisCheck.check_service."""
 
     async def test_missing_security_headers(self, sample_service):
-        """Missing security headers create finding."""
+        """Missing security headers create observation."""
         check = HeaderAnalysisCheck()
         response = make_response(headers={"content-type": "text/html"})
 
         with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        missing_findings = [f for f in result.findings if "Missing security" in f.title]
-        assert len(missing_findings) == 1
-        assert missing_findings[0].severity == "low"
+        missing_observations = [f for f in result.observations if "Missing security" in f.title]
+        assert len(missing_observations) == 1
+        assert missing_observations[0].severity == "low"
 
     async def test_all_security_headers_present(self, sample_service):
-        """No missing headers finding when all present."""
+        """No missing headers observation when all present."""
         check = HeaderAnalysisCheck()
         response = make_response(
             headers={
@@ -126,11 +126,11 @@ class TestHeaderAnalysisCheckService:
         with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        missing_findings = [f for f in result.findings if "Missing security" in f.title]
-        assert len(missing_findings) == 0
+        missing_observations = [f for f in result.observations if "Missing security" in f.title]
+        assert len(missing_observations) == 0
 
     async def test_cors_wildcard_detection(self, sample_service):
-        """CORS wildcard creates finding."""
+        """CORS wildcard creates observation."""
         check = HeaderAnalysisCheck()
         response = make_response(
             headers={
@@ -142,9 +142,9 @@ class TestHeaderAnalysisCheckService:
         with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        cors_findings = [f for f in result.findings if "CORS" in f.title]
-        assert len(cors_findings) == 1
-        assert cors_findings[0].severity == "medium"
+        cors_observations = [f for f in result.observations if "CORS" in f.title]
+        assert len(cors_observations) == 1
+        assert cors_observations[0].severity == "medium"
 
     async def test_cors_wildcard_with_credentials_high_severity(self, sample_service):
         """CORS wildcard with credentials is high severity."""
@@ -160,12 +160,12 @@ class TestHeaderAnalysisCheckService:
         with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        cors_findings = [f for f in result.findings if "CORS" in f.title]
-        assert len(cors_findings) == 1
-        assert cors_findings[0].severity == "high"
+        cors_observations = [f for f in result.observations if "CORS" in f.title]
+        assert len(cors_observations) == 1
+        assert cors_observations[0].severity == "high"
 
     async def test_server_version_disclosure(self, sample_service):
-        """Server version disclosure creates finding."""
+        """Server version disclosure creates observation."""
         check = HeaderAnalysisCheck()
         response = make_response(
             headers={
@@ -177,8 +177,8 @@ class TestHeaderAnalysisCheckService:
         with patch("app.checks.web.headers.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        server_findings = [f for f in result.findings if "Server version" in f.title]
-        assert len(server_findings) == 1
+        server_observations = [f for f in result.observations if "Server version" in f.title]
+        assert len(server_observations) == 1
 
     async def test_error_handling(self, sample_service):
         """HTTP errors are captured."""
@@ -211,14 +211,14 @@ class TestRobotsTxtCheckService:
     """Tests for RobotsTxtCheck.check_service."""
 
     async def test_robots_not_found(self, sample_service):
-        """No finding when robots.txt missing."""
+        """No observation when robots.txt missing."""
         check = RobotsTxtCheck()
         response = make_response(status_code=404)
 
         with patch("app.checks.web.robots.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
     async def test_parses_disallow_paths(self, sample_service):
         """Disallow paths are extracted."""
@@ -235,8 +235,8 @@ Disallow: /public/
             result = await check.check_service(sample_service, {})
 
         # /admin/ matches "admin" pattern
-        sensitive_findings = [f for f in result.findings if "Sensitive paths" in f.title]
-        assert len(sensitive_findings) == 1
+        sensitive_observations = [f for f in result.observations if "Sensitive paths" in f.title]
+        assert len(sensitive_observations) == 1
 
     async def test_detects_sensitive_paths(self, sample_service):
         """Sensitive patterns are flagged."""
@@ -252,9 +252,9 @@ Disallow: /model/weights/
         with patch("app.checks.web.robots.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) > 0
-        finding = result.findings[0]
-        assert "Sensitive" in finding.title
+        assert len(result.observations) > 0
+        observation = result.observations[0]
+        assert "Sensitive" in observation.title
 
     async def test_extracts_sitemaps(self, sample_service):
         """Sitemap URLs are extracted."""
@@ -270,9 +270,9 @@ Sitemap: https://example.com/sitemap2.xml
         with patch("app.checks.web.robots.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        sitemap_findings = [f for f in result.findings if "Sitemaps" in f.title]
-        assert len(sitemap_findings) == 1
-        assert sitemap_findings[0].severity == "info"
+        sitemap_observations = [f for f in result.observations if "Sitemaps" in f.title]
+        assert len(sitemap_observations) == 1
+        assert sitemap_observations[0].severity == "info"
 
     async def test_sets_outputs(self, sample_service):
         """Outputs contain parsed data."""
@@ -319,8 +319,8 @@ class TestPathProbeCheckInit:
 class TestPathProbeCheckService:
     """Tests for PathProbeCheck.check_service."""
 
-    async def test_accessible_path_creates_finding(self, sample_service):
-        """HTTP 200 creates accessible path finding."""
+    async def test_accessible_path_creates_observation(self, sample_service):
+        """HTTP 200 creates accessible path observation."""
         check = PathProbeCheck()
         check.COMMON_PATHS = ["/test"]  # Simplify for test
 
@@ -332,8 +332,8 @@ class TestPathProbeCheckService:
         with patch("app.checks.web.paths.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        accessible_findings = [f for f in result.findings if "Accessible" in f.title]
-        assert len(accessible_findings) == 1
+        accessible_observations = [f for f in result.observations if "Accessible" in f.title]
+        assert len(accessible_observations) == 1
 
     async def test_high_severity_paths(self, sample_service):
         """Sensitive paths get high severity."""
@@ -348,8 +348,8 @@ class TestPathProbeCheckService:
         with patch("app.checks.web.paths.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) == 1
-        assert result.findings[0].severity == "high"
+        assert len(result.observations) == 1
+        assert result.observations[0].severity == "high"
 
     async def test_medium_severity_paths(self, sample_service):
         """Admin paths get medium severity."""
@@ -364,11 +364,11 @@ class TestPathProbeCheckService:
         with patch("app.checks.web.paths.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.findings) == 1
-        assert result.findings[0].severity == "medium"
+        assert len(result.observations) == 1
+        assert result.observations[0].severity == "medium"
 
-    async def test_forbidden_path_finding(self, sample_service):
-        """HTTP 403 on sensitive paths creates finding."""
+    async def test_forbidden_path_observation(self, sample_service):
+        """HTTP 403 on sensitive paths creates observation."""
         check = PathProbeCheck()
         check.COMMON_PATHS = ["/admin"]
 
@@ -377,11 +377,11 @@ class TestPathProbeCheckService:
         with patch("app.checks.web.paths.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        forbidden_findings = [f for f in result.findings if "Protected" in f.title]
-        assert len(forbidden_findings) == 1
+        forbidden_observations = [f for f in result.observations if "Protected" in f.title]
+        assert len(forbidden_observations) == 1
 
-    async def test_redirect_creates_finding(self, sample_service):
-        """Redirects create findings."""
+    async def test_redirect_creates_observation(self, sample_service):
+        """Redirects create observations."""
         check = PathProbeCheck()
         check.COMMON_PATHS = ["/admin"]
 
@@ -393,8 +393,8 @@ class TestPathProbeCheckService:
         with patch("app.checks.web.paths.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        redirect_findings = [f for f in result.findings if "Redirect" in f.title]
-        assert len(redirect_findings) == 1
+        redirect_observations = [f for f in result.observations if "Redirect" in f.title]
+        assert len(redirect_observations) == 1
 
     async def test_sets_outputs(self, sample_service):
         """Outputs contain discovered paths."""

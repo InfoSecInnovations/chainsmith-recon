@@ -14,7 +14,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Metadata fields to test with injection payloads
@@ -135,7 +135,7 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        # Generate findings
+        # Generate observations
         injected = [r for r in injection_results if r.get("injection_followed")]
         visible = [
             r
@@ -145,8 +145,8 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
 
         if injected:
             for inj in injected:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Metadata injection: LLM followed instructions in '{inj['field']}' field",
                         description=(
@@ -165,8 +165,8 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
 
         if visible and not injected:
             fields = [r["field"] for r in visible]
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Metadata included in LLM context",
                     description=(
@@ -182,8 +182,8 @@ class RAGMetadataInjectionCheck(ServiceIteratingCheck):
             )
 
         if not injected and not visible:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Metadata not accessible through RAG queries",
                     description="No metadata field content detected in RAG responses.",

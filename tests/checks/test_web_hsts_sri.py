@@ -105,7 +105,7 @@ class TestHSTSPreloadCheck:
 
         assert result.success
         assert result.outputs["hsts_preload_info"]["preloaded"] is True
-        assert any("HSTS preloaded" in f.title for f in result.findings)
+        assert any("HSTS preloaded" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_not_preloaded_with_hsts(self, https_service):
@@ -126,7 +126,7 @@ class TestHSTSPreloadCheck:
             result = await check.check_service(https_service, {})
 
         assert result.outputs["hsts_preload_info"]["preloaded"] is False
-        not_preloaded = [f for f in result.findings if "not preloaded" in f.title]
+        not_preloaded = [f for f in result.observations if "not preloaded" in f.title]
         assert len(not_preloaded) == 1
         assert not_preloaded[0].severity == "low"
 
@@ -148,7 +148,7 @@ class TestHSTSPreloadCheck:
             check = HSTSPreloadCheck()
             result = await check.check_service(https_service, {})
 
-        assert any("not yet preloaded" in f.title for f in result.findings)
+        assert any("not yet preloaded" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_no_hsts_header_http(self, service):
@@ -158,7 +158,7 @@ class TestHSTSPreloadCheck:
             check = HSTSPreloadCheck()
             result = await check.check_service(service, {})
 
-        assert any("No HSTS" in f.title for f in result.findings)
+        assert any("No HSTS" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_hsts_from_context(self, https_service):
@@ -183,7 +183,7 @@ class TestHSTSPreloadCheck:
 
     @pytest.mark.asyncio
     async def test_short_max_age_noted(self, https_service):
-        """Short max-age is mentioned in not-preloaded finding."""
+        """Short max-age is mentioned in not-preloaded observation."""
         api_response = json.dumps({"status": "unknown"})
         hsts_header = "max-age=86400"
 
@@ -199,7 +199,7 @@ class TestHSTSPreloadCheck:
             check = HSTSPreloadCheck()
             result = await check.check_service(https_service, {})
 
-        not_preloaded = [f for f in result.findings if "not preloaded" in f.title]
+        not_preloaded = [f for f in result.observations if "not preloaded" in f.title]
         assert len(not_preloaded) == 1
         assert "max-age too short" in not_preloaded[0].description
 
@@ -294,13 +294,13 @@ class TestSRICheck:
         # Should find 3 external resources without SRI (2 scripts + 1 stylesheet)
         assert result.outputs["sri_info"]["without_sri"] == 3
         assert result.outputs["sri_info"]["with_sri"] == 0
-        # Summary finding
-        summary = [f for f in result.findings if "external resource(s) without SRI" in f.title]
+        # Summary observation
+        summary = [f for f in result.observations if "external resource(s) without SRI" in f.title]
         assert len(summary) == 1
 
     @pytest.mark.asyncio
     async def test_all_sri_present(self, service):
-        """All external resources have SRI — good finding."""
+        """All external resources have SRI — good observation."""
         client = mock_client_multi(
             response_map={
                 ("GET", "target.com:80/"): resp(
@@ -315,11 +315,11 @@ class TestSRICheck:
 
         assert result.outputs["sri_info"]["with_sri"] == 2
         assert result.outputs["sri_info"]["without_sri"] == 0
-        assert any("All external resources use SRI" in f.title for f in result.findings)
+        assert any("All external resources use SRI" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_no_external_resources(self, service):
-        """No external resources — info finding."""
+        """No external resources — info observation."""
         client = mock_client_multi(
             response_map={
                 ("GET", "target.com:80/"): resp(
@@ -333,7 +333,7 @@ class TestSRICheck:
             result = await check.check_service(service, {})
 
         assert result.outputs["sri_info"]["total_external"] == 0
-        assert any("No external resources" in f.title for f in result.findings)
+        assert any("No external resources" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_mixed_sri(self, service):
@@ -368,7 +368,7 @@ class TestSRICheck:
             check = SRICheck()
             result = await check.check_service(service, {})
 
-        summary = [f for f in result.findings if "external resource(s) without SRI" in f.title]
+        summary = [f for f in result.observations if "external resource(s) without SRI" in f.title]
         assert summary[0].severity == "medium"  # 3 resources = medium
 
     @pytest.mark.asyncio

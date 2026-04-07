@@ -19,7 +19,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -74,8 +74,8 @@ class ProviderCachingCheck(ServiceIteratingCheck):
                         provider_results.append(cache_info)
 
                         severity = self._determine_severity(cache_info)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=self._build_title(cache_info),
                                 description=self._build_description(cache_info),
@@ -258,7 +258,7 @@ class ProviderCachingCheck(ServiceIteratingCheck):
         return False
 
     def _determine_severity(self, cache_info: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if cache_info.get("shared_prefix_detected"):
             return "medium"
         if cache_info.get("caching_detected"):
@@ -266,7 +266,7 @@ class ProviderCachingCheck(ServiceIteratingCheck):
         return "info"
 
     def _build_title(self, cache_info: dict) -> str:
-        """Build finding title."""
+        """Build observation title."""
         if cache_info.get("shared_prefix_detected"):
             return "Provider caching reveals shared system prompt across queries"
         if cache_info.get("caching_detected"):
@@ -274,7 +274,7 @@ class ProviderCachingCheck(ServiceIteratingCheck):
         return "No provider-level prompt caching detected"
 
     def _build_description(self, cache_info: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         if cache_info.get("shared_prefix_detected"):
             cached_counts = [
                 r.get("cached_tokens", 0)

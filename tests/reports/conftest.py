@@ -11,8 +11,8 @@ from app.db.repositories import (
     CheckLogRepository,
     ComparisonRepository,
     EngagementRepository,
-    FindingOverrideRepository,
-    FindingRepository,
+    ObservationOverrideRepository,
+    ObservationRepository,
     ScanRepository,
     TrendRepository,
 )
@@ -20,13 +20,13 @@ from app.db.repositories import (
 # --- Shared path constants for viz tests ------------------------------------
 
 STATIC_DIR = Path(__file__).parent.parent.parent / "static"
-FINDINGS_HTML = STATIC_DIR / "findings.html"
+FINDINGS_HTML = STATIC_DIR / "observations.html"
 VIZ_CSS = STATIC_DIR / "css" / "viz.css"
 VIZ_JS_DIR = STATIC_DIR / "js" / "viz"
 
 
 def _all_viz_content():
-    """Return combined text of findings.html + all viz JS + viz CSS for assertion checks."""
+    """Return combined text of observations.html + all viz JS + viz CSS for assertion checks."""
     parts = [FINDINGS_HTML.read_text()]
     if VIZ_CSS.exists():
         parts.append(VIZ_CSS.read_text())
@@ -60,8 +60,8 @@ def scan_repo(db):
 
 
 @pytest.fixture
-def finding_repo(db):
-    return FindingRepository(db)
+def observation_repo(db):
+    return ObservationRepository(db)
 
 
 @pytest.fixture
@@ -81,7 +81,7 @@ def comparison_repo(db):
 
 @pytest.fixture
 def override_repo(db):
-    return FindingOverrideRepository(db)
+    return ObservationOverrideRepository(db)
 
 
 @pytest.fixture
@@ -98,15 +98,15 @@ def trend_repo(db):
 
 
 async def _create_populated_scan(
-    scan_repo, finding_repo, chain_repo, check_log_repo, scan_id="report-scan", target="example.com"
+    scan_repo, observation_repo, chain_repo, check_log_repo, scan_id="report-scan", target="example.com"
 ):
-    """Create a scan with findings, chains, and log entries."""
+    """Create a scan with observations, chains, and log entries."""
     await scan_repo.create_scan(
         scan_id=scan_id,
         session_id=f"s-{scan_id}",
         target_domain=target,
     )
-    await finding_repo.bulk_create(
+    await observation_repo.bulk_create(
         scan_id,
         [
             {
@@ -156,7 +156,7 @@ async def _create_populated_scan(
                 "severity": "critical",
                 "source": "rule-based",
                 "description": "XSS enables session theft",
-                "finding_ids": ["f1", "f2"],
+                "observation_ids": ["f1", "f2"],
             },
         ],
     )
@@ -168,7 +168,7 @@ async def _create_populated_scan(
                 "check": "xss_reflected",
                 "suite": "web",
                 "event": "completed",
-                "findings": 1,
+                "observations": 1,
                 "duration_ms": 500,
             },
             {"check": "sqli", "suite": "web", "event": "started"},
@@ -176,7 +176,7 @@ async def _create_populated_scan(
                 "check": "sqli",
                 "suite": "web",
                 "event": "completed",
-                "findings": 1,
+                "observations": 1,
                 "duration_ms": 800,
             },
             {"check": "header_analysis", "suite": "web", "event": "started"},
@@ -184,7 +184,7 @@ async def _create_populated_scan(
                 "check": "header_analysis",
                 "suite": "web",
                 "event": "completed",
-                "findings": 1,
+                "observations": 1,
                 "duration_ms": 200,
             },
             {"check": "server_header", "suite": "network", "event": "started"},
@@ -192,7 +192,7 @@ async def _create_populated_scan(
                 "check": "server_header",
                 "suite": "network",
                 "event": "completed",
-                "findings": 1,
+                "observations": 1,
                 "duration_ms": 100,
             },
             {"check": "port_scan", "suite": "network", "event": "started"},
@@ -207,7 +207,7 @@ async def _create_populated_scan(
     await scan_repo.complete_scan(
         scan_id,
         status="complete",
-        findings_count=4,
+        observations_count=4,
         checks_total=5,
         checks_completed=4,
         duration_ms=2000,

@@ -4,14 +4,14 @@ app/scenario_services/corporate/admin.py
 Administrative panel service template.
 
 This service provides an admin interface with debug endpoints and
-configuration exposure findings. It's designed to simulate an
+configuration exposure observations. It's designed to simulate an
 improperly secured admin panel.
 
 Configurable via environment variables:
     BRAND_NAME          Display name (default: from scenario.json)
     ADMIN_VERSION       Service version (default: 1.5.0)
 
-Planted findings:
+Planted observations:
     debug_mode_enabled      X-Debug-Mode header
     stack_trace_leak        Full stack traces on errors
     debug_endpoints_enabled /debug endpoint accessible
@@ -34,7 +34,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.scenario_services.common.config import (
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -63,10 +63,10 @@ app = FastAPI(
 @app.exception_handler(Exception)
 async def verbose_exception_handler(request: Request, exc: Exception):
     """
-    Finding: stack_trace_leak
+    Observation: stack_trace_leak
     When active, returns full stack traces with server info.
     """
-    if is_finding_active("stack_trace_leak"):
+    if is_observation_active("stack_trace_leak"):
         tb = traceback.format_exc()
         return JSONResponse(
             status_code=500,
@@ -91,13 +91,13 @@ async def verbose_exception_handler(request: Request, exc: Exception):
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
-    """Add headers based on active findings."""
+    """Add headers based on active observations."""
     response = await call_next(request)
 
     response.headers["X-Admin-Panel"] = "true"
 
-    # Finding: debug_mode_enabled - leak debug status
-    if is_finding_active("debug_mode_enabled"):
+    # Observation: debug_mode_enabled - leak debug status
+    if is_observation_active("debug_mode_enabled"):
         response.headers["X-Debug-Mode"] = "enabled"
 
     return response
@@ -172,13 +172,13 @@ async def get_settings():
     return {
         "rate_limiting": True,
         "waf_enabled": False,
-        "debug_mode": is_finding_active("debug_mode_enabled"),
+        "debug_mode": is_observation_active("debug_mode_enabled"),
         "maintenance_window": "Sunday 2:00-4:00 AM EST",
     }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# DEBUG ENDPOINTS (findings)
+# DEBUG ENDPOINTS (observations)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -187,10 +187,10 @@ async def debug_info():
     """
     Debug endpoint.
 
-    Finding: debug_endpoints_enabled
-    Only accessible when this finding is active.
+    Observation: debug_endpoints_enabled
+    Only accessible when this observation is active.
     """
-    if not is_finding_active("debug_endpoints_enabled"):
+    if not is_observation_active("debug_endpoints_enabled"):
         raise HTTPException(404, "Not found")
 
     brand = get_brand_name().lower().replace(" ", "-")
@@ -210,10 +210,10 @@ async def debug_dump():
     """
     Full debug dump - very sensitive!
 
-    Finding: config_dump_endpoint
+    Observation: config_dump_endpoint
     Returns fake but realistic credentials.
     """
-    if not is_finding_active("config_dump_endpoint"):
+    if not is_observation_active("config_dump_endpoint"):
         raise HTTPException(403, "Access denied")
 
     brand = get_brand_name().lower().replace(" ", "-")
@@ -239,7 +239,7 @@ async def trigger_error():
     """
     Endpoint to trigger an error for stack trace testing.
 
-    Used for demonstrating stack_trace_leak finding.
+    Used for demonstrating stack_trace_leak observation.
     """
     raise ValueError("Intentional error for debugging")
 
@@ -249,9 +249,9 @@ async def debug_env():
     """
     Environment variable dump.
 
-    Finding: config_dump_endpoint
+    Observation: config_dump_endpoint
     """
-    if not is_finding_active("config_dump_endpoint"):
+    if not is_observation_active("config_dump_endpoint"):
         raise HTTPException(403, "Access denied")
 
     # Return selected (fake) env vars
@@ -270,9 +270,9 @@ async def debug_routes():
     """
     List all registered routes.
 
-    Finding: debug_endpoints_enabled
+    Observation: debug_endpoints_enabled
     """
-    if not is_finding_active("debug_endpoints_enabled"):
+    if not is_observation_active("debug_endpoints_enabled"):
         raise HTTPException(404, "Not found")
 
     routes = []

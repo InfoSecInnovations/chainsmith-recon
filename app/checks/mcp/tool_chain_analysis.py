@@ -16,7 +16,7 @@ import re
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 # ── Capability tags ─────────────────────────────────────────────────
 # Maps tool name/description patterns to capability tags.
@@ -265,8 +265,8 @@ class ToolChainAnalysisCheck(BaseCheck):
                 }
                 detected_chains.append(chain_info)
 
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"Dangerous tool chain: {chain_name}",
                         description=description,
@@ -282,11 +282,11 @@ class ToolChainAnalysisCheck(BaseCheck):
             # Check for partial chains
             partial = self._check_partial_chains(all_caps, capability_to_tools, host)
             if partial:
-                for finding in partial:
-                    result.findings.append(finding)
+                for observation in partial:
+                    result.observations.append(observation)
             else:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="No dangerous tool chain categories detected",
                         description="The discovered tool set does not form any known dangerous capability combinations.",
@@ -317,7 +317,7 @@ class ToolChainAnalysisCheck(BaseCheck):
 
     def _check_partial_chains(self, all_caps: set, capability_to_tools: dict, host: str) -> list:
         """Check for partial dangerous chains (source present but no sink, or vice versa)."""
-        findings = []
+        observations = []
 
         # Check for dangerous source capabilities without exfil vector
         source_caps = {"file_read", "database_access", "credential_access"}
@@ -331,8 +331,8 @@ class ToolChainAnalysisCheck(BaseCheck):
                 source_tools.extend(capability_to_tools.get(cap, []))
             source_tools = list(set(source_tools))
 
-            findings.append(
-                build_finding(
+            observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Partial dangerous chain: data access tools present but no exfiltration vector",
                     description=(
@@ -348,7 +348,7 @@ class ToolChainAnalysisCheck(BaseCheck):
                 )
             )
 
-        return findings
+        return observations
 
     def _build_chain_evidence(self, chain_info: dict, tool_capabilities: dict) -> str:
         """Build evidence string for a detected chain."""

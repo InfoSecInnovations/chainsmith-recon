@@ -16,7 +16,7 @@ import contextlib
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Approximate tokens → characters (rough: 1 token ≈ 4 chars)
@@ -108,8 +108,8 @@ class RAGChunkBoundaryCheck(ServiceIteratingCheck):
                     boundary_results.append(test_result)
 
                     if test_result.get("bypass_confirmed"):
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Chunk boundary bypass: split payload at {size_name} reassembled",
                                 description=(
@@ -126,8 +126,8 @@ class RAGChunkBoundaryCheck(ServiceIteratingCheck):
                             )
                         )
                     elif test_result.get("chunks_retrieved"):
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Chunk boundary: both chunks retrieved at {size_name}",
                                 description=(
@@ -148,8 +148,8 @@ class RAGChunkBoundaryCheck(ServiceIteratingCheck):
         if not any(
             r.get("bypass_confirmed") or r.get("chunks_retrieved") for r in boundary_results
         ):
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Chunk boundary exploitation not effective",
                     description="Split payloads did not bypass filtering at tested boundaries.",

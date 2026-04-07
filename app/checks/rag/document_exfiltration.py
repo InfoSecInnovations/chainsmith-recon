@@ -19,7 +19,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Phase 1: Broad discovery queries
@@ -127,7 +127,7 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        # Generate findings based on what was detected
+        # Generate observations based on what was detected
         cred_cats = all_categories & {
             "api_key",
             "password",
@@ -139,8 +139,8 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
         infra_cats = all_categories & {"ip_address"}
 
         if cred_cats:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="RAG returns credentials in retrieved documents",
                     description=(
@@ -159,8 +159,8 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
             )
 
         if pii_cats:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"RAG exposes PII in {len(unique_docs)} retrieved documents",
                     description=(f"PII patterns detected: {', '.join(sorted(pii_cats))}."),
@@ -175,8 +175,8 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
             )
 
         if infra_cats:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Knowledge base contains internal infrastructure details",
                     description="Private IP addresses found in retrieved documents.",
@@ -191,8 +191,8 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
             )
 
         if raw_chunks_detected:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="RAG returns raw document chunks with metadata",
                     description="No output filtering detected — raw chunks returned.",
@@ -205,8 +205,8 @@ class RAGDocumentExfiltrationCheck(ServiceIteratingCheck):
             )
 
         if not all_categories and not raw_chunks_detected:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Knowledge base content appears non-sensitive",
                     description="No sensitive content patterns detected in RAG responses.",

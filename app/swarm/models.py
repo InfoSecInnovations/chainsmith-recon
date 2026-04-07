@@ -144,7 +144,7 @@ class TaskResultPayload(BaseModel):
 
     agent_id: str
     success: bool = True
-    findings: list[dict] = Field(default_factory=list)
+    observations: list[dict] = Field(default_factory=list)
     outputs: dict = Field(default_factory=dict)
     services: list[dict] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
@@ -165,7 +165,7 @@ class CoordinatorStatus(BaseModel):
     tasks_in_progress: int = 0
     tasks_complete: int = 0
     tasks_failed: int = 0
-    findings_count: int = 0
+    observations_count: int = 0
     current_phase: str | None = None
 
 

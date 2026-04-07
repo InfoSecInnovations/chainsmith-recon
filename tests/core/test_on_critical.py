@@ -15,7 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from app.check_launcher import CheckLauncher
-from app.checks.base import CheckCondition, CheckResult, Finding, Service
+from app.checks.base import CheckCondition, CheckResult, Observation, Service
 from app.preferences import (
     VALID_ON_CRITICAL_VALUES,
     CheckPreferences,
@@ -35,23 +35,23 @@ class FakeCheck:
     name: str
     conditions: list = field(default_factory=list)
     produces: list = field(default_factory=list)
-    _findings: list = field(default_factory=list)
+    _observations: list = field(default_factory=list)
     _outputs: dict = field(default_factory=dict)
 
     async def run(self, context: dict) -> CheckResult:
         result = CheckResult(success=True)
-        result.findings = list(self._findings)
+        result.observations = list(self._observations)
         result.outputs = dict(self._outputs)
         return result
 
 
-def make_finding(
-    title: str = "Test finding",
+def make_observation(
+    title: str = "Test observation",
     severity: str = "info",
     host: str = "example.com",
     check_name: str = "test_check",
-) -> Finding:
-    return Finding(
+) -> Observation:
+    return Observation(
         id=f"{check_name}-{host}-{title}",
         title=title,
         severity=severity,
@@ -62,12 +62,12 @@ def make_finding(
     )
 
 
-def make_critical_finding(
+def make_critical_observation(
     host: str = "example.com",
     check_name: str = "test_check",
     title: str = "Critical vuln",
-) -> Finding:
-    return make_finding(title=title, severity="critical", host=host, check_name=check_name)
+) -> Observation:
+    return make_observation(title=title, severity="critical", host=host, check_name=check_name)
 
 
 # ─── Preference Resolution ──────────────────────────────────────────────
@@ -140,22 +140,22 @@ class TestCheckPreferencesFields:
 
 
 class TestLauncherAnnotate:
-    """Test that findings are annotated when on_critical='annotate'."""
+    """Test that observations are annotated when on_critical='annotate'."""
 
     @pytest.mark.asyncio
-    async def test_annotates_downstream_findings(self):
-        """When web check produces critical finding, AI findings get annotated."""
+    async def test_annotates_downstream_observations(self):
+        """When web check produces critical observation, AI observations get annotated."""
         web_check = FakeCheck(
             name="header_analysis",
-            produces=["header_findings"],
-            _findings=[make_critical_finding(host="target.com", check_name="header_analysis")],
-            _outputs={"header_findings": True},
+            produces=["header_observations"],
+            _observations=[make_critical_observation(host="target.com", check_name="header_analysis")],
+            _outputs={"header_observations": True},
         )
         ai_check = FakeCheck(
             name="llm_endpoint",
-            conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[
-                make_finding(
+            conditions=[CheckCondition("header_observations", "truthy")],
+            _observations=[
+                make_observation(
                     title="Prompt leak",
                     severity="medium",
                     host="target.com",
@@ -168,28 +168,28 @@ class TestLauncherAnnotate:
         launcher = CheckLauncher([web_check, ai_check], context)
 
         with patch.object(launcher, "_resolve_on_critical", return_value="annotate"):
-            findings = await launcher.run_all()
+            observations = await launcher.run_all()
 
-        assert len(findings) == 2
-        # The AI finding should be annotated
-        ai_finding = next(f for f in findings if f.get("check_name") == "llm_endpoint")
-        assert ai_finding.get("raw_data", {}).get("critical_finding_on_host") is True
-        assert ai_finding["raw_data"]["critical_finding_source"]["suite"] == "web"
+        assert len(observations) == 2
+        # The AI observation should be annotated
+        ai_observation = next(f for f in observations if f.get("check_name") == "llm_endpoint")
+        assert ai_observation.get("raw_data", {}).get("critical_observation_on_host") is True
+        assert ai_observation["raw_data"]["critical_observation_source"]["suite"] == "web"
 
     @pytest.mark.asyncio
     async def test_same_suite_not_annotated(self):
-        """Findings from the same suite as the critical are NOT annotated."""
+        """Observations from the same suite as the critical are NOT annotated."""
         check1 = FakeCheck(
             name="header_analysis",
-            produces=["header_findings"],
-            _findings=[make_critical_finding(host="target.com", check_name="header_analysis")],
-            _outputs={"header_findings": True},
+            produces=["header_observations"],
+            _observations=[make_critical_observation(host="target.com", check_name="header_analysis")],
+            _outputs={"header_observations": True},
         )
         check2 = FakeCheck(
             name="robots_txt",
-            conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[
-                make_finding(
+            conditions=[CheckCondition("header_observations", "truthy")],
+            _observations=[
+                make_observation(
                     title="Sensitive paths",
                     severity="low",
                     host="target.com",
@@ -202,12 +202,12 @@ class TestLauncherAnnotate:
         launcher = CheckLauncher([check1, check2], context)
 
         with patch.object(launcher, "_resolve_on_critical", return_value="annotate"):
-            findings = await launcher.run_all()
+            observations = await launcher.run_all()
 
         # robots_txt is also "web" suite — should NOT be annotated
-        robots_finding = next(f for f in findings if f.get("check_name") == "robots_txt")
-        raw = robots_finding.get("raw_data") or {}
-        assert raw.get("critical_finding_on_host") is not True
+        robots_observation = next(f for f in observations if f.get("check_name") == "robots_txt")
+        raw = robots_observation.get("raw_data") or {}
+        assert raw.get("critical_observation_on_host") is not True
 
 
 class TestLauncherSkipDownstream:
@@ -218,15 +218,15 @@ class TestLauncherSkipDownstream:
         """AI checks are skipped when web has critical + skip_downstream."""
         web_check = FakeCheck(
             name="header_analysis",
-            produces=["header_findings"],
-            _findings=[make_critical_finding(host="target.com", check_name="header_analysis")],
-            _outputs={"header_findings": True},
+            produces=["header_observations"],
+            _observations=[make_critical_observation(host="target.com", check_name="header_analysis")],
+            _outputs={"header_observations": True},
         )
         ai_check = FakeCheck(
             name="llm_endpoint",
-            conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[
-                make_finding(
+            conditions=[CheckCondition("header_observations", "truthy")],
+            _observations=[
+                make_observation(
                     title="Should not appear",
                     severity="high",
                     host="target.com",
@@ -239,11 +239,11 @@ class TestLauncherSkipDownstream:
         launcher = CheckLauncher([web_check, ai_check], context)
 
         with patch.object(launcher, "_resolve_on_critical", return_value="skip_downstream"):
-            findings = await launcher.run_all()
+            observations = await launcher.run_all()
 
-        # Only the web finding should be present
-        assert len(findings) == 1
-        assert findings[0]["check_name"] == "header_analysis"
+        # Only the web observation should be present
+        assert len(observations) == 1
+        assert observations[0]["check_name"] == "header_analysis"
         assert "llm_endpoint" in launcher.skipped
 
     @pytest.mark.asyncio
@@ -251,15 +251,15 @@ class TestLauncherSkipDownstream:
         """Checks in the same suite are NOT skipped."""
         check1 = FakeCheck(
             name="header_analysis",
-            produces=["header_findings"],
-            _findings=[make_critical_finding(host="target.com", check_name="header_analysis")],
-            _outputs={"header_findings": True},
+            produces=["header_observations"],
+            _observations=[make_critical_observation(host="target.com", check_name="header_analysis")],
+            _outputs={"header_observations": True},
         )
         check2 = FakeCheck(
             name="path_probe",
-            conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[
-                make_finding(
+            conditions=[CheckCondition("header_observations", "truthy")],
+            _observations=[
+                make_observation(
                     title="Path found",
                     severity="info",
                     host="target.com",
@@ -272,10 +272,10 @@ class TestLauncherSkipDownstream:
         launcher = CheckLauncher([check1, check2], context)
 
         with patch.object(launcher, "_resolve_on_critical", return_value="skip_downstream"):
-            findings = await launcher.run_all()
+            observations = await launcher.run_all()
 
         # Both are web suite — path_probe should NOT be skipped
-        assert len(findings) == 2
+        assert len(observations) == 2
         assert "path_probe" not in launcher.skipped
 
 
@@ -284,18 +284,18 @@ class TestLauncherStop:
 
     @pytest.mark.asyncio
     async def test_stops_scan(self):
-        """Scan halts immediately when critical finding + on_critical='stop'."""
+        """Scan halts immediately when critical observation + on_critical='stop'."""
         web_check = FakeCheck(
             name="header_analysis",
-            produces=["header_findings"],
-            _findings=[make_critical_finding(host="target.com", check_name="header_analysis")],
-            _outputs={"header_findings": True},
+            produces=["header_observations"],
+            _observations=[make_critical_observation(host="target.com", check_name="header_analysis")],
+            _outputs={"header_observations": True},
         )
         ai_check = FakeCheck(
             name="llm_endpoint",
-            conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[
-                make_finding(
+            conditions=[CheckCondition("header_observations", "truthy")],
+            _observations=[
+                make_observation(
                     title="Should not run",
                     severity="medium",
                     host="target.com",
@@ -308,39 +308,39 @@ class TestLauncherStop:
         launcher = CheckLauncher([web_check, ai_check], context)
 
         with patch.object(launcher, "_resolve_on_critical", return_value="stop"):
-            findings = await launcher.run_all()
+            observations = await launcher.run_all()
 
         assert launcher.scan_stopped is True
-        # Only the critical finding from the first check
-        assert len(findings) == 1
-        assert findings[0]["severity"] == "critical"
+        # Only the critical observation from the first check
+        assert len(observations) == 1
+        assert observations[0]["severity"] == "critical"
 
 
 class TestLauncherNoCriticals:
-    """Test normal behavior when no critical findings exist."""
+    """Test normal behavior when no critical observations exist."""
 
     @pytest.mark.asyncio
     async def test_no_skip_without_criticals(self):
-        """Non-critical findings don't trigger any on_critical behavior."""
+        """Non-critical observations don't trigger any on_critical behavior."""
         check1 = FakeCheck(
             name="header_analysis",
-            produces=["header_findings"],
-            _findings=[
-                make_finding(
-                    title="Low finding",
+            produces=["header_observations"],
+            _observations=[
+                make_observation(
+                    title="Low observation",
                     severity="low",
                     host="target.com",
                     check_name="header_analysis",
                 )
             ],
-            _outputs={"header_findings": True},
+            _outputs={"header_observations": True},
         )
         check2 = FakeCheck(
             name="llm_endpoint",
-            conditions=[CheckCondition("header_findings", "truthy")],
-            _findings=[
-                make_finding(
-                    title="AI finding",
+            conditions=[CheckCondition("header_observations", "truthy")],
+            _observations=[
+                make_observation(
+                    title="AI observation",
                     severity="medium",
                     host="target.com",
                     check_name="llm_endpoint",
@@ -352,9 +352,9 @@ class TestLauncherNoCriticals:
         launcher = CheckLauncher([check1, check2], context)
 
         with patch.object(launcher, "_resolve_on_critical", return_value="skip_downstream"):
-            findings = await launcher.run_all()
+            observations = await launcher.run_all()
 
-        assert len(findings) == 2
+        assert len(observations) == 2
         assert len(launcher.skipped) == 0
 
 
@@ -365,9 +365,9 @@ class TestLauncherCriticalHosts:
     async def test_critical_hosts_in_context(self):
         web_check = FakeCheck(
             name="header_analysis",
-            _findings=[
-                make_critical_finding(host="host1.com", check_name="header_analysis"),
-                make_critical_finding(host="host2.com", check_name="header_analysis"),
+            _observations=[
+                make_critical_observation(host="host1.com", check_name="header_analysis"),
+                make_critical_observation(host="host2.com", check_name="header_analysis"),
             ],
         )
 

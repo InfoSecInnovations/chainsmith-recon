@@ -10,7 +10,7 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -21,7 +21,7 @@ class DebugEndpointCheck(ServiceIteratingCheck):
     description = "Analyze exposed debug/actuator/status endpoints for sensitive data"
 
     conditions = [CheckCondition("services", "truthy")]
-    produces = ["debug_findings"]
+    produces = ["debug_observations"]
     service_types = ["http", "html", "api"]
 
     timeout_seconds = 60.0
@@ -146,8 +146,8 @@ class DebugEndpointCheck(ServiceIteratingCheck):
                         actuator_found = True
                         actuator_endpoints = await self._enumerate_actuator(client, service)
                         if actuator_endpoints:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Spring Boot Actuator exposed: {service.host}",
                                     description=f"{len(actuator_endpoints)} actuator endpoints accessible",
@@ -170,8 +170,8 @@ class DebugEndpointCheck(ServiceIteratingCheck):
 
                     if framework == "werkzeug_debugger":
                         # Werkzeug debugger = potential RCE
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Werkzeug debugger exposed: {service.host}{path}",
                                 description="Interactive debugger detected — potential remote code execution",
@@ -184,8 +184,8 @@ class DebugEndpointCheck(ServiceIteratingCheck):
                             )
                         )
                     elif framework == "django_debug":
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Django DEBUG=True: {service.host}",
                                 description="Django debug mode enabled — detailed error pages with source code",
@@ -203,8 +203,8 @@ class DebugEndpointCheck(ServiceIteratingCheck):
                         has_env = "environment_variables" in categories
                         severity = "critical" if has_env else "high"
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Debug endpoint leaks sensitive data: {service.host}{path}",
                                 description=f"Sensitive data categories: {', '.join(categories)}",
@@ -218,8 +218,8 @@ class DebugEndpointCheck(ServiceIteratingCheck):
                             )
                         )
                     elif framework:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Framework identified from debug page: {framework} at {service.host}{path}",
                                 description=f"Debug/error page reveals framework: {framework}",
@@ -234,8 +234,8 @@ class DebugEndpointCheck(ServiceIteratingCheck):
                     elif path in ("/health", "/healthcheck", "/.well-known/health"):
                         # Verbose health endpoints
                         if len(body) > 100:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Verbose health endpoint: {service.host}{path}",
                                     description=f"Health endpoint returns detailed info ({len(body)} bytes)",

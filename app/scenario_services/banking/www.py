@@ -10,7 +10,7 @@ Configurable via environment variables:
     FOUNDED_YEAR        Year established (default: 1952)
     TAGLINE             Slogan (default: Your Regional Banking Partner)
 
-Planted findings (controlled via is_finding_active):
+Planted observations (controlled via is_observation_active):
     header_vllm_version         X-Powered-By: vLLM/0.4.1
     cors_misconfigured          Wildcard CORS headers
     model_temperature_exposed   X-Model-Config header leak
@@ -39,7 +39,7 @@ from app.scenario_services.common.config import (
     get_brand_domain,
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -70,10 +70,10 @@ app = FastAPI(
 @app.exception_handler(Exception)
 async def verbose_exception_handler(request: Request, exc: Exception):
     """
-    Finding: debug_mode_enabled
+    Observation: debug_mode_enabled
     When active, returns full stack traces on errors.
     """
-    if VERBOSE_ERRORS and is_finding_active("debug_mode_enabled"):
+    if VERBOSE_ERRORS and is_observation_active("debug_mode_enabled"):
         tb = traceback.format_exc()
         return Response(
             content=f"Internal Server Error\n\n{tb}",
@@ -91,20 +91,20 @@ async def verbose_exception_handler(request: Request, exc: Exception):
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    """Add headers based on active findings."""
+    """Add headers based on active observations."""
     response = await call_next(request)
 
-    # Finding: header_vllm_version - leak AI infrastructure version
-    if is_finding_active("header_vllm_version"):
+    # Observation: header_vllm_version - leak AI infrastructure version
+    if is_observation_active("header_vllm_version"):
         response.headers["X-Powered-By"] = "vLLM/0.4.1"
 
-    # Finding: cors_misconfigured - dangerous CORS settings
-    if is_finding_active("cors_misconfigured"):
+    # Observation: cors_misconfigured - dangerous CORS settings
+    if is_observation_active("cors_misconfigured"):
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Credentials"] = "true"
 
-    # Finding: model_temperature_exposed - leak model config
-    if is_finding_active("model_temperature_exposed"):
+    # Observation: model_temperature_exposed - leak model config
+    if is_observation_active("model_temperature_exposed"):
         response.headers["X-Model-Config"] = "temperature=0.7;top_p=0.9;max_tokens=2048"
 
     return response
@@ -275,7 +275,7 @@ async def contact():
 @app.get("/robots.txt", response_class=PlainTextResponse)
 async def robots():
     """
-    Finding: robots_model_admin
+    Observation: robots_model_admin
     Discloses internal paths including /internal/model-admin.
     """
     return """User-agent: *

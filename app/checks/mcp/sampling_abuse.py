@@ -16,7 +16,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import cap_response
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -82,8 +82,8 @@ class MCPSamplingAbuseCheck(BaseCheck):
 
                         # Test 3: Auth on sampling
                         if not has_sampling:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title="Undeclared sampling endpoint accessible",
                                     description=(
@@ -97,8 +97,8 @@ class MCPSamplingAbuseCheck(BaseCheck):
                                 )
                             )
                     elif not has_sampling:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Sampling capability not exposed",
                                 description="The MCP server does not declare or respond to sampling requests.",
@@ -154,8 +154,8 @@ class MCPSamplingAbuseCheck(BaseCheck):
                     return {"accessible": False}
                 rpc_result = data.get("result", {})
                 if isinstance(rpc_result, dict) and rpc_result.get("content"):
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title="MCP sampling endpoint exposed: open LLM proxy via sampling/createMessage",
                             description=(
@@ -214,8 +214,8 @@ class MCPSamplingAbuseCheck(BaseCheck):
             text = content.get("text", str(content)) if isinstance(content, dict) else str(content)
 
             if "chainsmithprobe" in text.lower() or "chainsmith" in text.lower():
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="Sampling accepts client-supplied system prompt",
                         description=(

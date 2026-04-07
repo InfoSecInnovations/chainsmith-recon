@@ -10,7 +10,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -110,7 +110,7 @@ class GuardrailConsistencyCheck(BaseCheck):
 
             try:
                 gr = await self._test_consistency(url, service, api_format, context)
-                result.findings.extend(gr.findings)
+                result.observations.extend(gr.observations)
                 result.outputs.update(gr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -183,8 +183,8 @@ class GuardrailConsistencyCheck(BaseCheck):
         }
 
         if language_bypasses:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Guardrail inconsistency: blocked in English but allowed in {', '.join(language_bypasses[:3])}",
                     description=f"Content filter bypassed in {len(language_bypasses)}/{total_languages} non-English languages",
@@ -200,8 +200,8 @@ class GuardrailConsistencyCheck(BaseCheck):
             )
 
         if encoding_bypasses:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Encoding bypass: {', '.join(encoding_bypasses)} encoded prompt accepted",
                     description=f"Content filter bypassed via {', '.join(encoding_bypasses)} encoding",
@@ -217,8 +217,8 @@ class GuardrailConsistencyCheck(BaseCheck):
             )
 
         if phrasing_bypasses:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Phrasing bypass: {', '.join(phrasing_bypasses[:3])} variant accepted",
                     description="Content filter bypassed by phrasing variations",
@@ -233,8 +233,8 @@ class GuardrailConsistencyCheck(BaseCheck):
             )
 
         if not language_bypasses and not encoding_bypasses and not phrasing_bypasses:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Guardrails consistent across {total_languages} languages and {total_encodings} encodings",
                     description="Content filters maintained consistency across all tested variations",

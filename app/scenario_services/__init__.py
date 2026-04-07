@@ -25,7 +25,7 @@ Configuration via environment variables:
     - BRAND_NAME: Display name override
     - BRAND_DOMAIN: Domain override
     - VERBOSE_ERRORS: Enable stack traces (default: true)
-    - RANDOMIZE_FINDINGS: Enable finding randomization (default: true)
+    - RANDOMIZE_OBSERVATIONS: Enable observation randomization (default: true)
 
 See common/config.py for full configuration options.
 """

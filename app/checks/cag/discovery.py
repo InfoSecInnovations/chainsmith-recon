@@ -29,7 +29,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # CAG/caching infrastructure signatures
@@ -147,8 +147,8 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
                     cache_infra.add(infra_info["cache_type"])
                     cag_endpoints.append(infra_info)
 
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"Cache infrastructure: {infra_info['cache_type']}",
                             description=self._build_infra_description(infra_info),
@@ -175,8 +175,8 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
 
                         severity = self._determine_severity(endpoint_info)
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"CAG endpoint: {path}",
                                 description=self._build_endpoint_description(endpoint_info),
@@ -201,8 +201,8 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
                     if cache_info:
                         cag_endpoints.append(cache_info)
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Caching detected on: {cache_info['path']}",
                                 description=self._build_cache_description(cache_info),
@@ -384,7 +384,7 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
         }
 
     def _determine_severity(self, endpoint_info: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if endpoint_info.get("auth_required"):
             return "info"
 
@@ -396,7 +396,7 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
         return "low"
 
     def _build_infra_description(self, infra_info: dict) -> str:
-        """Build description for cache infrastructure finding."""
+        """Build description for cache infrastructure observation."""
         parts = [
             f"Cache infrastructure '{infra_info['cache_type']}' detected at {infra_info['path']}."
         ]
@@ -409,7 +409,7 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
         return " ".join(parts)
 
     def _build_endpoint_description(self, endpoint_info: dict) -> str:
-        """Build description for CAG endpoint finding."""
+        """Build description for CAG endpoint observation."""
         parts = [f"CAG endpoint discovered at {endpoint_info['path']}."]
 
         if endpoint_info.get("auth_required"):
@@ -424,7 +424,7 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
         return " ".join(parts)
 
     def _build_cache_description(self, cache_info: dict) -> str:
-        """Build description for cached endpoint finding."""
+        """Build description for cached endpoint observation."""
         parts = [f"Caching behavior detected on AI endpoint {cache_info['path']}."]
 
         indicators = cache_info.get("cache_indicators", [])

@@ -13,7 +13,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.payloads import get_payloads_for_check
 
@@ -189,8 +189,8 @@ class AgentStreamingInjectionCheck(ServiceIteratingCheck):
                         injection_results.append(test_result)
 
                         if is_bypass:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Streaming bypass: {payload['id']}",
                                     description=(
@@ -214,8 +214,8 @@ class AgentStreamingInjectionCheck(ServiceIteratingCheck):
                                 )
                             )
                         elif stream_analysis["succeeded"]:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Streaming injection: {payload['id']}",
                                     description=(

@@ -15,7 +15,7 @@ import os
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -129,8 +129,8 @@ class WebSocketTransportCheck(BaseCheck):
                                     "credentials. This allows bypassing HTTP auth via WebSocket."
                                 )
 
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=title,
                                     description=desc,
@@ -151,8 +151,8 @@ class WebSocketTransportCheck(BaseCheck):
                                 break
 
                         if upgrade_header.lower() == "websocket" and resp.status_code != 101:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"WebSocket upgrade indicated but not completed at {path}",
                                     description=(
@@ -172,11 +172,11 @@ class WebSocketTransportCheck(BaseCheck):
                 result.errors.append(f"{base_url}: {e}")
 
         if not ws_servers:
-            # Add info finding that WS was not found
+            # Add info observation that WS was not found
             if mcp_servers:
                 host = mcp_servers[0].get("service", {}).get("host", "unknown")
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="WebSocket upgrade rejected on all tested paths",
                         description="No MCP WebSocket transport endpoints were discovered.",

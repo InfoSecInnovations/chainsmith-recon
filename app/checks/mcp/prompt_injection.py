@@ -18,7 +18,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import cap_response
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Canary phrases that indicate the LLM followed injected instructions
@@ -99,8 +99,8 @@ class MCPPromptInjectionCheck(BaseCheck):
         text_tools = self._identify_text_tools(mcp_tools)
 
         if not text_tools:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No text-returning MCP tools found for injection testing",
                     description="No MCP tools were identified that return external text content.",
@@ -135,8 +135,8 @@ class MCPPromptInjectionCheck(BaseCheck):
                     )
 
                     if unfiltered.get("returns_content") and not unfiltered.get("filtered"):
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Tool returns unfiltered external content: {tool_name}",
                                 description=(
@@ -162,8 +162,8 @@ class MCPPromptInjectionCheck(BaseCheck):
                         )
 
                         if influence.get("influenced"):
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Tool result injection: LLM influenced by content from {tool_name}",
                                     description=(
@@ -187,10 +187,10 @@ class MCPPromptInjectionCheck(BaseCheck):
                 result.errors.append(f"Prompt injection test for {tool_name}: {e}")
 
         if not any(
-            f.severity in ("high", "critical") for f in result.findings if f.check_name == self.name
+            f.severity in ("high", "critical") for f in result.observations if f.check_name == self.name
         ):
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Tool results appear sanitized before LLM processing",
                     description="No evidence that tool results can inject into the LLM context.",

@@ -13,7 +13,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -119,11 +119,11 @@ class MCPDiscoveryCheck(ServiceIteratingCheck):
                         server_info["transport"] = transport
                         server_info["service"] = service.to_dict()
 
-                        # Build finding
+                        # Build observation
                         severity = "medium" if server_info.get("capabilities") else "info"
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"MCP server discovered: {path}",
                                 description=self._build_description(server_info),
@@ -271,7 +271,7 @@ class MCPDiscoveryCheck(ServiceIteratingCheck):
         return " ".join(parts)
 
     def _build_evidence(self, server_info: dict) -> str:
-        """Build evidence string for finding."""
+        """Build evidence string for observation."""
         lines = []
 
         lines.append(f"Path: {server_info.get('path', 'unknown')}")

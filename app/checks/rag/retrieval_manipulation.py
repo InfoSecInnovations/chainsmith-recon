@@ -13,7 +13,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Parameters to try overriding
@@ -120,11 +120,11 @@ class RAGRetrievalManipulationCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        # Generate findings
+        # Generate observations
         if control_results["topk_overridable"]:
             max_k = control_results["max_topk_accepted"]
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Retrieval manipulation: {control_results['topk_param']} accepts client override",
                     description=(
@@ -142,8 +142,8 @@ class RAGRetrievalManipulationCheck(ServiceIteratingCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="top_k parameter bounded by server",
                     description="Client override of retrieval parameters was rejected or had no effect.",
@@ -156,8 +156,8 @@ class RAGRetrievalManipulationCheck(ServiceIteratingCheck):
             )
 
         if control_results["filter_bypassable"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Retrieval filter override accepted",
                     description=(

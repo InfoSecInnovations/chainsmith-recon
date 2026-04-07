@@ -7,7 +7,7 @@ Services:
 - helpdesk: IT helpdesk landing page
 
 These services simulate internal corporate infrastructure with
-configurable access control and information disclosure findings.
+configurable access control and information disclosure observations.
 """
 
 __all__ = ["internal", "admin", "helpdesk"]

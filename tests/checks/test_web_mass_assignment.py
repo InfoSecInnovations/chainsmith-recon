@@ -85,7 +85,7 @@ class TestMassAssignmentCheck:
             result = await check.check_service(service, {})
 
         assert result.success
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
         assert any("is_admin" in f.title for f in critical)
         assert result.outputs["mass_assignment_info"]["tested"] > 0
@@ -135,8 +135,8 @@ class TestMassAssignmentCheck:
             check = MassAssignmentCheck()
             result = await check.check_service(service, context)
 
-        high_findings = [f for f in result.findings if f.severity == "high"]
-        assert len(high_findings) >= 1
+        high_observations = [f for f in result.observations if f.severity == "high"]
+        assert len(high_observations) >= 1
 
     @pytest.mark.asyncio
     async def test_extra_fields_accepted_not_reflected(self, service):
@@ -149,7 +149,7 @@ class TestMassAssignmentCheck:
             check = MassAssignmentCheck()
             result = await check.check_service(service, {})
 
-        blind = [f for f in result.findings if "blind mass assignment" in f.description]
+        blind = [f for f in result.observations if "blind mass assignment" in f.description]
         # At least some fields should be classified as blind (accepted but not reflected)
         assert len(blind) >= 1
 
@@ -164,7 +164,7 @@ class TestMassAssignmentCheck:
             check = MassAssignmentCheck()
             result = await check.check_service(service, {})
 
-        not_vuln = [f for f in result.findings if "not detected" in f.title]
+        not_vuln = [f for f in result.observations if "not detected" in f.title]
         assert len(not_vuln) >= 1
 
     @pytest.mark.asyncio
@@ -203,8 +203,8 @@ class TestMassAssignmentCheck:
             result = await check.check_service(service, context)
 
         # Should use /api/users from OpenAPI
-        api_findings = [f for f in result.findings if "/api/users" in (f.evidence or "")]
-        assert len(api_findings) >= 1
+        api_observations = [f for f in result.observations if "/api/users" in (f.evidence or "")]
+        assert len(api_observations) >= 1
 
     @pytest.mark.asyncio
     async def test_schema_fields_excluded_from_injection(self, service):
@@ -241,12 +241,12 @@ class TestMassAssignmentCheck:
             result = await check.check_service(service, context)
 
         # "role" should NOT be tested since it's a known schema field
-        role_findings = [f for f in result.findings if "'role' accepted and reflected" in f.title]
-        assert len(role_findings) == 0
+        role_observations = [f for f in result.observations if "'role' accepted and reflected" in f.title]
+        assert len(role_observations) == 0
 
     @pytest.mark.asyncio
     async def test_validation_error_reveals_schema(self, service):
-        """Validation error that reveals accepted fields = low finding."""
+        """Validation error that reveals accepted fields = low observation."""
         error_body = json.dumps(
             {
                 "detail": [
@@ -266,12 +266,12 @@ class TestMassAssignmentCheck:
             check = MassAssignmentCheck()
             result = await check.check_service(service, {})
 
-        schema_leak = [f for f in result.findings if "schema" in f.title.lower()]
+        schema_leak = [f for f in result.observations if "schema" in f.title.lower()]
         assert len(schema_leak) >= 1
 
     @pytest.mark.asyncio
     async def test_no_api_endpoints(self, service):
-        """No testable endpoints found = info finding."""
+        """No testable endpoints found = info observation."""
         # Override _gather_endpoints to return empty
         client = mock_client_multi(default=resp(404, error="Not Found"))
         with (
@@ -281,7 +281,7 @@ class TestMassAssignmentCheck:
             check = MassAssignmentCheck()
             result = await check.check_service(service, {})
 
-        assert any("No testable API endpoints" in f.title for f in result.findings)
+        assert any("No testable API endpoints" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_nested_field_reflection(self, service):
@@ -300,7 +300,7 @@ class TestMassAssignmentCheck:
             result = await check.check_service(service, {})
 
         critical = [
-            f for f in result.findings if f.severity == "critical" and "is_admin" in f.title
+            f for f in result.observations if f.severity == "critical" and "is_admin" in f.title
         ]
         assert len(critical) >= 1
 

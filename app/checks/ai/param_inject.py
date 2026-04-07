@@ -14,7 +14,7 @@ from app.lib.ai_helpers import (
     format_chat_request,
     format_chat_request_with_extra,
 )
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -121,7 +121,7 @@ class APIParameterInjectionCheck(BaseCheck):
 
             try:
                 pr = await self._test_params(url, service, api_format)
-                result.findings.extend(pr.findings)
+                result.observations.extend(pr.observations)
                 result.outputs.update(pr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -198,14 +198,14 @@ class APIParameterInjectionCheck(BaseCheck):
             "rejected": rejected,
         }
 
-        # Generate findings per-severity for the most important ones
+        # Generate observations per-severity for the most important ones
         critical = [a for a in accepted if a["severity"] == "critical"]
         high = [a for a in accepted if a["severity"] == "high"]
         others = [a for a in accepted if a["severity"] not in ("critical", "high")]
 
         if critical:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Critical parameter injection ({len(critical)} params)",
                     description="; ".join(a["description"] for a in critical),
@@ -221,8 +221,8 @@ class APIParameterInjectionCheck(BaseCheck):
             )
 
         if high:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"High-risk parameter injection ({len(high)} params)",
                     description="; ".join(a["description"] for a in high),
@@ -238,8 +238,8 @@ class APIParameterInjectionCheck(BaseCheck):
             )
 
         if others:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Extra API parameters accepted ({len(others)} params)",
                     description="; ".join(a["description"] for a in others),
@@ -254,8 +254,8 @@ class APIParameterInjectionCheck(BaseCheck):
             )
 
         if not accepted:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Extra parameters rejected or ignored ({len(rejected)}/{len(self.PARAM_TESTS)})",
                     description="All tested extra parameters were rejected",

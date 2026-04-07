@@ -13,7 +13,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Tool abuse prompts — ordered from benign to dangerous
@@ -176,8 +176,8 @@ class AgentToolAbuseCheck(ServiceIteratingCheck):
                         abuse_results.append(analysis)
 
                         if analysis["executed"]:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Agent executed {probe['category']}: {probe['id']}",
                                     description=(
@@ -201,8 +201,8 @@ class AgentToolAbuseCheck(ServiceIteratingCheck):
                                 )
                             )
                         elif analysis["refused_with_tool_info"]:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Agent has tool access but refused: {probe['id']}",
                                     description=(

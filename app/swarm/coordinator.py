@@ -3,7 +3,7 @@ app/swarm/coordinator.py - Swarm task scheduler and agent registry.
 
 The coordinator decomposes a scan into tasks using ChainOrchestrator,
 then assigns tasks to agents as they poll. Context (outputs, services,
-findings) accumulates as tasks complete.
+observations) accumulates as tasks complete.
 
 Singleton access: get_coordinator()
 """
@@ -50,7 +50,7 @@ class SwarmCoordinator:
         self.tasks: dict[str, SwarmTask] = {}
         self.phase_tasks: dict[int, list[str]] = {}  # phase_number -> [task_ids]
         self.scan_context: dict[str, Any] = {}
-        self.findings: list[dict] = []
+        self.observations: list[dict] = []
         self.state: AppState | None = None
         self.scan_id: str | None = None
         self.scan_start_time: float | None = None
@@ -65,7 +65,7 @@ class SwarmCoordinator:
         self.tasks.clear()
         self.phase_tasks.clear()
         self.scan_context.clear()
-        self.findings.clear()
+        self.observations.clear()
         self.state = None
         self.scan_id = None
         self.scan_start_time = None
@@ -286,7 +286,7 @@ class SwarmCoordinator:
         """
         Mark task complete and merge results into coordinator state.
 
-        This is where findings flow back from agents.
+        This is where observations flow back from agents.
         """
         task = self.tasks.get(task_id)
         if task is None or task.assigned_agent != result.agent_id:
@@ -296,7 +296,7 @@ class SwarmCoordinator:
         task.completed_at = datetime.now(UTC)
         task.result = {
             "success": result.success,
-            "findings_count": len(result.findings),
+            "observations_count": len(result.observations),
             "duration_ms": result.duration_ms,
         }
 
@@ -317,18 +317,18 @@ class SwarmCoordinator:
         # Merge services
         self._merge_services(result.services)
 
-        # Accumulate findings
-        for finding_dict in result.findings:
-            self.findings.append(finding_dict)
+        # Accumulate observations
+        for observation_dict in result.observations:
+            self.observations.append(observation_dict)
 
         # Update AppState
         if self.state:
-            self.state.findings = self.findings
+            self.state.observations = self.observations
             self.state.checks_completed += 1
             self.state.check_statuses[task.check_name] = "completed" if result.success else "failed"
 
         if self._on_check_complete:
-            self._on_check_complete(task.check_name, result.success, len(result.findings))
+            self._on_check_complete(task.check_name, result.success, len(result.observations))
 
         # Clean up agent's current_tasks
         agent = self.agents.get(result.agent_id)
@@ -336,10 +336,10 @@ class SwarmCoordinator:
             agent.current_tasks.remove(task_id)
 
         logger.info(
-            "Task %s (%s) complete: %d findings",
+            "Task %s (%s) complete: %d observations",
             task_id,
             task.check_name,
-            len(result.findings),
+            len(result.observations),
         )
 
         self._check_scan_complete()
@@ -399,8 +399,8 @@ class SwarmCoordinator:
         if all(t.is_terminal for t in self.tasks.values()):
             self.is_running = False
             logger.info(
-                "Scan complete: %d findings from %d tasks",
-                len(self.findings),
+                "Scan complete: %d observations from %d tasks",
+                len(self.observations),
                 len(self.tasks),
             )
 
@@ -428,7 +428,7 @@ class SwarmCoordinator:
             tasks_in_progress=status_counts.get(TaskStatus.IN_PROGRESS, 0),
             tasks_complete=status_counts.get(TaskStatus.COMPLETE, 0),
             tasks_failed=status_counts.get(TaskStatus.FAILED, 0),
-            findings_count=len(self.findings),
+            observations_count=len(self.observations),
             current_phase=current_phase,
         )
 

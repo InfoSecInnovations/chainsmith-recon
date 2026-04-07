@@ -13,7 +13,7 @@ from app.lib.ai_helpers import (
     format_chat_request,
     format_chat_request_with_system,
 )
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -72,7 +72,7 @@ class SystemPromptInjectionCheck(BaseCheck):
 
             try:
                 sr = await self._test_system_inject(url, service, api_format)
-                result.findings.extend(sr.findings)
+                result.observations.extend(sr.observations)
                 result.outputs.update(sr.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -143,8 +143,8 @@ class SystemPromptInjectionCheck(BaseCheck):
         }
 
         if override_accepted:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Client-supplied system prompt overrides service prompt",
                     description="A client-supplied system message completely overrode the service's own system prompt",
@@ -159,8 +159,8 @@ class SystemPromptInjectionCheck(BaseCheck):
                 )
             )
         elif persona_accepted:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Client-supplied system prompt accepted and processed",
                     description="The system message field is processed — persona injection changed model behavior",
@@ -175,8 +175,8 @@ class SystemPromptInjectionCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="System message field ignored or rejected",
                     description="Client-supplied system prompts do not affect model behavior",

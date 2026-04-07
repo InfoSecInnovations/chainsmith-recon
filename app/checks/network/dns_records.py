@@ -16,7 +16,7 @@ import re
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckResult
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ class DnsRecordCheck(BaseCheck):
         rdata: str,
         extra_hosts: list[str],
     ) -> None:
-        """Process a single DNS record, generating findings and extracting hosts."""
+        """Process a single DNS record, generating observations and extracting hosts."""
 
         if rtype == "MX":
             # MX format: "10 mail.example.com."
@@ -155,8 +155,8 @@ class DnsRecordCheck(BaseCheck):
                 priority = parts[0]
                 mx_host = parts[1].rstrip(".")
                 extra_hosts.append(mx_host)
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"MX record: {mx_host} (priority {priority})",
                         description=f"Mail exchange server for {base_domain}",
@@ -169,8 +169,8 @@ class DnsRecordCheck(BaseCheck):
 
         elif rtype == "NS":
             ns_host = rdata.rstrip(".")
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"NS record: {ns_host}",
                     description=f"Nameserver for {base_domain}",
@@ -187,8 +187,8 @@ class DnsRecordCheck(BaseCheck):
         elif rtype == "CNAME":
             cname_host = rdata.rstrip(".")
             extra_hosts.append(cname_host)
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"CNAME record: {base_domain} -> {cname_host}",
                     description="Canonical name alias reveals target infrastructure",
@@ -200,8 +200,8 @@ class DnsRecordCheck(BaseCheck):
             )
 
         elif rtype == "SOA":
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"SOA record for {base_domain}",
                     description="Start of Authority record reveals primary NS and admin contact",
@@ -213,8 +213,8 @@ class DnsRecordCheck(BaseCheck):
             )
 
         elif rtype == "AAAA":
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"IPv6 address: {base_domain} -> {rdata}",
                     description=f"AAAA record for {base_domain}",
@@ -233,8 +233,8 @@ class DnsRecordCheck(BaseCheck):
         # Check for verification tokens
         for pattern, label in VERIFICATION_PATTERNS:
             if re.search(pattern, txt_value, re.IGNORECASE):
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"TXT record: {label}",
                         description=(
@@ -247,7 +247,7 @@ class DnsRecordCheck(BaseCheck):
                         discriminator=f"txt-{label[:30]}",
                     )
                 )
-                return  # One finding per TXT record
+                return  # One observation per TXT record
 
         # Check for SPF records
         if txt_value.lower().startswith("v=spf1"):
@@ -257,8 +257,8 @@ class DnsRecordCheck(BaseCheck):
                     providers_found.append(provider_name)
 
             if providers_found:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"SPF reveals providers: {', '.join(providers_found)}",
                         description=(
@@ -272,8 +272,8 @@ class DnsRecordCheck(BaseCheck):
                     )
                 )
             else:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title=f"SPF record for {base_domain}",
                         description="SPF record found",
@@ -286,8 +286,8 @@ class DnsRecordCheck(BaseCheck):
             return
 
         # Generic TXT record
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"TXT record for {base_domain}",
                 description="TXT record found",

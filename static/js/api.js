@@ -66,8 +66,8 @@ const api = {
     async stopScan() { return (await fetch('/api/v1/scan/stop', { method: 'POST' })).json(); },
     async getScanStatus() { return (await fetch('/api/v1/scan')).json(); },
     async getCheckStatuses() { return (await fetch('/api/v1/scan/checks')).json(); },
-    async getFindings() { return (await fetch('/api/v1/findings')).json(); },
-    async getFindingsByHost() { return (await fetch('/api/v1/findings/by-host')).json(); },
+    async getObservations() { return (await fetch('/api/v1/observations')).json(); },
+    async getObservationsByHost() { return (await fetch('/api/v1/observations/by-host')).json(); },
     async getChecks() { return (await fetch('/api/v1/checks')).json(); },
     async analyzeChains() { return (await fetch('/api/v1/chains/analyze', { method: 'POST' })).json(); },
     async retryChains() { return (await fetch('/api/v1/chains/retry', { method: 'POST' })).json(); },
@@ -125,12 +125,12 @@ const api = {
     // ─── Capabilities ─────────────────────────────────────────
     async getCapabilities() { return (await fetch('/api/v1/capabilities')).json(); },
 
-    // ─── Scan Findings (for targeted export) ──────────────────
-    async getScanFindings(scanId, severity = null) {
+    // ─── Scan Observations (for targeted export) ──────────────────
+    async getScanObservations(scanId, severity = null) {
         const params = new URLSearchParams();
         if (severity) params.set('severity', severity);
         const qs = params.toString();
-        return (await fetch(`/api/v1/scans/${scanId}/findings${qs ? '?' + qs : ''}`)).json();
+        return (await fetch(`/api/v1/scans/${scanId}/observations${qs ? '?' + qs : ''}`)).json();
     },
 
     // ─── Report Generation ─────────────────────────────────────
@@ -492,9 +492,9 @@ async function updateHeaderStatus() {
     if (!statusEl) return;
     try {
         const scope = await api.getScope();
-        const findings = await api.getFindings();
+        const observations = await api.getObservations();
         statusEl.innerHTML = scope.target
-            ? `<strong>${scope.target}</strong> | ${findings.total || 0} findings`
+            ? `<strong>${scope.target}</strong> | ${observations.total || 0} observations`
             : '<em>No target set</em>';
     } catch (err) {
         statusEl.innerHTML = '<em>No target set</em>';
@@ -531,10 +531,10 @@ function getCheckModalContent(check) {
     `;
 }
 
-// ─── Finding Modal Content ─────────────────────────────────────
-function getFindingModalContent(finding, chains = []) {
-    // Find chains that include this finding
-    const relatedChains = chains.filter(c => c.finding_ids?.includes(finding.id));
+// ─── Observation Modal Content ─────────────────────────────────────
+function getObservationModalContent(observation, chains = []) {
+    // Find chains that include this observation
+    const relatedChains = chains.filter(c => c.observation_ids?.includes(observation.id));
     const chainLinks = relatedChains.length > 0 
         ? `<div class="modal-section">
             <div class="modal-section-title">Part of Attack Chain</div>
@@ -548,34 +548,34 @@ function getFindingModalContent(finding, chains = []) {
         <div class="modal-section">
             <div class="modal-section-title">Severity</div>
             <div class="modal-section-content">
-                <span class="severity-badge severity-${finding.severity}">${finding.severity}</span>
+                <span class="severity-badge severity-${observation.severity}">${observation.severity}</span>
             </div>
         </div>
         <div class="modal-section">
             <div class="modal-section-title">Description</div>
-            <div class="modal-section-content">${finding.description || 'No description'}</div>
+            <div class="modal-section-content">${observation.description || 'No description'}</div>
         </div>
-        ${finding.target_url ? `
+        ${observation.target_url ? `
         <div class="modal-section">
             <div class="modal-section-title">Target URL</div>
-            <div class="modal-section-content" style="word-break:break-all">${finding.target_url}</div>
+            <div class="modal-section-content" style="word-break:break-all">${observation.target_url}</div>
         </div>` : ''}
-        ${finding.evidence ? `
+        ${observation.evidence ? `
         <div class="modal-section">
             <div class="modal-section-title">Evidence</div>
-            <div class="modal-section-content" style="font-family:monospace;background:var(--bg-tertiary);padding:8px;border-radius:4px;white-space:pre-wrap">${finding.evidence}</div>
+            <div class="modal-section-content" style="font-family:monospace;background:var(--bg-tertiary);padding:8px;border-radius:4px;white-space:pre-wrap">${observation.evidence}</div>
         </div>` : ''}
-        ${finding.check_name ? `
+        ${observation.check_name ? `
         <div class="modal-section">
             <div class="modal-section-title">Discovered By</div>
-            <div class="modal-section-content">${finding.check_name}</div>
+            <div class="modal-section-content">${observation.check_name}</div>
         </div>` : ''}
         ${chainLinks}
     `;
 }
 
 // ─── Chain Modal Content ───────────────────────────────────────
-function getChainModalContent(chain, findings) {
+function getChainModalContent(chain, observations) {
     const stepsHtml = chain.exploitation_steps?.length > 0
         ? `<ol style="list-style:decimal;padding-left:20px;margin:0">
             ${chain.exploitation_steps.map(s => `<li style="margin-bottom:8px">${s}</li>`).join('')}
@@ -593,11 +593,11 @@ function getChainModalContent(chain, findings) {
             <div class="modal-section-content">${chain.description || 'No description'}</div>
         </div>
         <div class="modal-section">
-            <div class="modal-section-title">Related Findings</div>
+            <div class="modal-section-title">Related Observations</div>
             <div class="modal-section-content">
-                ${chain.finding_ids.map(id => {
-                    const f = findings.find(f => f.id === id);
-                    return `<a href="#" class="finding-link chain-finding-tag" data-finding-id="${id}" style="margin-right:4px;margin-bottom:4px;display:inline-block;cursor:pointer;text-decoration:none">${id}: ${f ? f.title : 'Unknown'}</a>`;
+                ${chain.observation_ids.map(id => {
+                    const f = observations.find(f => f.id === id);
+                    return `<a href="#" class="observation-link chain-observation-tag" data-observation-id="${id}" style="margin-right:4px;margin-bottom:4px;display:inline-block;cursor:pointer;text-decoration:none">${id}: ${f ? f.title : 'Unknown'}</a>`;
                 }).join('')}
             </div>
         </div>
@@ -619,21 +619,21 @@ function getChainModalContent(chain, findings) {
 }
 
 // ─── Modal Cross-Link Handlers ────────────────────────────────
-// Call this after opening a modal to enable finding<->chain links
-function initModalCrossLinks(findings, chains, onOpenFinding, onOpenChain) {
-    // Handle clicks on finding links (in chain modals)
-    document.querySelectorAll('.finding-link').forEach(link => {
+// Call this after opening a modal to enable observation<->chain links
+function initModalCrossLinks(observations, chains, onOpenFinding, onOpenChain) {
+    // Handle clicks on observation links (in chain modals)
+    document.querySelectorAll('.observation-link').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
-            const findingId = link.dataset.findingId;
-            const finding = findings.find(f => f.id === findingId);
-            if (finding && onOpenFinding) {
-                onOpenFinding(finding);
+            const observationId = link.dataset.observationId;
+            const observation = observations.find(f => f.id === observationId);
+            if (observation && onOpenFinding) {
+                onOpenFinding(observation);
             }
         });
     });
     
-    // Handle clicks on chain links (in finding modals)
+    // Handle clicks on chain links (in observation modals)
     document.querySelectorAll('.chain-link').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();

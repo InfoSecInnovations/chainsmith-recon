@@ -15,7 +15,7 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Paths to probe for auth mechanisms
@@ -82,8 +82,8 @@ class AuthDetectionCheck(ServiceIteratingCheck):
                         body = (resp.body or "").lower()
                         if "issuer" in body and "authorization_endpoint" in body:
                             mechanisms.setdefault("oidc", []).append(path)
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"OAuth/OIDC provider detected: {service.host}",
                                     description="OpenID Connect discovery document found",
@@ -110,8 +110,8 @@ class AuthDetectionCheck(ServiceIteratingCheck):
                     # Login form detection
                     if resp.status_code == 200 and resp.body and LOGIN_FORM_RE.search(resp.body):
                         mechanisms.setdefault("login_form", []).append(path)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Login page detected: {service.host}{path}",
                                 description="HTML page with password input form found",
@@ -137,8 +137,8 @@ class AuthDetectionCheck(ServiceIteratingCheck):
                                 ct = v.lower()
                                 break
                         if "json" in ct or "api" in api_path:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"API endpoint requires no authentication: {service.host}{api_path}",
                                     description="API endpoint returned 200 with no authentication required",
@@ -182,8 +182,8 @@ class AuthDetectionCheck(ServiceIteratingCheck):
         if auth_type == "bearer" and service.scheme == "http":
             severity = "low"
 
-        result.findings.append(
-            build_finding(
+        result.observations.append(
+            build_observation(
                 check_name=self.name,
                 title=f"{auth_type.title()} auth required: {service.host}{path}",
                 description=f"WWW-Authenticate header specifies {auth_type} authentication",

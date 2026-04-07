@@ -22,7 +22,7 @@ import uuid
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -77,8 +77,8 @@ class CrossUserLeakageCheck(ServiceIteratingCheck):
                     auth_result = await self._test_auth_vs_noauth(client, url)
                     if auth_result and auth_result.get("leakage_detected"):
                         isolation_results.append(auth_result)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Cross-user cache leakage: auth response served without auth",
                                 description=self._build_description(auth_result),
@@ -97,8 +97,8 @@ class CrossUserLeakageCheck(ServiceIteratingCheck):
                     token_result = await self._test_different_tokens(client, url)
                     if token_result and token_result.get("leakage_detected"):
                         isolation_results.append(token_result)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Cross-user cache leakage: different tokens share cache",
                                 description=self._build_description(token_result),
@@ -117,8 +117,8 @@ class CrossUserLeakageCheck(ServiceIteratingCheck):
                     user_result = await self._test_user_isolation(client, url)
                     if user_result and user_result.get("leakage_detected"):
                         isolation_results.append(user_result)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Cross-user cache leakage: user identity not in cache key",
                                 description=self._build_description(user_result),
@@ -137,8 +137,8 @@ class CrossUserLeakageCheck(ServiceIteratingCheck):
                     apikey_result = await self._test_api_key_isolation(client, url)
                     if apikey_result and apikey_result.get("leakage_detected"):
                         isolation_results.append(apikey_result)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Cache key excludes API key: different keys share cache",
                                 description=self._build_description(apikey_result),
@@ -155,8 +155,8 @@ class CrossUserLeakageCheck(ServiceIteratingCheck):
 
                     # If no leakage found, report info
                     if not isolation_results:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title="Cache properly isolates responses per user",
                                 description="No cross-user cache leakage detected across auth contexts.",
@@ -367,7 +367,7 @@ class CrossUserLeakageCheck(ServiceIteratingCheck):
             return {"test_id": test_id, "leakage_detected": False, "error": str(e)}
 
     def _build_description(self, test_result: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         test_id = test_result.get("test_id", "unknown")
 
         if test_id == "auth_vs_noauth":

@@ -2,7 +2,7 @@
  * Chainsmith Viz — Fullscreen & Pop-Out Module
  *
  * Adds fullscreen (expand in-place) and pop-out (new window) controls
- * to every visualization panel on findings.html and trend.html.
+ * to every visualization panel on observations.html and trend.html.
  */
 (function () {
     'use strict';
@@ -138,7 +138,7 @@
 
     // ─── Initialize ──────────────────────────────────────────────
     function init() {
-        // Findings page: .viz-panel elements
+        // Observations page: .viz-panel elements
         document.querySelectorAll('.viz-panel').forEach(function (panel) {
             var id = panel.id || '';
             var label = id.replace('panel-', '').replace(/-/g, ' ');

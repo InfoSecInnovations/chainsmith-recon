@@ -14,7 +14,7 @@ import logging
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
@@ -118,8 +118,8 @@ class MassAssignmentCheck(ServiceIteratingCheck):
         # Collect API endpoints to test
         endpoints = self._gather_endpoints(service, context)
         if not endpoints:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"No testable API endpoints found: {service.host}",
                     description="No POST/PUT/PATCH endpoints discovered for mass assignment testing",
@@ -187,8 +187,8 @@ class MassAssignmentCheck(ServiceIteratingCheck):
                             }
                             vulnerable_endpoints.append(vuln_info)
 
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Mass assignment: '{field_name}' accepted and reflected at {method} {path}",
                                     description=f"The {risk_cat} field '{field_name}' was accepted in a {method} request "
@@ -217,8 +217,8 @@ class MassAssignmentCheck(ServiceIteratingCheck):
                             }
                             vulnerable_endpoints.append(vuln_info)
 
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Extra fields accepted at {method} {path}",
                                     description=f"Endpoint accepted request with extra field '{field_name}' "
@@ -238,8 +238,8 @@ class MassAssignmentCheck(ServiceIteratingCheck):
                         elif validation_error:
                             # Check if the validation error reveals schema info
                             if resp.body and self._reveals_schema(resp.body, field_name):
-                                result.findings.append(
-                                    build_finding(
+                                result.observations.append(
+                                    build_observation(
                                         check_name=self.name,
                                         title=f"Validation error reveals schema at {method} {path}",
                                         description=f"422/400 response reveals accepted field names when "
@@ -259,8 +259,8 @@ class MassAssignmentCheck(ServiceIteratingCheck):
             result.errors.append(f"Mass assignment check error: {e}")
 
         if tested_count > 0 and not vulnerable_endpoints:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Mass assignment not detected: {service.host}",
                     description=f"Tested {tested_count} field injections across {min(len(endpoints), 5)} "

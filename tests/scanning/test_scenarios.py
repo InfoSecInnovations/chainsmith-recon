@@ -86,7 +86,7 @@ class TestScenario:
             version="2.0.0",
             target=ScenarioTarget(pattern="*.test.local"),
             simulations=["network/dns.yaml"],
-            expected_findings=["finding-1"],
+            expected_observations=["observation-1"],
             expected_chains=["chain-1"],
             source_path=source,
         )
@@ -98,7 +98,7 @@ class TestScenario:
         assert d["version"] == "2.0.0"
         assert d["target"]["pattern"] == "*.test.local"
         assert "network/dns.yaml" in d["simulations"]
-        assert "finding-1" in d["expected_findings"]
+        assert "observation-1" in d["expected_observations"]
         assert str(source) in d["source_path"]
 
 
@@ -133,7 +133,7 @@ class TestParseScenario:
                 "notes": "Test target",
             },
             "simulations": ["network/dns.yaml", "web/headers.yaml"],
-            "expected_findings": ["finding-1", "finding-2"],
+            "expected_observations": ["observation-1", "observation-2"],
             "expected_chains": ["chain-1"],
         }
         source = tmp_path / "scenario.json"

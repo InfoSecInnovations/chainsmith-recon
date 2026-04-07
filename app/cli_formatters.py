@@ -30,54 +30,54 @@ SUITE_COLORS = {
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Finding Formatters
+# Observation Formatters
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def format_finding_terminal(finding: dict, verbose: bool = False, no_color: bool = False) -> str:
-    """Format a finding dict for terminal output."""
-    sev = finding.get("severity", "info").upper()
-    color = SEVERITY_COLORS.get(finding.get("severity", "info"), "white")
+def format_observation_terminal(observation: dict, verbose: bool = False, no_color: bool = False) -> str:
+    """Format an observation dict for terminal output."""
+    sev = observation.get("severity", "info").upper()
+    color = SEVERITY_COLORS.get(observation.get("severity", "info"), "white")
 
     if no_color:
-        header = f"[{sev}] {finding.get('title', '')}"
+        header = f"[{sev}] {observation.get('title', '')}"
     else:
-        header = click.style(f"[{sev}]", fg=color, bold=True) + f" {finding.get('title', '')}"
+        header = click.style(f"[{sev}]", fg=color, bold=True) + f" {observation.get('title', '')}"
 
     lines = [header]
 
     if verbose:
-        desc = finding.get("description", "")
+        desc = observation.get("description", "")
         if desc:
             if len(desc) > 80:
                 desc = desc[:77] + "..."
             lines.append(f"    {desc}")
-        target_url = finding.get("target_url")
+        target_url = observation.get("target_url")
         if target_url:
             lines.append(f"    Target: {target_url}")
-        evidence = finding.get("evidence", "")
+        evidence = observation.get("evidence", "")
         if evidence:
             evidence = evidence.replace("\n", " ").strip()
             if len(evidence) > 80:
                 evidence = evidence[:77] + "..."
             lines.append(f"    Evidence: {evidence}")
-        check_name = finding.get("check_name")
+        check_name = observation.get("check_name")
         if check_name:
             lines.append(f"    Check: {check_name}")
-        refs = finding.get("references", [])
+        refs = observation.get("references", [])
         if refs:
             lines.append(f"    Refs: {', '.join(refs[:2])}")
 
     return "\n".join(lines)
 
 
-def findings_to_json(findings: list[dict]) -> str:
-    """Convert finding dicts to JSON string."""
-    return json.dumps(findings, indent=2)
+def observations_to_json(observations: list[dict]) -> str:
+    """Convert observation dicts to JSON string."""
+    return json.dumps(observations, indent=2)
 
 
-def findings_to_yaml(findings: list[dict], target: str) -> str:
-    """Convert finding dicts to YAML string."""
+def observations_to_yaml(observations: list[dict], target: str) -> str:
+    """Convert observation dicts to YAML string."""
     import yaml
 
     data = {
@@ -86,32 +86,32 @@ def findings_to_yaml(findings: list[dict], target: str) -> str:
             "version": "1.3.0",
             "target": target,
             "generated": datetime.utcnow().isoformat() + "Z",
-            "findings_count": len(findings),
+            "observations_count": len(observations),
         },
-        "findings": findings,
+        "observations": observations,
         "summary": {
-            "by_severity": _count_by_severity(findings),
+            "by_severity": _count_by_severity(observations),
         },
     }
 
     return yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
 
-def findings_to_markdown(findings: list[dict], target: str) -> str:
-    """Convert finding dicts to Markdown report."""
+def observations_to_markdown(observations: list[dict], target: str) -> str:
+    """Convert observation dicts to Markdown report."""
     lines = [
         "# Chainsmith Recon Report",
         "",
         f"**Target:** {target}",
         f"**Generated:** {datetime.utcnow().isoformat()}Z",
-        f"**Findings:** {len(findings)}",
+        f"**Observations:** {len(observations)}",
         "",
         "---",
         "",
     ]
 
     by_severity: dict[str, list[dict]] = {}
-    for f in findings:
+    for f in observations:
         sev = f.get("severity", "info")
         if sev not in by_severity:
             by_severity[sev] = []
@@ -145,8 +145,8 @@ def findings_to_markdown(findings: list[dict], target: str) -> str:
     return "\n".join(lines)
 
 
-def findings_to_sarif(findings: list[dict], target: str) -> str:
-    """Convert finding dicts to SARIF format."""
+def observations_to_sarif(observations: list[dict], target: str) -> str:
+    """Convert observation dicts to SARIF format."""
     sarif = {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
         "version": "2.1.0",
@@ -157,21 +157,21 @@ def findings_to_sarif(findings: list[dict], target: str) -> str:
                         "name": "Chainsmith Recon",
                         "version": "1.3.0",
                         "informationUri": "https://github.com/infosecinnovations/chainsmith-recon",
-                        "rules": _sarif_rules(findings),
+                        "rules": _sarif_rules(observations),
                     }
                 },
-                "results": _sarif_results(findings, target),
+                "results": _sarif_results(observations, target),
             }
         ],
     }
     return json.dumps(sarif, indent=2)
 
 
-def _sarif_rules(findings: list[dict]) -> list[dict]:
-    """Generate SARIF rules from finding dicts."""
+def _sarif_rules(observations: list[dict]) -> list[dict]:
+    """Generate SARIF rules from observation dicts."""
     seen = set()
     rules = []
-    for f in findings:
+    for f in observations:
         rule_id = f.get("check_name") or f.get("id", "")
         if rule_id in seen:
             continue
@@ -186,8 +186,8 @@ def _sarif_rules(findings: list[dict]) -> list[dict]:
     return rules
 
 
-def _sarif_results(findings: list[dict], target: str) -> list[dict]:
-    """Generate SARIF results from finding dicts."""
+def _sarif_results(observations: list[dict], target: str) -> list[dict]:
+    """Generate SARIF results from observation dicts."""
     severity_map = {
         "critical": "error",
         "high": "error",
@@ -197,7 +197,7 @@ def _sarif_results(findings: list[dict], target: str) -> list[dict]:
     }
 
     results = []
-    for f in findings:
+    for f in observations:
         results.append(
             {
                 "ruleId": f.get("check_name") or f.get("id", ""),
@@ -215,10 +215,10 @@ def _sarif_results(findings: list[dict], target: str) -> list[dict]:
     return results
 
 
-def _count_by_severity(findings: list[dict]) -> dict:
-    """Count findings by severity."""
+def _count_by_severity(observations: list[dict]) -> dict:
+    """Count observations by severity."""
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    for f in findings:
+    for f in observations:
         sev = f.get("severity", "info").lower()
         if sev in counts:
             counts[sev] += 1
@@ -365,8 +365,8 @@ def format_chain_summary(chains_data: dict, no_color: bool = False) -> str:
     return f"{base} {suffix}"
 
 
-def output_findings(
-    findings: list[dict],
+def output_observations(
+    observations: list[dict],
     target: str,
     fmt: str,
     output: str | None,
@@ -374,31 +374,31 @@ def output_findings(
     quiet: bool,
     no_color: bool = False,
 ):
-    """Output findings in the requested format, optionally to file."""
+    """Output observations in the requested format, optionally to file."""
     if fmt == "text":
-        if not findings:
+        if not observations:
             if not quiet:
-                click.echo(_style("No findings.", no_color, fg="yellow"))
+                click.echo(_style("No observations.", no_color, fg="yellow"))
             return
 
-        for f in findings:
-            click.echo(format_finding_terminal(f, verbose=verbose, no_color=no_color))
+        for f in observations:
+            click.echo(format_observation_terminal(f, verbose=verbose, no_color=no_color))
             click.echo()
 
     elif fmt == "json":
-        result = findings_to_json(findings)
+        result = observations_to_json(observations)
         _write_or_echo(result, output, quiet)
 
     elif fmt == "yaml":
-        result = findings_to_yaml(findings, target)
+        result = observations_to_yaml(observations, target)
         _write_or_echo(result, output, quiet)
 
     elif fmt == "md":
-        result = findings_to_markdown(findings, target)
+        result = observations_to_markdown(observations, target)
         _write_or_echo(result, output, quiet)
 
     elif fmt == "sarif":
-        result = findings_to_sarif(findings, target)
+        result = observations_to_sarif(observations, target)
         _write_or_echo(result, output, quiet)
 
 

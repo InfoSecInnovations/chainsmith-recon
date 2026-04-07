@@ -111,7 +111,7 @@ class TestCacheEvictionCheck:
         assert result.success
         eviction = result.outputs.get("eviction_capability", [])
         assert len(eviction) > 0
-        assert any(f.severity == "critical" for f in result.findings)
+        assert any(f.severity == "critical" for f in result.observations)
 
     @pytest.mark.asyncio
     async def test_detects_auth_required(self, check, sample_service, cag_endpoint_context):
@@ -125,14 +125,14 @@ class TestCacheEvictionCheck:
             result = await check.check_service(sample_service, cag_endpoint_context)
 
         assert result.success
-        auth_findings = [f for f in result.findings if f.severity == "medium"]
-        assert len(auth_findings) > 0
+        auth_observations = [f for f in result.observations if f.severity == "medium"]
+        assert len(auth_observations) > 0
 
     @pytest.mark.asyncio
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -161,13 +161,13 @@ class TestCacheWarmingCheck:
             result = await check.check_service(sample_service, cag_endpoint_context)
 
         assert result.success
-        assert len(result.findings) > 0
+        assert len(result.observations) > 0
 
     @pytest.mark.asyncio
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -188,7 +188,7 @@ class TestTTLMappingCheck:
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -209,7 +209,7 @@ class TestMultiLayerCacheCheck:
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -230,7 +230,7 @@ class TestCacheQuotaCheck:
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -269,4 +269,4 @@ class TestProviderCachingCheck:
     async def test_no_endpoints_skips(self, check, sample_service):
         result = await check.check_service(sample_service, {})
         assert result.success
-        assert len(result.findings) == 0
+        assert len(result.observations) == 0

@@ -18,7 +18,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Memory/state endpoints to probe
@@ -115,8 +115,8 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
                         continue
 
                     if resp.status_code == 401:
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"Memory endpoint exists but requires auth: {path}",
                                 description=f"Memory endpoint at {path} requires authentication.",
@@ -139,8 +139,8 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
                         memory_data.append(analysis)
                         severity = self._determine_severity(analysis)
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=self._build_title(analysis, path),
                                 description=self._build_description(analysis, path),
@@ -169,8 +169,8 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
                         analysis = self._analyze_memory_content(body, f"/threads/{tid}/history")
                         if analysis["has_content"]:
                             memory_data.append(analysis)
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Thread history accessible: thread {tid}",
                                     description=(
@@ -211,8 +211,8 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
                         conv_analysis = self._analyze_conversational_memory(body)
                         if conv_analysis["reveals_memory"]:
                             memory_data.append(conv_analysis)
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title="Agent memory readable via conversation",
                                     description=(
@@ -368,7 +368,7 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
         return []
 
     def _determine_severity(self, analysis: dict) -> str:
-        """Determine finding severity based on content analysis."""
+        """Determine observation severity based on content analysis."""
         if analysis.get("has_credentials") or analysis.get("has_system_prompt"):
             return "critical"
         if analysis.get("has_multi_user") or analysis.get("has_pii"):
@@ -379,7 +379,7 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
         return "high"  # Any accessible memory endpoint is high
 
     def _build_title(self, analysis: dict, path: str) -> str:
-        """Build finding title."""
+        """Build observation title."""
         if analysis.get("has_multi_user"):
             return f"Agent memory contains other users' data: {path}"
         if analysis.get("has_system_prompt"):
@@ -389,7 +389,7 @@ class AgentMemoryExtractionCheck(ServiceIteratingCheck):
         return f"Agent memory endpoint accessible: {path}"
 
     def _build_description(self, analysis: dict, path: str) -> str:
-        """Build finding description."""
+        """Build observation description."""
         parts = [f"Agent memory endpoint at {path} returned {analysis['entry_count']} entries."]
         if analysis.get("has_pii"):
             parts.append(f"Contains PII ({', '.join(analysis.get('pii_types', []))}).")

@@ -13,7 +13,7 @@ import time
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Prompts designed to trigger loops
@@ -133,8 +133,8 @@ class AgentLoopDetectionCheck(ServiceIteratingCheck):
                         loop_results.append(analysis)
 
                         if analysis["is_runaway"]:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Agent runaway: {probe['id']} ({elapsed:.1f}s)",
                                     description=(
@@ -153,8 +153,8 @@ class AgentLoopDetectionCheck(ServiceIteratingCheck):
                                 )
                             )
                         elif analysis["has_repetition"]:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"Agent loop indicators: {probe['id']}",
                                     description=(
@@ -171,8 +171,8 @@ class AgentLoopDetectionCheck(ServiceIteratingCheck):
                                 )
                             )
                         elif analysis["no_timeout"]:
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"No execution timeout: {probe['id']}",
                                     description=(

@@ -366,7 +366,7 @@
     <nav class="nav">
         <a href="index.html" class="nav-item">Scope</a>
         <a href="scan.html" class="nav-item">Scan</a>
-        <a href="findings.html" class="nav-item">Results</a>
+        <a href="observations.html" class="nav-item">Observations</a>
         <a href="engagements.html" class="nav-item active">Engagements</a>
         <a href="trend.html" class="nav-item">Trends</a>
         <a href="reports.html" class="nav-item">Reports</a>
@@ -453,7 +453,7 @@
                     <div class="report-option">
                         <div class="report-option-info">
                             <h4>Trend Report</h4>
-                            <p>Finding trends across all scans in this engagement</p>
+                            <p>Observation trends across all scans in this engagement</p>
                         </div>
                         <button class="btn btn-primary btn-small" onclick="generateEngReport('trend')">Generate</button>
                     </div>
@@ -576,7 +576,7 @@
         </div>
     </div>
 
-    <!-- Modal (shared pattern for check/finding details) -->
+    <!-- Modal (shared pattern for check/observation details) -->
     <div class="modal-overlay" id="modal-overlay">
         <div class="modal">
             <div class="modal-header">
@@ -755,7 +755,7 @@
                             <tr>
                                 <th>Scan ID</th>
                                 <th>Date</th>
-                                <th>Findings</th>
+                                <th>Observations</th>
                                 <th>Duration</th>
                                 <th>Status</th>
                             </tr>
@@ -768,7 +768,7 @@
                                 <tr>
                                     <td style="font-family:monospace;font-size:0.75rem;">${s.id.substring(0, 8)}</td>
                                     <td>${date}</td>
-                                    <td>${s.findings_count ?? s.total_findings ?? '--'}</td>
+                                    <td>${s.observations_count ?? s.total_observations ?? '--'}</td>
                                     <td>${duration}</td>
                                     <td>${s.status || '--'}</td>
                                 </tr>`;
@@ -823,7 +823,7 @@
                     </div>
                 `;
 
-                // Render simple findings-over-time chart with D3
+                // Render simple observations-over-time chart with D3
                 chartEl.innerHTML = '';
                 renderTrendChart(chartEl, points);
 
@@ -848,9 +848,9 @@
                 .range([0, width])
                 .padding(0.5);
 
-            const maxFindings = d3.max(points, d => d.total_findings || d.findings_count || 0);
+            const maxObservations = d3.max(points, d => d.total_observations || d.observations_count || 0);
             const y = d3.scaleLinear()
-                .domain([0, Math.max(maxFindings, 1)])
+                .domain([0, Math.max(maxObservations, 1)])
                 .nice()
                 .range([height, 0]);
 
@@ -870,7 +870,7 @@
             // Line
             const line = d3.line()
                 .x((_, i) => x(`S${i + 1}`))
-                .y(d => y(d.total_findings || d.findings_count || 0))
+                .y(d => y(d.total_observations || d.observations_count || 0))
                 .curve(d3.curveMonotoneX);
 
             svg.append('path')
@@ -885,7 +885,7 @@
                 .data(points)
                 .enter().append('circle')
                 .attr('cx', (_, i) => x(`S${i + 1}`))
-                .attr('cy', d => y(d.total_findings || d.findings_count || 0))
+                .attr('cy', d => y(d.total_observations || d.observations_count || 0))
                 .attr('r', 4)
                 .attr('fill', 'var(--accent)')
                 .attr('stroke', 'var(--bg-secondary)')

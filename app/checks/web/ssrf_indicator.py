@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 logger = logging.getLogger(__name__)
@@ -155,7 +155,7 @@ class SSRFIndicatorCheck(ServiceIteratingCheck):
                 unique_candidates.append(c)
         candidates = unique_candidates
 
-        # Generate findings
+        # Generate observations
         for candidate in candidates:
             path = candidate["path"]
             param = candidate.get("param", "unknown")
@@ -171,8 +171,8 @@ class SSRFIndicatorCheck(ServiceIteratingCheck):
                 severity = "low"
                 title = f"URL parameter detected: {service.host}{path} (potential SSRF)"
 
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=title,
                     description=f"Endpoint at {path} accepts URL-like parameter '{param}', which may be vulnerable to SSRF",

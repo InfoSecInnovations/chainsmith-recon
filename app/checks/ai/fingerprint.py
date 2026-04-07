@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import extract_headers_dict
 
@@ -132,8 +132,8 @@ class AIFrameworkFingerprintCheck(ServiceIteratingCheck):
                         "high" if best_score >= 6 else "medium" if best_score >= 4 else "low"
                     )
 
-                    result.findings.append(
-                        build_finding(
+                    result.observations.append(
+                        build_observation(
                             check_name=self.name,
                             title=f"AI framework identified: {best}",
                             description=f"Service appears to be running {best} ({confidence} confidence)",

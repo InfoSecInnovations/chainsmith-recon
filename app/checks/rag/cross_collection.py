@@ -12,7 +12,7 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -107,11 +107,11 @@ class RAGCrossCollectionCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        # Generate findings
+        # Generate observations
         leaks = [r for r in cross_results if r.get("isolation_violated")]
         if leaks:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=(
                         f"Cross-collection retrieval: query to '{leaks[0]['source_collection']}' "
@@ -131,8 +131,8 @@ class RAGCrossCollectionCheck(ServiceIteratingCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Collection isolation enforced",
                     description="Queries to one collection did not return documents from another.",

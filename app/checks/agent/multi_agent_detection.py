@@ -19,7 +19,7 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Endpoints that reveal multi-agent architectures
@@ -194,10 +194,10 @@ class AgentMultiAgentDetectionCheck(ServiceIteratingCheck):
         if topology["architecture"] == "unknown" and topology["agent_count"] > 0:
             topology["architecture"] = self._infer_architecture(topology)
 
-        # Generate findings
+        # Generate observations
         if topology["management_endpoints"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Agent orchestrator endpoint: {topology['management_endpoints'][0]['path']}",
                     description=(
@@ -216,8 +216,8 @@ class AgentMultiAgentDetectionCheck(ServiceIteratingCheck):
                 )
             )
         elif topology["delegation_patterns"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Multi-agent system detected via delegation patterns",
                     description=(
@@ -236,8 +236,8 @@ class AgentMultiAgentDetectionCheck(ServiceIteratingCheck):
                 )
             )
         elif topology["agent_names"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Multiple agent identifiers detected",
                     description=(

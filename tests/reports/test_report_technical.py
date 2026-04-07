@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from app.db.models import Finding
+from app.db.models import ObservationRecord
 from app.reports import generate_technical_report
 
 from .conftest import PDF_MAGIC, _create_populated_scan
@@ -17,8 +17,8 @@ pytestmark = pytest.mark.integration
 
 class TestTechnicalReportMarkdown:
     @pytest.mark.asyncio
-    async def test_basic_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_basic_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
 
         assert result["format"] == "md"
@@ -31,8 +31,8 @@ class TestTechnicalReportMarkdown:
         assert "**Scan ID:** report-scan" in content
 
     @pytest.mark.asyncio
-    async def test_severity_summary(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_severity_summary(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
         content = result["content"]
 
@@ -42,8 +42,8 @@ class TestTechnicalReportMarkdown:
         assert "| Info | 1 |" in content
 
     @pytest.mark.asyncio
-    async def test_findings_listed(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_observations_listed(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
         content = result["content"]
 
@@ -55,8 +55,8 @@ class TestTechnicalReportMarkdown:
         assert "<script>alert(1)</script>" in content
 
     @pytest.mark.asyncio
-    async def test_chains_included(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_chains_included(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
         content = result["content"]
 
@@ -65,8 +65,8 @@ class TestTechnicalReportMarkdown:
         assert "rule-based" in content
 
     @pytest.mark.asyncio
-    async def test_check_coverage(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_check_coverage(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
         content = result["content"]
 
@@ -75,8 +75,8 @@ class TestTechnicalReportMarkdown:
         assert "Failed: 1" in content
 
     @pytest.mark.asyncio
-    async def test_risk_score(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_risk_score(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "md")
         content = result["content"]
 
@@ -86,8 +86,8 @@ class TestTechnicalReportMarkdown:
 
 class TestTechnicalReportJSON:
     @pytest.mark.asyncio
-    async def test_json_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_json_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "json")
 
         assert result["format"] == "json"
@@ -96,9 +96,9 @@ class TestTechnicalReportJSON:
         report = json.loads(result["content"])
         assert report["report_type"] == "technical"
         assert report["scan"]["id"] == "report-scan"
-        assert report["summary"]["total_findings"] == 4
+        assert report["summary"]["total_observations"] == 4
         assert report["summary"]["risk_score"] == 17
-        assert len(report["findings"]) == 4
+        assert len(report["observations"]) == 4
         assert len(report["chains"]) == 1
         assert report["check_coverage"]["completed"] == 4
         assert report["check_coverage"]["failed"] == 1
@@ -106,23 +106,23 @@ class TestTechnicalReportJSON:
 
 class TestTechnicalReportOverrides:
     @pytest.mark.asyncio
-    async def test_overridden_findings_annotated(
+    async def test_overridden_observations_annotated(
         self,
         db,
         scan_repo,
-        finding_repo,
+        observation_repo,
         chain_repo,
         check_log_repo,
         override_repo,
     ):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
 
         # Get a fingerprint and override it
         from sqlalchemy import select
 
         async with db.session() as session:
             result = await session.execute(
-                select(Finding.fingerprint).where(Finding.title == "Missing CSP")
+                select(ObservationRecord.fingerprint).where(ObservationRecord.title == "Missing CSP")
             )
             fp = result.scalar_one()
 
@@ -141,24 +141,24 @@ class TestTechnicalReportErrors:
             await generate_technical_report("nonexistent", "md")
 
     @pytest.mark.asyncio
-    async def test_empty_scan(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        """Report generates even with no findings."""
+    async def test_empty_scan(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        """Report generates even with no observations."""
         await scan_repo.create_scan(
             scan_id="empty-scan",
             session_id="s1",
             target_domain="empty.com",
         )
-        await scan_repo.complete_scan("empty-scan", status="complete", findings_count=0)
+        await scan_repo.complete_scan("empty-scan", status="complete", observations_count=0)
 
         result = await generate_technical_report("empty-scan", "md")
         assert "# Technical Security Report" in result["content"]
-        assert "**Findings:** 0" in result["content"]
+        assert "**Observations:** 0" in result["content"]
 
 
 class TestTechnicalReportHTML:
     @pytest.mark.asyncio
-    async def test_html_structure(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_html_structure(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "html")
 
         assert result["format"] == "html"
@@ -174,9 +174,9 @@ class TestTechnicalReportHTML:
 
     @pytest.mark.asyncio
     async def test_html_severity_badges(
-        self, db, scan_repo, finding_repo, chain_repo, check_log_repo
+        self, db, scan_repo, observation_repo, chain_repo, check_log_repo
     ):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "html")
         content = result["content"]
 
@@ -185,15 +185,15 @@ class TestTechnicalReportHTML:
         assert "badge-medium" in content
 
     @pytest.mark.asyncio
-    async def test_html_chains(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_html_chains(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "html")
         assert "Attack Chains" in result["content"]
         assert "XSS to Session Hijack" in result["content"]
 
     @pytest.mark.asyncio
-    async def test_html_coverage(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_html_coverage(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "html")
         assert "Check Coverage" in result["content"]
         assert "Completed: 4/5" in result["content"]
@@ -203,8 +203,8 @@ class TestTechnicalReportPDF:
     xhtml2pdf = pytest.importorskip("xhtml2pdf")
 
     @pytest.mark.asyncio
-    async def test_pdf_output(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_pdf_output(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "pdf")
 
         assert result["format"] == "pdf"
@@ -214,7 +214,7 @@ class TestTechnicalReportPDF:
         assert result["content"][:4] == PDF_MAGIC
 
     @pytest.mark.asyncio
-    async def test_pdf_not_empty(self, db, scan_repo, finding_repo, chain_repo, check_log_repo):
-        await _create_populated_scan(scan_repo, finding_repo, chain_repo, check_log_repo)
+    async def test_pdf_not_empty(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
+        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "pdf")
         assert len(result["content"]) > 1000

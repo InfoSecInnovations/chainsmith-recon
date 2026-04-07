@@ -13,7 +13,7 @@
     /**
      * Build coverage matrix data.
      */
-    function buildCoverageData(findingsList, checkStatuses) {
+    function buildCoverageData(observationsList, checkStatuses) {
         var checks = [];
         var checkStatusMap = {};
 
@@ -26,7 +26,7 @@
             }
         });
 
-        findingsList.forEach(function (f) {
+        observationsList.forEach(function (f) {
             var name = f.check_name;
             if (name && !checkStatusMap[name]) {
                 checkStatusMap[name] = 'completed';
@@ -36,15 +36,15 @@
 
         if (checks.length === 0) return { matrix: {}, hosts: [], checks: [], isGlobal: true };
 
-        var findingsByHost = {};
-        findingsList.forEach(function (f) {
+        var observationsByHost = {};
+        observationsList.forEach(function (f) {
             var rawHost = f.host || f.target_url || 'global';
             var host = ns.normalizeHost(rawHost);
-            if (!findingsByHost[host]) findingsByHost[host] = [];
-            findingsByHost[host].push(f);
+            if (!observationsByHost[host]) observationsByHost[host] = [];
+            observationsByHost[host].push(f);
         });
 
-        var hosts = Object.keys(findingsByHost).sort();
+        var hosts = Object.keys(observationsByHost).sort();
         var isGlobal = hosts.length <= 1;
 
         if (isGlobal) {
@@ -52,21 +52,21 @@
             var matrix = {};
             matrix[globalHost] = {};
 
-            var findingsByCheck = {};
-            findingsList.forEach(function (f) {
+            var observationsByCheck = {};
+            observationsList.forEach(function (f) {
                 if (!f.check_name) return;
-                if (!findingsByCheck[f.check_name]) findingsByCheck[f.check_name] = [];
-                findingsByCheck[f.check_name].push(f);
+                if (!observationsByCheck[f.check_name]) observationsByCheck[f.check_name] = [];
+                observationsByCheck[f.check_name].push(f);
             });
 
             checks.forEach(function (check) {
-                var checkFindings = findingsByCheck[check] || [];
+                var checkObservations = observationsByCheck[check] || [];
                 var status = checkStatusMap[check] || 'not-run';
-                if (checkFindings.length > 0 && status === 'completed') status = 'found';
+                if (checkObservations.length > 0 && status === 'completed') status = 'found';
                 matrix[globalHost][check] = {
                     status: status,
-                    findingCount: checkFindings.length,
-                    findings: checkFindings,
+                    observationCount: checkObservations.length,
+                    observations: checkObservations,
                 };
             });
 
@@ -77,23 +77,23 @@
         var matrix = {};
         hosts.forEach(function (host) {
             matrix[host] = {};
-            var hostFindings = findingsByHost[host] || [];
+            var hostObservations = observationsByHost[host] || [];
 
-            var hostFindingsByCheck = {};
-            hostFindings.forEach(function (f) {
+            var hostObservationsByCheck = {};
+            hostObservations.forEach(function (f) {
                 if (!f.check_name) return;
-                if (!hostFindingsByCheck[f.check_name]) hostFindingsByCheck[f.check_name] = [];
-                hostFindingsByCheck[f.check_name].push(f);
+                if (!hostObservationsByCheck[f.check_name]) hostObservationsByCheck[f.check_name] = [];
+                hostObservationsByCheck[f.check_name].push(f);
             });
 
             checks.forEach(function (check) {
-                var checkFindings = hostFindingsByCheck[check] || [];
+                var checkObservations = hostObservationsByCheck[check] || [];
                 var status = checkStatusMap[check] || 'not-run';
-                if (checkFindings.length > 0 && status === 'completed') status = 'found';
+                if (checkObservations.length > 0 && status === 'completed') status = 'found';
                 matrix[host][check] = {
                     status: status,
-                    findingCount: checkFindings.length,
-                    findings: checkFindings,
+                    observationCount: checkObservations.length,
+                    observations: checkObservations,
                 };
             });
         });
@@ -108,7 +108,7 @@
     /**
      * Render the coverage matrix visualization.
      */
-    ns.renderCoverage = async function (findings, openModal) {
+    ns.renderCoverage = async function (observations, openModal) {
         var emptyEl   = document.getElementById('coverage-empty');
         var contentEl = document.getElementById('coverage-content');
         var tooltipEl = document.getElementById('coverage-tooltip');
@@ -121,7 +121,7 @@
             checkStatuses = csData.checks || csData || [];
         } catch (e) { /* check statuses may not be available */ }
 
-        if (findings.length === 0 && checkStatuses.length === 0) {
+        if (observations.length === 0 && checkStatuses.length === 0) {
             emptyEl.style.display  = 'flex';
             contentEl.style.display = 'none';
             return;
@@ -130,7 +130,7 @@
         emptyEl.style.display  = 'none';
         contentEl.style.display = 'block';
 
-        var data   = buildCoverageData(findings, checkStatuses);
+        var data   = buildCoverageData(observations, checkStatuses);
         var matrix = data.matrix;
         var hosts  = data.hosts;
         var checks = data.checks;
@@ -200,13 +200,13 @@
         var cells = [];
         hosts.forEach(function (host) {
             checks.forEach(function (check) {
-                var cell = (matrix[host] && matrix[host][check]) || { status: 'not-run', findingCount: 0, findings: [] };
+                var cell = (matrix[host] && matrix[host][check]) || { status: 'not-run', observationCount: 0, observations: [] };
                 cells.push({
                     host: host,
                     check: check,
                     status: cell.status,
-                    findingCount: cell.findingCount,
-                    findings: cell.findings,
+                    observationCount: cell.observationCount,
+                    observations: cell.observations,
                 });
             });
         });
@@ -224,30 +224,30 @@
             .attr('fill', function (d) { return STATUS_COLORS[d.status] || STATUS_COLORS['not-run']; })
             .attr('stroke', 'var(--bg-primary)')
             .attr('stroke-width', 1.5)
-            .style('cursor', function (d) { return d.findingCount > 0 ? 'pointer' : 'default'; })
+            .style('cursor', function (d) { return d.observationCount > 0 ? 'pointer' : 'default'; })
             .on('mouseenter', function (event, d) {
                 var statusLabel = d.status.charAt(0).toUpperCase() + d.status.slice(1).replace('-', ' ');
                 tip.show(
                     '<strong>' + d.check + '</strong>' +
                     '<div class="coverage-tip-status">Host: ' + d.host + '</div>' +
                     '<div>Status: <span style="color:' + STATUS_COLORS[d.status] + '">' + statusLabel + '</span></div>' +
-                    (d.findingCount > 0 ? '<div>' + d.findingCount + ' finding' + (d.findingCount !== 1 ? 's' : '') + '</div>' : ''),
+                    (d.observationCount > 0 ? '<div>' + d.observationCount + ' observation' + (d.observationCount !== 1 ? 's' : '') + '</div>' : ''),
                     event
                 );
             })
             .on('mousemove', function (event) { tip.move(event); })
             .on('mouseleave', function () { tip.hide(); })
             .on('click', function (event, d) {
-                if (d.findingCount === 0) return;
+                if (d.observationCount === 0) return;
                 var content =
                     '<div class="modal-section">' +
                     '<div class="modal-section-title">Check: ' + d.check + '</div>' +
                     '<div class="modal-section-content">Host: ' + d.host + '</div>' +
                     '</div>' +
                     '<div class="modal-section">' +
-                    '<div class="modal-section-title">Findings (' + d.findingCount + ')</div>' +
+                    '<div class="modal-section-title">Observations (' + d.observationCount + ')</div>' +
                     '<div class="modal-section-content">' +
-                    d.findings.map(function (f) {
+                    d.observations.map(function (f) {
                         return '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
                             '<span class="severity-badge severity-' + f.severity + '">' + f.severity + '</span>' +
                             '<span style="margin-left:8px">' + f.title + '</span>' +
@@ -257,11 +257,11 @@
                 openModal(d.check + ' \u2014 ' + d.host, content);
             });
 
-        // Finding count labels
-        g.selectAll('.cell-finding-count')
-            .data(cells.filter(function (d) { return d.findingCount > 0; }))
+        // Observation count labels
+        g.selectAll('.cell-observation-count')
+            .data(cells.filter(function (d) { return d.observationCount > 0; }))
             .join('text')
-            .attr('class', 'cell-finding-count')
+            .attr('class', 'cell-observation-count')
             .attr('x', function (d) { return x(d.check) + x.bandwidth() / 2; })
             .attr('y', function (d) { return y(d.host) + y.bandwidth() / 2; })
             .attr('text-anchor', 'middle')
@@ -270,7 +270,7 @@
             .attr('font-size', '11px')
             .attr('font-weight', '600')
             .attr('pointer-events', 'none')
-            .text(function (d) { return d.findingCount; });
+            .text(function (d) { return d.observationCount; });
 
         // Summary row
         var summaryY = hosts.length * cellSize + 8;

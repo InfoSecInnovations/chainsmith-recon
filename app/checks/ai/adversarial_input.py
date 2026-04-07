@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, format_chat_request
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -113,7 +113,7 @@ class AdversarialInputCheck(BaseCheck):
 
             try:
                 ar = await self._test_adversarial(url, service, api_format)
-                result.findings.extend(ar.findings)
+                result.observations.extend(ar.observations)
                 result.outputs.update(ar.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -194,8 +194,8 @@ class AdversarialInputCheck(BaseCheck):
 
         if bypassed:
             severity = "medium" if len(bypassed) <= 2 else "high"
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Unicode/adversarial bypass: {bypassed[0]['description']}",
                     description=f"{len(bypassed)} adversarial input techniques bypassed content filter",
@@ -210,8 +210,8 @@ class AdversarialInputCheck(BaseCheck):
                 )
             )
         else:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Input sanitization appears robust",
                     description=f"All {len(self.ADVERSARIAL_TESTS)} adversarial input techniques handled correctly",

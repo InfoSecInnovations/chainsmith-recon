@@ -4,13 +4,13 @@ app/scenario_services/ai/vector_db.py
 Vector database / RAG retrieval service template.
 
 This service simulates a vector database with document storage and
-semantic search capabilities. It includes configurable security findings.
+semantic search capabilities. It includes configurable security observations.
 
 Configurable via environment variables:
     BRAND_NAME          Display name (default: from scenario.json)
     VECTOR_VERSION      Service version (default: 0.8.2)
 
-Planted findings:
+Planted observations:
     rag_endpoint_exposed    X-Vector-Service header added
     namespace_leak          Internal namespaces visible in listing
     corpus_writable         Documents can be upserted (RAG poisoning)
@@ -32,7 +32,7 @@ from pydantic import BaseModel
 from app.scenario_services.common.config import (
     get_brand_name,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -126,11 +126,11 @@ DOCUMENTS: dict[str, list[Document]] = {
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
-    """Add headers based on active findings."""
+    """Add headers based on active observations."""
     response = await call_next(request)
 
-    # Finding: rag_endpoint_exposed - reveal service identity
-    if is_finding_active("rag_endpoint_exposed"):
+    # Observation: rag_endpoint_exposed - reveal service identity
+    if is_observation_active("rag_endpoint_exposed"):
         brand = get_brand_name().lower().replace(" ", "-")
         response.headers["X-Vector-Service"] = f"{brand}-rag"
 
@@ -170,10 +170,10 @@ async def list_namespaces():
     """
     List available namespaces.
 
-    Finding: namespace_leak
+    Observation: namespace_leak
     When active, internal namespaces are visible.
     """
-    if is_finding_active("namespace_leak"):
+    if is_observation_active("namespace_leak"):
         return {"namespaces": list(DOCUMENTS.keys())}
     return {"namespaces": ["default"]}
 
@@ -183,12 +183,12 @@ async def search(request: SearchRequest):
     """
     Search for similar documents.
 
-    Finding: namespace_leak
+    Observation: namespace_leak
     When active, internal namespace is accessible.
     """
     namespace = request.namespace
 
-    if namespace == "internal" and not is_finding_active("namespace_leak"):
+    if namespace == "internal" and not is_observation_active("namespace_leak"):
         raise HTTPException(403, "Access to internal namespace denied")
 
     docs = DOCUMENTS.get(namespace, [])
@@ -217,10 +217,10 @@ async def upsert_documents(request: UpsertRequest):
     """
     Upsert documents to the vector store.
 
-    Finding: corpus_writable
+    Observation: corpus_writable
     When active, allows writing documents (enables RAG poisoning).
     """
-    if not is_finding_active("corpus_writable"):
+    if not is_observation_active("corpus_writable"):
         raise HTTPException(403, "Write access denied. Read-only mode.")
 
     namespace = request.namespace
@@ -246,10 +246,10 @@ async def delete_document(document_id: str, namespace: str = "default"):
     """
     Delete a document from the vector store.
 
-    Finding: corpus_writable
+    Observation: corpus_writable
     When active, allows deletion.
     """
-    if not is_finding_active("corpus_writable"):
+    if not is_observation_active("corpus_writable"):
         raise HTTPException(403, "Write access denied. Read-only mode.")
 
     if namespace not in DOCUMENTS:
@@ -272,7 +272,7 @@ async def get_stats():
     stats = {}
 
     for namespace, docs in DOCUMENTS.items():
-        if namespace == "internal" and not is_finding_active("namespace_leak"):
+        if namespace == "internal" and not is_observation_active("namespace_leak"):
             continue
         stats[namespace] = {
             "document_count": len(docs),

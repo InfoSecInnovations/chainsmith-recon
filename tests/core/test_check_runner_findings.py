@@ -1,11 +1,11 @@
-"""Tests for CheckRunner finding/service handling, error handling, controls, diagnostics, and event callbacks."""
+"""Tests for CheckRunner observation/service handling, error handling, controls, diagnostics, and event callbacks."""
 
 import asyncio
 from typing import Any
 
 import pytest
 
-from app.checks.base import BaseCheck, CheckCondition, CheckResult, Finding, Service
+from app.checks.base import BaseCheck, CheckCondition, CheckResult, Observation, Service
 from app.checks.runner import CheckRunner
 
 pytestmark = pytest.mark.unit
@@ -52,31 +52,31 @@ class DependentCheck(BaseCheck):
         return CheckResult(success=True, outputs={"dependent_output": "dependent_result"})
 
 
-class FindingProducingCheck(BaseCheck):
-    """Check that produces findings."""
+class ObservationProducingCheck(BaseCheck):
+    """Check that produces observations."""
 
-    name = "finding_check"
-    description = "Produces findings"
+    name = "observation_check"
+    description = "Produces observations"
     conditions = []
 
-    def __init__(self, finding_count: int = 1, preset_ids: bool = False):
+    def __init__(self, observation_count: int = 1, preset_ids: bool = False):
         super().__init__()
-        self.finding_count = finding_count
+        self.observation_count = observation_count
         self.preset_ids = preset_ids
 
     async def run(self, context: dict[str, Any]) -> CheckResult:
-        findings = []
-        for i in range(self.finding_count):
-            findings.append(
-                Finding(
+        observations = []
+        for i in range(self.observation_count):
+            observations.append(
+                Observation(
                     id=f"PRESET-{i}" if self.preset_ids else "",
-                    title=f"Finding {i}",
+                    title=f"Observation {i}",
                     description=f"Description {i}",
                     severity="medium",
                     evidence=f"Evidence {i}",
                 )
             )
-        return CheckResult(success=True, findings=findings)
+        return CheckResult(success=True, observations=observations)
 
 
 class ServiceDiscoveringCheck(BaseCheck):
@@ -125,63 +125,63 @@ class SlowCheck(BaseCheck):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Finding Handling Tests
+# Observation Handling Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestFindingHandling:
-    """Tests for finding collection and ID assignment."""
+class TestObservationHandling:
+    """Tests for observation collection and ID assignment."""
 
-    async def test_findings_collected(self):
-        """Findings from checks are collected."""
+    async def test_observations_collected(self):
+        """Observations from checks are collected."""
         runner = CheckRunner()
-        check = FindingProducingCheck(finding_count=3)
+        check = ObservationProducingCheck(observation_count=3)
         runner.register_check(check)
 
-        findings = await runner.run()
+        observations = await runner.run()
 
-        assert len(findings) == 3
-        assert len(runner.findings) == 3
+        assert len(observations) == 3
+        assert len(runner.observations) == 3
 
-    async def test_finding_ids_assigned(self):
-        """Findings without IDs get sequential IDs."""
+    async def test_observation_ids_assigned(self):
+        """Observations without IDs get sequential IDs."""
         runner = CheckRunner()
-        check = FindingProducingCheck(finding_count=3, preset_ids=False)
+        check = ObservationProducingCheck(observation_count=3, preset_ids=False)
         runner.register_check(check)
 
-        findings = await runner.run()
+        observations = await runner.run()
 
-        assert findings[0].id == "F-001"
-        assert findings[1].id == "F-002"
-        assert findings[2].id == "F-003"
+        assert observations[0].id == "F-001"
+        assert observations[1].id == "F-002"
+        assert observations[2].id == "F-003"
 
     async def test_preset_ids_preserved(self):
-        """Findings with preset IDs keep them."""
+        """Observations with preset IDs keep them."""
         runner = CheckRunner()
-        check = FindingProducingCheck(finding_count=2, preset_ids=True)
+        check = ObservationProducingCheck(observation_count=2, preset_ids=True)
         runner.register_check(check)
 
-        findings = await runner.run()
+        observations = await runner.run()
 
-        assert findings[0].id == "PRESET-0"
-        assert findings[1].id == "PRESET-1"
+        assert observations[0].id == "PRESET-0"
+        assert observations[1].id == "PRESET-1"
 
-    async def test_findings_from_multiple_checks(self):
-        """Findings from multiple checks are accumulated."""
+    async def test_observations_from_multiple_checks(self):
+        """Observations from multiple checks are accumulated."""
         runner = CheckRunner()
-        check1 = FindingProducingCheck(finding_count=2)
-        check2 = FindingProducingCheck(finding_count=3)
+        check1 = ObservationProducingCheck(observation_count=2)
+        check2 = ObservationProducingCheck(observation_count=3)
         check1.name = "check_1"
         check2.name = "check_2"
 
         runner.register_check(check1)
         runner.register_check(check2)
 
-        findings = await runner.run()
+        observations = await runner.run()
 
-        assert len(findings) == 5
+        assert len(observations) == 5
         # IDs should be sequential across checks
-        assert findings[4].id == "F-005"
+        assert observations[4].id == "F-005"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -368,7 +368,7 @@ class TestDiagnostics:
 
         assert "context_keys" in diag
         assert "services_count" in diag
-        assert "findings_count" in diag
+        assert "observations_count" in diag
         assert "checks" in diag
         assert len(diag["checks"]) == 2
 

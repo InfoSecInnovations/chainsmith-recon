@@ -159,7 +159,7 @@ class TestMCPAuthCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) > 0
 
     @pytest.mark.asyncio
@@ -172,7 +172,7 @@ class TestMCPAuthCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) > 0
 
     @pytest.mark.asyncio
@@ -189,7 +189,7 @@ class TestMCPAuthCheck:
         assert result.success
         cors = [
             f
-            for f in result.findings
+            for f in result.observations
             if "cors" in f.title.lower() or "cross-origin" in f.title.lower()
         ]
         assert len(cors) > 0
@@ -225,8 +225,8 @@ class TestWebSocketTransportCheck:
 
         assert result.success
         assert "mcp_websocket_servers" in result.outputs
-        ws_findings = [f for f in result.findings if "websocket" in f.title.lower()]
-        assert len(ws_findings) > 0
+        ws_observations = [f for f in result.observations if "websocket" in f.title.lower()]
+        assert len(ws_observations) > 0
 
     @pytest.mark.asyncio
     async def test_ws_not_found(self, check, mcp_server_context):
@@ -237,7 +237,7 @@ class TestWebSocketTransportCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) > 0
 
     @pytest.mark.asyncio
@@ -270,7 +270,7 @@ class TestWebSocketTransportCheck:
         with patch("app.checks.mcp.websocket_transport.AsyncHttpClient", return_value=mock):
             result = await check.run(ctx)
 
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert len(high) > 0
 
 
@@ -311,7 +311,7 @@ class TestToolSchemaLeakageCheck:
         result = await check.run(ctx)
         assert result.success
         assert "mcp_schema_leaks" in result.outputs
-        medium = [f for f in result.findings if f.severity == "medium"]
+        medium = [f for f in result.observations if f.severity == "medium"]
         assert len(medium) >= 1  # default + enum
 
     @pytest.mark.asyncio
@@ -332,7 +332,7 @@ class TestToolSchemaLeakageCheck:
             ]
         }
         result = await check.run(ctx)
-        low = [f for f in result.findings if f.severity == "low"]
+        low = [f for f in result.observations if f.severity == "low"]
         assert len(low) >= 2
 
     @pytest.mark.asyncio
@@ -348,7 +348,7 @@ class TestToolSchemaLeakageCheck:
             ]
         }
         result = await check.run(ctx)
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) > 0
 
 
@@ -374,7 +374,7 @@ class TestMCPNotificationInjectionCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert len(high) > 0  # roots/list_changed or tools/list_changed
 
     @pytest.mark.asyncio
@@ -387,7 +387,7 @@ class TestMCPNotificationInjectionCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) > 0
 
 
@@ -430,7 +430,7 @@ class TestMCPResourceTraversalCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-        critical = [f for f in result.findings if f.severity == "critical"]
+        critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) > 0
 
     @pytest.mark.asyncio
@@ -445,7 +445,7 @@ class TestMCPResourceTraversalCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) > 0
 
 
@@ -509,7 +509,7 @@ class TestResourceTemplateInjectionCheck:
 
         assert result.success
         # Should find SQL injection based on error
-        high_or_critical = [f for f in result.findings if f.severity in ("high", "critical")]
+        high_or_critical = [f for f in result.observations if f.severity in ("high", "critical")]
         assert len(high_or_critical) > 0
 
     @pytest.mark.asyncio
@@ -555,7 +555,7 @@ class TestMCPPromptInjectionCheck:
         }
         result = await check.run(ctx)
         assert result.success
-        info = [f for f in result.findings if f.severity == "info"]
+        info = [f for f in result.observations if f.severity == "info"]
         assert len(info) > 0
 
     @pytest.mark.asyncio
@@ -577,7 +577,7 @@ class TestMCPPromptInjectionCheck:
             result = await check.run(mcp_tools_context)
 
         assert result.success
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert len(high) > 0
 
 
@@ -609,7 +609,7 @@ class TestMCPSamplingAbuseCheck:
             result = await check.run(mcp_server_context)
 
         assert result.success
-        high = [f for f in result.findings if f.severity == "high"]
+        high = [f for f in result.observations if f.severity == "high"]
         assert len(high) > 0
 
     @pytest.mark.asyncio

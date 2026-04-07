@@ -9,7 +9,7 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.evidence import fmt_error_evidence
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -52,7 +52,7 @@ class AIErrorLeakageCheck(BaseCheck):
             service = Service.from_dict(endpoint_info.get("service", {}))
             try:
                 ep_result = await self._test_errors(url, service)
-                result.findings.extend(ep_result.findings)
+                result.observations.extend(ep_result.observations)
                 result.outputs.update(ep_result.outputs)
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
@@ -114,8 +114,8 @@ class AIErrorLeakageCheck(BaseCheck):
         host = service.host
 
         if leaked["stack_traces"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Stack trace in error response",
                     description="Error responses contain stack traces revealing internal code paths",
@@ -130,8 +130,8 @@ class AIErrorLeakageCheck(BaseCheck):
             )
 
         if leaked["paths"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Internal paths leaked ({len(leaked['paths'])})",
                     description="Error messages reveal internal file paths",
@@ -145,8 +145,8 @@ class AIErrorLeakageCheck(BaseCheck):
             )
 
         if leaked["tools"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title=f"Tools leaked in errors ({len(leaked['tools'])})",
                     description="Error messages reveal available tool/function names",
@@ -161,8 +161,8 @@ class AIErrorLeakageCheck(BaseCheck):
             )
 
         if leaked["config"]:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Configuration leaked in errors",
                     description="Error messages reveal configuration parameters",

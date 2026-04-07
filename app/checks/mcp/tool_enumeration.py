@@ -24,7 +24,7 @@ import re
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Tool name patterns mapped to risk levels
@@ -178,14 +178,14 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
                         tool_info = self._analyze_tool(tool, service, server_url)
                         all_tools.append(tool_info)
 
-                        # Generate findings based on risk level
+                        # Generate observations based on risk level
                         severity = self._risk_to_severity(tool_info["risk_level"])
 
                         if tool_info["risk_level"] in ("critical", "high"):
                             high_risk_tools.append(tool_info)
 
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=f"MCP tool: {tool_info['name']} ({tool_info['risk_level']} risk)",
                                 description=self._build_tool_description(tool_info),
@@ -356,7 +356,7 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
         return indicators
 
     def _risk_to_severity(self, risk_level: str) -> str:
-        """Convert risk level to finding severity."""
+        """Convert risk level to observation severity."""
         mapping = {
             "critical": "critical",
             "high": "high",
@@ -385,7 +385,7 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
         return " ".join(parts)
 
     def _build_tool_evidence(self, tool_info: dict) -> str:
-        """Build evidence string for tool finding."""
+        """Build evidence string for tool observation."""
         lines = [
             f"Tool: {tool_info['name']}",
             f"Risk: {tool_info['risk_level']}",

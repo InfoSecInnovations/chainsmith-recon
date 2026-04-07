@@ -8,7 +8,7 @@ only recommends.
 Phase 1: Post-scan analysis only.
 - Gap analysis: checks that could have run with better inputs
 - Partial results: checks that errored or timed out
-- Follow-up suggestions: deeper checks based on what was found
+- Follow-up suggestions: deeper checks based on what was observed
 - Coverage cross-reference: suites with zero or low coverage
 
 Usage:
@@ -62,76 +62,76 @@ class ScanAdvisorConfig:
 
 
 # ── Follow-up rules ──────────────────────────────────────────────
-# Maps check names to follow-up suggestions when they produce findings.
+# Maps check names to follow-up suggestions when they produce observations.
 # Each entry: (suggested_check, reason, confidence)
 
 FOLLOW_UP_RULES: list[dict] = [
     {
         "trigger_check": "port_scan",
-        "trigger_condition": "findings",
+        "trigger_condition": "observations",
         "suggest": "service_probe",
         "reason": "Port scan found open ports — service probing can identify what's running.",
         "confidence": "high",
     },
     {
         "trigger_check": "llm_endpoint_discovery",
-        "trigger_condition": "findings",
+        "trigger_condition": "observations",
         "suggest": "prompt_leakage",
         "reason": "LLM endpoints discovered — prompt leakage testing can extract system prompts.",
         "confidence": "high",
     },
     {
         "trigger_check": "mcp_discovery",
-        "trigger_condition": "findings",
+        "trigger_condition": "observations",
         "suggest": "mcp_tool_enumeration",
         "reason": "MCP servers found — enumerating available tools reveals attack surface.",
         "confidence": "high",
     },
     {
         "trigger_check": "agent_discovery",
-        "trigger_condition": "findings",
+        "trigger_condition": "observations",
         "suggest": "agent_goal_injection",
         "reason": "Agent endpoints found — goal injection testing can reveal control weaknesses.",
         "confidence": "medium",
     },
     {
         "trigger_check": "rag_discovery",
-        "trigger_condition": "findings",
+        "trigger_condition": "observations",
         "suggest": "rag_indirect_injection",
         "reason": "RAG endpoints found — indirect injection can manipulate retrieval results.",
         "confidence": "medium",
     },
     {
         "trigger_check": "header_analysis",
-        "trigger_condition": "findings",
+        "trigger_condition": "observations",
         "suggest": "cors_check",
         "reason": "Header issues found — CORS misconfig often accompanies missing security headers.",
         "confidence": "medium",
     },
     {
         "trigger_check": "default_creds",
-        "trigger_condition": "findings",
+        "trigger_condition": "observations",
         "suggest": "debug_endpoints",
         "reason": "Default credentials found — debug endpoints are likely exposed too.",
         "confidence": "high",
     },
     {
         "trigger_check": "tls_analysis",
-        "trigger_condition": "findings",
+        "trigger_condition": "observations",
         "suggest": "hsts_preload",
         "reason": "TLS issues found — HSTS preload status should be verified.",
         "confidence": "medium",
     },
     {
         "trigger_check": "openapi_check",
-        "trigger_condition": "findings",
+        "trigger_condition": "observations",
         "suggest": "mass_assignment",
         "reason": "OpenAPI spec found — mass assignment testing on documented endpoints.",
         "confidence": "medium",
     },
     {
         "trigger_check": "content_filter",
-        "trigger_condition": "findings",
+        "trigger_condition": "observations",
         "suggest": "jailbreak_testing",
         "reason": "Content filter weaknesses detected — jailbreak testing may bypass them entirely.",
         "confidence": "high",
@@ -170,7 +170,7 @@ class ScanAdvisor:
         skipped: set[str],
         all_check_names: set[str],
         context: dict[str, Any],
-        findings: list[dict],
+        observations: list[dict],
         check_metadata: dict[str, dict],
         config: ScanAdvisorConfig | None = None,
     ):
@@ -181,7 +181,7 @@ class ScanAdvisor:
             skipped: Names of checks skipped (on_critical or other).
             all_check_names: Names of ALL checks in the registry.
             context: Final context dict after scan.
-            findings: All findings produced.
+            observations: All observations produced.
             check_metadata: Per-check metadata (conditions, produces, suite).
             config: Advisor configuration.
         """
@@ -190,7 +190,7 @@ class ScanAdvisor:
         self.skipped = skipped
         self.all_check_names = all_check_names
         self.context = context
-        self.findings = findings
+        self.observations = observations
         self.check_metadata = check_metadata
         self.config = config or ScanAdvisorConfig()
 
@@ -291,7 +291,7 @@ class ScanAdvisor:
                     check_name=name,
                     reason=(
                         f"Check '{name}' was skipped due to on_critical policy. "
-                        f"Running it separately may reveal additional findings on the affected hosts."
+                        f"Running it separately may reveal additional observations on the affected hosts."
                     ),
                     confidence="low",
                     category="gap_analysis",
@@ -304,21 +304,21 @@ class ScanAdvisor:
 
     def _analyze_follow_ups(self) -> list[ScanAdvisorRecommendation]:
         """
-        If certain checks produced findings, suggest deeper follow-up
+        If certain checks produced observations, suggest deeper follow-up
         checks that weren't already run.
         """
         recs = []
         ran = self.completed | self.failed | self.skipped
 
-        # Build set of checks that produced findings
-        checks_with_findings = {f.get("check_name") for f in self.findings if f.get("check_name")}
+        # Build set of checks that produced observations
+        checks_with_observations = {o.get("check_name") for o in self.observations if o.get("check_name")}
 
         for rule in FOLLOW_UP_RULES:
             trigger = rule["trigger_check"]
             suggest = rule["suggest"]
 
-            # Only fire if the trigger check ran AND produced findings
-            if trigger not in checks_with_findings:
+            # Only fire if the trigger check ran AND produced observations
+            if trigger not in checks_with_observations:
                 continue
 
             # Only suggest if the follow-up didn't already run
@@ -377,7 +377,7 @@ class ScanAdvisor:
                         reason=(
                             f"No checks ran from the '{suite}' suite "
                             f"({total} available). Consider running the "
-                            f"'{suite}' suite to identify {suite}-specific issues."
+                            f"'{suite}' suite to identify {suite}-specific observations."
                         ),
                         confidence="low",
                         category="config_suggestion",
@@ -427,7 +427,7 @@ def build_advisor_from_launcher(
         skipped=set(launcher.skipped),
         all_check_names=all_check_names,
         context=dict(launcher.context),
-        findings=list(launcher.findings),
+        observations=list(launcher.observations),
         check_metadata=check_metadata,
         config=config,
     )

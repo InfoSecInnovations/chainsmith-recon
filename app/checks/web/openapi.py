@@ -7,7 +7,7 @@ Find and analyze exposed API documentation.
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import extract_headers_dict, extract_paths_from_openapi, safe_json
 
@@ -83,8 +83,8 @@ class OpenAPICheck(ServiceIteratingCheck):
                                 if len(endpoints) > 5:
                                     endpoint_preview += "..."
 
-                                result.findings.append(
-                                    build_finding(
+                                result.observations.append(
+                                    build_observation(
                                         check_name=self.name,
                                         title=f"OpenAPI documentation exposed ({len(endpoints)} endpoints)",
                                         description="API documentation reveals endpoint structure and attack surface",
@@ -114,8 +114,8 @@ class OpenAPICheck(ServiceIteratingCheck):
                     elif "html" in content_type:
                         body_lower = resp.body.lower()
                         if any(kw in body_lower for kw in ["swagger", "openapi", "redoc"]):
-                            result.findings.append(
-                                build_finding(
+                            result.observations.append(
+                                build_observation(
                                     check_name=self.name,
                                     title=f"API documentation UI at {path}",
                                     description="Interactive API documentation is accessible",

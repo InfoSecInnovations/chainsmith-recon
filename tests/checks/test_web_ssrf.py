@@ -102,7 +102,7 @@ class TestSSRFIndicatorCheck:
         ):
             result = await check.check_service(service, context)
 
-        ssrf = [f for f in result.findings if "ssrf" in (f.id or "")]
+        ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) >= 1
         assert any("OpenAPI" in f.title for f in ssrf)
 
@@ -141,7 +141,7 @@ class TestSSRFIndicatorCheck:
         ):
             result = await check.check_service(service, context)
 
-        ssrf = [f for f in result.findings if "ssrf" in (f.id or "")]
+        ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) >= 1
         assert any("image_url" in f.title for f in ssrf)
 
@@ -162,12 +162,12 @@ class TestSSRFIndicatorCheck:
         ):
             result = await check.check_service(service, {})
 
-        ssrf = [f for f in result.findings if "ssrf" in (f.id or "")]
+        ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) >= 2
 
     @pytest.mark.asyncio
     async def test_no_ssrf_when_all_404(self, service):
-        """No SSRF findings when all probed paths return 404."""
+        """No SSRF observations when all probed paths return 404."""
         check = SSRFIndicatorCheck()
 
         with patch(
@@ -178,7 +178,7 @@ class TestSSRFIndicatorCheck:
         ):
             result = await check.check_service(service, {})
 
-        ssrf = [f for f in result.findings if "ssrf" in (f.id or "")]
+        ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) == 0
 
     @pytest.mark.asyncio
@@ -203,10 +203,10 @@ class TestSSRFIndicatorCheck:
         ):
             result = await check.check_service(service, context)
 
-        ssrf = [f for f in result.findings if "ssrf" in (f.id or "")]
+        ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         # Should find /proxy?url= but not /page?id= or /view?name=
-        url_param_findings = [f for f in ssrf if "url" in f.title.lower()]
-        assert len(url_param_findings) >= 1
+        url_param_observations = [f for f in ssrf if "url" in f.title.lower()]
+        assert len(url_param_observations) >= 1
 
     @pytest.mark.asyncio
     async def test_outputs_ssrf_candidates(self, service):
@@ -263,9 +263,9 @@ class TestSSRFIndicatorCheck:
         ):
             result = await check.check_service(service, context)
 
-        proxy_findings = [f for f in result.findings if "proxy" in (f.id or "")]
-        assert len(proxy_findings) >= 1
-        assert proxy_findings[0].severity == "medium"
+        proxy_observations = [f for f in result.observations if "proxy" in (f.id or "")]
+        assert len(proxy_observations) >= 1
+        assert proxy_observations[0].severity == "medium"
 
     @pytest.mark.asyncio
     async def test_deduplication(self, service):
@@ -297,8 +297,8 @@ class TestSSRFIndicatorCheck:
             result = await check.check_service(service, context)
 
         # /api/fetch should appear only once despite being in both sources
-        fetch_findings = [f for f in result.findings if "api-fetch" in (f.id or "")]
-        assert len(fetch_findings) == 1
+        fetch_observations = [f for f in result.observations if "api-fetch" in (f.id or "")]
+        assert len(fetch_observations) == 1
 
     @pytest.mark.asyncio
     async def test_connection_error_handled(self, service):
@@ -333,5 +333,5 @@ class TestSSRFIndicatorCheck:
         ):
             result = await check.check_service(service, {})
 
-        ssrf = [f for f in result.findings if "preview" in (f.id or "")]
+        ssrf = [f for f in result.observations if "preview" in (f.id or "")]
         assert len(ssrf) >= 1

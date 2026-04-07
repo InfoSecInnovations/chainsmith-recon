@@ -1,7 +1,7 @@
 """
 Verifier Agent
 
-Validates Scout's findings, catches hallucinations, assigns confidence scores.
+Validates Scout's observations, catches hallucinations, assigns confidence scores.
 """
 
 import asyncio
@@ -12,18 +12,18 @@ from datetime import datetime
 from openai import AsyncOpenAI
 
 from app.config import LITELLM_BASE_URL, LITELLM_MODEL_VERIFIER
-from app.models import AgentEvent, AgentType, EventImportance, EventType, Finding, FindingStatus
+from app.models import AgentEvent, AgentType, EventImportance, EventType, Observation, ObservationStatus
 from app.tools import verify_cve, verify_endpoint_exists, verify_version_claim
 
-VERIFIER_SYSTEM_PROMPT = """You are Verifier, an AI agent that validates reconnaissance findings.
+VERIFIER_SYSTEM_PROMPT = """You are Verifier, an AI agent that validates reconnaissance observations.
 
-Your job is to fact-check Scout's findings and catch errors, hallucinations, or overstated claims.
+Your job is to fact-check Scout's observations and catch errors, hallucinations, or overstated claims.
 
 VALIDATION RULES:
 1. For CVE claims: Use verify_cve to check if the CVE exists
 2. For version claims: Use verify_version with the raw evidence
 3. For endpoint claims: Use verify_endpoint with the ACTUAL base URL and path
-4. For port/header findings: These are usually factual - verify based on evidence quality
+4. For port/header observations: These are usually factual - verify based on evidence quality
 
 IMPORTANT BASE URLS FOR THIS ENGAGEMENT:
 - Web service: http://sec536-lab-fakobanko-web:8082
@@ -38,13 +38,13 @@ VERIFICATION APPROACH:
 - If claim is reasonable but unverifiable → VERIFIED with lower confidence
 
 SUBMIT VERDICTS:
-For each finding, call submit_verdict with:
-- finding_id: The ID (e.g., "F-001")
+For each observation, call submit_verdict with:
+- observation_id: The ID (e.g., "F-001")
 - status: "verified", "rejected", or "hallucination"
 - confidence: 0.0 to 1.0
 - reasoning: Brief explanation
 
-Be practical. Port scan results showing open ports are factual observations. Header disclosures are factual if the evidence shows the header. Focus hallucination detection on CVEs and overstated claims."""
+Be practical. Port scan results showing open ports are factual data. Header disclosures are factual if the evidence shows the header. Focus hallucination detection on CVEs and overstated claims."""
 
 VERIFIER_TOOLS = [
     {
@@ -91,16 +91,16 @@ VERIFIER_TOOLS = [
         "type": "function",
         "function": {
             "name": "submit_verdict",
-            "description": "Submit verification verdict for a finding",
+            "description": "Submit verification verdict for an observation",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "finding_id": {"type": "string"},
+                    "observation_id": {"type": "string"},
                     "status": {"type": "string", "enum": ["verified", "rejected", "hallucination"]},
                     "confidence": {"type": "number"},
                     "reasoning": {"type": "string"},
                 },
-                "required": ["finding_id", "status", "confidence", "reasoning"],
+                "required": ["observation_id", "status", "confidence", "reasoning"],
             },
         },
     },
@@ -108,7 +108,7 @@ VERIFIER_TOOLS = [
 
 
 class VerifierAgent:
-    """Verifier agent for validating findings."""
+    """Verifier agent for validating observations."""
 
     def __init__(self, event_callback: Callable[[AgentEvent], Awaitable[None]] | None = None):
         self.event_callback = event_callback
@@ -116,8 +116,8 @@ class VerifierAgent:
         self.is_running = False
 
         # Progress tracking
-        self.findings_processed = 0
-        self.total_findings = 0
+        self.observations_processed = 0
+        self.total_observations = 0
 
         self.client = AsyncOpenAI(base_url=LITELLM_BASE_URL, api_key="not-needed")
 
@@ -126,21 +126,21 @@ class VerifierAgent:
         if self.event_callback:
             await self.event_callback(event)
 
-    async def verify_findings(self, findings: list[Finding]) -> list[Finding]:
-        """Verify a list of findings."""
+    async def verify_observations(self, observations: list[Observation]) -> list[Observation]:
+        """Verify a list of observations."""
         self.is_running = True
-        self.findings_processed = 0
+        self.observations_processed = 0
 
-        pending = [f for f in findings if f.status == FindingStatus.PENDING]
-        self.total_findings = len(pending)
+        pending = [f for f in observations if f.status == ObservationStatus.PENDING]
+        self.total_observations = len(pending)
 
         await self.emit(
             AgentEvent(
                 event_type=EventType.AGENT_START,
                 agent=AgentType.VERIFIER,
                 importance=EventImportance.MEDIUM,
-                message=f"Verifier starting validation of {self.total_findings} findings...",
-                details={"total_findings": self.total_findings, "phase": "verification"},
+                message=f"Verifier starting validation of {self.total_observations} observations...",
+                details={"total_observations": self.total_observations, "phase": "verification"},
             )
         )
 
@@ -150,13 +150,13 @@ class VerifierAgent:
                     event_type=EventType.AGENT_COMPLETE,
                     agent=AgentType.VERIFIER,
                     importance=EventImportance.LOW,
-                    message="No findings to verify",
+                    message="No observations to verify",
                 )
             )
-            return findings
+            return observations
 
-        # Build prompt with findings
-        findings_text = "\n".join(
+        # Build prompt with observations
+        observations_text = "\n".join(
             [
                 f"- [{f.id}] {f.title}\n  Severity: {f.severity.value}\n  Evidence: {f.evidence_summary or 'None provided'}"
                 for f in pending
@@ -167,7 +167,7 @@ class VerifierAgent:
             {"role": "system", "content": VERIFIER_SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": f"Verify these {len(pending)} findings. Call submit_verdict for EACH one:\n\n{findings_text}",
+                "content": f"Verify these {len(pending)} observations. Call submit_verdict for EACH one:\n\n{observations_text}",
             },
         ]
 
@@ -184,11 +184,11 @@ class VerifierAgent:
                         event_type=EventType.INFO,
                         agent=AgentType.VERIFIER,
                         importance=EventImportance.LOW,
-                        message=f"Verifier iteration {iteration}, {self.findings_processed}/{self.total_findings} processed",
+                        message=f"Verifier iteration {iteration}, {self.observations_processed}/{self.total_observations} processed",
                         details={
                             "iteration": iteration,
-                            "processed": self.findings_processed,
-                            "total": self.total_findings,
+                            "processed": self.observations_processed,
+                            "total": self.total_observations,
                         },
                     )
                 )
@@ -207,13 +207,13 @@ class VerifierAgent:
                     messages.append(msg)
 
                     for tc in msg.tool_calls:
-                        result = await self._execute_tool(tc, findings)
+                        result = await self._execute_tool(tc, observations)
                         messages.append(
                             {"role": "tool", "tool_call_id": tc.id, "content": json.dumps(result)}
                         )
                 else:
-                    # Check if we've processed all findings
-                    if self.findings_processed >= self.total_findings:
+                    # Check if we've processed all observations
+                    if self.observations_processed >= self.total_observations:
                         break
                     # If not done, prompt to continue
                     if msg.content:
@@ -229,25 +229,25 @@ class VerifierAgent:
 
                 await asyncio.sleep(0.1)
 
-            # Apply verdicts to findings
+            # Apply verdicts to observations
             verified_count = 0
             rejected_count = 0
             hallucination_count = 0
 
-            for f in findings:
+            for f in observations:
                 if f.id in self.verdicts:
                     v = self.verdicts[f.id]
-                    f.status = FindingStatus(v["status"])
+                    f.status = ObservationStatus(v["status"])
                     f.confidence = v["confidence"]
                     f.verification_notes = v["reasoning"]
                     f.verified_by = AgentType.VERIFIER
                     f.verified_at = datetime.utcnow()
 
-                    if f.status == FindingStatus.VERIFIED:
+                    if f.status == ObservationStatus.VERIFIED:
                         verified_count += 1
-                    elif f.status == FindingStatus.REJECTED:
+                    elif f.status == ObservationStatus.REJECTED:
                         rejected_count += 1
-                    elif f.status == FindingStatus.HALLUCINATION:
+                    elif f.status == ObservationStatus.HALLUCINATION:
                         hallucination_count += 1
 
             await self.emit(
@@ -260,7 +260,7 @@ class VerifierAgent:
                         "verified": verified_count,
                         "rejected": rejected_count,
                         "hallucinations": hallucination_count,
-                        "total_processed": self.findings_processed,
+                        "total_processed": self.observations_processed,
                     },
                 )
             )
@@ -276,9 +276,9 @@ class VerifierAgent:
             )
 
         self.is_running = False
-        return findings
+        return observations
 
-    async def _execute_tool(self, tool_call, findings: list[Finding]) -> dict:
+    async def _execute_tool(self, tool_call, observations: list[Observation]) -> dict:
         """Execute a verification tool."""
         name = tool_call.function.name
         args = json.loads(tool_call.function.arguments)
@@ -355,21 +355,21 @@ class VerifierAgent:
                 return result
 
             elif name == "submit_verdict":
-                finding_id = args["finding_id"]
+                observation_id = args["observation_id"]
                 status = args["status"]
                 confidence = args["confidence"]
                 reasoning = args["reasoning"]
 
-                self.verdicts[finding_id] = {
+                self.verdicts[observation_id] = {
                     "status": status,
                     "confidence": confidence,
                     "reasoning": reasoning,
                 }
-                self.findings_processed += 1
+                self.observations_processed += 1
 
-                # Find the finding for context
-                finding = next((f for f in findings if f.id == finding_id), None)
-                finding_title = finding.title if finding else finding_id
+                # Find the observation for context
+                observation = next((f for f in observations if f.id == observation_id), None)
+                observation_title = observation.title if observation else observation_id
 
                 # Emit appropriate event based on verdict
                 if status == "hallucination":
@@ -378,38 +378,38 @@ class VerifierAgent:
                             event_type=EventType.HALLUCINATION_CAUGHT,
                             agent=AgentType.VERIFIER,
                             importance=EventImportance.HIGH,
-                            message=f"HALLUCINATION CAUGHT [{finding_id}]: {reasoning[:80]}",
-                            finding_id=finding_id,
-                            details={"confidence": confidence, "finding_title": finding_title},
+                            message=f"HALLUCINATION CAUGHT [{observation_id}]: {reasoning[:80]}",
+                            observation_id=observation_id,
+                            details={"confidence": confidence, "observation_title": observation_title},
                         )
                     )
                 elif status == "verified":
                     await self.emit(
                         AgentEvent(
-                            event_type=EventType.FINDING_VERIFIED,
+                            event_type=EventType.OBSERVATION_VERIFIED,
                             agent=AgentType.VERIFIER,
                             importance=EventImportance.MEDIUM,
-                            message=f"VERIFIED [{finding_id}]: {finding_title}",
-                            finding_id=finding_id,
+                            message=f"VERIFIED [{observation_id}]: {observation_title}",
+                            observation_id=observation_id,
                             details={"confidence": confidence, "reasoning": reasoning[:100]},
                         )
                     )
                 else:  # rejected
                     await self.emit(
                         AgentEvent(
-                            event_type=EventType.FINDING_REJECTED,
+                            event_type=EventType.OBSERVATION_REJECTED,
                             agent=AgentType.VERIFIER,
                             importance=EventImportance.LOW,
-                            message=f"REJECTED [{finding_id}]: {reasoning[:80]}",
-                            finding_id=finding_id,
+                            message=f"REJECTED [{observation_id}]: {reasoning[:80]}",
+                            observation_id=observation_id,
                             details={"confidence": confidence},
                         )
                     )
 
                 return {
                     "status": "recorded",
-                    "finding_id": finding_id,
-                    "progress": f"{self.findings_processed}/{self.total_findings}",
+                    "observation_id": observation_id,
+                    "progress": f"{self.observations_processed}/{self.total_observations}",
                 }
 
             return {"error": f"Unknown tool: {name}"}

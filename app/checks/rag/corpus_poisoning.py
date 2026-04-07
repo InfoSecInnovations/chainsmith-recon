@@ -19,7 +19,7 @@ import uuid
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Ingestion endpoint paths to probe
@@ -126,15 +126,15 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        # Generate findings
+        # Generate observations
         writable = [i for i in ingestion_found if i.get("writable")]
         accessible = [i for i in ingestion_found if not i.get("writable") and i.get("accessible")]
 
         if writable:
             no_auth = [i for i in writable if not i.get("auth_required")]
             if no_auth:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="Corpus poisoning: ingestion endpoint accepts unauthenticated writes",
                         description=(
@@ -151,8 +151,8 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
                     )
                 )
             else:
-                result.findings.append(
-                    build_finding(
+                result.observations.append(
+                    build_observation(
                         check_name=self.name,
                         title="Document ingestion endpoint accessible with write access",
                         description=(
@@ -170,8 +170,8 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
                 )
 
         if accessible and not writable:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="Document ingestion endpoint found but writes rejected",
                     description="Ingestion endpoint exists but requires proper auth or rejected test document.",
@@ -184,8 +184,8 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
             )
 
         if not ingestion_found:
-            result.findings.append(
-                build_finding(
+            result.observations.append(
+                build_observation(
                     check_name=self.name,
                     title="No writable ingestion endpoints found",
                     description="No document ingestion endpoints detected.",

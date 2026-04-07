@@ -18,7 +18,7 @@ import uuid
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.findings import build_finding
+from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 # Max entries to test (keep low to avoid impacting production)
@@ -75,8 +75,8 @@ class CacheQuotaCheck(ServiceIteratingCheck):
                         quota_results.append(quota_info)
 
                         severity = self._determine_severity(quota_info)
-                        result.findings.append(
-                            build_finding(
+                        result.observations.append(
+                            build_observation(
                                 check_name=self.name,
                                 title=self._build_title(quota_info),
                                 description=self._build_description(quota_info),
@@ -198,7 +198,7 @@ class CacheQuotaCheck(ServiceIteratingCheck):
         }
 
     def _determine_severity(self, quota_info: dict) -> str:
-        """Determine finding severity."""
+        """Determine observation severity."""
         if quota_info.get("eviction_detected"):
             return "medium"
         if quota_info.get("unbounded"):
@@ -206,7 +206,7 @@ class CacheQuotaCheck(ServiceIteratingCheck):
         return "low"
 
     def _build_title(self, quota_info: dict) -> str:
-        """Build finding title."""
+        """Build observation title."""
         if quota_info.get("eviction_detected"):
             n = quota_info["early_entries_evicted"]
             return f"Cache exhaustion possible: {n} early entries evicted (LRU eviction confirmed)"
@@ -218,7 +218,7 @@ class CacheQuotaCheck(ServiceIteratingCheck):
         return f"Cache size limited: approximately {quota_info['estimated_capacity']} entries"
 
     def _build_description(self, quota_info: dict) -> str:
-        """Build finding description."""
+        """Build observation description."""
         if quota_info.get("eviction_detected"):
             return (
                 f"After sending {quota_info['total_entries_sent']} unique queries, "

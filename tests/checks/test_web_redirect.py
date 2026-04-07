@@ -96,7 +96,7 @@ class TestRedirectChainCheck:
         ):
             result = await check.check_service(service, {})
 
-        no_https = [f for f in result.findings if "no-https-redirect" in (f.id or "")]
+        no_https = [f for f in result.observations if "no-https-redirect" in (f.id or "")]
         assert len(no_https) == 1
         assert no_https[0].severity == "medium"
 
@@ -118,7 +118,7 @@ class TestRedirectChainCheck:
         ):
             result = await check.check_service(service, {})
 
-        ok = [f for f in result.findings if "https-redirect-ok" in (f.id or "")]
+        ok = [f for f in result.observations if "https-redirect-ok" in (f.id or "")]
         assert len(ok) == 1
         assert ok[0].severity == "info"
 
@@ -135,7 +135,7 @@ class TestRedirectChainCheck:
         ):
             result = await check.check_service(https_service, {})
 
-        no_https = [f for f in result.findings if "no-https-redirect" in (f.id or "")]
+        no_https = [f for f in result.observations if "no-https-redirect" in (f.id or "")]
         assert len(no_https) == 0
 
     @pytest.mark.asyncio
@@ -160,7 +160,7 @@ class TestRedirectChainCheck:
         with patch("app.checks.web.redirect_chain.AsyncHttpClient", return_value=mock):
             result = await check.check_service(service, {})
 
-        long_chain = [f for f in result.findings if "long-chain" in (f.id or "")]
+        long_chain = [f for f in result.observations if "long-chain" in (f.id or "")]
         assert len(long_chain) == 1
 
     @pytest.mark.asyncio
@@ -181,7 +181,7 @@ class TestRedirectChainCheck:
         ):
             result = await check.check_service(service, {})
 
-        open_redir = [f for f in result.findings if "open-redirect" in (f.id or "")]
+        open_redir = [f for f in result.observations if "open-redirect" in (f.id or "")]
         assert len(open_redir) >= 1
         assert open_redir[0].severity == "medium"
 
@@ -211,7 +211,7 @@ class TestRedirectChainCheck:
         with patch("app.checks.web.redirect_chain.AsyncHttpClient", return_value=mock):
             result = await check.check_service(service, {})
 
-        cross = [f for f in result.findings if "cross-domain" in (f.id or "")]
+        cross = [f for f in result.observations if "cross-domain" in (f.id or "")]
         assert len(cross) == 1
 
     @pytest.mark.asyncio
@@ -227,7 +227,7 @@ class TestRedirectChainCheck:
         ):
             result = await check.check_service(service, {})
 
-        open_redir = [f for f in result.findings if "open-redirect" in (f.id or "")]
+        open_redir = [f for f in result.observations if "open-redirect" in (f.id or "")]
         assert len(open_redir) == 0
 
     @pytest.mark.asyncio

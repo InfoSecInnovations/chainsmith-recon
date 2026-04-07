@@ -8,7 +8,7 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_endpoint_evidence
-from app.lib.findings import make_finding_id_hashed
+from app.lib.observations import make_observation_id_hashed
 from app.lib.http import AsyncHttpClient, HttpConfig
 from app.lib.parsing import safe_json
 
@@ -111,14 +111,14 @@ class ModelInfoCheck(ServiceIteratingCheck):
                     if model_details.get("model_id"):
                         evidence += f" | Model: {model_details['model_id']}"
 
-                    finding_id = make_finding_id_hashed(
+                    observation_id = make_observation_id_hashed(
                         self.name, service.host, "info-endpoint", path
                     )
-                    from app.checks.base import Finding
+                    from app.checks.base import Observation
 
-                    result.findings.append(
-                        Finding(
-                            id=finding_id,
+                    result.observations.append(
+                        Observation(
+                            id=observation_id,
                             title=f"Model info endpoint: {path}",
                             description="Endpoint exposes model information and configuration",
                             severity=severity,
