@@ -12,9 +12,11 @@ from app.proof_of_scope import ProofOfScopeSettings, ScopeChecker, reset_proof_o
 
 class AppState:
     """
-    Global application state for scan tracking.
+    Global application state for scan progress tracking.
 
-    Holds target info, observations, progress, settings, and proof-of-scope config.
+    Holds target info, progress counters, settings, and proof-of-scope config.
+    Result data (observations, chains, adjudication) lives in the database,
+    keyed by active_scan_id.
     """
 
     def __init__(self):
@@ -23,10 +25,11 @@ class AppState:
     def reset(self):
         """Reset all state to initial values."""
         self.session_id = uuid.uuid4().hex[:8]
+        self.active_scan_id: str | None = None  # Phase 31: points routes to current scan in DB
+        self._last_scan_id: str | None = None  # Internal: used by post-scan phases
         self.target: str | None = None
         self.exclude: list[str] = []
         self.techniques: list[str] = []
-        self.observations: list[dict] = []
         self.status: str = "idle"
         self.phase: str = "idle"  # idle, scanning, done
         self.error_message: str | None = None
@@ -37,13 +40,10 @@ class AppState:
         self.checks_completed: int = 0
         self.current_check: str | None = None
         self.check_statuses: dict[str, str] = {}  # name -> status
-        self.check_log: list[dict] = []  # History of check executions
 
-        # Chain analysis
-        self.chains: list[dict] = []
+        # Chain / adjudication concurrency guards (result data is in DB)
         self.chain_status: str = "idle"  # idle, analyzing, complete, partial, error
-        self.chain_error: str | None = None
-        self.chain_llm_analysis: dict | None = None  # structured LLM analysis detail
+        self.adjudication_status: str = "idle"  # idle, adjudicating, complete, error
 
         # Settings
         self.settings = {
@@ -54,14 +54,6 @@ class AppState:
 
         # Engagement link
         self.engagement_id: str | None = None
-
-        # Scan advisor recommendations (Phase 20)
-        self.advisor_recommendations: list[dict] = []
-
-        # Adjudication tracking (Phase 21)
-        self.adjudication_status: str = "idle"  # idle, adjudicating, complete, error
-        self.adjudication_results: list[dict] = []
-        self.adjudication_error: str | None = None
 
         # Proof of scope settings
         self.proof_settings = ProofOfScopeSettings()

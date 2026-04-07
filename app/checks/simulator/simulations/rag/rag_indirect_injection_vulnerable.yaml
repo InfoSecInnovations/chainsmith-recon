@@ -74,7 +74,7 @@ output:
         - payload_id: "delimiter_escape"
           confidence: 0.6
 
-findings:
+observations:
   - title: "Indirect injection indicator: context_extraction"
     description: "Indirect injection indicators detected using 'context_extraction' test. Category: information_extraction. Confidence: 75%. Test: Attempts to extract injection payloads from retrieved context. Retrieved 3 documents."
     severity: "high"

@@ -1,5 +1,5 @@
 # simulations/web/cors_wildcard.yaml
-# Smoke test: CORS wildcard with credentials (critical finding)
+# Smoke test: CORS wildcard with credentials (critical observation)
 suite: web
 emulates: cors_check
 target: "api.example.local"
@@ -9,4 +9,4 @@ output:
   tested_origin: "https://evil.attacker.com"
   acao_header: "*"
   acac_header: "true"
-  finding_severity: "high"
+  observation_severity: "high"

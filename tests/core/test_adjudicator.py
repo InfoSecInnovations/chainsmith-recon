@@ -1,15 +1,15 @@
 """
-Tests for Phase 21a Adjudicator Agent
+Tests for Adjudicator Agent
 
 Covers:
-- AdjudicatorAgent instantiation and approach defaults
-- Auto tiering logic (severity -> approach mapping)
-- Each approach with mocked LLM responses
-- Operator context loading (file exists, missing, malformed)
-- Event emission (correct types and counts)
+- AdjudicatorAgent instantiation
+- Evidence rubric scoring with mocked LLM responses
+- Operator context matching (exact, wildcard, defaults, missing)
+- Operator context file loading (valid, missing, malformed)
+- Event emission (start, complete, upheld, adjusted)
 - AdjudicatedRisk model validation
-- Edge cases (no verified observations, LLM unavailable, all upheld)
-- Approach resolution priority
+- Edge cases (no verified observations, LLM unavailable, malformed JSON, stop)
+- JSON cleaning
 """
 
 import json
@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.agents.adjudicator import AdjudicatorAgent
-from app.engine.adjudication import load_operator_context, resolve_approach
+from app.engine.adjudication import load_operator_context
 from app.lib.llm import LLMErrorType, LLMResponse
 from app.models import (
     AdjudicatedRisk,
@@ -75,22 +75,6 @@ def _make_llm_response(content: dict, success: bool = True) -> LLMResponse:
     )
 
 
-def _challenge_response(severity: str = "medium", confidence: float = 0.85) -> dict:
-    """Standard structured challenge response."""
-    return {
-        "challenge_argument": "The severity seems overstated given context",
-        "final_severity": severity,
-        "confidence": confidence,
-        "rationale": "Observation is valid but mitigated by VPN access requirement",
-        "factors": {
-            "attack_vector": "network",
-            "complexity": "high",
-            "privileges_required": "low",
-            "impact": "medium",
-        },
-    }
-
-
 def _rubric_response(severity: str = "medium", confidence: float = 0.8) -> dict:
     """Standard evidence rubric response."""
     return {
@@ -144,144 +128,15 @@ def sample_operator_context():
 
 
 class TestAgentInstantiation:
-    def test_default_approach_is_auto(self, mock_llm_client):
+    def test_default_state(self, mock_llm_client):
         agent = AdjudicatorAgent(client=mock_llm_client)
-        assert agent.approach == AdjudicationApproach.AUTO
-
-    def test_explicit_approach(self, mock_llm_client):
-        agent = AdjudicatorAgent(
-            client=mock_llm_client, approach=AdjudicationApproach.ADVERSARIAL_DEBATE
-        )
-        assert agent.approach == AdjudicationApproach.ADVERSARIAL_DEBATE
+        assert agent.is_running is False
+        assert agent.results == []
 
     def test_event_callback_stored(self, mock_llm_client):
         callback = AsyncMock()
         agent = AdjudicatorAgent(client=mock_llm_client, event_callback=callback)
         assert agent.event_callback is callback
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Auto Tiering
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestAutoTiering:
-    def test_critical_uses_adversarial(self, mock_llm_client):
-        agent = AdjudicatorAgent(client=mock_llm_client)
-        observation = _make_observation(severity="critical")
-        assert agent._resolve_approach(observation) == AdjudicationApproach.ADVERSARIAL_DEBATE
-
-    def test_high_uses_adversarial(self, mock_llm_client):
-        agent = AdjudicatorAgent(client=mock_llm_client)
-        observation = _make_observation(severity="high")
-        assert agent._resolve_approach(observation) == AdjudicationApproach.ADVERSARIAL_DEBATE
-
-    def test_medium_uses_rubric(self, mock_llm_client):
-        agent = AdjudicatorAgent(client=mock_llm_client)
-        observation = _make_observation(severity="medium")
-        assert agent._resolve_approach(observation) == AdjudicationApproach.EVIDENCE_RUBRIC
-
-    def test_low_uses_challenge(self, mock_llm_client):
-        agent = AdjudicatorAgent(client=mock_llm_client)
-        observation = _make_observation(severity="low")
-        assert agent._resolve_approach(observation) == AdjudicationApproach.STRUCTURED_CHALLENGE
-
-    def test_info_uses_challenge(self, mock_llm_client):
-        agent = AdjudicatorAgent(client=mock_llm_client)
-        observation = _make_observation(severity="info")
-        assert agent._resolve_approach(observation) == AdjudicationApproach.STRUCTURED_CHALLENGE
-
-    def test_explicit_approach_overrides_auto(self, mock_llm_client):
-        agent = AdjudicatorAgent(
-            client=mock_llm_client, approach=AdjudicationApproach.EVIDENCE_RUBRIC
-        )
-        observation = _make_observation(severity="critical")
-        assert agent._resolve_approach(observation) == AdjudicationApproach.EVIDENCE_RUBRIC
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Structured Challenge
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestStructuredChallenge:
-    async def test_severity_adjusted(self, mock_llm_client):
-        mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("medium"))
-
-        agent = AdjudicatorAgent(
-            client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
-        )
-        observation = _make_observation(severity="high")
-        results = await agent.adjudicate_observations([observation])
-
-        assert len(results) == 1
-        assert results[0].original_severity == ObservationSeverity.HIGH
-        assert results[0].adjudicated_severity == ObservationSeverity.MEDIUM
-        assert results[0].approach_used == AdjudicationApproach.STRUCTURED_CHALLENGE
-        assert results[0].confidence == 0.85
-
-    async def test_severity_upheld(self, mock_llm_client):
-        mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("high"))
-
-        agent = AdjudicatorAgent(
-            client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
-        )
-        observation = _make_observation(severity="high")
-        results = await agent.adjudicate_observations([observation])
-
-        assert len(results) == 1
-        assert results[0].original_severity == results[0].adjudicated_severity
-
-    async def test_llm_failure_upholds_severity(self, mock_llm_client):
-        mock_llm_client.chat.return_value = _make_llm_response({}, success=False)
-
-        agent = AdjudicatorAgent(
-            client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
-        )
-        observation = _make_observation(severity="high")
-        results = await agent.adjudicate_observations([observation])
-
-        assert len(results) == 1
-        assert results[0].adjudicated_severity == ObservationSeverity.HIGH
-        assert results[0].confidence == 0.0
-        assert "inconclusive" in results[0].rationale.lower()
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Adversarial Debate
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestAdversarialDebate:
-    async def test_three_llm_calls(self, mock_llm_client):
-        prosecution = {
-            "argument": "This is critical",
-            "suggested_severity": "critical",
-            "key_factors": ["exposed"],
-        }
-        defense = {
-            "argument": "This is overstated",
-            "suggested_severity": "low",
-            "key_factors": ["vpn"],
-        }
-        verdict = _challenge_response("medium", 0.9)
-
-        mock_llm_client.chat.side_effect = [
-            _make_llm_response(prosecution),
-            _make_llm_response(defense),
-            _make_llm_response(verdict),
-        ]
-
-        agent = AdjudicatorAgent(
-            client=mock_llm_client, approach=AdjudicationApproach.ADVERSARIAL_DEBATE
-        )
-        observation = _make_observation(severity="high")
-        results = await agent.adjudicate_observations([observation])
-
-        assert mock_llm_client.chat.call_count == 3
-        assert len(results) == 1
-        assert results[0].approach_used == AdjudicationApproach.ADVERSARIAL_DEBATE
-        assert results[0].adjudicated_severity == ObservationSeverity.MEDIUM
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -293,15 +148,56 @@ class TestEvidenceRubric:
     async def test_rubric_scoring(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response(_rubric_response("medium"))
 
-        agent = AdjudicatorAgent(
-            client=mock_llm_client, approach=AdjudicationApproach.EVIDENCE_RUBRIC
-        )
+        agent = AdjudicatorAgent(client=mock_llm_client)
         observation = _make_observation(severity="high")
         results = await agent.adjudicate_observations([observation])
 
         assert len(results) == 1
         assert results[0].approach_used == AdjudicationApproach.EVIDENCE_RUBRIC
         assert "exploitability" in results[0].factors
+
+    async def test_severity_adjusted(self, mock_llm_client):
+        mock_llm_client.chat.return_value = _make_llm_response(_rubric_response("medium"))
+
+        agent = AdjudicatorAgent(client=mock_llm_client)
+        observation = _make_observation(severity="high")
+        results = await agent.adjudicate_observations([observation])
+
+        assert len(results) == 1
+        assert results[0].original_severity == ObservationSeverity.HIGH
+        assert results[0].adjudicated_severity == ObservationSeverity.MEDIUM
+        assert results[0].confidence == 0.8
+
+    async def test_severity_upheld(self, mock_llm_client):
+        mock_llm_client.chat.return_value = _make_llm_response(_rubric_response("high"))
+
+        agent = AdjudicatorAgent(client=mock_llm_client)
+        observation = _make_observation(severity="high")
+        results = await agent.adjudicate_observations([observation])
+
+        assert len(results) == 1
+        assert results[0].original_severity == results[0].adjudicated_severity
+
+    async def test_llm_failure_upholds_severity(self, mock_llm_client):
+        mock_llm_client.chat.return_value = _make_llm_response({}, success=False)
+
+        agent = AdjudicatorAgent(client=mock_llm_client)
+        observation = _make_observation(severity="high")
+        results = await agent.adjudicate_observations([observation])
+
+        assert len(results) == 1
+        assert results[0].adjudicated_severity == ObservationSeverity.HIGH
+        assert results[0].confidence == 0.0
+        assert "inconclusive" in results[0].rationale.lower()
+
+    async def test_single_llm_call_per_observation(self, mock_llm_client):
+        mock_llm_client.chat.return_value = _make_llm_response(_rubric_response("medium"))
+
+        agent = AdjudicatorAgent(client=mock_llm_client)
+        observation = _make_observation(severity="high")
+        await agent.adjudicate_observations([observation])
+
+        assert mock_llm_client.chat.call_count == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -380,14 +276,10 @@ class TestOperatorContextLoading:
 
 class TestEventEmission:
     async def test_emits_start_and_complete(self, mock_llm_client):
-        mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("high"))
+        mock_llm_client.chat.return_value = _make_llm_response(_rubric_response("high"))
 
         callback = AsyncMock()
-        agent = AdjudicatorAgent(
-            client=mock_llm_client,
-            event_callback=callback,
-            approach=AdjudicationApproach.STRUCTURED_CHALLENGE,
-        )
+        agent = AdjudicatorAgent(client=mock_llm_client, event_callback=callback)
 
         observation = _make_observation(severity="high")
         await agent.adjudicate_observations([observation])
@@ -397,14 +289,10 @@ class TestEventEmission:
         assert EventType.ADJUDICATION_COMPLETE in event_types
 
     async def test_emits_upheld_when_severity_same(self, mock_llm_client):
-        mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("high"))
+        mock_llm_client.chat.return_value = _make_llm_response(_rubric_response("high"))
 
         callback = AsyncMock()
-        agent = AdjudicatorAgent(
-            client=mock_llm_client,
-            event_callback=callback,
-            approach=AdjudicationApproach.STRUCTURED_CHALLENGE,
-        )
+        agent = AdjudicatorAgent(client=mock_llm_client, event_callback=callback)
 
         observation = _make_observation(severity="high")
         await agent.adjudicate_observations([observation])
@@ -413,14 +301,10 @@ class TestEventEmission:
         assert EventType.SEVERITY_UPHELD in event_types
 
     async def test_emits_adjusted_when_severity_changes(self, mock_llm_client):
-        mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("medium"))
+        mock_llm_client.chat.return_value = _make_llm_response(_rubric_response("medium"))
 
         callback = AsyncMock()
-        agent = AdjudicatorAgent(
-            client=mock_llm_client,
-            event_callback=callback,
-            approach=AdjudicationApproach.STRUCTURED_CHALLENGE,
-        )
+        agent = AdjudicatorAgent(client=mock_llm_client, event_callback=callback)
 
         observation = _make_observation(severity="high")
         await agent.adjudicate_observations([observation])
@@ -454,9 +338,7 @@ class TestEdgeCases:
             success=True,
         )
 
-        agent = AdjudicatorAgent(
-            client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
-        )
+        agent = AdjudicatorAgent(client=mock_llm_client)
         observation = _make_observation(severity="high")
         results = await agent.adjudicate_observations([observation])
 
@@ -472,13 +354,11 @@ class TestEdgeCases:
             call_count += 1
             if call_count >= 2:
                 agent.stop()
-            return _make_llm_response(_challenge_response("high"))
+            return _make_llm_response(_rubric_response("high"))
 
         mock_llm_client.chat.side_effect = chat_side_effect
 
-        agent = AdjudicatorAgent(
-            client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
-        )
+        agent = AdjudicatorAgent(client=mock_llm_client)
         observations = [_make_observation(observation_id=f"F-{i:03d}") for i in range(5)]
         results = await agent.adjudicate_observations(observations)
         # Stop called after 2nd LLM call, so should have fewer than 5 results
@@ -497,9 +377,9 @@ class TestAdjudicatedRiskModel:
             original_severity=ObservationSeverity.HIGH,
             adjudicated_severity=ObservationSeverity.MEDIUM,
             confidence=0.85,
-            approach_used=AdjudicationApproach.STRUCTURED_CHALLENGE,
+            approach_used=AdjudicationApproach.EVIDENCE_RUBRIC,
             rationale="Mitigated by VPN",
-            factors={"attack_vector": "local"},
+            factors={"exploitability": 0.3},
         )
         assert risk.observation_id == "F-001"
         assert risk.adjudicated_by == AgentType.ADJUDICATOR
@@ -511,37 +391,9 @@ class TestAdjudicatedRiskModel:
                 original_severity=ObservationSeverity.HIGH,
                 adjudicated_severity=ObservationSeverity.HIGH,
                 confidence=1.5,  # Out of bounds
-                approach_used=AdjudicationApproach.AUTO,
+                approach_used=AdjudicationApproach.EVIDENCE_RUBRIC,
                 rationale="Test",
             )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Approach Resolution
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestApproachResolution:
-    def _make_config(self, default_approach="auto"):
-        cfg = MagicMock()
-        cfg.adjudicator.default_approach = default_approach
-        return cfg
-
-    def test_api_param_wins(self):
-        result = resolve_approach("adversarial_debate", config=self._make_config("auto"))
-        assert result == AdjudicationApproach.ADVERSARIAL_DEBATE
-
-    def test_config_default_used(self):
-        result = resolve_approach(None, config=self._make_config("evidence_rubric"))
-        assert result == AdjudicationApproach.EVIDENCE_RUBRIC
-
-    def test_invalid_api_param_falls_back(self):
-        result = resolve_approach("invalid_approach", config=self._make_config("auto"))
-        assert result == AdjudicationApproach.AUTO
-
-    def test_invalid_config_falls_back_to_auto(self):
-        result = resolve_approach(None, config=self._make_config("invalid"))
-        assert result == AdjudicationApproach.AUTO
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

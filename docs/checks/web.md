@@ -14,11 +14,11 @@ HTTP analysis, technology fingerprinting, and web vulnerability detection.
 | Property | Value |
 |----------|-------|
 | Conditions | `services is truthy` |
-| Produces | `header_findings` |
+| Produces | `header_observations` |
 
 Checks for missing security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy), grades CSP and HSTS values, detects CORS wildcards and server version disclosure.
 
-#### Findings
+#### Observations
 
 - **medium**: Weak CSP policy (unsafe-inline, unsafe-eval, wildcard sources)
 - **medium**: CORS allows any origin
@@ -38,11 +38,11 @@ Checks for missing security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-
 | Property | Value |
 |----------|-------|
 | Conditions | `services is truthy` |
-| Produces | `cookie_findings` |
+| Produces | `cookie_observations` |
 
 Parses Set-Cookie headers and flags missing security attributes on session and authentication cookies. Detects broad domain scope and excessively long-lived sessions.
 
-#### Findings
+#### Observations
 
 - **medium**: Session cookie missing Secure flag
 - **medium**: Session cookie missing HttpOnly
@@ -60,11 +60,11 @@ Parses Set-Cookie headers and flags missing security attributes on session and a
 | Property | Value |
 |----------|-------|
 | Conditions | `services is truthy` |
-| Produces | `cors_findings` |
+| Produces | `cors_observations` |
 
 Sends OPTIONS requests with attacker-controlled Origin headers (evil.attacker.com, null). Detects wildcard CORS, origin reflection, null origin acceptance, and credentials exposure.
 
-#### Findings
+#### Observations
 
 - **high**: CORS reflects arbitrary origin with credentials
 - **high**: CORS allows any origin with credentials
@@ -85,7 +85,7 @@ Sends OPTIONS requests with attacker-controlled Origin headers (evil.attacker.co
 
 Fetches robots.txt and searches disallowed paths for sensitive patterns: admin, internal, api, debug, config, backup, model, ml, ai, git, env.
 
-#### Findings
+#### Observations
 
 - **low**: Sensitive paths in robots.txt
 - **info**: Sitemaps disclosed
@@ -103,7 +103,7 @@ Fetches robots.txt and searches disallowed paths for sensitive patterns: admin, 
 
 Multi-method detection via response headers, cookie signatures, server header patterns, and error page fingerprints. Distinguishes WAF products (Cloudflare, AWS WAF, Imperva, Sucuri, F5 BIG-IP, Barracuda, Citrix ADC) from generic CDNs.
 
-#### Findings
+#### Observations
 
 - **info**: WAF/CDN product detected
 - **low**: WAF may affect scan accuracy
@@ -121,7 +121,7 @@ Multi-method detection via response headers, cookie signatures, server header pa
 
 Probes for WWW-Authenticate headers, OAuth/OIDC endpoints, login forms, and unauthenticated API access.
 
-#### Findings
+#### Observations
 
 - **medium**: API endpoint requires no authentication
 - **low**: Bearer auth required on HTTP (insecure)
@@ -142,7 +142,7 @@ Probes for WWW-Authenticate headers, OAuth/OIDC endpoints, login forms, and unau
 
 Downloads /favicon.ico and extracts favicon URLs from HTML link tags. Matches MD5 hash against OWASP database to identify CI/CD systems, monitoring platforms, web servers, frameworks, databases, and AI/ML platforms.
 
-#### Findings
+#### Observations
 
 - **info**: Framework identified via favicon
 
@@ -159,7 +159,7 @@ Downloads /favicon.ico and extracts favicon URLs from HTML link tags. Matches MD
 
 Detects HTTP/2 via TLS ALPN negotiation, HTTP/3 via Alt-Svc header, and HTTP/2c via Upgrade header.
 
-#### Findings
+#### Observations
 
 - **info**: Protocol support detected (HTTP/2, HTTP/3, HTTP/1.1 only)
 
@@ -178,7 +178,7 @@ Detects HTTP/2 via TLS ALPN negotiation, HTTP/3 via Alt-Svc header, and HTTP/2c 
 
 Probes 50+ common paths including admin endpoints, config files, VCS files, backups, API endpoints, AI/ML paths, and monitoring endpoints. Returns accessible (200), protected (403), and redirect (3xx) results.
 
-#### Findings
+#### Observations
 
 - **high**: Accessible .env, .git, database backups
 - **medium**: Admin, config, debug, model, inference endpoints
@@ -198,7 +198,7 @@ Probes 50+ common paths including admin endpoints, config files, VCS files, back
 
 Fetches and parses XML sitemaps, follows sitemap index files (up to 10 sub-sitemaps), processes up to 500 URLs per service. Classifies sensitive and API paths.
 
-#### Findings
+#### Observations
 
 - **low**: Sitemap reveals sensitive paths (staging, debug, internal, model)
 - **low**: API versioning detected
@@ -217,7 +217,7 @@ Fetches and parses XML sitemaps, follows sitemap index files (up to 10 sub-sitem
 
 Triggers 404, 405, and 500 errors and matches against 20+ framework signatures: Django, Flask/Werkzeug, Spring Boot, Express.js, ASP.NET, Laravel, FastAPI, Rails, Tomcat, nginx, Apache.
 
-#### Findings
+#### Observations
 
 - **high**: Werkzeug/Flask debugger exposed (RCE risk)
 - **medium**: Django DEBUG=True
@@ -238,7 +238,7 @@ Triggers 404, 405, and 500 errors and matches against 20+ framework signatures: 
 
 Searches 13+ common paths for OpenAPI/Swagger specs. Parses JSON specs to extract endpoints, methods, security schemes, and sensitive endpoints.
 
-#### Findings
+#### Observations
 
 - **high**: OpenAPI spec exposed with sensitive endpoints
 - **medium**: OpenAPI spec exposed (no sensitive endpoints)
@@ -246,7 +246,7 @@ Searches 13+ common paths for OpenAPI/Swagger specs. Parses JSON specs to extrac
 
 ---
 
-## Phase 3 — Critical Findings (depends on services, uses path_probe output)
+## Phase 3 — Critical Observations (depends on services, uses path_probe output)
 
 ### webdav_check
 
@@ -255,11 +255,11 @@ Searches 13+ common paths for OpenAPI/Swagger specs. Parses JSON specs to extrac
 | Property | Value |
 |----------|-------|
 | Conditions | `services is truthy` |
-| Produces | `webdav_findings` |
+| Produces | `webdav_observations` |
 
 Tests PROPFIND, MKCOL, and PUT methods. Creates test file on PUT success and cleans up. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: WebDAV write access (PUT/MKCOL succeeded)
 - **high**: WebDAV PROPFIND enabled (directory listing)
@@ -274,11 +274,11 @@ Tests PROPFIND, MKCOL, and PUT methods. Creates test file on PUT success and cle
 | Property | Value |
 |----------|-------|
 | Conditions | `services is truthy` |
-| Produces | `vcs_findings` |
+| Produces | `vcs_observations` |
 
 Deep check for VCS metadata. Probes .git/config, .git/HEAD, .git/COMMIT_EDITMSG, .git/refs/heads/\*, .git/logs/HEAD, .gitignore, .svn/entries, .hg/store. Searches .git/config for embedded credentials.
 
-#### Findings
+#### Observations
 
 - **critical**: Git config contains credentials
 - **critical**: Full git repository exposed (3+ files, code recoverable)
@@ -294,11 +294,11 @@ Deep check for VCS metadata. Probes .git/config, .git/HEAD, .git/COMMIT_EDITMSG,
 | Property | Value |
 |----------|-------|
 | Conditions | `services is truthy` |
-| Produces | `config_findings` |
+| Produces | `config_observations` |
 
-Analyzes config files for 16+ secret patterns: LLM provider keys (OpenAI, Anthropic, HuggingFace), cloud credentials (AWS, Azure, GCP), database credentials, JWT/session secrets, and private keys. Secrets are never stored — only redacted evidence in findings.
+Analyzes config files for 16+ secret patterns: LLM provider keys (OpenAI, Anthropic, HuggingFace), cloud credentials (AWS, Azure, GCP), database credentials, JWT/session secrets, and private keys. Secrets are never stored — only redacted evidence in observations.
 
-#### Findings
+#### Observations
 
 - **critical**: Configuration file contains secrets
 - **high**: Configuration file accessible (no secrets detected)
@@ -312,11 +312,11 @@ Analyzes config files for 16+ secret patterns: LLM provider keys (OpenAI, Anthro
 | Property | Value |
 |----------|-------|
 | Conditions | `services is truthy` |
-| Produces | `directory_listing_findings` |
+| Produces | `directory_listing_observations` |
 
 Detects Apache, nginx, IIS, and Python autoindex signatures. Checks root and common paths plus path_probe results. Identifies sensitive file extensions (.py, .env, .json, .key, .pem, .sql, .db, .pt, .onnx, .pkl).
 
-#### Findings
+#### Observations
 
 - **high**: Directory listing at root or with sensitive files
 - **medium**: Directory listing at other paths
@@ -330,11 +330,11 @@ Detects Apache, nginx, IIS, and Python autoindex signatures. Checks root and com
 | Property | Value |
 |----------|-------|
 | Conditions | `services is truthy` |
-| Produces | `default_creds_findings` |
+| Produces | `default_creds_observations` |
 
 Tests discovered admin panels for unauthenticated access and 6 default credential pairs (admin/admin, admin/password, root/root, etc.). Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Default credentials accepted
 - **critical**: Admin panel requires no authentication
@@ -349,11 +349,11 @@ Tests discovered admin panels for unauthenticated access and 6 default credentia
 | Property | Value |
 |----------|-------|
 | Conditions | `services is truthy` |
-| Produces | `debug_findings` |
+| Produces | `debug_observations` |
 
 Probes /debug, /\_\_debug\_\_/, /actuator and sub-endpoints, /server-status, /phpinfo.php, /\_profiler, /trace. Detects Werkzeug debugger, Django DEBUG, Spring Boot Actuator, environment variables, connection strings, and internal IPs.
 
-#### Findings
+#### Observations
 
 - **critical**: Werkzeug debugger exposed (RCE risk)
 - **high**: Django DEBUG=True, Spring Boot Actuator exposed, sensitive data leak
@@ -376,7 +376,7 @@ Probes /debug, /\_\_debug\_\_/, /actuator and sub-endpoints, /server-status, /ph
 
 Follows up to 10 redirect hops. Tests 8 common redirect parameter paths for open redirects. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **medium**: Long redirect chain (>3 hops)
 - **medium**: Open redirect detected
@@ -397,7 +397,7 @@ Follows up to 10 redirect hops. Tests 8 common redirect parameter paths for open
 
 Identifies URL-accepting parameters via OpenAPI spec analysis, discovered path query strings, and probing known SSRF-prone paths. Detects 25+ parameter names (url, uri, image_url, fetch, proxy, webhook, etc.). Does NOT attempt actual SSRF exploitation.
 
-#### Findings
+#### Observations
 
 - **medium**: SSRF candidate with proxy/forward/fetch parameter
 - **medium**: SSRF candidate from OpenAPI spec
@@ -416,7 +416,7 @@ Identifies URL-accepting parameters via OpenAPI spec analysis, discovered path q
 
 Tests up to 5 endpoints with 21 injection fields across privilege (is_admin, role), billing (balance, credits), identity (user_id, tenant_id), and internal categories. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Privilege field accepted and reflected (is_admin, role)
 - **high**: Billing/identity field accepted and reflected
@@ -436,7 +436,7 @@ Tests up to 5 endpoints with 21 injection fields across privilege (is_admin, rol
 
 Verifies HSTS preload status via hstspreload.org API. Checks for preload directive, includeSubDomains, and max-age >= 1 year.
 
-#### Findings
+#### Observations
 
 - **low**: HSTS present but not preloaded (first-visit vulnerability)
 - **info**: Domain is HSTS preloaded
@@ -455,7 +455,7 @@ Verifies HSTS preload status via hstspreload.org API. Checks for preload directi
 
 Parses HTML for external script and link tags, checks for integrity= attributes. External resources without SRI are vulnerable to CDN compromise or supply-chain attacks.
 
-#### Findings
+#### Observations
 
 - **medium**: Multiple external resources (3+) without SRI
 - **low**: External resources without SRI (1-2)

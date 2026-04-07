@@ -26,7 +26,7 @@ chainsmith --profile PROFILE     # Activate a profile for this session
 | `suites` | List check suites |
 | `scenarios list` | List available scenarios |
 | `scenarios info` | Show scenario details |
-| `export` | Export findings |
+| `export` | Export observations |
 | `serve` | Start web UI |
 
 ## Common Workflows

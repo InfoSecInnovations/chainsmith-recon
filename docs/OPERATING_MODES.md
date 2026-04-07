@@ -24,7 +24,7 @@ Normal mode is for production use — scanning real systems to discover AI secur
 2. Set your target scope (e.g., `api.example.com`)
 3. Configure exclusions if needed
 4. Start the scan
-5. Review findings
+5. Review observations
 
 ### Using the API
 
@@ -40,8 +40,8 @@ curl -X POST http://localhost:8100/api/v1/scan/start
 # Check status
 curl http://localhost:8100/api/v1/scan
 
-# Get findings
-curl http://localhost:8100/api/v1/findings
+# Get observations
+curl http://localhost:8100/api/v1/observations
 ```
 
 ### Using the CLI
@@ -128,9 +128,9 @@ When a scenario is loaded:
 
 2. **Real checks are bypassed** — Instead of making actual network requests, checks return pre-configured responses from YAML simulation files
 
-3. **Findings are generated** — The simulated responses trigger the same finding logic as real checks, producing realistic findings
+3. **Observations are generated** — The simulated responses trigger the same observation logic as real checks, producing realistic observations
 
-4. **Attack chains are detected** — Chainsmith's chain detection works the same way, identifying attack patterns from the simulated findings
+4. **Attack chains are detected** — Chainsmith's chain detection works the same way, identifying attack patterns from the simulated observations
 
 ### Available Scenarios
 
@@ -257,8 +257,8 @@ curl -X POST http://localhost:8100/api/v1/scenarios/clear
 | `/api/v1/scan/start` | POST | Start scan |
 | `/api/v1/scan` | GET | Get scan status |
 | `/api/v1/scan/stop` | POST | Stop running scan |
-| `/api/v1/findings` | GET | Get all findings |
-| `/api/v1/findings/by-host` | GET | Get findings grouped by host |
+| `/api/v1/observations` | GET | Get all observations |
+| `/api/v1/observations/by-host` | GET | Get observations grouped by host |
 | `/api/v1/chains` | GET | Get detected attack chains |
 
 ---

@@ -13,7 +13,7 @@ credential storage.
 
 Chainsmith stores security assessment data that qualifies as CUI:
 
-- **Finding evidence** may contain extracted secrets, tokens, configuration
+- **Observation evidence** may contain extracted secrets, tokens, configuration
   snippets, and internal URLs from target systems
 - **Attack chains** describe exploitable paths through target infrastructure
 - **Engagement metadata** includes client names and scope details
@@ -30,8 +30,8 @@ This plan defines a layered encryption strategy and a path from the current
 
 | Classification | Data | Examples | Encryption Need |
 |----------------|------|----------|-----------------|
-| **Critical** | Extracted target secrets, credentials, API keys | `findings.evidence` containing tokens, `.env` API keys, engagement client PII | Column-level encryption with dedicated key |
-| **High** | Assessment details that reveal target weaknesses | `findings.title`, `findings.severity`, `chains.*`, `adjudication_results.rationale` | Column-level encryption |
+| **Critical** | Extracted target secrets, credentials, API keys | `observations.evidence` containing tokens, `.env` API keys, engagement client PII | Column-level encryption with dedicated key |
+| **High** | Assessment details that reveal target weaknesses | `observations.title`, `observations.severity`, `chains.*`, `adjudication_results.rationale` | Column-level encryption |
 | **Standard** | Operational metadata | `check_log.*`, `scans.status`, `scans.started_at`, user preferences | Database-level encryption sufficient |
 | **Public** | Check definitions, scenario templates, app config | Check metadata, built-in payloads, documentation | No encryption needed |
 
@@ -39,12 +39,12 @@ This plan defines a layered encryption strategy and a path from the current
 
 | Table | Critical Columns | High Columns | Standard Columns |
 |-------|-----------------|--------------|------------------|
-| `findings` | `evidence` | `title`, `severity`, `check_name` | `fingerprint`, `created_at` |
-| `chains` | — | `title`, `severity`, `finding_ids` | `source`, `created_at` |
-| `scans` | — | `target_domain` | `status`, `started_at`, `findings_count` |
+| `observations` | `evidence` | `title`, `severity`, `check_name` | `fingerprint`, `created_at` |
+| `chains` | — | `title`, `severity`, `observation_ids` | `source`, `created_at` |
+| `scans` | — | `target_domain` | `status`, `started_at`, `observations_count` |
 | `engagements` | `client_name` | `target_domain`, `name` | `status`, `created_at` |
 | `adjudication_results` | — | `rationale`, `adjudicated_severity` | `approach`, `original_severity` |
-| `finding_overrides` | — | `reason` | `fingerprint`, `status` |
+| `observation_overrides` | — | `reason` | `fingerprint`, `status` |
 | `swarm_api_keys` | `key_hash` (already hashed) | — | `name`, `created_at` |
 
 ## Encryption Strategy — Layered Approach
@@ -114,13 +114,13 @@ Master Key (file / vault / derived from passphrase)
 ├── KEK (Key Encryption Key) — encrypts the DEKs
 │
 ├── DEK-critical ── AES-256-GCM
-│   ├── findings.evidence
+│   ├── observations.evidence
 │   ├── engagements.client_name
 │   └── (any future credential storage columns)
 │
 ├── DEK-high ── AES-256-GCM
-│   ├── findings.title, findings.severity, findings.check_name
-│   ├── chains.title, chains.severity, chains.finding_ids
+│   ├── observations.title, observations.severity, observations.check_name
+│   ├── chains.title, chains.severity, chains.observation_ids
 │   ├── adjudication_results.rationale
 │   └── scans.target_domain
 │
@@ -151,8 +151,8 @@ changes without a full re-encryption migration.
 ```python
 from app.db.encryption import EncryptedString, EncryptedText
 
-class Finding(Base):
-    __tablename__ = "findings"
+class Observation(Base):
+    __tablename__ = "observations"
 
     id = Column(Integer, primary_key=True)
     scan_id = Column(Integer, ForeignKey("scans.id"))
@@ -333,7 +333,7 @@ Options:
 ### Swarm Agent Key Distribution
 
 Swarm agents need to decrypt task payloads (which may contain target info)
-and encrypt results (which contain findings). Options:
+and encrypt results (which contain observations). Options:
 
 | Approach | How | Pros | Cons |
 |----------|-----|------|------|
@@ -351,11 +351,11 @@ Column-level encryption adds overhead to every read and write:
 | Operation | Estimated Overhead | Mitigation |
 |-----------|-------------------|------------|
 | Encrypt on write | ~0.1ms per field (AES-256-GCM is fast) | Negligible for individual writes |
-| Decrypt on read | ~0.1ms per field | Bulk reads (listing findings) may be noticeable |
-| Bulk scan persist (500 findings) | ~50-100ms additional | Acceptable; scan execution takes minutes |
+| Decrypt on read | ~0.1ms per field | Bulk reads (listing observations) may be noticeable |
+| Bulk scan persist (500 observations) | ~50-100ms additional | Acceptable; scan execution takes minutes |
 | Key derivation on startup | ~200ms (PBKDF2, 256k iterations) | One-time cost |
 
-Primary concern is bulk reads — listing/filtering findings requires
+Primary concern is bulk reads — listing/filtering observations requires
 decrypting every returned row. Consider:
 - Caching decrypted results in memory for active scans
 - Pagination (already exists in the API)
@@ -384,18 +384,18 @@ Alembic migrations that alter encrypted columns need special handling:
 - Migration scripts must have access to the master key
 
 ```python
-# Example: migration to encrypt findings.evidence
+# Example: migration to encrypt observations.evidence
 def upgrade():
     # Load encryption key
     from app.db.encryption import get_dek
     dek = get_dek("critical")
 
     # Read all plaintext evidence
-    findings = op.get_bind().execute(text("SELECT id, evidence FROM findings"))
-    for f in findings:
+    observations = op.get_bind().execute(text("SELECT id, evidence FROM observations"))
+    for f in observations:
         encrypted = encrypt(dek, f.evidence)
         op.get_bind().execute(
-            text("UPDATE findings SET evidence = :ev WHERE id = :id"),
+            text("UPDATE observations SET evidence = :ev WHERE id = :id"),
             {"ev": encrypted, "id": f.id}
         )
 ```
@@ -417,7 +417,7 @@ def upgrade():
 - [ ] `EncryptedString` / `EncryptedText` SQLAlchemy column types
 - [ ] Key hierarchy: master key → KEK → DEK-critical, DEK-high
 - [ ] `encryption_keys` table for DEK storage
-- [ ] Encrypt critical columns: `findings.evidence`, `engagements.client_name`
+- [ ] Encrypt critical columns: `observations.evidence`, `engagements.client_name`
 - [ ] Encrypt high columns: `chains.title`, `adjudication_results.rationale`
 - [ ] Encrypted secrets store (`~/.chainsmith/secrets.enc`)
 - [ ] CLI: `chainsmith secrets set/list/delete/export`
@@ -463,9 +463,9 @@ def upgrade():
    team leads, or organizational HSM.
 
 6. **Performance benchmarking**: Before committing to column-level
-   encryption, need benchmarks on realistic data volumes. How many findings
+   encryption, need benchmarks on realistic data volumes. How many observations
    per scan? How large is typical evidence text? What's the acceptable
-   latency for listing 1,000 findings with decryption?
+   latency for listing 1,000 observations with decryption?
 
 7. **Schema migration strategy**: Encrypting existing plaintext columns is
    a one-way operation. Need a tested rollback plan (keep plaintext backup

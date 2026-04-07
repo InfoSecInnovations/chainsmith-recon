@@ -71,13 +71,13 @@ Each check has:
 - **reason**: Why a pentester would run this
 - **references**: OWASP, CWE, MITRE links
 
-## Finding Severities
+## Observation Severities
 
 | Severity | Description | Examples |
 |----------|-------------|----------|
 | **critical** | Immediate exploitation risk | SQL exec tool, prompt leak with creds |
 | **high** | Significant security issue | Goal injection, cross-session leak |
-| **medium** | Notable finding | Unauthenticated endpoints |
+| **medium** | Notable observation | Unauthenticated endpoints |
 | **low** | Minor issue | Info disclosure |
 | **info** | Informational | Service detected |
 

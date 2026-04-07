@@ -18,7 +18,7 @@ AI agent discovery, framework fingerprinting, and adversarial testing.
 
 Probes 25+ common agent endpoint paths (/agent, /run, /invoke, /stream, /batch, /input_schema, /state, /threads, etc.). Detects LangServe, LangGraph, LangChain, AutoGen, and CrewAI via response headers, body patterns, and error signatures. Identifies capabilities: memory, tools, streaming, state, threads.
 
-#### Findings
+#### Observations
 
 - **high**: Unauthenticated agent execution endpoint
 - **medium**: Unauthenticated schema/discovery endpoint
@@ -40,7 +40,7 @@ Probes 25+ common agent endpoint paths (/agent, /run, /invoke, /stream, /batch, 
 
 Probes management endpoints (/crew, /kickoff, /agents/list, /groupchat, /workers, /supervisor, /orchestrator, /graph). Detects delegation patterns and architecture types: crew, debate, supervisor, routing, graph.
 
-#### Findings
+#### Observations
 
 - **medium**: Management endpoints found, delegation patterns detected
 - **low**: Multiple agent identifiers detected
@@ -58,7 +58,7 @@ Probes management endpoints (/crew, /kickoff, /agents/list, /groupchat, /workers
 
 Extracts versions from headers, error messages, and OpenAPI metadata. Checks against known vulnerable versions: LangChain <= 0.0.325 (CVE-2023-36188, RCE), LangChain <= 0.0.350 (deserialization), LangServe <= 0.0.21 (input validation bypass), AutoGen <= 0.2.0 (unsandboxed code execution).
 
-#### Findings
+#### Observations
 
 - **critical**: Known RCE vulnerability (CVE match)
 - **high**: Known vulnerability in framework version
@@ -78,7 +78,7 @@ Extracts versions from headers, error messages, and OpenAPI metadata. Checks aga
 
 Probes /agent/memory, /memory, /history, /state, /threads, /context, /conversation. Detects PII, credentials, system prompt fragments, and multi-user/cross-session data. Enumerates threads and extracts history.
 
-#### Findings
+#### Observations
 
 - **critical**: Contains credentials, system prompt fragments, or multi-user data
 - **high**: Accessible memory endpoint with entries
@@ -99,7 +99,7 @@ Probes /agent/memory, /memory, /history, /state, /threads, /context, /conversati
 
 Tests 5 payload categories: direct_override, information_extraction, authority_bypass, framework_specific (LangServe config, LangGraph state, AutoGen code execution, CrewAI task injection). Confidence scoring based on payload and hijack indicators. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Goal injection succeeded (confidence > 0.7)
 - **medium**: Goal injection succeeded (lower confidence) or partial success
@@ -118,7 +118,7 @@ Tests 5 payload categories: direct_override, information_extraction, authority_b
 
 Tests 6 abuse categories: file_access (critical), command_execution (critical), ssrf/AWS metadata (critical), database_access (high), outbound_action (high), information_disclosure (high). Distinguishes executed vs. refused tool calls. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Tool executed (file read, command execution, SSRF)
 - **high**: Tool executed (database, outbound, info disclosure)
@@ -137,7 +137,7 @@ Tests 6 abuse categories: file_access (critical), command_execution (critical), 
 
 Tests 5 techniques: admin_claim, sudo_claim, security_override, admin_mode, superuser_role. Compares baseline vs. escalated responses for new indicators, acknowledgment, or role leakage. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Clear privilege escalation (confidence > 0.7)
 - **high**: Privilege escalation or agent acknowledges claim
@@ -156,7 +156,7 @@ Tests 5 techniques: admin_claim, sudo_claim, security_override, admin_mode, supe
 
 Sends 4 loop-trigger prompts designed to cause excessive computation. Measures response time against baseline, detects repetitive patterns, monitors for timeout and server errors (502/503/504).
 
-#### Findings
+#### Observations
 
 - **high**: Agent runaway (timeout, server error, extreme response time)
 - **medium**: Loop indicators or missing execution timeout
@@ -174,7 +174,7 @@ Sends 4 loop-trigger prompts designed to cause excessive computation. Measures r
 
 Tests parameter injection (callback_url, webhook, notify_url, etc.), conversational probes ("send results to URL"), and config schema analysis for callback fields. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Callback parameter accepted or URL echoed, config schema exposes callback fields
 - **medium**: Conversational probe indicates callback capability
@@ -192,7 +192,7 @@ Tests parameter injection (callback_url, webhook, notify_url, etc.), conversatio
 
 Sends injection payloads to streaming endpoints (/stream, /agent/stream, /v1/stream). Compares injection success rate vs. non-streaming endpoints to detect bypass where early chunks evade output filters. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Streaming bypass confirmed (injection succeeds in stream but not non-stream)
 - **medium**: Streaming endpoint vulnerable to injection
@@ -212,7 +212,7 @@ Sends injection payloads to streaming endpoints (/stream, /agent/stream, /v1/str
 
 Tests per-framework exploits: LangChain PythonREPLTool RCE (CVE-2023-36188), LLMMathChain code execution; LangServe batch abuse, config exploit; LangGraph state write, cross-user thread access; AutoGen default code execution, GroupChat injection; CrewAI task/delegation injection. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Known RCE (PythonREPLTool, LLMMathChain, AutoGen code exec)
 - **high**: Batch abuse, config exploit, state write, cross-user access, task injection
@@ -230,7 +230,7 @@ Tests per-framework exploits: LangChain PythonREPLTool RCE (CVE-2023-36188), LLM
 
 Tests 3 poisoning payloads: instruction_inject (persistent marker), role_override (admin permission), policy_inject (relaxed security). Sends poisoning message, checks for acknowledgment, then sends verification prompt. Also tests direct state write via PUT /state. Cleanup attempted after testing. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Memory poisoning confirmed (verification shows persistence), state endpoint writable
 - **high**: Partial success (agent acknowledges storage)
@@ -248,7 +248,7 @@ Tests 3 poisoning payloads: instruction_inject (persistent marker), role_overrid
 
 Tests injection on fresh context (baseline), fills context with 8 large messages (~2.4KB each), then re-tests injection. Detects guardrail bypass when injection succeeds post-fill but failed on fresh context. Also tests for role/personality degradation. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Context overflow weakens guardrails (injection succeeds post-fill)
 - **medium**: Agent drops system prompt after overflow (role change detected)
@@ -266,7 +266,7 @@ Tests injection on fresh context (baseline), fills context with 8 large messages
 
 Tests 3 reflection-targeted prompts designed to exploit self-critique steps: reflection_admin, reflection_relax, reflection_override. Compares baseline vs. reflection-targeted response for increased permissiveness. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Reflection successfully exploited (agent becomes more permissive)
 - **medium**: Agent reflection is influenced but constraints maintained
@@ -284,7 +284,7 @@ Tests 3 reflection-targeted prompts designed to exploit self-critique steps: ref
 
 Tests 3 state modifications: inject_context, override_task, modify_permissions. Targets /state and /threads/{tid}/state endpoints. Detects writability with and without schema validation. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: State writable without schema validation
 - **high**: Thread state modifiable
@@ -306,7 +306,7 @@ Tests 3 state modifications: inject_context, override_task, modify_permissions. 
 
 Tests 5 false authority claims: security_approval, compliance_override, verification_claim, qa_bypass, classification_claim. Compares baseline vs. assertion-enhanced response for new indicators and increased permissiveness. Severity escalated for multi-agent systems. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Trust chain exploitation in multi-agent system
 - **high**: Trust chain exploitation in single agent
@@ -325,7 +325,7 @@ Tests 5 false authority claims: security_approval, compliance_override, verifica
 
 Tests 4 cross-injection payloads: system_override, instruction_smuggle, hidden_directive, role_injection. Checks if injection markers are preserved in agent output (delivery vector for downstream agents). Severity escalated for multi-agent systems. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Full cross-injection in multi-agent system
 - **high**: Full cross-injection in single agent, or delivery vector confirmed in multi-agent

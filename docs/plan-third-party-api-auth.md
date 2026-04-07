@@ -25,7 +25,7 @@ with expiry.
 
 **Auth Barrier Encounters.** During reconnaissance checks, Chainsmith
 probes target endpoints and may encounter MFA prompts, CAPTCHAs, or
-login walls. These are not obstacles to bypass — they are findings to
+login walls. These are not obstacles to bypass — they are observations to
 detect and report. The framework needs a consistent way for checks to
 recognize and classify these barriers.
 
@@ -283,7 +283,7 @@ not in each `LLMClient`.
 ## Encountering MFA & CAPTCHA During Checks
 
 Chainsmith's checks probe target systems and may encounter authentication
-barriers. These are **positive security findings** — they indicate the
+barriers. These are **positive security observations** — they indicate the
 target has protections in place. Chainsmith should detect, classify, and
 report them, not bypass them.
 
@@ -421,18 +421,18 @@ class SomeWebCheck(BaseCheck):
     def __init__(self):
         self._barrier_detector = AuthBarrierDetector()
 
-    async def run(self, target: str, **kwargs) -> list[Finding]:
+    async def run(self, target: str, **kwargs) -> list[Observation]:
         response = await self._client.get(f"https://{target}/api/endpoint")
 
         # Check for auth barriers before processing response
         barriers = self._barrier_detector.detect(str(response.url), response)
         if barriers:
-            return [self._barrier_to_finding(b) for b in barriers]
+            return [self._barrier_to_observation(b) for b in barriers]
 
         # Normal check logic continues...
 
-    def _barrier_to_finding(self, barrier: AuthBarrier) -> Finding:
-        return Finding(
+    def _barrier_to_observation(self, barrier: AuthBarrier) -> Observation:
+        return Observation(
             title=f"Auth barrier detected: {barrier.barrier_type.value}",
             severity="informational",
             evidence=barrier.detection_evidence,
@@ -451,7 +451,7 @@ Chainsmith **MUST NOT**:
 
 Chainsmith **SHOULD**:
 - Detect and report the presence and type of auth barriers
-- Note the barrier type in findings for the engagement report
+- Note the barrier type in observations for the engagement report
 - Continue scanning other endpoints that don't require auth
 - Respect `robots.txt` and rate limits after barrier detection
 
@@ -629,7 +629,7 @@ credentials:
 - [ ] CAPTCHA detection (reCAPTCHA, hCaptcha, Cloudflare)
 - [ ] MFA detection (TOTP prompt, push notification, SMS)
 - [ ] WAF detection (Cloudflare, AWS WAF, Akamai)
-- [ ] Auth barrier → Finding conversion in web checks
+- [ ] Auth barrier → Observation conversion in web checks
 - [ ] Update `LLMClient` to use `CredentialProvider`
 
 ### Phase 2 — Credential Management & Native Cloud Auth (Mid-Term)

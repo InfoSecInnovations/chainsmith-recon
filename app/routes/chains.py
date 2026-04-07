@@ -6,9 +6,8 @@ Endpoints for:
 - Chain status and results
 - Chain details
 
-When an optional `scan_id` query parameter is provided, chains are
-read from the database (historical). Otherwise, the active scan's
-in-memory data is returned.
+All reads go through the database. Chain status is read from the Scan
+record. If no scan_id is provided, the active scan is used.
 """
 
 import asyncio
@@ -16,7 +15,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.db.repositories import ChainRepository
+from app.db.repositories import ChainRepository, ObservationRepository, ScanRepository
 from app.engine.chains import run_chain_analysis
 from app.state import state
 
@@ -25,92 +24,131 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _chain_repo = ChainRepository()
+_scan_repo = ScanRepository()
+_observation_repo = ObservationRepository()
+
+
+def _resolve_scan_id(scan_id: str | None) -> str | None:
+    """Resolve scan_id from parameter or active scan."""
+    return scan_id or state.active_scan_id
 
 
 @router.post("/api/v1/chains/analyze", status_code=202)
 async def analyze_chains():
     """Start chain analysis (rule-based + LLM)."""
-    if len(state.observations) == 0:
+    sid = state.active_scan_id or state._last_scan_id
+    if not sid:
+        raise HTTPException(400, "No observations to analyze. Run a scan first.")
+
+    obs = await _observation_repo.get_observations(sid)
+    if not obs:
         raise HTTPException(400, "No observations to analyze. Run a scan first.")
 
     if state.chain_status == "analyzing":
         raise HTTPException(409, "Chain analysis already running.")
 
     state.chain_status = "analyzing"
-    state.chains = []
-    state.chain_error = None
 
     # Launch analysis in background
     asyncio.create_task(run_chain_analysis(state))
 
     return {
         "status": "accepted",
-        "message": "Chain analysis started. Poll GET /api/chains for status.",
+        "message": "Chain analysis started. Poll GET /api/v1/chains for status.",
     }
 
 
 @router.get("/api/v1/chains")
 async def get_chains(
-    scan_id: str | None = Query(None, description="Historical scan ID"),
+    scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
 ):
-    """Get chain analysis status and results. Pass scan_id for historical data."""
-    if scan_id:
-        chains = await _chain_repo.get_chains(scan_id)
-        rule_based = [c for c in chains if c.get("source") == "rule-based"]
-        llm_chains = [c for c in chains if c.get("source") in ("llm", "both")]
+    """Get chain analysis status and results."""
+    sid = _resolve_scan_id(scan_id)
+    if not sid:
         return {
-            "status": "complete",
-            "chains_count": len(chains),
-            "rule_based_count": len(rule_based),
-            "llm_count": len(llm_chains),
-            "chains": chains,
+            "status": "idle",
+            "chains_count": 0,
+            "rule_based_count": 0,
+            "llm_count": 0,
+            "chains": [],
             "message": None,
             "llm_analysis": None,
         }
 
-    rule_based = [c for c in state.chains if c.get("source") == "rule-based"]
-    llm_chains = [c for c in state.chains if c.get("source") in ["llm", "both"]]
+    # Get chains from DB
+    chains = await _chain_repo.get_chains(sid)
+    rule_based = [c for c in chains if c.get("source") == "rule-based"]
+    llm_chains = [c for c in chains if c.get("source") in ("llm", "both")]
+
+    # Get status from Scan record
+    scan = await _scan_repo.get_scan(sid)
+    chain_status = scan.get("chain_status", "idle") if scan else "idle"
+    chain_error = scan.get("chain_error") if scan else None
+    chain_llm_analysis = scan.get("chain_llm_analysis") if scan else None
+
+    # If scan is still running and chain analysis hasn't started, use state for live status
+    if sid == state.active_scan_id and state.chain_status == "analyzing":
+        chain_status = state.chain_status
 
     return {
-        "status": state.chain_status,
-        "chains_count": len(state.chains),
+        "status": chain_status,
+        "chains_count": len(chains),
         "rule_based_count": len(rule_based),
         "llm_count": len(llm_chains),
-        "chains": state.chains,
-        "message": state.chain_error,
-        "llm_analysis": state.chain_llm_analysis,
+        "chains": chains,
+        "message": chain_error,
+        "llm_analysis": chain_llm_analysis,
     }
 
 
 @router.post("/api/v1/chains/retry", status_code=202)
 async def retry_chain_analysis():
     """Re-run LLM chain analysis only (keeps existing rule-based chains)."""
-    if len(state.observations) == 0:
+    sid = state.active_scan_id or state._last_scan_id
+    if not sid:
+        raise HTTPException(400, "No observations to analyze. Run a scan first.")
+
+    obs = await _observation_repo.get_observations(sid)
+    if not obs:
         raise HTTPException(400, "No observations to analyze. Run a scan first.")
 
     if state.chain_status == "analyzing":
         raise HTTPException(409, "Chain analysis already running.")
 
     state.chain_status = "analyzing"
-    state.chain_error = None
-    state.chain_llm_analysis = None
 
     asyncio.create_task(run_chain_analysis(state, llm_only=True))
 
     return {
         "status": "accepted",
-        "message": "LLM chain re-analysis started. Poll GET /api/chains for status.",
+        "message": "LLM chain re-analysis started. Poll GET /api/v1/chains for status.",
     }
 
 
 @router.get("/api/v1/chains/{chain_id}")
-async def get_chain_detail(chain_id: str):
+async def get_chain_detail(
+    chain_id: str,
+    scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
+):
     """Get details of a specific chain."""
-    chain = next((c for c in state.chains if c["id"] == chain_id), None)
+    sid = _resolve_scan_id(scan_id)
+    if not sid:
+        raise HTTPException(404, f"Chain '{chain_id}' not found")
+
+    chains = await _chain_repo.get_chains(sid)
+    chain = next((c for c in chains if c.get("id") == chain_id), None)
     if not chain:
         raise HTTPException(404, f"Chain '{chain_id}' not found")
 
     # Include the actual observation objects
     chain_with_observations = chain.copy()
-    chain_with_observations["observations"] = [f for f in state.observations if f["id"] in chain["observation_ids"]]
+    obs_ids = chain.get("observation_ids", [])
+    if obs_ids:
+        all_observations = await _observation_repo.get_observations(sid)
+        chain_with_observations["observations"] = [
+            f for f in all_observations if f.get("id") in obs_ids
+        ]
+    else:
+        chain_with_observations["observations"] = []
+
     return chain_with_observations

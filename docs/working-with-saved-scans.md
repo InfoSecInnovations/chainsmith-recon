@@ -12,9 +12,9 @@ database at two points:
 
 1. **Scan start** — a record is created with `status=running`, capturing
    the target domain, scope, settings, profile, and scenario.
-2. **Scan completion** — findings, attack chains, and the check execution
+2. **Scan completion** — observations, attack chains, and the check execution
    log are bulk-inserted, then the scan record is updated with final
-   stats (duration, finding counts, status).
+   stats (duration, observation counts, status).
 
 If the database write fails for any reason, the scan still completes
 normally — persistence never blocks execution.
@@ -24,11 +24,11 @@ normally — persistence never blocks execution.
 | Data | Description |
 |------|-------------|
 | **Scan metadata** | Target, status, timing, check counts, profile/scenario, scope snapshot |
-| **Findings** | Title, severity, check name, host, evidence, raw data, references |
-| **Attack chains** | Linked findings with severity and source (rule-based/LLM/both) |
+| **Observations** | Title, severity, check name, host, evidence, raw data, references |
+| **Attack chains** | Linked observations with severity and source (rule-based/LLM/both) |
 | **Check log** | Per-check events: started, completed, failed, skipped, with duration |
-| **Finding fingerprints** | Stable SHA256 hash for tracking findings across scans |
-| **Finding status history** | Whether each finding is new, recurring, resolved, or regressed |
+| **Observation fingerprints** | Stable SHA256 hash for tracking observations across scans |
+| **Observation status history** | Whether each observation is new, recurring, resolved, or regressed |
 | **Scan comparisons** | Precomputed diff between consecutive scans of the same target |
 
 ### Configuration
@@ -84,8 +84,8 @@ chainsmith scans show <scan-id> --json
 ```
 GET /api/v1/scans?target=example.com&status=complete&limit=50&offset=0
 GET /api/v1/scans/{scan_id}
-GET /api/v1/scans/{scan_id}/findings?severity=high&host=api.example.com
-GET /api/v1/scans/{scan_id}/findings/by-host
+GET /api/v1/scans/{scan_id}/observations?severity=high&host=api.example.com
+GET /api/v1/scans/{scan_id}/observations/by-host
 GET /api/v1/scans/{scan_id}/chains
 GET /api/v1/scans/{scan_id}/log
 ```
@@ -95,27 +95,27 @@ All endpoints are also available without the `/v1` prefix
 
 ### Web UI
 
-Open the **Findings** page to browse scan history interactively. You can
-filter by severity and host, view finding status across scans, and manage
+Open the **Observations** page to browse scan history interactively. You can
+filter by severity and host, view observation status across scans, and manage
 overrides.
 
 ---
 
 ## Comparing Scans
 
-Chainsmith uses **finding fingerprints** — stable hashes of
-`check_name | host | title | key_evidence` — to track the same finding
+Chainsmith uses **observation fingerprints** — stable hashes of
+`check_name | host | title | key_evidence` — to track the same observation
 across scans. This enables four status categories:
 
 | Status | Meaning |
 |--------|---------|
-| **new** | Finding appears in the current scan but not the previous one |
-| **recurring** | Finding exists in both scans |
-| **resolved** | Finding was in the previous scan but is gone now |
-| **regressed** | Finding was previously resolved but has reappeared |
+| **new** | Observation appears in the current scan but not the previous one |
+| **recurring** | Observation exists in both scans |
+| **resolved** | Observation was in the previous scan but is gone now |
+| **regressed** | Observation was previously resolved but has reappeared |
 
-Comparisons are **check-aware**: only findings from checks that ran in
-both scans are considered. A finding from a newly-added check won't be
+Comparisons are **check-aware**: only observations from checks that ran in
+both scans are considered. An observation from a newly-added check won't be
 falsely marked as "new" relative to an older scan that didn't run that
 check.
 
@@ -133,13 +133,13 @@ GET /api/v1/scans/{scan_a_id}/compare/{scan_b_id}
 ```
 
 Returns: `new_count`, `resolved_count`, `recurring_count`, plus the
-actual finding lists and check-level comparison.
+actual observation lists and check-level comparison.
 
 ---
 
 ## Trend Analysis
 
-View how findings evolve over time for a target domain.
+View how observations evolve over time for a target domain.
 
 ### CLI
 
@@ -165,37 +165,37 @@ scan, regression rate, and MTTR over a date range.
 
 ---
 
-## Finding History and Overrides
+## Observation History and Overrides
 
-Track the lifecycle of a specific finding across all scans, and
+Track the lifecycle of a specific observation across all scans, and
 optionally mark it as accepted risk or a false positive.
 
-### View Finding History
+### View Observation History
 
 ```
-GET /api/v1/findings/{fingerprint}/history
+GET /api/v1/observations/{fingerprint}/history
 ```
 
-Returns the finding's status (new/recurring/resolved/regressed) in each
+Returns the observation's status (new/recurring/resolved/regressed) in each
 scan where it appeared, plus any active override.
 
 ### Set an Override
 
 ```
-PUT /api/v1/findings/{fingerprint}/override
+PUT /api/v1/observations/{fingerprint}/override
 Body: {"status": "accepted" | "false_positive", "reason": "optional note"}
 ```
 
 ### Remove an Override
 
 ```
-DELETE /api/v1/findings/{fingerprint}/override
+DELETE /api/v1/observations/{fingerprint}/override
 ```
 
 ### List All Overrides
 
 ```
-GET /api/v1/findings/overrides?status=false_positive
+GET /api/v1/observations/overrides?status=false_positive
 ```
 
 ---
@@ -208,7 +208,7 @@ database. Available formats: `md`, `json`, `html`, `pdf`, `sarif`.
 ### CLI
 
 ```bash
-# Technical report (detailed findings)
+# Technical report (detailed observations)
 chainsmith report technical --scan <scan-id> -f html -o report.html
 
 # Executive summary
@@ -235,7 +235,7 @@ POST /api/v1/reports/trend         {"target": "example.com", "format": "html"}
 POST /api/v1/reports/targeted      {"fingerprints": ["abc1...", "def2..."], "format": "md"}
 ```
 
-The targeted export lets you cherry-pick specific findings by fingerprint
+The targeted export lets you cherry-pick specific observations by fingerprint
 for a curated report.
 
 PDF output requires the optional `xhtml2pdf` dependency. Check what
@@ -309,7 +309,7 @@ DELETE /api/v1/scans/{scan_id}
 ```
 
 Deletion is **cascading** — it removes the scan record and all associated
-findings, chains, check log entries, finding status history, and scan
+observations, chains, check log entries, observation status history, and scan
 comparison records.
 
 ### Automatic Retention

@@ -155,7 +155,7 @@ def _parse_scenario(data: dict, source_path: Path) -> Scenario:
         version=str(data.get("version", "1.0.0")),
         target=target,
         simulations=[str(s) for s in simulations],
-        expected_observations=list(data.get("expected_observations", data.get("expected_findings", []))),
+        expected_observations=list(data.get("expected_observations", [])),
         expected_chains=list(data.get("expected_chains", [])),
         source_path=source_path,
     )

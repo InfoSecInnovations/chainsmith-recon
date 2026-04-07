@@ -2,32 +2,55 @@
 app/routes/advisor.py - Scan Advisor Routes
 
 Endpoints for retrieving post-scan advisor recommendations.
+
+All reads go through the database. If no scan_id is provided,
+the active scan is used.
 """
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.config import get_config
+from app.db.repositories import AdvisorRepository
 from app.state import state
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_advisor_repo = AdvisorRepository()
+
+
+def _resolve_scan_id(scan_id: str | None) -> str | None:
+    """Resolve scan_id from parameter or active scan."""
+    return scan_id or state.active_scan_id
+
 
 @router.get("/api/v1/scan-advisor/recommendations")
-async def get_recommendations():
+async def get_recommendations(
+    scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
+):
     """
-    Get scan advisor recommendations from the most recent scan.
+    Get scan advisor recommendations.
 
     Returns empty list if advisor is disabled or no scan has completed.
     """
     cfg = get_config()
+    sid = _resolve_scan_id(scan_id)
+
+    if not sid:
+        return {
+            "enabled": cfg.scan_advisor.enabled,
+            "recommendations": [],
+            "count": 0,
+        }
+
+    recommendations = await _advisor_repo.get_recommendations(sid)
     return {
         "enabled": cfg.scan_advisor.enabled,
-        "recommendations": state.advisor_recommendations,
-        "count": len(state.advisor_recommendations),
+        "recommendations": recommendations,
+        "count": len(recommendations),
     }
 
 

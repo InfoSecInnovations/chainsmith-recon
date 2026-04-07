@@ -53,7 +53,7 @@ output:
       responses_identical: true
       cache_hit_detected: false
 
-findings:
+observations:
   - title: "Cache vulnerability: cross_session_leak"
     description: "Cache vulnerability detected: Tests if cached responses leak across sessions. Category: information_leakage."
     severity: "high"

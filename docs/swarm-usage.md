@@ -3,7 +3,7 @@
 Swarm mode distributes scan execution across multiple machines. A
 **coordinator** (the Chainsmith server) breaks scans into tasks and assigns
 them to **agents** that poll for work, execute checks locally, and report
-findings back. The existing scan API and web UI work unchanged -- swarm
+observations back. The existing scan API and web UI work unchanged -- swarm
 mode is transparent to the user.
 
 For architecture details and design rationale, see
@@ -73,7 +73,7 @@ curl -X POST http://coordinator-host:8000/api/v1/scan \
 
 The coordinator decomposes the scan into tasks, resolves dependencies
 using the check execution plan (network before web, web before ai, etc.),
-and assigns ready tasks to connected agents. Findings stream back and
+and assigns ready tasks to connected agents. Observations stream back and
 appear in the web UI and API in real time.
 
 ### 5. Check status
@@ -154,7 +154,7 @@ chainsmith swarm status [--server HOST:PORT]
 ```
 
 Shows: running state, connected agents, task progress by status
-(queued/assigned/in-progress/complete/failed), and total findings.
+(queued/assigned/in-progress/complete/failed), and total observations.
 
 ## API Endpoints
 
@@ -229,7 +229,7 @@ read the coordinator's config file.
    the scope validator from the task payload, applies the coordinator-
    assigned rate limit, and runs the check.
 
-4. **Agent reports**: Results (findings, outputs, discovered services)
+4. **Agent reports**: Results (observations, outputs, discovered services)
    are sent back via `POST /api/swarm/tasks/{id}/result`. The
    coordinator merges outputs into the shared context so downstream
    checks have the data they need.
@@ -273,7 +273,7 @@ full scope, only what they need.
 - **API keys** are SHA-256 hashed before storage. The raw key is shown
   once at creation time and never stored.
 - **Agents receive minimum data**: scoped domains/ports and upstream
-  context, not the full scope, other agents' findings, or LLM config.
+  context, not the full scope, other agents' observations, or LLM config.
 - **mTLS** is planned for Phase 3 (production deployments on untrusted
   networks). For now, deploy the coordinator behind a VPN or firewall.
 - **Key management**: Revoke keys immediately if an agent is compromised.
@@ -299,7 +299,7 @@ curl -H "Authorization: Bearer <key>" http://coordinator-host:8000/api/swarm/age
 - Phase dependencies may not be satisfied yet. Tasks in later phases
   wait for earlier phases to complete.
 
-### Findings not appearing
+### Observations not appearing
 
 - Check `chainsmith swarm status` to see if tasks are completing.
 - Check the agent's terminal output for errors.

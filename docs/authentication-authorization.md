@@ -7,7 +7,7 @@ Design guidance for securing Chainsmith across deployment scenarios.
 Chainsmith has three distinct authentication needs with different trust
 models and friction tolerances:
 
-1. **Server/UI access** — Who can view findings, start scans, manage
+1. **Server/UI access** — Who can view observations, start scans, manage
    settings via the web UI or API.
 2. **CLI-to-server authentication** — The CLI talks to the API server.
    Currently unauthenticated. Matters when the server is shared.
@@ -40,7 +40,7 @@ work exactly as it does today. Authentication activates when:
 
 The MVP auth system is self-contained — no external dependencies. Chainsmith
 generates and validates its own JWTs using a local secret. User credentials
-are stored alongside findings in the existing data layer.
+are stored alongside observations in the existing data layer.
 
 ### How It Works
 
@@ -50,11 +50,11 @@ are stored alongside findings in the existing data layer.
 │  Browser │  <──────────────────────────   │   Server         │
 │          │     { "token": "eyJ..." }      │                  │
 │          │                                │  ┌────────────┐  │
-│          │     GET /api/findings          │  │ User Store  │  │
+│          │     GET /api/observations          │  │ User Store  │  │
 │          │     Authorization: Bearer eyJ  │  │ (SQLite)    │  │
 │          │  ──────────────────────────>   │  └────────────┘  │
 │          │  <──────────────────────────   │  ┌────────────┐  │
-│          │     { findings: [...] }        │  │ JWT Secret  │  │
+│          │     { observations: [...] }        │  │ JWT Secret  │  │
 └──────────┘                                │  │ (generated) │  │
                                             │  └────────────┘  │
                                             └──────────────────┘
@@ -122,11 +122,11 @@ prevent XSS-based token theft.
 
 Login flow:
 1. User navigates to Chainsmith UI
-2. Server returns login page (no findings data loaded)
+2. Server returns login page (no observations data loaded)
 3. User enters credentials
 4. JavaScript sends POST /api/auth/login
 5. Server sets httpOnly cookie with JWT
-6. UI redirects to findings/scope page
+6. UI redirects to observations/scope page
 
 ### API Endpoints
 
@@ -169,7 +169,7 @@ CHAINSMITH_TOKEN_TTL_HOURS=24
 ### Password Storage
 
 - Passwords hashed with bcrypt (work factor 12)
-- Stored in SQLite alongside findings data
+- Stored in SQLite alongside observations data
 - No plaintext passwords anywhere (config, logs, error messages)
 - Password requirements: minimum 8 characters (no complexity rules —
   pentesters know about password security)
@@ -285,7 +285,7 @@ the same RBAC model.
 
 | Role | Description |
 |------|-------------|
-| `viewer` | Read-only access to findings and reports |
+| `viewer` | Read-only access to observations and reports |
 | `operator` | Start/stop scans, manage scope, run analysis |
 | `admin` | Full access including user management and settings |
 
@@ -293,7 +293,7 @@ the same RBAC model.
 
 | Action | viewer | operator | admin |
 |--------|--------|----------|-------|
-| View findings | yes | yes | yes |
+| View observations | yes | yes | yes |
 | Export reports | yes | yes | yes |
 | View scan status | yes | yes | yes |
 | View attack chains | yes | yes | yes |
@@ -320,9 +320,9 @@ middleware checks:
 
 ```python
 # Example route decoration
-@router.get("/api/findings")
+@router.get("/api/observations")
 @require_role("viewer")
-async def get_findings():
+async def get_observations():
     ...
 
 @router.post("/api/scan/start")
@@ -340,7 +340,7 @@ async def create_user():
 
 The UI adapts based on role:
 
-- **viewer**: Scan/scope controls hidden. Findings and visualizations
+- **viewer**: Scan/scope controls hidden. Observations and visualizations
   visible. Export button visible.
 - **operator**: Full scan controls visible. Settings drawer visible.
   User management hidden.
@@ -405,7 +405,7 @@ Usage:
 chainsmith --api-key cs_key_a1b2c3d4e5f6 scan example.com
 
 # HTTP
-curl -H "X-API-Key: cs_key_a1b2c3d4e5f6" http://localhost:8000/api/findings
+curl -H "X-API-Key: cs_key_a1b2c3d4e5f6" http://localhost:8000/api/observations
 
 # Environment variable
 export CHAINSMITH_API_KEY=cs_key_a1b2c3d4e5f6
@@ -430,7 +430,7 @@ When auth is enabled, all authenticated actions are logged:
 2026-03-27T14:35:00Z [AUTH] user=bob action=login_failed ip=192.168.1.10 reason=invalid_password
 2026-03-27T14:35:30Z [AUTH] user=bob action=account_locked ip=192.168.1.10 reason=max_attempts
 2026-03-27T15:00:00Z [AGENT] key=dmz-scanner action=submit_results task=uuid-1234
-2026-03-27T15:10:00Z [API] key=ci-pipeline action=export_findings format=sarif
+2026-03-27T15:10:00Z [API] key=ci-pipeline action=export_observations format=sarif
 ```
 
 Audit log stored in `~/.chainsmith/audit.log` (configurable path).

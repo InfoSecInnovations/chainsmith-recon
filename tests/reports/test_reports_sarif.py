@@ -583,21 +583,21 @@ class TestReportsUIPhase8B:
     def test_scans_routes_has_capabilities(self):
         import pathlib
 
-        content = pathlib.Path("app/routes/scans.py").read_text()
+        content = pathlib.Path("app/routes/scan_history.py").read_text()
         assert "/api/v1/capabilities" in content
         assert "pdf" in content and "sarif" in content
 
     def test_scans_routes_has_targeted_export(self):
         import pathlib
 
-        content = pathlib.Path("app/routes/scans.py").read_text()
+        content = pathlib.Path("app/routes/scan_history.py").read_text()
         assert "/api/v1/reports/targeted" in content
         assert "TargetedExportInput" in content
 
     def test_valid_formats_includes_sarif(self):
         import pathlib
 
-        content = pathlib.Path("app/routes/scans.py").read_text()
+        content = pathlib.Path("app/routes/scan_history.py").read_text()
         assert '"sarif"' in content
 
     def test_cli_format_choices_include_sarif(self):

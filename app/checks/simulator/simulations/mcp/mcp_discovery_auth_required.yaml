@@ -23,7 +23,7 @@ output:
         scheme: "http"
         service_type: "api"
 
-findings:
+observations:
   - title: "MCP server discovered: /.well-known/mcp"
     description: "MCP server endpoint discovered. Transport: http. Authentication required (401 response)."
     severity: "info"

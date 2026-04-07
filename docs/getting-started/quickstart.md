@@ -59,7 +59,7 @@ chainsmith scan example.com -c dns_enumeration -c llm_endpoint_discovery
 chainsmith scan example.com --dry-run
 ```
 
-## Export Findings
+## Export Observations
 
 ```bash
 # JSON
@@ -93,7 +93,7 @@ Shows per-check progress:
 ```
 Phase 1 [network]
   Running: dns_enumeration
-  ✓ dns_enumeration: 1 findings
+  ✓ dns_enumeration: 1 observations
   Running: service_probe
   ✓ service_probe
 ...

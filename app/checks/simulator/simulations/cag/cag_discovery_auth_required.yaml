@@ -25,7 +25,7 @@ output:
 
   cache_infrastructure: []
 
-findings:
+observations:
   - title: "CAG endpoint: /cache/warm"
     description: "CAG endpoint discovered at /cache/warm. Authentication required."
     severity: "info"

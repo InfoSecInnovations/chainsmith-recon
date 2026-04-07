@@ -10,7 +10,7 @@ MFA roadmap.
 
 ## Problem Statement
 
-Chainsmith stores security assessment data — findings with extracted evidence,
+Chainsmith stores security assessment data — observations with extracted evidence,
 attack chains, engagement details, client metadata — that qualifies as CUI
 under NIST 800-171. The existing auth design covers *mechanisms* (how users
 authenticate) but not *compliance* (what controls are required, how sessions
@@ -28,7 +28,7 @@ how to implement them incrementally, and where the current design has gaps.
 | 3.1.1 | Limit system access to authorized users | **Designed** | JWT auth with role enforcement; auto-enable on non-localhost bind |
 | 3.1.2 | Limit system access to authorized transactions/functions | **Designed** | RBAC: viewer/operator/admin permission matrix |
 | 3.1.3 | Control CUI flow in accordance with approved authorizations | **Gap** | Need data classification + export controls per role |
-| 3.1.4 | Separate duties to reduce risk of malicious activity | **Partial** | Role separation exists; no separation between scan execution and finding modification |
+| 3.1.4 | Separate duties to reduce risk of malicious activity | **Partial** | Role separation exists; no separation between scan execution and observation modification |
 | 3.1.5 | Employ principle of least privilege | **Designed** | Role-based; swarm agents scoped to execute+report only |
 | 3.1.7 | Prevent non-privileged users from executing privileged functions | **Designed** | API middleware checks role per route |
 | 3.1.8 | Limit unsuccessful login attempts | **Designed** | 5-attempt lockout, 15-minute cooldown |
@@ -179,7 +179,7 @@ chainsmith auth sessions kill-user <username>
 ## Swarm Node Considerations
 
 Swarm agents use API keys, not user sessions — they are not subject to
-session idle timeout. However, swarm traffic carries CUI (findings, evidence,
+session idle timeout. However, swarm traffic carries CUI (observations, evidence,
 task payloads) and has its own compliance requirements.
 
 ### Transport Security
@@ -355,7 +355,7 @@ Design considerations:
 ## Open Questions
 
 1. **Session storage location**: Should the sessions table live in the main
-   Chainsmith database alongside findings, or in a separate auth database?
+   Chainsmith database alongside observations, or in a separate auth database?
    Colocating is simpler; separating isolates auth state from scan data.
 
 2. **Session state across restarts**: If Chainsmith restarts, should all

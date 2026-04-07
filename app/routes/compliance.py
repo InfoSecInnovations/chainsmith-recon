@@ -6,19 +6,31 @@ Endpoints for:
 - Scope violations
 - Compliance reports
 - Export
+
+Compliance/scope config stays in state (not result data).
+Export reads observations and chains from the database.
 """
 
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
+from app.db.repositories import ChainRepository, ObservationRepository
 from app.proof_of_scope import compliance_reporter, traffic_logger, violation_logger
 from app.state import state
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_observation_repo = ObservationRepository()
+_chain_repo = ChainRepository()
+
+
+def _resolve_scan_id(scan_id: str | None) -> str | None:
+    """Resolve scan_id from parameter or active scan."""
+    return scan_id or state.active_scan_id
 
 
 # ─── Traffic Logging ──────────────────────────────────────────
@@ -84,10 +96,18 @@ def _count_by_severity(observations: list) -> dict:
 
 
 @router.post("/api/v1/export")
-async def export_report():
+async def export_report(
+    scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
+):
     """Export full scan report (observations + chains + compliance)."""
     if not state.target:
         raise HTTPException(400, "No scope defined")
+
+    sid = _resolve_scan_id(scan_id)
+
+    # Get observations and chains from DB
+    observations = await _observation_repo.get_observations(sid) if sid else []
+    chains = await _chain_repo.get_chains(sid) if sid else []
 
     window = state.proof_settings.engagement_window
 
@@ -105,11 +125,11 @@ async def export_report():
             "techniques": state.techniques,
         },
         "observations": {
-            "total": len(state.observations),
-            "by_severity": _count_by_severity(state.observations),
-            "items": state.observations,
+            "total": len(observations),
+            "by_severity": _count_by_severity(observations),
+            "items": observations,
         },
-        "chains": {"total": len(state.chains), "items": state.chains},
+        "chains": {"total": len(chains), "items": chains},
         "compliance": {
             "engagement_window": {
                 "start": window.start,

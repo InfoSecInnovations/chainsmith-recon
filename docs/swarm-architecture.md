@@ -58,7 +58,7 @@ responsibilities:
 
 - **Agent registry:** Track connected agents, health, capabilities
 - **Task scheduler:** Resolve check dependencies, assign ready checks to agents
-- **Result collector:** Receive findings streamed from agents, store in AppState
+- **Result collector:** Receive observations streamed from agents, store in AppState
 - **Heartbeat monitor:** Detect failed agents, reassign their tasks
 - **Local runner toggle:** Optionally run checks locally (default: on)
 
@@ -73,7 +73,7 @@ A lightweight worker that:
 1. Connects to the coordinator and registers
 2. Polls for assigned checks
 3. Executes checks using the local check runner
-4. Streams findings back to the coordinator
+4. Streams observations back to the coordinator
 5. Sends periodic heartbeats
 
 The agent lives in `app/swarm/agent.py`. Its dependencies are minimal:
@@ -100,7 +100,7 @@ DELETE /api/swarm/agents/{id}       Agent deregistration
 POST   /api/swarm/heartbeat         Agent heartbeat
 GET    /api/swarm/tasks/next        Poll for next assigned check
 POST   /api/swarm/tasks/{id}/start  Mark task as in_progress
-POST   /api/swarm/tasks/{id}/result Submit check results (findings)
+POST   /api/swarm/tasks/{id}/result Submit check results (observations)
 POST   /api/swarm/tasks/{id}/fail   Report check failure
 GET    /api/swarm/status            Coordinator status (for UI/CLI)
 GET    /api/swarm/agents            List connected agents (for UI/CLI)
@@ -129,7 +129,7 @@ GET    /api/swarm/agents            List connected agents (for UI/CLI)
 2. **assigned** — Coordinator has handed the check to a specific agent.
    Clock starts for heartbeat monitoring.
 3. **in_progress** — Agent has acknowledged and started execution.
-4. **complete** — Agent submitted findings. Findings are merged into the
+4. **complete** — Agent submitted observations. Observations are merged into the
    coordinator's AppState.
 5. **failed** — Agent reported an error, or agent went silent (heartbeat
    timeout). Task returns to `queued` for reassignment.
@@ -175,7 +175,7 @@ The coordinator validates the key and certificate, then returns:
 | mTLS | Mutual authentication, prevents MITM and data injection | Production |
 
 **Concern: false data injection.** An attacker who can impersonate an agent
-could inject false findings into the coordinator. mTLS mitigates this by
+could inject false observations into the coordinator. mTLS mitigates this by
 ensuring both sides verify identity. API keys alone are insufficient if the
 network is untrusted.
 
@@ -204,7 +204,7 @@ Agents receive only what is needed to execute their assigned check:
 | In-scope domains relevant to this check | Yes | Needed for scope validation |
 | In-scope ports relevant to this check | Yes | Needed for scope validation |
 | Full scope (all domains/ports) | No | Minimize exposure |
-| Other agents' findings | No | Not needed for check execution |
+| Other agents' observations | No | Not needed for check execution |
 | Chain analysis results | No | Coordinator-side only |
 | LLM configuration/keys | No | Coordinator-side only |
 
@@ -266,20 +266,20 @@ agent doubles throughput rather than just shifting work.
 
 ## Result Streaming
 
-Agents stream findings back as each check completes (not batched):
+Agents stream observations back as each check completes (not batched):
 
 ```
 POST /api/swarm/tasks/{id}/result
 {
   "task_id": "uuid",
   "status": "complete",
-  "findings": [ ... ],
+  "observations": [ ... ],
   "duration_ms": 1234,
   "checks_metadata": { }
 }
 ```
 
-Findings use the same format as locally-run checks (`Finding` objects with
+Observations use the same format as locally-run checks (`Observation` objects with
 severity, title, description, evidence, check_name, target_url). No
 transformation is needed — the coordinator inserts them directly into AppState.
 
@@ -291,7 +291,7 @@ The coordinator does not assign the same check to multiple agents. Each check
 is assigned to exactly one agent at a time. If that agent fails (heartbeat
 timeout), the check is reassigned to a different agent.
 
-This means duplicate findings from concurrent scans of the same endpoint
+This means duplicate observations from concurrent scans of the same endpoint
 should not occur under normal operation. The only edge case is a network
 partition where an agent completes work after being timed out and replaced.
 The coordinator should deduplicate by `(check_name, target_url)` when
@@ -376,11 +376,11 @@ The following questions were resolved during design review:
 | 3 | Agent concurrency model? | Async parallel via asyncio semaphore (size = `max_concurrent`). Checks are already async. |
 | 4 | Where do API keys live? | New `swarm_api_keys` DB table (SQLite/Postgres). CLI commands map to DB CRUD. |
 | 5 | How is the agent identified after registration? | API key at registration only. Agent UUID on all subsequent requests. |
-| 6 | Concurrent findings merge — locking? | No. Single uvicorn worker + async event loop. Append between awaits is atomic. Multi-worker fix is DB-backed state (persistence track), not locks. |
+| 6 | Concurrent observations merge — locking? | No. Single uvicorn worker + async event loop. Append between awaits is atomic. Multi-worker fix is DB-backed state (persistence track), not locks. |
 | 7 | Scan lifecycle integration? | `SwarmRunner` replaces `CheckLauncher` when `swarm.enabled`. Same scan API surface, different backend. Coordinator *is* the runner. |
 | 8 | Rate limiting? | Built from scratch. Coordinator-assigned, agent-enforced. |
 | 9 | Agent-side scope validation? | **MVP:** Agent validates outbound requests against task payload domains/ports. **Future:** Defense-in-depth — agent independently fetches/validates full scope. |
-| 10 | Phase 1 MVP definition? | One coordinator + one remote agent. Agent executes a single suite's checks. Findings appear in coordinator UI. |
+| 10 | Phase 1 MVP definition? | One coordinator + one remote agent. Agent executes a single suite's checks. Observations appear in coordinator UI. |
 
 ## Implementation Phases
 

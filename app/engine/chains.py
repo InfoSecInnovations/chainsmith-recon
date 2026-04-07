@@ -817,34 +817,81 @@ CHAIN_PATTERNS = [
 # ─── Chain Analysis ───────────────────────────────────────────
 
 
+async def _update_chain_status_in_db(scan_id: str | None, **fields) -> None:
+    """Persist chain status fields to the Scan DB record (best-effort)."""
+    if not scan_id:
+        return
+    try:
+        from app.db.repositories import ScanRepository
+        await ScanRepository().update_scan_status(scan_id, **fields)
+    except Exception:
+        logger.warning("Failed to persist chain status to DB", exc_info=True)
+
+
+async def _load_observations_for_chains(scan_id: str | None) -> list[dict]:
+    """Load observations from the database for chain analysis."""
+    if not scan_id:
+        return []
+    try:
+        from app.db.repositories import ObservationRepository
+        return await ObservationRepository().get_observations(scan_id)
+    except Exception:
+        logger.warning("Failed to load observations from DB for chain analysis", exc_info=True)
+        return []
+
+
+async def _persist_chains(scan_id: str | None, chains: list[dict]) -> None:
+    """Persist chains to the database (best-effort)."""
+    if not scan_id or not chains:
+        return
+    try:
+        from app.db.repositories import ChainRepository
+        await ChainRepository().bulk_create(scan_id, chains)
+    except Exception:
+        logger.warning("Failed to persist chains to DB", exc_info=True)
+
+
 async def run_chain_analysis(state: "AppState", llm_only: bool = False):
     """
     Run two-pass chain analysis: rule-based then LLM.
 
-    Updates state.chains, state.chain_status, and state.chain_llm_analysis.
+    Reads observations from DB, accumulates chains locally, persists
+    chains and status to DB. Updates state.chain_status as a concurrency guard.
 
     Args:
         llm_only: If True, skip rule-based pass and re-run LLM only
                   (used by the /api/chains/retry endpoint).
     """
+    scan_id = getattr(state, "_last_scan_id", None)
+    chains: list[dict] = []
+    chain_error: str | None = None
+    chain_llm_analysis: dict | None = None
+
     try:
         logger.info("Starting chain analysis...")
 
+        # Load observations from DB
+        observations = await _load_observations_for_chains(scan_id)
+
         if not llm_only:
             # Pass 1: Rule-based pattern matching
-            rule_chains = detect_rule_based_chains(state)
+            rule_chains = detect_rule_based_chains(observations)
             logger.info(f"Rule-based analysis found {len(rule_chains)} chains")
-
-            for chain in rule_chains:
-                state.chains.append(chain)
+            chains.extend(rule_chains)
         else:
-            # Remove previous LLM-only chains, keep rule-based and "both"
-            state.chains = [c for c in state.chains if c.get("source") == "rule-based"]
-            rule_chains = list(state.chains)
+            # For retry, load existing rule-based chains from DB
+            try:
+                from app.db.repositories import ChainRepository
+                existing = await ChainRepository().get_chains(scan_id) if scan_id else []
+                rule_chains = [c for c in existing if c.get("source") == "rule-based"]
+                chains.extend(rule_chains)
+            except Exception:
+                logger.warning("Failed to load existing chains for retry", exc_info=True)
+                rule_chains = []
 
         # Pass 2: LLM-based analysis
-        result = await detect_llm_chains(state)
-        state.chain_llm_analysis = result.to_analysis_dict()
+        result = await detect_llm_chains(state, observations, len(chains))
+        chain_llm_analysis = result.to_analysis_dict()
 
         logger.info(
             f"LLM analysis returned {len(result.chains)} chains (status: {result.llm_status})"
@@ -852,45 +899,54 @@ async def run_chain_analysis(state: "AppState", llm_only: bool = False):
 
         for chain in result.chains:
             # Check if this overlaps with a rule-based chain
-            overlapping = find_overlapping_chain(
-                chain, rule_chains if not llm_only else state.chains
-            )
+            overlapping = find_overlapping_chain(chain, chains)
             if overlapping:
                 overlapping["source"] = "both"
                 overlapping["llm_reasoning"] = chain.get("llm_reasoning")
                 if chain.get("exploitation_steps"):
                     overlapping["exploitation_steps"].extend(chain["exploitation_steps"])
             else:
-                state.chains.append(chain)
+                chains.append(chain)
 
         # Set top-level status based on LLM outcome
         if result.llm_status == "success":
             state.chain_status = "complete"
         elif result.llm_status == "not_configured":
             state.chain_status = "complete"  # rule-only is fine
-        elif state.chains:
+        elif chains:
             state.chain_status = "partial"  # have rule chains but LLM failed
         else:
             state.chain_status = "error"
-            state.chain_error = (
+            chain_error = (
                 result.llm_response.error if result.llm_response else "LLM analysis failed"
             )
 
-        logger.info(f"Chain analysis complete. {len(state.chains)} total chains.")
+        logger.info(f"Chain analysis complete. {len(chains)} total chains.")
+
+        # Persist chains and status to DB
+        await _persist_chains(scan_id, chains)
+        await _update_chain_status_in_db(
+            scan_id,
+            chain_status=state.chain_status,
+            chain_error=chain_error,
+            chain_llm_analysis=chain_llm_analysis,
+        )
 
     except Exception as e:
         logger.exception(f"Chain analysis error: {e}")
         state.chain_status = "error"
-        state.chain_error = str(e)
+        await _update_chain_status_in_db(
+            scan_id, chain_status="error", chain_error=str(e)
+        )
 
 
-def detect_rule_based_chains(state: "AppState") -> list[dict]:
+def detect_rule_based_chains(observations: list[dict]) -> list[dict]:
     """Detect chains using predefined patterns."""
     chains = []
     chain_counter = 0
 
     for pattern in CHAIN_PATTERNS:
-        matching_observations = match_pattern(pattern, state.observations)
+        matching_observations = match_pattern(pattern, observations)
 
         if matching_observations:
             chain_counter += 1
@@ -1000,7 +1056,11 @@ IMPORTANT: Respond with ONLY valid JSON, no other text. Use this exact format:
 Only include chains that represent genuine combined attack opportunities. If no additional chains beyond obvious single-observation attacks exist, return {{"chains": []}}."""
 
 
-async def detect_llm_chains(state: "AppState") -> ChainAnalysisResult:
+async def detect_llm_chains(
+    state: "AppState",
+    observations: list[dict],
+    existing_chain_count: int = 0,
+) -> ChainAnalysisResult:
     """
     Use LLM to discover additional attack chains.
 
@@ -1019,7 +1079,7 @@ async def detect_llm_chains(state: "AppState") -> ChainAnalysisResult:
 
     # Prepare observations summary
     observations_summary = []
-    for f in state.observations:
+    for f in observations:
         observations_summary.append(
             {
                 "id": f["id"],
@@ -1045,11 +1105,8 @@ async def detect_llm_chains(state: "AppState") -> ChainAnalysisResult:
             logger.info(
                 f"LLM chain analysis retry {attempt}/{LLM_MAX_RETRIES + 1} after {delay}s backoff"
             )
-            state.chain_llm_analysis = {
-                **(state.chain_llm_analysis or {}),
-                "status": "retrying",
-                "attempts": attempt,
-            }
+            # Retry status is transient — logged only
+            logger.debug(f"LLM chain analysis: retrying (attempt {attempt})")
             await asyncio.sleep(delay)
 
         response = await llm_client.chat(prompt, max_tokens=4096)
@@ -1068,7 +1125,7 @@ async def detect_llm_chains(state: "AppState") -> ChainAnalysisResult:
                 break  # parse errors won't improve with retry
 
             # Success — build chain objects
-            chains = _build_chain_objects(llm_chains, state)
+            chains = _build_chain_objects(llm_chains, existing_chain_count)
             logger.info(
                 f"LLM chain analysis found {len(chains)} chains "
                 f"(provider: {llm_client.provider_name}, "
@@ -1115,10 +1172,10 @@ async def detect_llm_chains(state: "AppState") -> ChainAnalysisResult:
     )
 
 
-def _build_chain_objects(llm_chains: list[dict], state: "AppState") -> list[dict]:
+def _build_chain_objects(llm_chains: list[dict], existing_chain_count: int = 0) -> list[dict]:
     """Convert parsed LLM chain dicts into our internal chain format."""
     chains = []
-    chain_counter = len(state.chains) + 1
+    chain_counter = existing_chain_count + 1
     for lc in llm_chains:
         chains.append(
             {

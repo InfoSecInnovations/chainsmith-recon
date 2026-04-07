@@ -13,6 +13,7 @@ from app.check_launcher import CheckLauncher
 from app.check_resolver import get_real_checks, resolve_checks
 from app.config import get_config
 from app.db.persist import on_scan_complete, on_scan_start
+from app.db.writers import CheckLogWriter, ObservationWriter
 from app.scenarios import get_scenario_manager
 
 if TYPE_CHECKING:
@@ -75,11 +76,22 @@ async def run_scan(
     """
     scan_start_time = time.time()
     scan_id = None
+    obs_writer = None
+    log_writer = None
     try:
         logger.info(f"Starting scan against {state.target}")
 
         # Persist scan start (fire-and-forget on failure)
         scan_id = await on_scan_start(state)
+
+        # Store scan_id on state so routes and post-scan phases can find it
+        state.active_scan_id = scan_id
+        state._last_scan_id = scan_id
+
+        # Create streaming writers if we have a scan_id (persistence enabled)
+        if scan_id:
+            obs_writer = ObservationWriter(scan_id)
+            log_writer = CheckLogWriter(scan_id)
 
         # Resolve which checks to run
         mgr = get_scenario_manager()
@@ -117,23 +129,24 @@ async def run_scan(
         def on_start(name: str):
             state.current_check = name
             state.check_statuses[name] = "running"
-            state.check_log.append(
-                {
-                    "check": name,
-                    "event": "started",
-                }
-            )
+            if log_writer:
+                import asyncio
+                asyncio.ensure_future(
+                    log_writer.log_event({"check": name, "event": "started"})
+                )
 
         def on_complete(name: str, success: bool, observations_count: int):
             state.checks_completed += 1
             state.check_statuses[name] = "completed" if success else "failed"
-            state.check_log.append(
-                {
-                    "check": name,
-                    "event": "completed" if success else "failed",
-                    "observations": observations_count,
-                }
-            )
+            if log_writer:
+                import asyncio
+                asyncio.ensure_future(
+                    log_writer.log_event({
+                        "check": name,
+                        "event": "completed" if success else "failed",
+                        "observations": observations_count,
+                    })
+                )
 
         # Choose execution backend: swarm or local
         cfg = get_config()
@@ -143,6 +156,7 @@ async def run_scan(
 
             coordinator = get_coordinator()
             coordinator.create_tasks_from_plan(state, checks, context)
+            coordinator.observation_writer = obs_writer
 
             runner = SwarmRunner(checks, context, coordinator)
             state.runner = runner
@@ -151,9 +165,13 @@ async def run_scan(
                 on_check_start=on_start,
                 on_check_complete=on_complete,
             )
+
+            # Final flush for any buffered observations
+            if obs_writer:
+                await obs_writer.flush()
         else:
             # Standard single-node execution
-            launcher = CheckLauncher(checks, context)
+            launcher = CheckLauncher(checks, context, observation_writer=obs_writer)
             state.runner = launcher
 
             observations = await launcher.run_all(
@@ -161,38 +179,48 @@ async def run_scan(
                 on_check_complete=on_complete,
             )
 
-        # Store observations in state
-        state.observations = observations
         state.status = "complete"
         state.phase = "done"
         state.current_check = None
 
         logger.info(f"Scan complete. {len(observations)} observations.")
 
+        # Notify if writer fell back to scratch space
+        if obs_writer and obs_writer.db_failed:
+            logger.warning(
+                "Some observations were written to scratch space due to DB failure. "
+                "Run scratch-to-db to import them."
+            )
+
         # Run scan advisor if enabled (only for local CheckLauncher, not swarm)
         local_launcher = state.runner if not cfg.swarm.enabled else None
-        _run_scan_advisor(state, local_launcher)
+        await _run_scan_advisor(state, local_launcher, scan_id)
 
-        # Persist results to database
-        await on_scan_complete(state, scan_id, scan_start_time)
+        # Persist remaining results to database (chains, scan completion)
+        await on_scan_complete(state, scan_id, scan_start_time, obs_writer=obs_writer)
 
     except Exception as e:
         logger.exception(f"Scan failed: {e}")
         state.status = "error"
         state.error_message = str(e)
+        # Flush any buffered observations before recording failure
+        if obs_writer:
+            await obs_writer.flush()
         # Still try to persist the error state
-        await on_scan_complete(state, scan_id, scan_start_time)
+        await on_scan_complete(state, scan_id, scan_start_time, obs_writer=obs_writer)
 
 
 # ─── Scan Advisor ─────────────────────────────────────────────
 
 
-def _run_scan_advisor(state: "AppState", launcher=None) -> None:
+async def _run_scan_advisor(
+    state: "AppState", launcher=None, scan_id: str | None = None
+) -> None:
     """
     Run post-scan advisor analysis if enabled.
 
     Only runs when a local CheckLauncher was used (not swarm mode yet)
-    and the advisor is enabled in config.
+    and the advisor is enabled in config. Persists recommendations to DB.
     """
     try:
         cfg = get_config()
@@ -221,8 +249,16 @@ def _run_scan_advisor(state: "AppState", launcher=None) -> None:
         advisor = build_advisor_from_launcher(launcher, all_checks, advisor_cfg)
         recommendations = advisor.analyze()
 
-        state.advisor_recommendations = [r.to_dict() for r in recommendations]
-        logger.info(f"Scan advisor: {len(recommendations)} recommendations stored")
+        recommendation_dicts = [r.to_dict() for r in recommendations]
+        logger.info(f"Scan advisor: {len(recommendations)} recommendations")
+
+        # Persist to DB
+        if scan_id and recommendation_dicts:
+            try:
+                from app.db.repositories import AdvisorRepository
+                await AdvisorRepository().bulk_create(scan_id, recommendation_dicts)
+            except Exception:
+                logger.warning("Failed to persist advisor recommendations to DB", exc_info=True)
 
     except Exception as e:
         logger.warning(f"Scan advisor failed (non-fatal): {e}")

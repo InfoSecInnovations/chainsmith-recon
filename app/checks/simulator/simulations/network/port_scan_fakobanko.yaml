@@ -53,7 +53,7 @@ output:
       scheme: "http"
       service_type: "ai"
 
-findings:
+observations:
   - title: "Port scan: 8 services discovered"
     description: "TCP port scan discovered 8 open services across fakobanko.local infrastructure including web, API, and AI services."
     severity: "info"

@@ -18,7 +18,7 @@ Model Context Protocol server discovery, tool analysis, and security testing.
 
 Probes well-known MCP paths (/.well-known/mcp, /mcp, /mcp/sse, /v1/mcp, /sse, /events). Detects MCP servers via response headers (mcp-session-id, mcp-server-version), JSON-RPC patterns, and SSE content types. Identifies transport type and server capabilities.
 
-#### Findings
+#### Observations
 
 - **medium**: MCP server discovered with capabilities
 - **info**: MCP endpoint found (auth required or minimal info)
@@ -36,7 +36,7 @@ Probes well-known MCP paths (/.well-known/mcp, /mcp, /mcp/sse, /v1/mcp, /sse, /e
 
 Attempts WebSocket upgrade on common MCP paths (/ws, /mcp/ws, /socket, /mcp/websocket). Compares WebSocket auth with HTTP endpoint auth to detect bypass scenarios.
 
-#### Findings
+#### Observations
 
 - **high**: WebSocket accepts connection but HTTP requires auth (auth bypass)
 - **medium**: WebSocket transport discovered
@@ -57,7 +57,7 @@ Attempts WebSocket upgrade on common MCP paths (/ws, /mcp/ws, /socket, /mcp/webs
 
 Calls `tools/list` on discovered servers. Classifies each tool by risk: critical (exec, shell, eval, bash), high (file ops, HTTP, SQL, email, cloud), medium (env, config, secrets, browser), low (read-only), info (benign utilities).
 
-#### Findings
+#### Observations
 
 - **critical**: Tool enables command execution or code evaluation
 - **high**: Tool accesses files, networks, or databases
@@ -77,7 +77,7 @@ Calls `tools/list` on discovered servers. Classifies each tool by risk: critical
 
 Tests: no-auth access to tools/list, common default API keys (mcp-key, default, test, admin, changeme), auth scope mismatch (initialize vs tools/list), session reuse/fixation via Mcp-Session-Id, and CORS preflight with foreign origin.
 
-#### Findings
+#### Observations
 
 - **critical**: Tools accessible without any authentication
 - **high**: Default API keys accepted, auth scope mismatch, session reusable, CORS allows cross-origin
@@ -96,7 +96,7 @@ Tests: no-auth access to tools/list, common default API keys (mcp-key, default, 
 
 Tests for plain HTTP (no TLS), CORS headers on MCP endpoints, origin header validation, and SSE stream auth.
 
-#### Findings
+#### Observations
 
 - **high**: Plain HTTP, CORS issues, no origin validation
 - **medium**: SSE without per-connection auth
@@ -115,7 +115,7 @@ Tests for plain HTTP (no TLS), CORS headers on MCP endpoints, origin header vali
 
 Identifies server framework/SDK from serverInfo, error response signatures, and capability heuristics. Detects: official TypeScript SDK, official Python SDK, FastMCP, LangChain MCP Adapter, Claude Desktop MCP, Cursor MCP, Ollama MCP Bridge, and custom implementations.
 
-#### Findings
+#### Observations
 
 - **info**: Server implementation and version identified
 - **low**: Custom/unknown implementation detected
@@ -133,7 +133,7 @@ Identifies server framework/SDK from serverInfo, error response signatures, and 
 
 Probes standard capabilities (tools/list, resources/list, prompts/list, sampling/createMessage) and non-standard methods (admin/status, debug/info, internal/config, server/info, health, metrics, logging/setLevel).
 
-#### Findings
+#### Observations
 
 - **high**: Undeclared standard capability returns data
 - **medium**: Non-standard method responds with data
@@ -152,7 +152,7 @@ Probes standard capabilities (tools/list, resources/list, prompts/list, sampling
 
 Sends initialize with different protocol versions (2024-01-01 through 2025-03-26). Compares capabilities across versions to detect downgrade with reduced security features.
 
-#### Findings
+#### Observations
 
 - **medium/low**: Server accepts protocol downgrade (severity based on capability loss)
 - **info**: Server only accepts current version
@@ -172,7 +172,7 @@ Sends initialize with different protocol versions (2024-01-01 through 2025-03-26
 
 Analyzes tool naming conventions (flat vs namespaced), detects common tool name collisions (read_file, execute, search, etc.), and tests protocol-level attacks: list_changed notification injection and re-initialization.
 
-#### Findings
+#### Observations
 
 - **high**: Server accepts list_changed notification from client
 - **medium**: Flat tool naming (no namespace, vulnerable to collisions)
@@ -192,7 +192,7 @@ Analyzes tool naming conventions (flat vs namespaced), detects common tool name 
 
 Inspects inputSchema parameter names, default values, enum values, and descriptions for infrastructure details. Detects sensitive defaults (internal IPs, hostnames, database URIs, S3 paths), sensitive enums (prod, staging, admin), and descriptions mentioning production infrastructure.
 
-#### Findings
+#### Observations
 
 - **medium**: Sensitive default values or enum values
 - **low**: Sensitive parameter names or description details
@@ -211,7 +211,7 @@ Inspects inputSchema parameter names, default values, enum values, and descripti
 
 Tags tools with capabilities (file_read, file_write, command_exec, network_request, data_exfil, database_access, credential_access, remote_access, scheduling, search_recon, browser) and detects 6 dangerous chain categories.
 
-#### Findings
+#### Observations
 
 - **critical**: Data Read + Exfiltration, Credential + Network, File + Code Exec, Write + Persistence, Database + Exfiltration
 - **high**: Recon + Lateral Movement
@@ -230,7 +230,7 @@ Tags tools with capabilities (file_read, file_write, command_exec, network_reque
 
 Sends JSON-RPC notifications to test standard MCP notifications (cancelled, progress, tools/list_changed, resources/list_changed, roots/list_changed) and custom/arbitrary methods.
 
-#### Findings
+#### Observations
 
 - **high**: Server accepts tools/list_changed or roots/list_changed from client
 - **medium**: Server accepts resources/list_changed or cancelled from client
@@ -250,7 +250,7 @@ Sends JSON-RPC notifications to test standard MCP notifications (cancelled, prog
 
 Tests sampling/createMessage endpoint. Checks if sampling is exposed despite not being declared. Tests if client-supplied systemPrompt parameter is accepted. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Sampling endpoint exposed as open LLM proxy
 - **high**: Undeclared sampling endpoint accessible
@@ -270,7 +270,7 @@ Tests sampling/createMessage endpoint. Checks if sampling is exposed despite not
 
 Sends 10 rapid tool invocations within a 2-second window. Prefers low-risk tools for testing. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **medium**: No per-tool rate limiting (all requests succeeded)
 - **info**: Rate limiting detected (429 responses)
@@ -290,7 +290,7 @@ Sends 10 rapid tool invocations within a 2-second window. Prefers low-risk tools
 
 Generates safe, non-destructive payloads per tool type (exec: echo hostname, file: safe system files, fetch: httpbin.org, search: read-only queries). Invokes via tools/call and analyzes responses. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Tool executes commands or reads files (real output)
 - **high**: Tool makes HTTP requests (SSRF risk) or queries databases (real data)
@@ -309,7 +309,7 @@ Generates safe, non-destructive payloads per tool type (exec: echo hostname, fil
 
 Enumerates resources via resources/list. Tests path traversal payloads (relative, absolute, encoded, null byte), SSRF payloads (AWS/Azure/GCP metadata, localhost services), and protocol smuggling (gopher, dict). Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Path traversal returns file contents
 - **critical**: SSRF returns internal service data
@@ -329,7 +329,7 @@ Enumerates resources via resources/list. Tests path traversal payloads (relative
 
 Enumerates resource templates, extracts URI parameters, and injects SQL, path traversal, command, and template nesting payloads. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Command or path traversal injection successful
 - **high**: SQL injection error or unsanitized parameter
@@ -350,7 +350,7 @@ Enumerates resource templates, extracts URI parameters, and injects SQL, path tr
 
 Identifies text-returning tools (fetch, browse, search, read). Invokes tool and checks if unfiltered external content reaches the LLM context. Tests if chat endpoint is influenced by tool result content. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Tool result injection — LLM influenced by tool content
 - **high**: Tool returns unfiltered external content

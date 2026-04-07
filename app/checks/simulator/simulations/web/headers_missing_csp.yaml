@@ -1,5 +1,5 @@
 # simulations/web/headers_missing_csp.yaml
-# Smoke test: missing CSP and HSTS (common real-world finding)
+# Smoke test: missing CSP and HSTS (common real-world observation)
 suite: web
 emulates: header_analysis
 target: "api.example.local"
@@ -16,4 +16,4 @@ output:
     - "content-security-policy"
     - "x-frame-options"
     - "referrer-policy"
-  findings_count: 2
+  observations_count: 2

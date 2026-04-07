@@ -50,7 +50,7 @@ chainsmith scan TARGET [OPTIONS]
 | `--output` | `-o` | Output file path |
 | `--format` | `-f` | Output format: json, yaml, md, sarif, text |
 | `--verbose` | `-v` | Verbose output |
-| `--quiet` | `-q` | Quiet mode (findings only) |
+| `--quiet` | `-q` | Quiet mode (observations only) |
 | `--no-color` | | Disable colored output |
 | `--no-llm` | | Disable LLM analysis |
 | `--provider` | | LLM provider override |
@@ -178,7 +178,7 @@ chainsmith scenarios info NAME
 
 ## export
 
-Export findings to various formats.
+Export observations to various formats.
 
 ```bash
 chainsmith export [OPTIONS]

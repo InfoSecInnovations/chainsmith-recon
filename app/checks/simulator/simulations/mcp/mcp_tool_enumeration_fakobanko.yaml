@@ -93,7 +93,7 @@ output:
       risk_level: "high"
       reason: "File read capability may enable path traversal"
 
-findings:
+observations:
   - title: "Critical MCP tool: execute_sql"
     description: "MCP server exposes execute_sql tool allowing direct SQL query execution. This could enable data exfiltration, manipulation, or destruction of banking records."
     severity: "critical"

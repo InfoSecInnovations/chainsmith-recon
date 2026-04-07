@@ -47,4 +47,4 @@ output:
       responses_identical: false
       cache_hit_detected: false
 
-findings: []
+observations: []

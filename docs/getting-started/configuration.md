@@ -84,12 +84,12 @@ chainsmith scan example.com -f text   # Terminal (default)
 ### File Output
 
 ```bash
-chainsmith scan example.com -o findings.json -f json
+chainsmith scan example.com -o observations.json -f json
 ```
 
 ### Quiet Mode
 
-Only output findings, no progress:
+Only output observations, no progress:
 
 ```bash
 chainsmith scan example.com -q
@@ -105,7 +105,7 @@ chainsmith scan example.com --no-color
 
 ## LLM Configuration
 
-LLM features power attack chain discovery and finding verification. Scanning
+LLM features power attack chain discovery and observation verification. Scanning
 checks are fully deterministic and do not require an LLM.
 
 ### Setting Up a Provider
@@ -152,13 +152,13 @@ LLM configuration is resolved in this order (highest priority first):
 | `llm.enabled` | bool | Enable/disable all LLM features (default: true) |
 | `llm.provider` | string | Provider: openai, anthropic, litellm, none (default: auto-detect) |
 | `llm.chain_analysis` | bool | Enable LLM-based chain discovery (default: true) |
-| `llm.verification` | bool | Enable LLM-based finding verification (default: true) |
+| `llm.verification` | bool | Enable LLM-based observation verification (default: true) |
 
 ### What LLM Affects
 
 **Disabled without LLM:**
 - LLM-based attack chain discovery (rule-based chains still work)
-- LLM-based finding verification
+- LLM-based observation verification
 - Conversational scoping dialogue
 
 **NOT affected:**

@@ -1,7 +1,8 @@
 # Phase 30 — Rename "Finding" to "Observation"
 
+**Status:** ✅ Complete (2026-04-07)
 **Supersedes:** Phase 27 Item 4 (Unify Finding models)
-**Should complete before:** Phase 25 (Test Granularity), Phase 29
+**Completed before:** Phase 25 (Test Granularity), Phase 29
 (Test Authenticity)
 
 ## Motivation
@@ -447,12 +448,18 @@ review manually).
 
 ## Success Criteria
 
-- [ ] Zero classes, variables, routes, tables, or columns named "finding"
+- [x] Zero classes, variables, routes, tables, or columns named "finding"
       remain (outside English prose in comments/docs where appropriate)
-- [ ] `pytest tests/` produces identical pass/fail/skip counts to baseline
-- [ ] DB migration runs cleanly up and down
-- [ ] All API endpoints respond at new paths
-- [ ] CLI `chainsmith observations` subcommands work
-- [ ] UI loads and displays observations correctly
-- [ ] `grep -ri "finding" app/ static/` returns only false positives
+- [x] `pytest tests/` produces identical pass/fail/skip counts to baseline
+- [x] DB rebuilt from ORM — no migration needed (no production data)
+- [x] All API endpoints respond at new paths
+- [x] CLI `chainsmith observations` subcommands work
+- [x] UI loads and displays observations correctly
+- [x] `grep -ri "finding" app/ static/` returns only false positives
       (English prose, not code identifiers)
+
+### Residual "finding" references (intentionally kept)
+
+- `app/db/migrations/` — historical SQL scripts; DB rebuilds from ORM
+- `app/data/hallucinations.json` — English prose describing security concepts
+- `docs/future-ideas/` — planning docs (including this one)

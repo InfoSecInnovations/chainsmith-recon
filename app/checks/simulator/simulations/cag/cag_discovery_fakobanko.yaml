@@ -78,7 +78,7 @@ output:
     - "semantic_cache"
     - "prompt_cache"
 
-findings:
+observations:
   - title: "Semantic cache infrastructure detected"
     description: "Semantic caching system found at /cache. Cache management endpoints exposed without authentication."
     severity: "medium"

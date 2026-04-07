@@ -8,7 +8,7 @@ management.
 
 Chainsmith 1.3.0 stores all scan data **entirely in-memory** via the
 `AppState` class in `app/state.py`. When the server restarts, all
-findings, chains, and check logs are lost.
+observations, chains, and check logs are lost.
 
 ### What Persists Today
 
@@ -23,7 +23,7 @@ findings, chains, and check logs are lost.
 
 | Data | Storage | Survives Restart |
 |------|---------|-----------------|
-| Scan findings | `state.findings` (list in memory) | No |
+| Scan observations | `state.observations` (list in memory) | No |
 | Attack chains | `state.chains` (list in memory) | No |
 | Check execution log | `state.check_log` (list in memory) | No |
 | Scan metadata (target, status, timing) | `state.*` fields | No |
@@ -114,7 +114,7 @@ CREATE TABLE scans (
     checks_total    INTEGER,
     checks_completed INTEGER,
     checks_failed   INTEGER,
-    findings_count  INTEGER,
+    observations_count  INTEGER,
     scope           JSON,               -- Scope config snapshot
     settings        JSON,               -- Scan settings snapshot
     profile_name    TEXT,                -- Active profile at scan time
@@ -123,9 +123,9 @@ CREATE TABLE scans (
     metadata        JSON
 );
 
--- Findings: individual vulnerability findings
-CREATE TABLE findings (
-    id              TEXT PRIMARY KEY,    -- Finding ID (from check)
+-- Observations: individual vulnerability observations
+CREATE TABLE observations (
+    id              TEXT PRIMARY KEY,    -- Observation ID (from check)
     scan_id         TEXT NOT NULL REFERENCES scans(id),
     title           TEXT NOT NULL,
     description     TEXT,
@@ -146,10 +146,10 @@ CREATE TABLE findings (
     fingerprint     TEXT                 -- Hash of (check_name, host, title, key evidence)
 );
 
-CREATE INDEX idx_findings_scan_id ON findings(scan_id);
-CREATE INDEX idx_findings_severity ON findings(severity);
-CREATE INDEX idx_findings_host ON findings(host);
-CREATE INDEX idx_findings_fingerprint ON findings(fingerprint);
+CREATE INDEX idx_observations_scan_id ON observations(scan_id);
+CREATE INDEX idx_observations_severity ON observations(severity);
+CREATE INDEX idx_observations_host ON observations(host);
+CREATE INDEX idx_observations_fingerprint ON observations(fingerprint);
 
 -- Attack chains
 CREATE TABLE chains (
@@ -159,7 +159,7 @@ CREATE TABLE chains (
     description     TEXT,
     severity        TEXT NOT NULL,
     source          TEXT NOT NULL,       -- rule-based, llm, both
-    finding_ids     JSON,               -- Array of finding IDs in this chain
+    observation_ids     JSON,               -- Array of observation IDs in this chain
     created_at      TIMESTAMP NOT NULL,
     metadata        JSON
 );
@@ -173,7 +173,7 @@ CREATE TABLE check_log (
     check_name      TEXT NOT NULL,
     suite           TEXT,
     event           TEXT NOT NULL,       -- started, completed, failed, skipped
-    findings_count  INTEGER DEFAULT 0,
+    observations_count  INTEGER DEFAULT 0,
     duration_ms     INTEGER,
     error_message   TEXT,
     timestamp       TIMESTAMP NOT NULL
@@ -185,11 +185,11 @@ CREATE INDEX idx_check_log_scan_id ON check_log(scan_id);
 ### Supporting Tables
 
 ```sql
--- Finding fingerprints for tracking across scans
--- (did this finding exist in the last scan? is it new? resolved?)
-CREATE TABLE finding_status_history (
+-- Observation fingerprints for tracking across scans
+-- (did this observation exist in the last scan? is it new? resolved?)
+CREATE TABLE observation_status_history (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    fingerprint     TEXT NOT NULL,       -- Finding fingerprint
+    fingerprint     TEXT NOT NULL,       -- Observation fingerprint
     scan_id         TEXT NOT NULL REFERENCES scans(id),
     status          TEXT NOT NULL,       -- new, recurring, resolved, regressed
     first_seen_scan TEXT REFERENCES scans(id),
@@ -197,14 +197,14 @@ CREATE TABLE finding_status_history (
     created_at      TIMESTAMP NOT NULL
 );
 
-CREATE INDEX idx_fsh_fingerprint ON finding_status_history(fingerprint);
+CREATE INDEX idx_fsh_fingerprint ON observation_status_history(fingerprint);
 
 -- Scan comparisons (precomputed for performance)
 CREATE TABLE scan_comparisons (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     scan_a_id       TEXT NOT NULL REFERENCES scans(id),
     scan_b_id       TEXT NOT NULL REFERENCES scans(id),
-    new_findings    INTEGER,             -- In B but not A
+    new_observations    INTEGER,             -- In B but not A
     resolved        INTEGER,             -- In A but not B
     recurring       INTEGER,             -- In both
     regressed       INTEGER,             -- Was resolved, now back
@@ -214,10 +214,10 @@ CREATE TABLE scan_comparisons (
 );
 ```
 
-## Finding Fingerprinting
+## Observation Fingerprinting
 
-To track findings across scans (is this finding new, recurring, or
-resolved?), each finding gets a deterministic fingerprint:
+To track observations across scans (is this observation new, recurring, or
+resolved?), each observation gets a deterministic fingerprint:
 
 ```python
 fingerprint = sha256(
@@ -232,10 +232,10 @@ The fingerprint is stable across scans for the same vulnerability on the
 same host, even if the description or raw_data changes slightly. This
 enables:
 
-- **New finding detection:** fingerprint not in previous scan
-- **Recurring finding:** fingerprint in both current and previous scan
-- **Resolved finding:** fingerprint in previous scan but not current
-- **Regressed finding:** was resolved, now back (appeared, disappeared,
+- **New observation detection:** fingerprint not in previous scan
+- **Recurring observation:** fingerprint in both current and previous scan
+- **Resolved observation:** fingerprint in previous scan but not current
+- **Regressed observation:** was resolved, now back (appeared, disappeared,
   reappeared)
 
 Key evidence normalization strips timestamps, request IDs, and other
@@ -257,13 +257,13 @@ class ScanRepository:
                          limit: int = 50) -> list[Scan]
     async def get_latest_scan(self, target: str) -> Optional[Scan]
 
-class FindingRepository:
-    async def bulk_create(self, scan_id: str, findings: list[dict]) -> int
-    async def get_findings(self, scan_id: str,
+class ObservationRepository:
+    async def bulk_create(self, scan_id: str, observations: list[dict]) -> int
+    async def get_observations(self, scan_id: str,
                            severity: str = None,
-                           host: str = None) -> list[Finding]
-    async def get_findings_by_host(self, scan_id: str) -> dict
-    async def get_finding(self, finding_id: str) -> Optional[Finding]
+                           host: str = None) -> list[Observation]
+    async def get_observations_by_host(self, scan_id: str) -> dict
+    async def get_observation(self, observation_id: str) -> Optional[Observation]
 
 class ChainRepository:
     async def bulk_create(self, scan_id: str, chains: list[dict]) -> int
@@ -277,25 +277,25 @@ class EngagementRepository:
 
 class ComparisonRepository:
     async def compare_scans(self, scan_a: str, scan_b: str) -> ScanComparison
-    async def get_finding_history(self, fingerprint: str) -> list[dict]
+    async def get_observation_history(self, fingerprint: str) -> list[dict]
     async def get_trend_data(self, engagement_id: str) -> TrendData
 ```
 
 ### Integration with AppState
 
 AppState continues to hold the active scan's in-memory data for real-time
-UI updates (progress, live findings). The persistence layer writes to the
+UI updates (progress, live observations). The persistence layer writes to the
 database at key lifecycle points:
 
 ```
 Scan starts     -> INSERT into scans (status=running)
 Check completes -> INSERT into check_log
-                -> INSERT findings into findings table
+                -> INSERT observations into observations table
 Scan completes  -> UPDATE scans (status=complete, timing)
                 -> INSERT chains
-                -> Compute finding fingerprints
+                -> Compute observation fingerprints
                 -> Compare with previous scan (if exists)
-                -> Generate finding_status_history entries
+                -> Generate observation_status_history entries
 ```
 
 The in-memory AppState is NOT replaced. It remains the source of truth
@@ -310,7 +310,7 @@ historical.
 # Scan history
 GET    /api/scans                    List past scans (paginated)
 GET    /api/scans/{id}               Get scan details
-GET    /api/scans/{id}/findings      Get scan's findings
+GET    /api/scans/{id}/observations      Get scan's observations
 GET    /api/scans/{id}/chains        Get scan's chains
 GET    /api/scans/{id}/log           Get scan's check execution log
 GET    /api/scans/{id}/compare/{id2} Compare two scans
@@ -325,8 +325,8 @@ GET    /api/engagements/{id}/trend   Trend data for engagement
 PUT    /api/engagements/{id}         Update engagement
 DELETE /api/engagements/{id}         Delete engagement and all scans
 
-# Finding history
-GET    /api/findings/{fingerprint}/history  Finding across scans
+# Observation history
+GET    /api/observations/{fingerprint}/history  Observation across scans
 ```
 
 ### Modified Endpoints
@@ -336,12 +336,12 @@ compatible). When a `scan_id` query parameter is provided, they read
 from the database instead:
 
 ```
-GET /api/findings                     -> Active scan (current behavior)
-GET /api/findings?scan_id=abc-123     -> Historical scan from database
+GET /api/observations                     -> Active scan (current behavior)
+GET /api/observations?scan_id=abc-123     -> Historical scan from database
 GET /api/chains                       -> Active scan
 GET /api/chains?scan_id=abc-123       -> Historical scan
-GET /api/findings-by-host             -> Active scan
-GET /api/findings-by-host?scan_id=abc -> Historical scan
+GET /api/observations-by-host             -> Active scan
+GET /api/observations-by-host?scan_id=abc -> Historical scan
 ```
 
 ## CLI Changes
@@ -372,23 +372,23 @@ chainsmith export --scan <scan-id> -f json -o report.json
 
 Add a "History" section accessible from the nav or a new tab:
 
-- List of past scans with: date, target, finding count by severity,
+- List of past scans with: date, target, observation count by severity,
   duration, status
-- Click to view historical findings in the same visualizations (icicle,
+- Click to view historical observations in the same visualizations (icicle,
   host table, chains)
 - Compare button: select two scans for side-by-side diff
 - Filter by target, date range, engagement
 
-### Finding Status Badges
+### Observation Status Badges
 
-When viewing current scan findings, show status relative to previous scan:
+When viewing current scan observations, show status relative to previous scan:
 
-- **NEW** — This finding didn't exist in the last scan (green badge)
-- **RECURRING** — This finding existed in the last scan too (neutral)
-- **REGRESSED** — This finding was resolved but is back (red badge)
+- **NEW** — This observation didn't exist in the last scan (green badge)
+- **RECURRING** — This observation existed in the last scan too (neutral)
+- **REGRESSED** — This observation was resolved but is back (red badge)
 
-When viewing historical findings:
-- **RESOLVED** — This finding no longer appears in the latest scan
+When viewing historical observations:
+- **RESOLVED** — This observation no longer appears in the latest scan
 
 ## Migration Strategy
 
@@ -396,7 +396,7 @@ When viewing historical findings:
 
 - Add SQLAlchemy + alembic to dependencies
 - Create schema and initial migration
-- At scan completion, write findings/chains/log to database
+- At scan completion, write observations/chains/log to database
 - All reads still come from AppState (no behavior change)
 - Database is populated silently in the background
 - If database write fails, scan still works (graceful degradation)
@@ -413,13 +413,13 @@ When viewing historical findings:
 
 - Add engagements table and API
 - Add --engagement flag to scan command
-- Add finding fingerprinting and status tracking
+- Add observation fingerprinting and status tracking
 - Add scan comparison API and UI
 
 ### Phase 4: Full integration
 
 - Trend analysis (requires engagement + history)
-- Remediation tracking (requires finding fingerprinting)
+- Remediation tracking (requires observation fingerprinting)
 - Compliance reporting over time (requires scan history)
 - Database becomes authoritative for all data, AppState becomes
   a real-time cache for the active scan only
@@ -453,7 +453,7 @@ app/
   db/
     __init__.py
     engine.py               # SQLAlchemy engine setup, session management
-    models.py               # ORM models (Scan, Finding, Chain, Engagement, etc.)
+    models.py               # ORM models (Scan, Observation, Chain, Engagement, etc.)
     repositories.py         # Data access layer (repository pattern)
     migrations/
       env.py                # Alembic configuration
@@ -468,10 +468,10 @@ For capacity planning:
 | Data | Per Scan | Retention | 1 Year (weekly scans) |
 |------|----------|-----------|----------------------|
 | Scan metadata | ~1 KB | Forever | ~52 KB |
-| Findings | ~50-500 KB (50-500 findings × ~1 KB each) | Forever | ~13-26 MB |
+| Observations | ~50-500 KB (50-500 observations × ~1 KB each) | Forever | ~13-26 MB |
 | Chains | ~5-50 KB | Forever | ~1.3-2.6 MB |
 | Check log | ~5-20 KB | 90 days | ~0.5-2 MB |
 | Fingerprint history | ~10-100 KB | Forever | ~2.6-5.2 MB |
 
-SQLite handles this easily. Even at 100 scans/year with 500 findings
+SQLite handles this easily. Even at 100 scans/year with 500 observations
 each, the database would be under 100 MB.

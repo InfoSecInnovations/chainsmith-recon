@@ -196,7 +196,7 @@ related routers:
 | 6. Fix global state | Large | Correctness | **Deferred** — future session, needs concurrency decision |
 | 7. Unify LLM client usage | Small | Consistency | **Done** — chainsmith.py now uses get_llm_client() |
 | 8. Fix state.py import | Minutes | Correctness | **Done** — updated to CheckLauncher |
-| 9. Simplify adjudicator | Medium | Complexity reduction | **Deferred** — future session, needs usage data |
+| 9. Simplify adjudicator | Medium | Complexity reduction | **Done** — evidence_rubric only; strategies archived in adjudicator-strategies-reference.md |
 | 10. Merge route files | Medium | Cognitive load | **Deferred** — future session |
 
 

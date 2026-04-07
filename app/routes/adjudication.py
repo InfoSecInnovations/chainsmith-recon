@@ -6,9 +6,8 @@ Endpoints for:
 - Adjudication status and results
 - Per-observation adjudication detail
 
-When an optional `scan_id` query parameter is provided, results are
-read from the database (historical). Otherwise, the active session's
-in-memory data is returned.
+All reads go through the database. Adjudication status is read from the
+Scan record. If no scan_id is provided, the active scan is used.
 """
 
 import asyncio
@@ -16,8 +15,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.api_models import AdjudicateRequest
-from app.db.repositories import AdjudicationRepository
+from app.db.repositories import AdjudicationRepository, ObservationRepository, ScanRepository
 from app.engine.adjudication import run_adjudication
 from app.state import state
 
@@ -26,84 +24,90 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _adjudication_repo = AdjudicationRepository()
+_observation_repo = ObservationRepository()
+_scan_repo = ScanRepository()
+
+
+def _resolve_scan_id(scan_id: str | None) -> str | None:
+    """Resolve scan_id from parameter or active scan."""
+    return scan_id or state.active_scan_id
 
 
 @router.post("/api/v1/adjudicate", status_code=202)
-async def start_adjudication(body: AdjudicateRequest = AdjudicateRequest()):
-    """Start severity adjudication on verified observations.
+async def start_adjudication():
+    """Start severity adjudication on verified observations using evidence rubric scoring."""
+    sid = state.active_scan_id or state._last_scan_id
+    if not sid:
+        raise HTTPException(400, "No observations to adjudicate. Run a scan first.")
 
-    Optional body fields:
-      - approach: structured_challenge, adversarial_debate, evidence_rubric, auto
-    """
-    if len(state.observations) == 0:
+    obs = await _observation_repo.get_observations(sid)
+    if not obs:
         raise HTTPException(400, "No observations to adjudicate. Run a scan first.")
 
     if state.adjudication_status == "adjudicating":
         raise HTTPException(409, "Adjudication already running.")
 
     state.adjudication_status = "adjudicating"
-    state.adjudication_results = []
-    state.adjudication_error = None
 
-    asyncio.create_task(run_adjudication(state, approach=body.approach))
+    asyncio.create_task(run_adjudication(state))
 
     return {
         "status": "accepted",
-        "message": "Adjudication started. Poll GET /api/adjudication for status.",
+        "message": "Adjudication started. Poll GET /api/v1/adjudication for status.",
     }
 
 
 @router.get("/api/v1/adjudication")
 async def get_adjudication_status(
-    scan_id: str | None = Query(None, description="Historical scan ID"),
+    scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
 ):
-    """Get adjudication status and results. Pass scan_id for historical data."""
-    if scan_id:
-        results = await _adjudication_repo.get_results(scan_id)
-        upheld = sum(1 for r in results if r["original_severity"] == r["adjudicated_severity"])
-        adjusted = len(results) - upheld
+    """Get adjudication status and results."""
+    sid = _resolve_scan_id(scan_id)
+    if not sid:
         return {
-            "status": "complete",
-            "total": len(results),
-            "upheld": upheld,
-            "adjusted": adjusted,
-            "results": results,
+            "status": "idle",
+            "total": 0,
+            "upheld": 0,
+            "adjusted": 0,
+            "results": [],
             "error": None,
         }
 
-    upheld = sum(
-        1
-        for r in state.adjudication_results
-        if r.get("original_severity") == r.get("adjudicated_severity")
-    )
-    adjusted = len(state.adjudication_results) - upheld
+    # Get results from DB
+    results = await _adjudication_repo.get_results(sid)
+    upheld = sum(1 for r in results if r["original_severity"] == r["adjudicated_severity"])
+    adjusted = len(results) - upheld
+
+    # Get status from Scan record
+    scan = await _scan_repo.get_scan(sid)
+    adj_status = scan.get("adjudication_status", "idle") if scan else "idle"
+    adj_error = scan.get("adjudication_error") if scan else None
+
+    # If this is the active scan and adjudication is running, use live state
+    if sid == state.active_scan_id and state.adjudication_status == "adjudicating":
+        adj_status = state.adjudication_status
 
     return {
-        "status": state.adjudication_status,
-        "total": len(state.adjudication_results),
+        "status": adj_status,
+        "total": len(results),
         "upheld": upheld,
         "adjusted": adjusted,
-        "results": state.adjudication_results,
-        "error": state.adjudication_error,
+        "results": results,
+        "error": adj_error,
     }
 
 
 @router.get("/api/v1/adjudication/{observation_id}")
 async def get_observation_adjudication(
     observation_id: str,
-    scan_id: str | None = Query(None, description="Historical scan ID"),
+    scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
 ):
     """Get adjudication result for a specific observation."""
-    if scan_id:
-        result = await _adjudication_repo.get_result_for_observation(scan_id, observation_id)
-        if not result:
-            raise HTTPException(404, f"No adjudication result for observation '{observation_id}'")
-        return result
+    sid = _resolve_scan_id(scan_id)
+    if not sid:
+        raise HTTPException(404, f"No adjudication result for observation '{observation_id}'")
 
-    result = next(
-        (r for r in state.adjudication_results if r.get("observation_id") == observation_id),
-        None,
-    )
+    result = await _adjudication_repo.get_result_for_observation(sid, observation_id)
     if not result:
         raise HTTPException(404, f"No adjudication result for observation '{observation_id}'")
     return result

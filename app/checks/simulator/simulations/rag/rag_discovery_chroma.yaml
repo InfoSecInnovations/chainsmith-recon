@@ -46,7 +46,7 @@ output:
   vector_stores:
     - "chroma"
 
-findings:
+observations:
   - title: "Vector store detected: chroma"
     description: "Vector store 'chroma' detected at /api/v1/collections. No authentication required - potential data exposure."
     severity: "medium"

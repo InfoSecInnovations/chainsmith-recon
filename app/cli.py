@@ -2084,6 +2084,186 @@ def serve(host: str, port: int, reload: bool, coordinator: bool):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Scratch Space Commands
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@cli.command("scratch-to-db")
+@click.argument("scan_id", required=False)
+@click.option("--all", "import_all", is_flag=True, help="Import all scratch directories")
+@click.option("--dry-run", is_flag=True, help="Preview without importing")
+@click.option("--keep", is_flag=True, help="Keep scratch files after import (default: delete on success)")
+def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bool):
+    """Import observations from scratch space into the database.
+
+    When the database becomes unreachable during a scan, observations are
+    written to ~/.chainsmith/scratch/<scan_id>/ as JSON files. This command
+    imports those observations into the database and cleans up the scratch
+    directory.
+
+    Pass a specific SCAN_ID to import one scan, or --all to import everything.
+    """
+    import asyncio
+    import json
+    import shutil
+    from pathlib import Path
+
+    from app.db.writers import SCRATCH_DIR
+
+    if not scan_id and not import_all:
+        click.echo(click.style("Error: provide a SCAN_ID or use --all", fg="red"), err=True)
+        raise SystemExit(1)
+
+    if not SCRATCH_DIR.exists():
+        click.echo("No scratch directory found — nothing to import.")
+        return
+
+    # Discover scratch directories
+    if scan_id:
+        scan_dirs = [SCRATCH_DIR / scan_id]
+        if not scan_dirs[0].exists():
+            click.echo(click.style(f"No scratch data for scan '{scan_id}'", fg="red"), err=True)
+            raise SystemExit(1)
+    else:
+        scan_dirs = sorted(
+            [d for d in SCRATCH_DIR.iterdir() if d.is_dir() and (d / "observations").exists()]
+        )
+        if not scan_dirs:
+            click.echo("No scratch directories with observations found.")
+            return
+
+    async def _import():
+        from app.config import get_config
+        from app.db import init_db
+        from app.db.repositories import ObservationRepository, _generate_fingerprint
+
+        cfg = get_config()
+        await init_db(
+            backend=cfg.storage.backend,
+            db_path=cfg.storage.db_path,
+            postgresql_url=cfg.storage.postgresql_url,
+        )
+
+        repo = ObservationRepository()
+        total_imported = 0
+        total_skipped = 0
+
+        for scan_dir in scan_dirs:
+            sid = scan_dir.name
+            obs_dir = scan_dir / "observations"
+
+            if not obs_dir.exists():
+                continue
+
+            # Load scratch observations
+            obs_files = sorted(obs_dir.glob("*.json"))
+            if not obs_files:
+                click.echo(f"  {sid}: no observation files")
+                continue
+
+            observations = []
+            for f in obs_files:
+                try:
+                    observations.append(json.loads(f.read_text(encoding="utf-8")))
+                except Exception as e:
+                    click.echo(click.style(f"  Warning: could not read {f.name}: {e}", fg="yellow"))
+
+            if not observations:
+                continue
+
+            # Get existing fingerprints for this scan to skip duplicates
+            existing = await repo.get_observations(sid)
+            existing_fps = {obs.get("fingerprint") for obs in existing if obs.get("fingerprint")}
+
+            # Compute fingerprints for scratch observations and filter duplicates
+            new_observations = []
+            for obs in observations:
+                host = obs.get("host") or obs.get("target_url", "")
+                fp = _generate_fingerprint(
+                    check_name=obs.get("check_name", obs.get("check", "")),
+                    host=host,
+                    title=obs.get("title", ""),
+                    evidence=obs.get("evidence", ""),
+                )
+                if fp not in existing_fps:
+                    new_observations.append(obs)
+                    existing_fps.add(fp)  # prevent intra-batch dupes
+
+            skipped = len(observations) - len(new_observations)
+
+            click.echo(
+                f"  {sid}: {len(obs_files)} files, "
+                f"{len(new_observations)} new, {skipped} duplicates"
+            )
+
+            if dry_run or not new_observations:
+                total_skipped += skipped
+                continue
+
+            # Import to DB
+            count = await repo.bulk_create(sid, new_observations)
+            total_imported += count
+            total_skipped += skipped
+
+            # Clean up scratch directory
+            if not keep:
+                try:
+                    shutil.rmtree(scan_dir)
+                    click.echo(f"    Cleaned up {scan_dir}")
+                except Exception as e:
+                    click.echo(click.style(f"    Warning: could not remove {scan_dir}: {e}", fg="yellow"))
+
+        return total_imported, total_skipped
+
+    click.echo(click.style("Scratch-to-DB Import", fg="cyan", bold=True))
+    click.echo(f"  Source: {SCRATCH_DIR}")
+    click.echo(f"  Scans:  {len(scan_dirs)}")
+    if dry_run:
+        click.echo(click.style("  Mode:   DRY RUN", fg="yellow"))
+    click.echo()
+
+    imported, skipped = asyncio.run(_import())
+
+    if dry_run:
+        click.echo(click.style(f"\nDry run complete. Would import observations from {len(scan_dirs)} scan(s).", fg="yellow"))
+    else:
+        click.echo(click.style(f"\nImported {imported} observations ({skipped} duplicates skipped).", fg="green"))
+
+
+@cli.command("scratch-list")
+def scratch_list():
+    """List scratch directories awaiting import."""
+    from app.db.writers import SCRATCH_DIR
+
+    if not SCRATCH_DIR.exists():
+        click.echo("No scratch directory found.")
+        return
+
+    scan_dirs = sorted(
+        [d for d in SCRATCH_DIR.iterdir() if d.is_dir()]
+    )
+
+    if not scan_dirs:
+        click.echo("No scratch data found.")
+        return
+
+    click.echo(click.style("Scratch Space Contents", fg="cyan", bold=True))
+    for d in scan_dirs:
+        obs_dir = d / "observations"
+        file_count = len(list(obs_dir.glob("*.json"))) if obs_dir.exists() else 0
+        meta_file = d / "metadata.json"
+        meta = ""
+        if meta_file.exists():
+            import json
+            try:
+                data = json.loads(meta_file.read_text(encoding="utf-8"))
+                meta = f" ({data.get('reason', '')})"
+            except Exception:
+                pass
+        click.echo(f"  {d.name}: {file_count} observation(s){meta}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Swarm Commands
 # ═══════════════════════════════════════════════════════════════════════════════
 

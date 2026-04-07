@@ -27,7 +27,7 @@ output:
         scheme: "http"
         service_type: "ai"
 
-findings:
+observations:
   - title: "MCP server discovered: /mcp"
     description: "MCP server endpoint discovered. Transport: http. Capabilities: tools, resources. No authentication required."
     severity: "medium"

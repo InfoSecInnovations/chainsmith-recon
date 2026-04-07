@@ -350,7 +350,7 @@ def _delta_markdown(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) ->
     lines.append("")
 
     # New observations
-    new_observations = comparison.get("new_observations", comparison.get("new_findings", []))
+    new_observations = comparison.get("new_observations", [])
     if new_observations:
         lines.append(f"## New Observations ({len(new_observations)})")
         lines.append("")
@@ -360,7 +360,7 @@ def _delta_markdown(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) ->
         lines.append("")
 
     # Resolved observations
-    resolved_observations = comparison.get("resolved_observations", comparison.get("resolved_findings", []))
+    resolved_observations = comparison.get("resolved_observations", [])
     if resolved_observations:
         lines.append(f"## Resolved Observations ({len(resolved_observations)})")
         lines.append("")
@@ -392,8 +392,8 @@ def _delta_json(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str
             "severity_a": sev_a,
             "severity_b": sev_b,
         },
-        "new_observations": comparison.get("new_observations", comparison.get("new_findings", [])),
-        "resolved_observations": comparison.get("resolved_observations", comparison.get("resolved_findings", [])),
+        "new_observations": comparison.get("new_observations", []),
+        "resolved_observations": comparison.get("resolved_observations", []),
     }
     return json.dumps(report, indent=2)
 
@@ -742,7 +742,7 @@ def _delta_html(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str
     parts.append("</table>")
 
     # New observations
-    new_observations = comparison.get("new_observations", comparison.get("new_findings", []))
+    new_observations = comparison.get("new_observations", [])
     if new_observations:
         parts.append(f"<h2>New Observations ({len(new_observations)})</h2>")
         for f in new_observations:
@@ -751,7 +751,7 @@ def _delta_html(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str
                 f"{_severity_badge(f.get('severity', 'info'))} {_esc(f.get('title', 'Untitled'))}</div></div>"
             )
 
-    resolved_observations = comparison.get("resolved_observations", comparison.get("resolved_findings", []))
+    resolved_observations = comparison.get("resolved_observations", [])
     if resolved_observations:
         parts.append(f"<h2>Resolved Observations ({len(resolved_observations)})</h2>")
         for f in resolved_observations:
@@ -1626,7 +1626,7 @@ def _technical_sarif(scan, observations, chains, severity_counts, risk, coverage
 
 def _delta_sarif(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str:
     """SARIF output for a delta report — new observations only."""
-    new_observations = comparison.get("new_observations", comparison.get("new_findings", []))
+    new_observations = comparison.get("new_observations", [])
     results = [_observation_to_sarif_result(o) for o in new_observations]
     rules = _build_sarif_rules(new_observations)
     return _sarif_envelope(

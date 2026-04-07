@@ -33,7 +33,7 @@ Simulation files go in `app/data/simulations/{suite}/`.
 
 ## Simulation YAML
 
-Each simulation file defines outputs and findings for a check:
+Each simulation file defines outputs and observations for a check:
 
 ```yaml
 # app/data/simulations/mcp/mcp_discovery_custom.yaml
@@ -57,7 +57,7 @@ output:
         scheme: "http"
         service_type: "ai"
 
-findings:
+observations:
   - title: "MCP server discovered"
     description: "MCP endpoint found without authentication."
     severity: "medium"
@@ -81,13 +81,13 @@ findings:
 
 Defines what the check's `result.outputs` should contain. Must match what the real check produces.
 
-### findings
+### observations
 
-List of findings to generate:
+List of observations to generate:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `title` | Yes | Finding title |
+| `title` | Yes | Observation title |
 | `description` | No | Detailed description |
 | `severity` | Yes | critical, high, medium, low, info |
 | `evidence` | No | Raw evidence string |
@@ -117,5 +117,5 @@ chainsmith scan example.local --scenario my-scenario
 
 1. **Match real check outputs**: Study existing checks to understand expected output shapes
 2. **Use consistent naming**: `{check}_{scenario}.yaml`
-3. **Include findings**: Scenarios without findings are less useful for training
+3. **Include observations**: Scenarios without observations are less useful for training
 4. **Add references**: Link to OWASP, CWE, etc. for educational value

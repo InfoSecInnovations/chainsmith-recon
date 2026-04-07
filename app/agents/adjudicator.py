@@ -1,14 +1,13 @@
 """
 Adjudicator Agent
 
-Challenges and debates the risk criticality of verified observations.
-Produces adjudicated_risk annotations without modifying original observations.
+Challenges the risk criticality of verified observations using a structured
+evidence rubric. Produces adjudicated_risk annotations without modifying
+original observations.
 
-Three approaches available:
-  - structured_challenge: Devil's advocate single LLM call (cheapest)
-  - adversarial_debate: Prosecutor + defender + judge (3 LLM calls, most thorough)
-  - evidence_rubric: CVSS-like structured scoring (1 LLM call, most deterministic)
-  - auto: Tiered by severity (default)
+Uses a CVSS-like scoring rubric (single LLM call per observation) for
+deterministic, comparable results. See docs/future-ideas/adjudicator-strategies-reference.md
+for alternative approaches considered and archived.
 """
 
 import json
@@ -31,89 +30,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 
-# ─── System Prompts ──────────────────────────────────────────────
-
-STRUCTURED_CHALLENGE_PROMPT = """\
-You are a security severity adjudicator. Your job is to challenge the assigned \
-severity of a security observation by arguing as a devil's advocate.
-
-Given an observation with its evidence and context, argue why the current severity \
-rating might be WRONG — either too high or too low. Then make a final decision.
-
-RULES:
-1. Consider attack vector, complexity, privileges required, and impact scope.
-2. If operator context is provided (asset exposure, criticality), factor it in.
-3. Be practical — a theoretical attack on an internal-only service is less \
-   severe than the same attack on an internet-facing production system.
-4. Output your response as valid JSON only, no markdown fences.
-
-OUTPUT FORMAT (JSON only):
-{
-  "challenge_argument": "Why the severity might be wrong...",
-  "final_severity": "critical|high|medium|low|info",
-  "confidence": 0.0-1.0,
-  "rationale": "Brief explanation of final decision",
-  "factors": {
-    "attack_vector": "network|adjacent|local|physical",
-    "complexity": "low|high",
-    "privileges_required": "none|low|high",
-    "impact": "critical|high|medium|low|none"
-  }
-}"""
-
-ADVERSARIAL_PROSECUTOR_PROMPT = """\
-You are a security severity PROSECUTOR. Your job is to argue that the observation's \
-severity should be MAINTAINED or RAISED. Build the strongest case for why this \
-observation is dangerous.
-
-Consider: real-world exploitability, blast radius, data exposure, lateral \
-movement potential, and any operator context provided.
-
-Output your argument as valid JSON only, no markdown fences:
-{
-  "argument": "Your case for maintaining or raising severity...",
-  "suggested_severity": "critical|high|medium|low|info",
-  "key_factors": ["factor1", "factor2"]
-}"""
-
-ADVERSARIAL_DEFENDER_PROMPT = """\
-You are a security severity DEFENDER. Your job is to argue that the observation's \
-severity should be LOWERED. Build the strongest case for why this observation is \
-less dangerous than it appears.
-
-Consider: mitigating controls, limited attack surface, required preconditions, \
-low impact in context, and any operator context provided.
-
-Output your argument as valid JSON only, no markdown fences:
-{
-  "argument": "Your case for lowering severity...",
-  "suggested_severity": "critical|high|medium|low|info",
-  "key_factors": ["factor1", "factor2"]
-}"""
-
-ADVERSARIAL_JUDGE_PROMPT = """\
-You are a security severity JUDGE. You have heard arguments from a prosecutor \
-(arguing severity should stay or increase) and a defender (arguing it should \
-decrease). Weigh both arguments and render a final verdict.
-
-RULES:
-1. Be impartial — evaluate the strength of each argument.
-2. Factor in operator context if provided.
-3. Output your verdict as valid JSON only, no markdown fences.
-
-OUTPUT FORMAT (JSON only):
-{
-  "verdict": "The prosecution/defense argument is stronger because...",
-  "final_severity": "critical|high|medium|low|info",
-  "confidence": 0.0-1.0,
-  "rationale": "Brief explanation of final decision",
-  "factors": {
-    "attack_vector": "network|adjacent|local|physical",
-    "complexity": "low|high",
-    "privileges_required": "none|low|high",
-    "impact": "critical|high|medium|low|none"
-  }
-}"""
+# ─── System Prompt ──────────────────────────────────────────────
 
 EVIDENCE_RUBRIC_PROMPT = """\
 You are a security severity scorer. Rate the observation using a structured rubric. \
@@ -164,11 +81,9 @@ class AdjudicatorAgent:
         self,
         client: LLMClient,
         event_callback: Callable[[AgentEvent], Awaitable[None]] | None = None,
-        approach: AdjudicationApproach = AdjudicationApproach.AUTO,
     ):
         self.client = client
         self.event_callback = event_callback
-        self.approach = approach
         self.is_running = False
         self.results: list[AdjudicatedRisk] = []
 
@@ -207,7 +122,7 @@ class AdjudicatorAgent:
                 agent=AgentType.ADJUDICATOR,
                 importance=EventImportance.MEDIUM,
                 message=f"Adjudicator starting severity review of {len(verified)} verified observations...",
-                details={"total_observations": len(verified), "approach": self.approach},
+                details={"total_observations": len(verified), "approach": AdjudicationApproach.EVIDENCE_RUBRIC},
             )
         )
 
@@ -276,7 +191,7 @@ class AdjudicatorAgent:
                     "total": len(verified),
                     "upheld": upheld,
                     "adjusted": adjusted,
-                    "approach": self.approach,
+                    "approach": AdjudicationApproach.EVIDENCE_RUBRIC,
                 },
             )
         )
@@ -295,32 +210,15 @@ class AdjudicatorAgent:
         observation: Observation,
         operator_context: OperatorContext | None,
     ) -> AdjudicatedRisk:
-        """Adjudicate a single observation using the resolved approach."""
-        approach = self._resolve_approach(observation)
+        """Adjudicate a single observation using the evidence rubric."""
         asset_context = self._match_asset_context(observation, operator_context)
         context_str = self._format_context(observation, asset_context)
 
-        if approach == AdjudicationApproach.STRUCTURED_CHALLENGE:
-            return await self._run_structured_challenge(observation, context_str)
-        elif approach == AdjudicationApproach.ADVERSARIAL_DEBATE:
-            return await self._run_adversarial_debate(observation, context_str)
-        elif approach == AdjudicationApproach.EVIDENCE_RUBRIC:
-            return await self._run_evidence_rubric(observation, context_str)
-        else:
-            return await self._run_structured_challenge(observation, context_str)
-
-    def _resolve_approach(self, observation: Observation) -> AdjudicationApproach:
-        """For 'auto' mode, pick approach based on severity tier."""
-        if self.approach != AdjudicationApproach.AUTO:
-            return self.approach
-
-        severity = observation.severity
-        if severity in (ObservationSeverity.HIGH, ObservationSeverity.CRITICAL):
-            return AdjudicationApproach.ADVERSARIAL_DEBATE
-        elif severity == ObservationSeverity.MEDIUM:
-            return AdjudicationApproach.EVIDENCE_RUBRIC
-        else:
-            return AdjudicationApproach.STRUCTURED_CHALLENGE
+        response = await self.client.chat(
+            prompt=f"Score this observation using the rubric:\n\n{context_str}",
+            system=EVIDENCE_RUBRIC_PROMPT,
+        )
+        return self._parse_rubric_response(observation, response)
 
     def _match_asset_context(
         self,
@@ -381,85 +279,6 @@ class AdjudicatorAgent:
 
         return "\n".join(parts)
 
-    async def _run_structured_challenge(self, observation: Observation, context: str) -> AdjudicatedRisk:
-        """Single LLM call — devil's advocate challenge."""
-        response = await self.client.chat(
-            prompt=f"Evaluate this observation:\n\n{context}",
-            system=STRUCTURED_CHALLENGE_PROMPT,
-        )
-        return self._parse_single_response(
-            observation, response, AdjudicationApproach.STRUCTURED_CHALLENGE
-        )
-
-    async def _run_adversarial_debate(self, observation: Observation, context: str) -> AdjudicatedRisk:
-        """Three LLM calls — prosecutor, defender, judge."""
-        # Call 1: Prosecutor argues to maintain/raise
-        prosecution = await self.client.chat(
-            prompt=f"Evaluate this observation:\n\n{context}",
-            system=ADVERSARIAL_PROSECUTOR_PROMPT,
-        )
-
-        # Call 2: Defender argues to lower
-        defense = await self.client.chat(
-            prompt=f"Evaluate this observation:\n\n{context}",
-            system=ADVERSARIAL_DEFENDER_PROMPT,
-        )
-
-        # Call 3: Judge weighs both arguments
-        judge_prompt = (
-            f"Observation under review:\n\n{context}\n\n"
-            f"PROSECUTION ARGUMENT:\n{prosecution.content}\n\n"
-            f"DEFENSE ARGUMENT:\n{defense.content}"
-        )
-        verdict = await self.client.chat(
-            prompt=judge_prompt,
-            system=ADVERSARIAL_JUDGE_PROMPT,
-        )
-        return self._parse_single_response(
-            observation, verdict, AdjudicationApproach.ADVERSARIAL_DEBATE
-        )
-
-    async def _run_evidence_rubric(self, observation: Observation, context: str) -> AdjudicatedRisk:
-        """Single LLM call — structured rubric scoring."""
-        response = await self.client.chat(
-            prompt=f"Score this observation using the rubric:\n\n{context}",
-            system=EVIDENCE_RUBRIC_PROMPT,
-        )
-        return self._parse_rubric_response(observation, response)
-
-    def _parse_single_response(
-        self,
-        observation: Observation,
-        response: LLMResponse,
-        approach: AdjudicationApproach,
-    ) -> AdjudicatedRisk:
-        """Parse a structured challenge or adversarial judge response."""
-        if not response.success:
-            logger.warning(f"LLM call failed for {observation.id}: {response.error}")
-            return self._fallback_result(observation, approach, response.error or "LLM call failed")
-
-        try:
-            data = json.loads(self._clean_json(response.content))
-        except (json.JSONDecodeError, ValueError):
-            logger.warning(f"Failed to parse LLM JSON for {observation.id}")
-            return self._fallback_result(observation, approach, "Failed to parse LLM response")
-
-        severity_str = data.get("final_severity", observation.severity).lower()
-        try:
-            adjudicated_severity = ObservationSeverity(severity_str)
-        except ValueError:
-            adjudicated_severity = observation.severity
-
-        return AdjudicatedRisk(
-            observation_id=observation.id,
-            original_severity=observation.severity,
-            adjudicated_severity=adjudicated_severity,
-            confidence=float(data.get("confidence", 0.5)),
-            approach_used=approach,
-            rationale=data.get("rationale", ""),
-            factors=data.get("factors", {}),
-        )
-
     def _parse_rubric_response(
         self,
         observation: Observation,
@@ -468,17 +287,13 @@ class AdjudicatorAgent:
         """Parse an evidence rubric response with scores."""
         if not response.success:
             logger.warning(f"LLM call failed for {observation.id}: {response.error}")
-            return self._fallback_result(
-                observation, AdjudicationApproach.EVIDENCE_RUBRIC, response.error or "LLM call failed"
-            )
+            return self._fallback_result(observation, response.error or "LLM call failed")
 
         try:
             data = json.loads(self._clean_json(response.content))
         except (json.JSONDecodeError, ValueError):
             logger.warning(f"Failed to parse rubric JSON for {observation.id}")
-            return self._fallback_result(
-                observation, AdjudicationApproach.EVIDENCE_RUBRIC, "Failed to parse rubric response"
-            )
+            return self._fallback_result(observation, "Failed to parse rubric response")
 
         scores = data.get("scores", {})
         severity_str = data.get("final_severity", observation.severity).lower()
@@ -498,16 +313,14 @@ class AdjudicatorAgent:
         )
 
     @staticmethod
-    def _fallback_result(
-        observation: Observation, approach: AdjudicationApproach, reason: str
-    ) -> AdjudicatedRisk:
+    def _fallback_result(observation: Observation, reason: str) -> AdjudicatedRisk:
         """Return a fallback result that upholds the original severity."""
         return AdjudicatedRisk(
             observation_id=observation.id,
             original_severity=observation.severity,
             adjudicated_severity=observation.severity,
             confidence=0.0,
-            approach_used=approach,
+            approach_used=AdjudicationApproach.EVIDENCE_RUBRIC,
             rationale=f"Adjudication inconclusive — severity upheld. Reason: {reason}",
             factors={},
         )

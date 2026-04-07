@@ -18,7 +18,7 @@ Retrieval-Augmented Generation pipeline discovery, vector store analysis, and in
 
 Probes common RAG paths (/query, /search, /retrieve, /ask, /chat, /rag, /documents, /knowledge, /embeddings, /invoke). Detects vector stores: Chroma, Pinecone, Weaviate, Qdrant, Milvus, pgvector, FAISS. Identifies RAG indicators in responses (sources, citations, chunks, similarity scores).
 
-#### Findings
+#### Observations
 
 - **medium**: Vector store accessible (no auth)
 - **medium**: RAG query endpoint found
@@ -39,7 +39,7 @@ Probes common RAG paths (/query, /search, /retrieve, /ask, /chat, /rag, /documen
 
 Per-store probes for collection listing, document enumeration, arbitrary queries. Store-specific: Chroma (list_collections, dump_documents), Qdrant (collection_info, enumerate_points), Weaviate (full_schema, GraphQL), Pinecone (index_stats, list_vectors), Milvus (entity_query).
 
-#### Findings
+#### Observations
 
 - **critical**: Full document dump or point enumeration accessible
 - **high**: Arbitrary query/search/GraphQL accessible
@@ -59,7 +59,7 @@ Per-store probes for collection listing, document enumeration, arbitrary queries
 
 Tests per-store default credentials (Chroma: empty token; Qdrant: "qdrant", "default"; Weaviate: anonymous Bearer; Pinecone: empty key). Also tests IP-based bypass headers (X-Forwarded-For, X-Real-IP) and common auth headers. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Vector store requires no authentication
 - **high**: Default credential or common header bypasses auth
@@ -79,7 +79,7 @@ Tests per-store default credentials (Chroma: empty token; Qdrant: "qdrant", "def
 
 Enumerates up to 10 collections per store with per-store methods. Flags sensitive collection names (hr, payroll, credential, password, secret, pii, customer, employee, financial, confidential, medical, hipaa, ssn).
 
-#### Findings
+#### Observations
 
 - **high**: Large number of collections or documents with sensitive names
 - **medium**: Collections detected without sensitive indicators
@@ -98,7 +98,7 @@ Enumerates up to 10 collections per store with per-store methods. Flags sensitiv
 
 Probes embedding endpoints and vector store configs. Maps dimensions to models: 1536 = OpenAI ada-002, 3072 = text-embedding-3-large, 768 = BERT/RoBERTa, 384 = MiniLM, 1024 = Cohere/e5-large, etc.
 
-#### Findings
+#### Observations
 
 - **low**: Embedding model identified with dimensions
 - **info**: Model not identified
@@ -118,7 +118,7 @@ Probes embedding endpoints and vector store configs. Maps dimensions to models: 
 
 Tests payloads: instruction_echo, context_extraction, delimiter_escape. Analyzes responses for instruction following, context leakage, role confusion, and delimiter escape patterns. Confidence-based scoring. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Indirect injection successful (confidence > 0.6)
 - **medium**: Possible injection (confidence 0.3-0.6)
@@ -137,7 +137,7 @@ Tests payloads: instruction_echo, context_extraction, delimiter_escape. Analyzes
 
 Two-phase approach: broad discovery queries then targeted sensitive queries (credentials, PII, API keys, infrastructure, financial). Detects email, phone, SSN, api_key, password, bearer_token, aws_key, private_key patterns. Also detects raw chunk metadata leakage. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Credentials or PII detected in responses
 - **high**: Internal infrastructure details detected
@@ -157,7 +157,7 @@ Two-phase approach: broad discovery queries then targeted sensitive queries (cre
 
 Tests top_k parameter override with multiple names (top_k, k, n_results, limit, topK, num_results, max_results) and k values (1, 10, 50). Tests filter/where clause override with empty and null filters. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: top_k parameter accepts client override
 - **medium**: Filter/where clause parameters accepted from client
@@ -176,7 +176,7 @@ Tests top_k parameter override with multiple names (top_k, k, n_results, limit, 
 
 Submits citation-eliciting queries. Detects citation patterns (source references, year citations, URLs). Validates URLs against suspicious patterns (localhost, .test, .example, .local domains).
 
-#### Findings
+#### Observations
 
 - **medium**: Suspicious URLs in citations (localhost, .example)
 - **low**: Source attribution present (structured or unstructured)
@@ -195,7 +195,7 @@ Submits citation-eliciting queries. Detects citation patterns (source references
 
 Detects caching via cache headers, identical responses to repeated queries, and response timing analysis.
 
-#### Findings
+#### Observations
 
 - **high**: Cache poisoning confirmed (caching + injection vulnerability + identical responses)
 - **medium**: Caching detected with identical responses
@@ -217,7 +217,7 @@ Detects caching via cache headers, identical responses to repeated queries, and 
 
 Probes ingestion paths (/documents, /ingest, /upload, /index, /add) and collection-scoped paths. Tries JSON and multipart upload formats with canary documents. Cleanup attempted after testing. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Ingestion endpoint accepts unauthenticated writes
 - **high**: Document ingestion accessible with write access (auth required)
@@ -236,7 +236,7 @@ Probes ingestion paths (/documents, /ingest, /upload, /index, /add) and collecti
 
 Active test (with write capability): injects metadata with payloads and queries for retrieval. Passive test: analyzes existing responses for metadata field presence. Tests fields: source, author, title, category, permissions, tags, date, filename, url, description. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Metadata injection confirmed (LLM followed metadata instructions)
 - **medium**: Metadata included in LLM context but not followed
@@ -255,7 +255,7 @@ Active test (with write capability): injects metadata with payloads and queries 
 
 Tests at multiple chunk sizes (256, 512, 1024 tokens). Splits injection payload across boundary with filler text. Injects document and queries to check if split payload reassembles in LLM context. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Chunk boundary bypass confirmed (split payload reassembled)
 - **medium**: Both chunks retrieved but injection not confirmed
@@ -274,7 +274,7 @@ Tests at multiple chunk sizes (256, 512, 1024 tokens). Splits injection payload 
 
 Tests 3 vectors: PDF metadata injection (payload in Title field), crafted filename injection, and text file hidden instructions. Uploads via multipart and queries to detect processing. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Multimodal injection confirmed (indicator in response)
 - **medium**: RAG accepts file uploads without content scanning
@@ -295,7 +295,7 @@ Tests 3 vectors: PDF metadata injection (payload in Title field), crafted filena
 
 Detects rerankers via response headers (x-reranker, x-fusion-score, x-cross-encoder). Analyzes score patterns with varying k values (1, 3, 10) to identify normalized scoring and high score spread.
 
-#### Findings
+#### Observations
 
 - **low**: Re-ranking detected via headers
 - **info**: Re-ranking inferred from score patterns or not detected
@@ -313,7 +313,7 @@ Detects rerankers via response headers (x-reranker, x-fusion-score, x-cross-enco
 
 Requires at least 2 collections. Tests isolation via direct vector store scoped queries and RAG query endpoint with collection parameter. Checks if one collection's query returns another's data.
 
-#### Findings
+#### Observations
 
 - **critical**: Cross-collection retrieval confirmed (multiple violations)
 - **high**: Single isolation violation
@@ -332,7 +332,7 @@ Requires at least 2 collections. Tests isolation via direct vector store scoped 
 
 Three keyword-based techniques (no GPU required): keyword stuffing (sensitive terms), semantic mismatch (public topic steered toward sensitive content), and embedding collision (special chars, template syntax). Compares baseline vs. adversarial retrieval results. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Adversarial embedding successful (>50% new docs)
 - **medium**: Adversarial embedding effective but weaker

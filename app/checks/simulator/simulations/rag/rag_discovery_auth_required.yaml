@@ -26,7 +26,7 @@ output:
 
   vector_stores: []
 
-findings:
+observations:
   - title: "RAG endpoint: /api/search"
     description: "RAG query endpoint discovered at /api/search. Authentication required."
     severity: "info"

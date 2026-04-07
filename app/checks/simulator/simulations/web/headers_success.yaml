@@ -15,4 +15,4 @@ output:
     content-security-policy: "default-src 'self'"
     referrer-policy: "strict-origin-when-cross-origin"
     server: "nginx"
-  findings_count: 0
+  observations_count: 0

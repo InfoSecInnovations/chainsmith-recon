@@ -29,7 +29,7 @@ from app.routes import (
     observations_router,
     preferences_router,
     scan_router,
-    scans_router,
+    scan_history_router,
     scenarios_router,
     scope_router,
     swarm_router,
@@ -93,7 +93,7 @@ if Path(_static_dir).exists():
 
 app.include_router(scope_router)
 app.include_router(scan_router)
-app.include_router(scans_router)
+app.include_router(scan_history_router)
 app.include_router(engagements_router)
 app.include_router(observations_router)
 app.include_router(checks_router)

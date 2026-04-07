@@ -14,6 +14,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.api_models import ScanStartInput, ScanStatus
+from app.db.repositories import CheckLogRepository
 from app.engine.scanner import AVAILABLE_CHECKS, get_check_info, run_scan
 from app.scenarios import get_scenario_manager
 from app.state import state
@@ -21,6 +22,8 @@ from app.state import state
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_check_log_repo = CheckLogRepository()
 
 
 # ─── Scan Execution ───────────────────────────────────────────
@@ -42,12 +45,10 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
 
     state.status = "running"
     state.phase = "scanning"
-    state.observations = []
     state.error_message = None
     state.checks_completed = 0
     state.current_check = None
     state.check_statuses = {}
-    state.check_log = []
     state.engagement_id = body.engagement_id
 
     # Launch scan in background with optional filters
@@ -67,10 +68,17 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
 @router.get("/api/v1/scan")
 async def get_scan_status():
     """Get scan status with progress."""
+    # Get live observation count from the writer via the runner
+    obs_count = 0
+    if state.runner:
+        writer = getattr(state.runner, "observation_writer", None)
+        if writer:
+            obs_count = writer.count
+
     return ScanStatus(
         status=state.status,
         phase=state.phase,
-        observations_count=len(state.observations),
+        observations_count=obs_count,
         checks_total=state.checks_total,
         checks_completed=state.checks_completed,
         current_check=state.current_check,
@@ -185,5 +193,10 @@ def _infer_suite(check_name: str) -> str:
 
 @router.get("/api/v1/scan/log")
 async def get_check_log():
-    """Get history of check executions."""
-    return {"log": state.check_log}
+    """Get history of check executions from the database."""
+    sid = state.active_scan_id
+    if not sid:
+        return {"log": []}
+
+    log = await _check_log_repo.get_log(sid)
+    return {"log": log}

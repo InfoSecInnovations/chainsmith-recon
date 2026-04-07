@@ -99,7 +99,7 @@ output:
         - payload_id: "delimiter_escape"
           confidence: 0.68
 
-findings:
+observations:
   - title: "RAG injection: context extraction successful"
     description: "RAG system leaked internal document content including system prompts and privileged instructions. Confidence: 85%."
     severity: "high"

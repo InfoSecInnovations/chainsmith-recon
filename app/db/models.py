@@ -62,6 +62,13 @@ class Scan(Base):
     error_message = Column(Text, nullable=True)
     metadata_ = Column("metadata", JSON, nullable=True)
 
+    # Phase 31: status fields migrated from AppState
+    adjudication_status = Column(String, nullable=True, default="idle")
+    adjudication_error = Column(Text, nullable=True)
+    chain_status = Column(String, nullable=True, default="idle")
+    chain_error = Column(Text, nullable=True)
+    chain_llm_analysis = Column(JSON, nullable=True)
+
 
 class ObservationRecord(Base):
     __tablename__ = "observations"
@@ -198,3 +205,18 @@ class ScanComparison(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
     __table_args__ = (UniqueConstraint("scan_a_id", "scan_b_id", name="uq_scan_comparison"),)
+
+
+class AdvisorRecommendation(Base):
+    __tablename__ = "advisor_recommendations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scan_id = Column(String, nullable=False)
+    category = Column(String, nullable=True)  # e.g. "missing_check", "scope_gap"
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    priority = Column(String, nullable=True)  # high, medium, low
+    data = Column(JSON, nullable=True)  # full recommendation payload
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (Index("idx_advisor_rec_scan_id", "scan_id"),)

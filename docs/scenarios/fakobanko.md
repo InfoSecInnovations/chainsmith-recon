@@ -59,9 +59,9 @@ chainsmith scan fakobanko.local --scenario fakobanko
 - No rate limiting
 - Tools enumerable
 
-## Expected Findings
+## Expected Observations
 
-Running the full scenario produces ~23 findings:
+Running the full scenario produces ~23 observations:
 
 | Severity | Count |
 |----------|-------|

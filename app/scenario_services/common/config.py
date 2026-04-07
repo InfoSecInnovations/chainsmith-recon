@@ -108,7 +108,7 @@ class ScenarioConfig:
     @classmethod
     def from_dict(cls, data: dict) -> ScenarioConfig:
         """Parse scenario.json into ScenarioConfig."""
-        observations_raw = data.get("observations", data.get("findings", {}))
+        observations_raw = data.get("observations", {})
 
         # Handle both flat list and structured observations config
         if isinstance(observations_raw, list):

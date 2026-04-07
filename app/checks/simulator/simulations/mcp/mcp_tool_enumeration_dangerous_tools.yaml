@@ -89,7 +89,7 @@ output:
       risk_level: "critical"
       server_url: "http://mcp.fakobanko.local:3000/mcp"
 
-findings:
+observations:
   - title: "MCP tool: execute_command (critical risk)"
     description: "MCP tool 'execute_command' discovered. Description: Execute a shell command on the server. Risk level: CRITICAL. This tool may allow arbitrary command execution or code evaluation."
     severity: "critical"

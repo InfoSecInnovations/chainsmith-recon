@@ -17,7 +17,6 @@ from app.config import get_config
 from app.db.repositories import (
     AdjudicationRepository,
     ChainRepository,
-    CheckLogRepository,
     ComparisonRepository,
     ObservationRepository,
     ScanRepository,
@@ -25,6 +24,7 @@ from app.db.repositories import (
 
 if TYPE_CHECKING:
     from app.db.engine import Database
+    from app.db.writers import ObservationWriter
     from app.state import AppState
 
 logger = logging.getLogger(__name__)
@@ -33,18 +33,6 @@ logger = logging.getLogger(__name__)
 def _is_enabled() -> bool:
     """Check if persistence is enabled in config."""
     return get_config().storage.auto_persist
-
-
-def _make_repos(db: Database | None = None):
-    """Create a set of repositories, optionally bound to a specific Database."""
-    return (
-        ScanRepository(db),
-        ObservationRepository(db),
-        ChainRepository(db),
-        CheckLogRepository(db),
-        ComparisonRepository(db),
-        AdjudicationRepository(db),
-    )
 
 
 async def on_scan_start(state: AppState, db: Database | None = None) -> str | None:
@@ -91,29 +79,28 @@ async def on_scan_complete(
     scan_id: str | None,
     started_at: float,
     db: Database | None = None,
+    obs_writer: "ObservationWriter | None" = None,
 ) -> None:
     """
-    Called when a scan completes (success or error). Persists observations,
-    chains, and check log, then updates the scan record.
+    Called when a scan completes (success or error). Updates the scan
+    record with final stats and computes observation status comparisons.
+
+    Observations and check logs are streamed during execution via writers.
+    Chains are persisted by run_chain_analysis() when it runs.
     """
     if scan_id is None or not _is_enabled():
         return
 
     duration_ms = int((time.time() - started_at) * 1000)
-    scan_repo, observation_repo, chain_repo, check_log_repo, comparison_repo, _ = _make_repos(db)
+    scan_repo = ScanRepository(db)
+    comparison_repo = ComparisonRepository(db)
 
     try:
         # Count failed checks
         checks_failed = sum(1 for s in state.check_statuses.values() if s == "failed")
 
-        # Persist observations
-        await observation_repo.bulk_create(scan_id, state.observations)
-
-        # Persist chains (if any were analyzed)
-        await chain_repo.bulk_create(scan_id, state.chains)
-
-        # Persist check log
-        await check_log_repo.bulk_create(scan_id, state.check_log)
+        # Resolve observation count from writer
+        obs_count = obs_writer.count if obs_writer else 0
 
         # Update scan record with final stats
         await scan_repo.complete_scan(
@@ -122,13 +109,13 @@ async def on_scan_complete(
             checks_total=state.checks_total,
             checks_completed=state.checks_completed,
             checks_failed=checks_failed,
-            observations_count=len(state.observations),
+            observations_count=obs_count,
             duration_ms=duration_ms,
             error_message=state.error_message,
         )
 
         # Compute observation statuses (new/recurring/resolved/regressed)
-        if state.status == "complete" and state.observations:
+        if state.status == "complete" and obs_count > 0:
             try:
                 statuses = await comparison_repo.compute_observation_statuses(scan_id)
                 logger.info(
@@ -141,21 +128,18 @@ async def on_scan_complete(
             except Exception:
                 logger.warning("Failed to compute observation statuses", exc_info=True)
 
-        logger.info(
-            f"Scan {scan_id} persisted: {len(state.observations)} observations, "
-            f"{len(state.chains)} chains, {len(state.check_log)} log entries"
-        )
+        logger.info(f"Scan {scan_id} persisted: {obs_count} observations")
     except Exception:
         logger.warning(
-            "Failed to persist scan results — data is still available in "
-            "the current session but will not survive a restart",
+            "Failed to persist scan results — data may be partially "
+            "written via streaming writers",
             exc_info=True,
         )
 
 
 async def on_adjudication_complete(
-    state: AppState,
     scan_id: str | None,
+    results: list[dict],
     db: Database | None = None,
 ) -> None:
     """
@@ -167,11 +151,10 @@ async def on_adjudication_complete(
 
     try:
         adjudication_repo = AdjudicationRepository(db)
-        count = await adjudication_repo.bulk_create(scan_id, state.adjudication_results)
+        count = await adjudication_repo.bulk_create(scan_id, results)
         logger.info(f"Persisted {count} adjudication results for scan {scan_id}")
     except Exception:
         logger.warning(
-            "Failed to persist adjudication results — data is still available "
-            "in the current session but will not survive a restart",
+            "Failed to persist adjudication results",
             exc_info=True,
         )

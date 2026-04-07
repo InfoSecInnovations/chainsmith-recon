@@ -77,7 +77,7 @@ output:
       auth_required: false
       ...
 
-findings:
+observations:
   - title: "MCP server discovered"
     severity: "medium"
     ...

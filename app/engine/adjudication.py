@@ -2,7 +2,8 @@
 app/engine/adjudication.py - Adjudication Orchestration
 
 Coordinates severity adjudication of verified observations.
-Mirrors the pattern of app/engine/chains.py for chain analysis.
+Reads observations from the database, runs the adjudicator agent,
+and persists results back to the database.
 """
 
 import logging
@@ -12,7 +13,7 @@ from typing import TYPE_CHECKING
 from app.agents.adjudicator import AdjudicatorAgent
 from app.config import get_config
 from app.lib.llm import get_llm_client
-from app.models import AdjudicationApproach, OperatorContext
+from app.models import OperatorContext
 
 if TYPE_CHECKING:
     from app.config import ChainsmithConfig
@@ -27,6 +28,29 @@ except ImportError:
     _YAML_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+
+async def _update_adjudication_status_in_db(scan_id: str | None, **fields) -> None:
+    """Persist adjudication status fields to the Scan DB record (best-effort)."""
+    if not scan_id:
+        return
+    try:
+        from app.db.repositories import ScanRepository
+        await ScanRepository().update_scan_status(scan_id, **fields)
+    except Exception:
+        logger.warning("Failed to persist adjudication status to DB", exc_info=True)
+
+
+async def _load_observations_from_db(scan_id: str | None) -> list[dict]:
+    """Load observations from the database for the given scan."""
+    if not scan_id:
+        return []
+    try:
+        from app.db.repositories import ObservationRepository
+        return await ObservationRepository().get_observations(scan_id)
+    except Exception:
+        logger.warning("Failed to load observations from DB", exc_info=True)
+        return []
 
 
 def load_operator_context(config: "ChainsmithConfig | None" = None) -> OperatorContext | None:
@@ -68,104 +92,75 @@ def load_operator_context(config: "ChainsmithConfig | None" = None) -> OperatorC
         return None
 
 
-def resolve_approach(
-    api_param: str | None = None,
-    config: "ChainsmithConfig | None" = None,
-) -> AdjudicationApproach:
-    """
-    Resolve adjudication approach from layered config.
-
-    Priority: api_param > config default_approach > "auto"
-
-    Args:
-        api_param: Explicit approach string from API request.
-        config: Explicit config to use. Falls back to get_config() if None.
-    """
-    if api_param:
-        try:
-            return AdjudicationApproach(api_param)
-        except ValueError:
-            logger.warning("Invalid approach '%s', falling back to config", api_param)
-
-    cfg = config or get_config()
-    try:
-        return AdjudicationApproach(cfg.adjudicator.default_approach)
-    except ValueError:
-        return AdjudicationApproach.AUTO
-
-
 async def run_adjudication(
     state: "AppState",
-    approach: str | None = None,
 ) -> None:
     """
     Run adjudication on verified observations.
 
-    Updates state.adjudication_status and state.adjudication_results.
-    Persists results if auto_persist is enabled.
-
-    Args:
-        state: The application state with observations to adjudicate.
-        approach: Optional approach override for this invocation.
+    Reads observations from the database, runs the adjudicator agent,
+    and persists results. Updates state.adjudication_status as a
+    concurrency guard.
     """
     from app.models import Observation, ObservationStatus
 
+    scan_id = getattr(state, "_last_scan_id", None)
+
     state.adjudication_status = "adjudicating"
-    state.adjudication_results = []
-    state.adjudication_error = None
+    await _update_adjudication_status_in_db(scan_id, adjudication_status="adjudicating")
 
     try:
         # Check if adjudicator is enabled
         cfg = get_config()
         if not cfg.adjudicator.enabled:
             state.adjudication_status = "complete"
-            state.adjudication_error = "Adjudicator is disabled in config"
+            await _update_adjudication_status_in_db(
+                scan_id, adjudication_status="complete",
+                adjudication_error="Adjudicator is disabled in config",
+            )
             logger.info("Adjudicator disabled — skipping")
             return
 
-        # Convert dict observations to Observation models if needed
+        # Load observations from DB
+        obs_dicts = await _load_observations_from_db(scan_id)
+
+        # Convert dict observations to Observation models
         observations = []
-        for f in state.observations:
-            if isinstance(f, dict):
-                observations.append(
-                    Observation(
-                        id=f.get("id", "unknown"),
-                        observation_type=f.get("check_name", f.get("observation_type", "unknown")),
-                        title=f.get("title", ""),
-                        description=f.get("description", ""),
-                        severity=f.get("severity", "info"),
-                        status=f.get("verification_status", f.get("status", "pending")),
-                        confidence=f.get("confidence", 0.5),
-                        discovered_by=f.get("discovered_by", "scout"),
-                        discovered_at=f.get(
-                            "discovered_at", f.get("created_at", "2000-01-01T00:00:00")
-                        ),
-                        target_url=f.get("target_url"),
-                        target_service=f.get("host"),
-                        evidence_summary=f.get("evidence"),
-                    )
+        for f in obs_dicts:
+            observations.append(
+                Observation(
+                    id=f.get("id", "unknown"),
+                    observation_type=f.get("check_name", f.get("observation_type", "unknown")),
+                    title=f.get("title", ""),
+                    description=f.get("description", ""),
+                    severity=f.get("severity", "info"),
+                    status=f.get("verification_status", f.get("status", "pending")),
+                    confidence=f.get("confidence", 0.5),
+                    discovered_by=f.get("discovered_by", "scout"),
+                    discovered_at=f.get(
+                        "discovered_at", f.get("created_at", "2000-01-01T00:00:00")
+                    ),
+                    target_url=f.get("target_url"),
+                    target_service=f.get("host"),
+                    evidence_summary=f.get("evidence"),
                 )
-            else:
-                observations.append(f)
+            )
 
         verified = [f for f in observations if f.status == ObservationStatus.VERIFIED]
         if not verified:
             state.adjudication_status = "complete"
+            await _update_adjudication_status_in_db(scan_id, adjudication_status="complete")
             logger.info("No verified observations to adjudicate")
             return
 
         # Load operator context
         operator_context = load_operator_context()
 
-        # Resolve approach
-        resolved_approach = resolve_approach(approach)
-
         # Create agent and run
-        agent = AdjudicatorAgent(client=get_llm_client(), approach=resolved_approach)
+        agent = AdjudicatorAgent(client=get_llm_client())
         results = await agent.adjudicate_observations(verified, operator_context)
 
-        # Store results as dicts for state/API compatibility
-        state.adjudication_results = [r.model_dump(mode="json") for r in results]
+        result_dicts = [r.model_dump(mode="json") for r in results]
         state.adjudication_status = "complete"
 
         logger.info(
@@ -174,14 +169,15 @@ async def run_adjudication(
             sum(1 for r in results if r.original_severity != r.adjudicated_severity),
         )
 
-        # Persist to DB
+        # Persist results to DB
         from app.db.persist import on_adjudication_complete
 
-        # Try to get scan_id from state (set during scan persistence)
-        scan_id = getattr(state, "_last_scan_id", None)
-        await on_adjudication_complete(state, scan_id)
+        await on_adjudication_complete(scan_id, result_dicts)
+        await _update_adjudication_status_in_db(scan_id, adjudication_status="complete")
 
     except Exception as e:
         logger.exception("Adjudication failed: %s", e)
         state.adjudication_status = "error"
-        state.adjudication_error = str(e)
+        await _update_adjudication_status_in_db(
+            scan_id, adjudication_status="error", adjudication_error=str(e)
+        )

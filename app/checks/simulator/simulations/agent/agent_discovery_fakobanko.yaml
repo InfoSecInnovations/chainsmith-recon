@@ -72,7 +72,7 @@ output:
   agent_frameworks:
     - "langserve"
 
-findings:
+observations:
   - title: "LangServe agent discovered"
     description: "LangServe agent endpoint found at /invoke with tools, memory, and streaming capabilities. No authentication required - potential for goal injection attacks."
     severity: "high"

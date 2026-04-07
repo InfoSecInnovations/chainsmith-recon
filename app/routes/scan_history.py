@@ -1,5 +1,5 @@
 """
-app/routes/scans.py - Scan History Routes (Phase 2)
+app/routes/scan_history.py - Scan History Routes (Phase 2)
 
 Endpoints for browsing and managing historical scan data
 stored in the database. The active scan is still served

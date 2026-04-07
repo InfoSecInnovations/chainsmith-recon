@@ -3,7 +3,8 @@ app/routes - API Route Handlers
 
 Organized by functional area:
 - scope: Target and scope configuration
-- scan: Scan execution and status
+- scan: Scan execution and status (active/live)
+- scan_history: Historical scan data and comparisons
 - observations: Observation retrieval and analysis
 - checks: Check metadata
 - chains: Attack chain analysis
@@ -23,7 +24,7 @@ from app.routes.engagements import router as engagements_router
 from app.routes.observations import router as observations_router
 from app.routes.preferences import router as preferences_router
 from app.routes.scan import router as scan_router
-from app.routes.scans import router as scans_router
+from app.routes.scan_history import router as scan_history_router
 from app.routes.scenarios import router as scenarios_router
 from app.routes.scope import router as scope_router
 from app.routes.swarm import router as swarm_router
@@ -38,7 +39,7 @@ __all__ = [
     "scenarios_router",
     "preferences_router",
     "compliance_router",
-    "scans_router",
+    "scan_history_router",
     "engagements_router",
     "swarm_router",
     "customizations_router",

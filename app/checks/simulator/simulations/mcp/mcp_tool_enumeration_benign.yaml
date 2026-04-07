@@ -61,7 +61,7 @@ output:
 
   high_risk_tools: []
 
-findings:
+observations:
   - title: "MCP tool: calculate (info risk)"
     description: "MCP tool 'calculate' discovered. Description: Perform mathematical calculations. Risk level: INFO"
     severity: "info"

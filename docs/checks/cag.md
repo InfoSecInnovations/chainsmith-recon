@@ -18,7 +18,7 @@ Cache-Augmented Generation discovery, infrastructure analysis, and cache exploit
 
 Probes cache-specific paths (/cache, /context, /precompute, /cache/warm, /prompt-cache, /semantic-cache). Detects cache infrastructure via signatures: GPTCache, semantic cache, prompt cache (Anthropic/OpenAI), KV cache, Redis. Analyzes response headers for cache indicators and performs timing analysis.
 
-#### Findings
+#### Observations
 
 - **medium**: Cache infrastructure detected (no auth)
 - **low**: CAG endpoint detected, caching behavior on AI endpoint
@@ -37,7 +37,7 @@ Probes cache-specific paths (/cache, /context, /precompute, /cache/warm, /prompt
 
 Runs 4 tests per endpoint: cross-session leak (marker in session A appears in session B), cache timing analysis (speedup ratio across successive requests), context ID enumeration (probes common IDs: 1, 0, admin, test, default), and cache key predictability (trailing space variation). Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Cross-session cache leakage, cache key collision
 - **medium**: Cache timing side-channel
@@ -58,7 +58,7 @@ Runs 4 tests per endpoint: cross-session leak (marker in session A appears in se
 
 Tests bulk eviction endpoints (POST /cache/clear, /cache/flush, /cache/invalidate, DELETE /cache) and key-specific eviction (DELETE /cache/{key}). Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Cache eviction endpoint accessible without authentication
 - **medium**: Cache eviction endpoint requires authentication
@@ -76,7 +76,7 @@ Tests bulk eviction endpoints (POST /cache/clear, /cache/flush, /cache/invalidat
 
 Tests 4 warming endpoint categories (/cache/warm, /precompute, /cache/store, /cache/set) with test marker payloads. Verifies warming success and checks input validation. Cleanup attempted. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Cache accepts arbitrary content without validation
 - **high**: Cache warming endpoint accessible, no input validation
@@ -95,7 +95,7 @@ Tests 4 warming endpoint categories (/cache/warm, /precompute, /cache/store, /ca
 
 Confirms caching via timing, extracts header-stated TTL (Cache-Control max-age, Expires, Age), re-queries at intervals (5s, 15s, 30s, 60s) to detect expiry. Compares header vs. observed TTL. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **medium**: Unbounded cache TTL (no expiry detected)
 - **medium**: Cache TTL >300 seconds
@@ -115,7 +115,7 @@ Confirms caching via timing, extracts header-stated TTL (Cache-Control max-age, 
 
 Tests 4 strategies with timing: normal request, Cache-Control: no-cache, Pragma: no-cache, and cache-buster parameter. Detects HTTP cache, application cache, semantic cache, and CDN layers.
 
-#### Findings
+#### Observations
 
 - **medium**: Multiple cache layers detected (2+)
 - **info**: Single cache layer
@@ -133,7 +133,7 @@ Tests 4 strategies with timing: normal request, Cache-Control: no-cache, Pragma:
 
 Floods cache with 50 unique queries, then checks if early entries were evicted (LRU behavior). Estimates cache capacity. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **medium**: Cache exhaustion possible (LRU eviction confirmed)
 - **medium**: Unbounded cache (memory exhaustion risk)
@@ -152,7 +152,7 @@ Floods cache with 50 unique queries, then checks if early entries were evicted (
 
 Tests OpenAI-style, Anthropic-style, and generic endpoints. Extracts usage metadata (cached_tokens, prompt_tokens_cached, cache_read_input_tokens). Detects shared system prompt prefix when multiple tests show similar cached token ratios.
 
-#### Findings
+#### Observations
 
 - **medium**: Provider caching reveals shared system prompt
 - **low**: Provider prompt caching active
@@ -173,7 +173,7 @@ Tests OpenAI-style, Anthropic-style, and generic endpoints. Extracts usage metad
 
 Runs 4 isolation tests: auth vs no-auth, different tokens, user identity isolation, and API key isolation. Compares responses across contexts for leakage. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Auth response served to no-auth request
 - **critical**: Different tokens share cache
@@ -194,7 +194,7 @@ Runs 4 isolation tests: auth vs no-auth, different tokens, user identity isolati
 
 Tests 5 query component variations (capitalization, punctuation, whitespace, prefix, suffix) and a system prompt test. Measures timing to determine which components are included in cache keys. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Cache key excludes system prompt (different systems share cache)
 - **medium**: Cache key is case/whitespace/punctuation-insensitive
@@ -213,7 +213,7 @@ Tests 5 query component variations (capitalization, punctuation, whitespace, pre
 
 Tests 6 query variations with decreasing semantic similarity (exact, minor_variation, rephrased, related, tangential, unrelated). Estimates threshold as midpoint between lowest hit and highest miss. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Loose semantic cache (threshold <= 0.6 or 4+ variations hit)
 - **medium**: Moderate threshold (threshold <= 0.8 or 2+ hits)
@@ -233,7 +233,7 @@ Tests 6 query variations with decreasing semantic similarity (exact, minor_varia
 
 Establishes baseline with 3 unique queries, then tests 8 sensitive topics 3x each (salary, merger plans, employee reviews, API keys, vulnerabilities, financial projections, customer data, password procedures). Detects cache hits that reveal what users have been querying.
 
-#### Findings
+#### Observations
 
 - **medium**: Cache timing side-channel (sensitive topics show cache hits)
 - **low**: Cache timing oracle available (significant response variance)
@@ -252,7 +252,7 @@ Establishes baseline with 3 unique queries, then tests 8 sensitive topics 3x eac
 
 Two tests: role-based (sends admin query, waits, checks if fresh user-role session gets admin response) and TTL staleness (confirms caching, waits past expected TTL, checks if entry persists). Intrusive check.
 
-#### Findings
+#### Observations
 
 - **high**: Stale admin context served to fresh session (privilege persistence)
 - **high**: Cached response still served past expected TTL
@@ -273,7 +273,7 @@ Two tests: role-based (sends admin query, waits, checks if fresh user-role sessi
 
 Exact query replay: injects marker in session A, queries from session B. Semantic poisoning: tests if 3 query variations also return the marker. Cleanup attempted. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Injected marker found in cross-session response
 - **critical**: Semantic cache amplifies poisoning (multiple variations affected)
@@ -293,7 +293,7 @@ Exact query replay: injects marker in session A, queries from session B. Semanti
 
 Tests 3 injection patterns: ignore_instructions, system_override, role_escape. If injection succeeds, waits and queries from new session to check persistence. Semantic amplification test with 3 query variations. Cleanup attempted. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Persistent injection via cache (served across users)
 - **critical**: Semantic cache amplifies injection
@@ -315,7 +315,7 @@ Tests 3 injection patterns: ignore_instructions, system_override, role_escape. I
 
 Tests: direct Redis access (/redis, /cache/redis), serialization format detection (pickle header, type confusion JSON, malformed payloads), and path traversal in cache keys (../../../etc/passwd variants). Intrusive check.
 
-#### Findings
+#### Observations
 
 - **critical**: Redis accessible without auth (RCE risk)
 - **critical**: Cache uses pickle serialization (RCE via deserialization)
@@ -336,7 +336,7 @@ Tests: direct Redis access (/redis, /cache/redis), serialization format detectio
 
 Sends 10 identical requests, extracts node identity from headers (x-cache-node, x-served-by, x-backend-server, x-instance-id, via, cf-ray). Detects load balancing pattern (sticky, round-robin, random) and checks response consistency across nodes. Intrusive check.
 
-#### Findings
+#### Observations
 
 - **medium**: Cache replication inconsistency (different content from different nodes)
 - **low**: Multiple cache nodes detected (consistent replication)

@@ -45,7 +45,7 @@ output:
   cache_infrastructure:
     - "gptcache"
 
-findings:
+observations:
   - title: "Cache infrastructure: gptcache"
     description: "Cache infrastructure 'gptcache' detected at /cache. No authentication required - potential cache poisoning vector."
     severity: "medium"

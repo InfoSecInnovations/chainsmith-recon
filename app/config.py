@@ -112,9 +112,6 @@ class SwarmConfig:
 @dataclass
 class AdjudicatorConfig:
     enabled: bool = True
-    default_approach: str = (
-        "auto"  # structured_challenge, adversarial_debate, evidence_rubric, auto
-    )
     context_file: str = "~/.chainsmith/adjudicator_context.yaml"
 
 
@@ -276,8 +273,6 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
         adjc = cfg.adjudicator
         if "enabled" in adj:
             adjc.enabled = bool(adj["enabled"])
-        if "default_approach" in adj:
-            adjc.default_approach = str(adj["default_approach"])
         if "context_file" in adj:
             adjc.context_file = str(adj["context_file"])
 
@@ -364,8 +359,6 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     # Adjudicator overrides
     if v := env.get("CHAINSMITH_ADJUDICATOR_ENABLED"):
         cfg.adjudicator.enabled = v.lower() in ("true", "1", "yes")
-    if v := env.get("CHAINSMITH_ADJUDICATOR_DEFAULT_APPROACH"):
-        cfg.adjudicator.default_approach = v
 
 
 def load_config(config_path: Path | None = None) -> ChainsmithConfig:

@@ -70,7 +70,7 @@ output:
       key_collision_detected: true
       vulnerability_type: "integrity"
 
-findings:
+observations:
   - title: "Cross-session cache leakage"
     description: "Cache system leaks responses between user sessions. Markers injected in session A were retrieved in session B, exposing potential for data theft."
     severity: "high"

@@ -55,6 +55,7 @@ class SwarmCoordinator:
         self.scan_id: str | None = None
         self.scan_start_time: float | None = None
         self.is_running: bool = False
+        self.observation_writer: Any | None = None  # ObservationWriter, set by scanner
 
         # Progress callbacks (set by SwarmRunner)
         self._on_check_start: Callable | None = None
@@ -70,6 +71,7 @@ class SwarmCoordinator:
         self.scan_id = None
         self.scan_start_time = None
         self.is_running = False
+        self.observation_writer = None
         self._on_check_start = None
         self._on_check_complete = None
 
@@ -282,11 +284,12 @@ class SwarmCoordinator:
         task.started_at = datetime.now(UTC)
         return True
 
-    def complete_task(self, task_id: str, result: TaskResultPayload) -> bool:
+    async def complete_task(self, task_id: str, result: TaskResultPayload) -> bool:
         """
         Mark task complete and merge results into coordinator state.
 
-        This is where observations flow back from agents.
+        This is where observations flow back from agents. If an
+        ObservationWriter is set, observations are streamed to the DB.
         """
         task = self.tasks.get(task_id)
         if task is None or task.assigned_agent != result.agent_id:
@@ -317,13 +320,18 @@ class SwarmCoordinator:
         # Merge services
         self._merge_services(result.services)
 
-        # Accumulate observations
+        # Accumulate observations and stream to DB via writer
         for observation_dict in result.observations:
             self.observations.append(observation_dict)
+            if self.observation_writer:
+                await self.observation_writer.write(observation_dict)
 
-        # Update AppState
+        # Flush writer after each check completes
+        if self.observation_writer and result.observations:
+            await self.observation_writer.flush()
+
+        # Update AppState progress counters
         if self.state:
-            self.state.observations = self.observations
             self.state.checks_completed += 1
             self.state.check_statuses[task.check_name] = "completed" if result.success else "failed"
 

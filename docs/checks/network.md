@@ -18,7 +18,7 @@ Service discovery and infrastructure reconnaissance.
 
 Resolves common subdomains (www, api, chat, app, admin, portal, auth, login, docs, dev, staging, test, internal, backend, frontend, cdn, etc.) in batches of 10. Accepts optional custom wordlist.
 
-#### Findings
+#### Observations
 
 - **info**: Host discovered
 
@@ -35,7 +35,7 @@ Resolves common subdomains (www, api, chat, app, admin, portal, auth, login, doc
 
 Generates 3 random non-existent subdomains and checks if they resolve. If all resolve to the same IP, a definite wildcard is present. Multiple IPs suggest round-robin or geo-DNS.
 
-#### Findings
+#### Observations
 
 - **info**: Wildcard DNS detected
 
@@ -52,7 +52,7 @@ Generates 3 random non-existent subdomains and checks if they resolve. If all re
 
 Queries six record types. Detects verification tokens from 42 cloud/SaaS providers and extracts SPF provider information to map email infrastructure.
 
-#### Findings
+#### Observations
 
 - **info**: MX, NS, CNAME, SOA, AAAA records found
 - **low**: Verification token detected (Google, Microsoft, Facebook, Apple, etc.)
@@ -71,7 +71,7 @@ Queries six record types. Detects verification tokens from 42 cloud/SaaS provide
 
 Queries WHOIS servers for domain registration details and performs RDAP lookups for ASN/network ownership. Supports 18 common TLDs with fallback to whois.iana.org.
 
-#### Findings
+#### Observations
 
 - **info**: Domain registrar details
 - **info**: IP ASN/network ownership
@@ -93,7 +93,7 @@ Queries WHOIS servers for domain registration details and performs RDAP lookups 
 
 Classifies IPs as hosting (major cloud, CDN, VPS), residential (consumer ISP), or other. Tracks 40+ hosting ASNs and 15+ residential ASNs. Requires MaxMind GeoLite2 databases.
 
-#### Findings
+#### Observations
 
 - **info**: Host geolocation and ASN info
 - **medium**: Residential IP hosting service (indicates home machine, misconfigured tunnel, or compromised host)
@@ -112,7 +112,7 @@ Classifies IPs as hosting (major cloud, CDN, VPS), residential (consumer ISP), o
 
 Reveals internal hostnames, virtual hosting relationships, and cloud infrastructure patterns from PTR records. Uses dnspython with socket fallback.
 
-#### Findings
+#### Observations
 
 - **info**: PTR record found
 - **info**: Multiple PTR records (possible virtual hosting)
@@ -132,7 +132,7 @@ Reveals internal hostnames, virtual hosting relationships, and cloud infrastruct
 
 Identifies hosts with IPv6 endpoints that may have different security postures than IPv4. Detects ULA and link-local addresses.
 
-#### Findings
+#### Observations
 
 - **info**: IPv6 address discovered
 - **medium**: Service reachable on IPv6 but not IPv4 (potential firewall bypass)
@@ -151,7 +151,7 @@ Identifies hosts with IPv6 endpoints that may have different security postures t
 
 TCP connect scan (no root required). Port selection uses profile hierarchy: in_scope_ports → port_profile → scope default. Profiles: "web", "ai", "full", "lab".
 
-#### Findings
+#### Observations
 
 - **info**: Open port discovered
 
@@ -170,7 +170,7 @@ TCP connect scan (no root required). Port selection uses profile hierarchy: in_s
 
 Inspects certificates on HTTPS services and common TLS ports. Extracts SANs for additional hostname discovery. Probes for deprecated TLS versions (1.0, 1.1).
 
-#### Findings
+#### Observations
 
 - **info**: TLS certificate summary (subject, issuer, SAN count)
 - **info**: Certificate SANs discovered
@@ -192,7 +192,7 @@ Inspects certificates on HTTPS services and common TLS ports. Extracts SANs for 
 
 Probes each service with HTTPS then HTTP. Classifies as "ai", "api", "html", "http", or "tcp". Detects AI services via headers (x-model, x-inference, x-llm), powered-by values (vllm, ollama, tgi, langchain), and API paths.
 
-#### Findings
+#### Observations
 
 - **low**: Server version disclosed
 - **medium**: AI/ML technology disclosed via X-Powered-By
@@ -213,7 +213,7 @@ Probes each service with HTTPS then HTTP. Classifies as "ai", "api", "html", "ht
 
 Identifies non-HTTP services (Redis, PostgreSQL, MongoDB, MySQL, SMTP, FTP, SSH, Memcached, Elasticsearch) via TCP banner analysis. Checks for unauthenticated access.
 
-#### Findings
+#### Observations
 
 - **info**: Service detected via banner
 - **critical**: Redis accepting commands without authentication
@@ -236,7 +236,7 @@ Identifies non-HTTP services (Redis, PostgreSQL, MongoDB, MySQL, SMTP, FTP, SSH,
 
 Sends OPTIONS request then individually probes TRACE, PUT, DELETE, PATCH, and WebDAV methods (PROPFIND, MKCOL, COPY, MOVE, LOCK, UNLOCK).
 
-#### Findings
+#### Observations
 
 - **info**: Allowed methods summary
 - **medium**: TRACE method enabled (cross-site tracing risk)
@@ -258,7 +258,7 @@ Sends OPTIONS request then individually probes TRACE, PUT, DELETE, PATCH, and We
 
 TCP traceroute using incrementing TTL (no root required). Traces up to 30 hops, max 5 target IPs. Detects CDN/WAF presence in path: Cloudflare, Akamai, AWS CloudFront, Fastly, Google Cloud, Azure, Incapsula, Sucuri, StackPath, Limelight.
 
-#### Findings
+#### Observations
 
 - **info**: Route summary (hop count, average RTT)
 - **info**: CDN/WAF detected in path

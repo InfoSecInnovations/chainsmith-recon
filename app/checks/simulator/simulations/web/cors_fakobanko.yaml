@@ -9,4 +9,4 @@ output:
   tested_origin: "https://evil.attacker.com"
   acao_header: "https://evil.attacker.com"
   acac_header: "true"
-  finding_severity: "high"
+  observation_severity: "high"

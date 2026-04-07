@@ -29,7 +29,7 @@ chainsmith scan example.com --plan
 # Run specific suites
 chainsmith scan example.com --suite ai --suite mcp
 
-# Export findings
+# Export observations
 chainsmith scan example.com -o report.yaml -f yaml
 ```
 
@@ -51,7 +51,7 @@ chainsmith scan example.com -o report.yaml -f yaml
          │
          ▼
 ┌─────────────────────────────────────────────────────────┐
-│                     Findings                             │
+│                     Observations                             │
 │  severity: critical | high | medium | low | info        │
 └─────────────────────────────────────────────────────────┘
 ```

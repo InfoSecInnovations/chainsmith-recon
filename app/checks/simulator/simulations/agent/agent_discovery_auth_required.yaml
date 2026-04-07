@@ -28,7 +28,7 @@ output:
   agent_frameworks:
     - "langchain"
 
-findings:
+observations:
   - title: "Agent endpoint: /agent/run"
     description: "Agent endpoint discovered at /agent/run. Framework: langchain. Authentication required."
     severity: "info"

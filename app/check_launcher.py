@@ -16,10 +16,15 @@ Usage:
     observations = launcher.run_all()
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.customizations import apply_pre_run_override
+
+if TYPE_CHECKING:
+    from app.db.writers import ObservationWriter
 
 logger = logging.getLogger(__name__)
 
@@ -41,14 +46,21 @@ class CheckLauncher:
     6. Repeats until nothing can run
     """
 
-    def __init__(self, checks: list, context: dict):
+    def __init__(
+        self,
+        checks: list,
+        context: dict,
+        observation_writer: ObservationWriter | None = None,
+    ):
         """
         Args:
             checks: List of check instances to run
             context: Shared context dict (modified in place)
+            observation_writer: Optional streaming writer for DB persistence
         """
         self.checks = {c.name: c for c in checks}
         self.context = context
+        self.observation_writer = observation_writer
         self.completed: set[str] = set()
         self.failed: set[str] = set()
         self.skipped: set[str] = set()
@@ -116,6 +128,10 @@ class CheckLauncher:
 
                 if on_check_complete:
                     on_check_complete(check.name, success, count)
+
+        # Final flush of any remaining buffered observations
+        if self.observation_writer:
+            await self.observation_writer.flush()
 
         # Store critical_hosts in context for downstream consumers
         self.context["critical_hosts"] = self.critical_hosts
@@ -207,7 +223,7 @@ class CheckLauncher:
                     )
 
             # Collect observations and track critical ones
-            observations = getattr(result, "observations", []) or getattr(result, "findings", []) or []
+            observations = getattr(result, "observations", []) or []
             check_suite = self._infer_suite(name)
 
             for obs in observations:
@@ -238,10 +254,18 @@ class CheckLauncher:
 
                 self.observations.append(obs_dict)
 
+                # Stream to DB if writer is available
+                if self.observation_writer:
+                    await self.observation_writer.write(obs_dict)
+
                 # Track critical observations for on_critical behavior
                 severity = obs_dict.get("severity", "").lower()
                 if severity == "critical" and host:
                     self._record_critical(host, check_suite, name, obs_dict)
+
+            # Flush any buffered observations after each check
+            if self.observation_writer:
+                await self.observation_writer.flush()
 
             logger.info(f"  Completed: {name} — {len(observations)} observations")
             return (True, len(observations))

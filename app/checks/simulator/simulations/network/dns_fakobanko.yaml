@@ -27,7 +27,7 @@ output:
     rag.fakobanko.local: "10.0.1.16"
     cache.fakobanko.local: "10.0.1.17"
 
-findings:
+observations:
   - title: "DNS enumeration: 8 hosts discovered"
     description: "DNS enumeration discovered 8 subdomains for fakobanko.local including AI services (chat, mcp, agent, rag, cache), API, docs, and www."
     severity: "info"

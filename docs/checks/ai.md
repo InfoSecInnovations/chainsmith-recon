@@ -18,7 +18,7 @@ LLM and ML endpoint discovery, analysis, and attack surface mapping.
 
 Probes for OpenAI-compatible, Anthropic, and custom LLM endpoints.
 
-#### Findings
+#### Observations
 
 - **medium**: LLM endpoint discovered (no auth)
 - **info**: LLM endpoint found (auth required)
@@ -34,7 +34,7 @@ Probes for OpenAI-compatible, Anthropic, and custom LLM endpoints.
 | Conditions | `services is truthy` |
 | Produces | `embedding_endpoints` |
 
-#### Findings
+#### Observations
 
 - **low**: Embedding endpoint accessible
 
@@ -51,7 +51,7 @@ Probes for OpenAI-compatible, Anthropic, and custom LLM endpoints.
 
 Identifies model names, versions, and capabilities.
 
-#### Findings
+#### Observations
 
 - **medium**: Model info exposed
 - **info**: Model version detected
@@ -69,7 +69,7 @@ Identifies model names, versions, and capabilities.
 
 Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
 
-#### Findings
+#### Observations
 
 - **info**: Framework detected
 
@@ -86,7 +86,7 @@ Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
 | Conditions | `chat_endpoints is truthy` |
 | Produces | `error_leaks` |
 
-#### Findings
+#### Observations
 
 - **medium**: Stack trace in error
 - **low**: Debug info leaked
@@ -102,7 +102,7 @@ Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
 | Conditions | `chat_endpoints is truthy` |
 | Produces | `content_filter_{port}` |
 
-#### Findings
+#### Observations
 
 - **medium**: Weak content filtering
 - **info**: Content filter detected
@@ -118,7 +118,7 @@ Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
 | Conditions | `chat_endpoints is truthy` |
 | Produces | `rate_limit_{port}` |
 
-#### Findings
+#### Observations
 
 - **medium**: No rate limiting detected
 - **info**: Rate limit headers present
@@ -134,7 +134,7 @@ Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
 | Conditions | `chat_endpoints is truthy` |
 | Produces | `context_{port}` |
 
-#### Findings
+#### Observations
 
 - **info**: Context window size detected
 
@@ -151,7 +151,7 @@ Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
 
 Tests no-auth, empty bearer, default API keys (sk-test, demo, EMPTY, test-key), and Basic test:test.
 
-#### Findings
+#### Observations
 
 - **critical**: AI endpoint requires no authentication
 - **critical**: Default API key accepted
@@ -171,7 +171,7 @@ Tests no-auth, empty bearer, default API keys (sk-test, demo, EMPTY, test-key), 
 
 Tests provider-specific model names (OpenAI, Anthropic, Meta, Mistral) plus generic names (default, staging, internal).
 
-#### Findings
+#### Observations
 
 - **high**: Internal/staging model accessible
 - **medium**: N models available
@@ -190,7 +190,7 @@ Tests provider-specific model names (OpenAI, Anthropic, Meta, Mistral) plus gene
 
 Tests temperature, max_tokens, tools, logprobs, user, system, response_format, seed, stop.
 
-#### Findings
+#### Observations
 
 - **critical**: Tool/function injection accepted
 - **critical**: User impersonation possible
@@ -211,7 +211,7 @@ Tests temperature, max_tokens, tools, logprobs, user, system, response_format, s
 
 Checks if stream=true produces SSE responses, then tests whether streaming bypasses content filters that operate on complete responses.
 
-#### Findings
+#### Observations
 
 - **medium**: Streaming bypasses content filter
 - **low**: Streaming supported (with TTFT measurement)
@@ -228,7 +228,7 @@ Checks if stream=true produces SSE responses, then tests whether streaming bypas
 | Conditions | `chat_endpoints is truthy` |
 | Produces | `system_inject_{port}` |
 
-#### Findings
+#### Observations
 
 - **critical**: Client-supplied system prompt overrides service prompt
 - **high**: System prompt accepted and processed
@@ -248,7 +248,7 @@ Checks if stream=true produces SSE responses, then tests whether streaming bypas
 
 Sends identical requests, compares content and timing, checks cache headers, tests temperature override.
 
-#### Findings
+#### Observations
 
 - **medium**: Response caching detected (overrides temperature)
 - **low**: Cache headers present
@@ -269,7 +269,7 @@ Sends identical requests, compares content and timing, checks cache headers, tes
 
 Captures vectors, maps dimensionality to known models (ada-002=1536, BERT=768, MiniLM=384, etc.), computes cosine similarity to verify real model.
 
-#### Findings
+#### Observations
 
 - **medium**: Embedding endpoint returns metadata beyond vectors
 - **low**: Embedding model identified from dimensions
@@ -289,7 +289,7 @@ Captures vectors, maps dimensionality to known models (ada-002=1536, BERT=768, M
 | Conditions | `chat_endpoints is truthy` |
 | Produces | `discovered_tools`, `chatbot_capabilities` |
 
-#### Findings
+#### Observations
 
 - **high**: Dangerous tools available
 - **medium**: Tools enumerated
@@ -303,11 +303,11 @@ Captures vectors, maps dimensionality to known models (ada-002=1536, BERT=768, M
 | Property | Value |
 |----------|-------|
 | Conditions | `chat_endpoints is truthy` |
-| Produces | `prompt_leak_findings` |
+| Produces | `prompt_leak_observations` |
 
 Uses various techniques to extract system prompts.
 
-#### Findings
+#### Observations
 
 - **critical**: System prompt leaked (contains secrets)
 - **high**: System prompt leaked
@@ -326,7 +326,7 @@ Uses various techniques to extract system prompts.
 
 Tests self-identification, knowledge cutoff, strawberry counting, creator attribution. Detects model misrepresentation (e.g., advertised GPT-4 but behavior matches GPT-3.5).
 
-#### Findings
+#### Observations
 
 - **low**: Model misrepresents identity
 - **info**: Model self-identifies as X
@@ -343,7 +343,7 @@ Tests self-identification, knowledge cutoff, strawberry counting, creator attrib
 | Conditions | `chat_endpoints is truthy` |
 | Produces | `format_risks_{port}` |
 
-#### Findings
+#### Observations
 
 - **medium**: Model produces arbitrary JSON / response_format bypass
 - **low**: Model produces markdown with URLs
@@ -362,7 +362,7 @@ Tests self-identification, knowledge cutoff, strawberry counting, creator attrib
 
 Plants a canary string, then probes for it from a "different session". Also checks for general cross-session indicators.
 
-#### Findings
+#### Observations
 
 - **critical**: Canary recovered from separate session
 - **high**: Shared context detected (references prior interactions)
@@ -381,7 +381,7 @@ Plants a canary string, then probes for it from a "different session". Also chec
 
 Completion probes with public domain text, repetition attacks that may trigger divergence into memorized content, PII pattern detection.
 
-#### Findings
+#### Observations
 
 - **high**: PII patterns found in generated text
 - **medium**: Repetition probe triggered diverse (memorized) output
@@ -400,7 +400,7 @@ Completion probes with public domain text, repetition attacks that may trigger d
 
 Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null bytes, 5000-char tokens, mixed scripts.
 
-#### Findings
+#### Observations
 
 - **high**: Multiple adversarial techniques bypass filter
 - **medium**: Unicode/adversarial bypass detected
@@ -421,7 +421,7 @@ Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null by
 
 8 techniques: DAN, roleplay, base64 encoding, translation, hypothetical framing, authority confusion, token smuggling, multi-step decomposition.
 
-#### Findings
+#### Observations
 
 - **critical**: 3+ jailbreak techniques bypassed filters
 - **high**: Jailbreak bypass detected
@@ -440,7 +440,7 @@ Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null by
 
 4 conversation sequences: trust building, context flooding, conversation pivoting, false memory injection.
 
-#### Findings
+#### Observations
 
 - **critical**: System prompt extracted via multi-turn
 - **high**: Partial prompt leaked after trust-building
@@ -460,7 +460,7 @@ Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null by
 
 6 injection types: markdown, XML, delimiter, JSON role, chat template markers, whitespace abuse.
 
-#### Findings
+#### Observations
 
 - **high**: XML/chat template injection changed model behavior
 - **medium**: Markdown injection partially accepted
@@ -479,7 +479,7 @@ Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null by
 
 7 languages (French, Spanish, German, Chinese, Japanese, Russian, Arabic), 2 encodings (base64, ROT13), 3 phrasing variants (ALL CAPS, aLtErNaTiNg, extra spaces).
 
-#### Findings
+#### Observations
 
 - **high**: Blocked in English but allowed in other languages
 - **high**: Encoding bypass (base64/ROT13 accepted)
@@ -499,7 +499,7 @@ Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null by
 
 Tests direct invocation, SQL-injection-style parameter injection, permission escalation, tool chaining, and probes for undocumented tools.
 
-#### Findings
+#### Observations
 
 - **critical**: Tool executes with elevated permissions
 - **high**: Tool parameter injection (SQL injection via tool)
@@ -517,7 +517,7 @@ Tests direct invocation, SQL-injection-style parameter injection, permission esc
 | Conditions | `chat_endpoints is truthy` |
 | Produces | `token_cost_{port}` |
 
-#### Findings
+#### Observations
 
 - **high**: No output token limit
 - **medium**: Large completions accepted

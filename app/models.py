@@ -168,11 +168,17 @@ class Observation(BaseModel):
 
 
 class AdjudicationApproach(StrEnum):
-    """Approaches for severity adjudication."""
+    """Approaches for severity adjudication.
 
+    Only EVIDENCE_RUBRIC is actively used. The others are retained for
+    backward compatibility with historical DB records. See
+    docs/future-ideas/adjudicator-strategies-reference.md.
+    """
+
+    EVIDENCE_RUBRIC = "evidence_rubric"
+    # Retired — kept for historical DB record deserialization
     STRUCTURED_CHALLENGE = "structured_challenge"
     ADVERSARIAL_DEBATE = "adversarial_debate"
-    EVIDENCE_RUBRIC = "evidence_rubric"
     AUTO = "auto"
 
 

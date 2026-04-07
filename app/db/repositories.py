@@ -18,6 +18,7 @@ from sqlalchemy import delete, func, select
 from app.db.engine import Database, get_session
 from app.db.models import (
     AdjudicationResult,
+    AdvisorRecommendation,
     Chain,
     CheckLog,
     Engagement,
@@ -117,6 +118,35 @@ class ScanRepository(_RepositoryBase):
             await session.commit()
         logger.info(f"Scan {scan_id} updated (status={status}, observations={observations_count})")
 
+    async def update_scan_status(
+        self,
+        scan_id: str,
+        **fields: str | None,
+    ) -> None:
+        """Update specific status fields on a scan record.
+
+        Accepts any combination of: adjudication_status, adjudication_error,
+        chain_status, chain_error, chain_llm_analysis.
+        """
+        allowed = {
+            "adjudication_status", "adjudication_error",
+            "chain_status", "chain_error", "chain_llm_analysis",
+        }
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return
+
+        async with self._session() as session:
+            result = await session.execute(select(Scan).where(Scan.id == scan_id))
+            scan = result.scalar_one_or_none()
+            if scan is None:
+                logger.warning(f"Scan {scan_id} not found for status update")
+                return
+            for key, value in updates.items():
+                setattr(scan, key, value)
+            await session.commit()
+        logger.info(f"Scan {scan_id} status updated: {list(updates.keys())}")
+
     async def get_scan(self, scan_id: str) -> dict | None:
         """Get a scan by ID. Returns dict or None."""
         async with self._session() as session:
@@ -176,6 +206,12 @@ class ScanRepository(_RepositoryBase):
                     (ScanComparison.scan_a_id == scan_id) | (ScanComparison.scan_b_id == scan_id)
                 )
             )
+            await session.execute(
+                delete(AdjudicationResult).where(AdjudicationResult.scan_id == scan_id)
+            )
+            await session.execute(
+                delete(AdvisorRecommendation).where(AdvisorRecommendation.scan_id == scan_id)
+            )
             await session.execute(delete(CheckLog).where(CheckLog.scan_id == scan_id))
             await session.execute(delete(Chain).where(Chain.scan_id == scan_id))
             await session.execute(delete(ObservationRecord).where(ObservationRecord.scan_id == scan_id))
@@ -206,6 +242,11 @@ def _scan_to_dict(scan: Scan) -> dict:
         "profile_name": scan.profile_name,
         "scenario_name": scan.scenario_name,
         "error_message": scan.error_message,
+        "adjudication_status": scan.adjudication_status or "idle",
+        "adjudication_error": scan.adjudication_error,
+        "chain_status": scan.chain_status or "idle",
+        "chain_error": scan.chain_error,
+        "chain_llm_analysis": scan.chain_llm_analysis,
     }
 
 
@@ -1351,5 +1392,56 @@ def _adjudication_to_dict(r: AdjudicationResult) -> dict:
         "rationale": r.rationale,
         "factors": r.factors,
         "operator_context_used": r.operator_context_used,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    }
+
+
+class AdvisorRepository(_RepositoryBase):
+    """Persist and query scan advisor recommendations."""
+
+    async def bulk_create(self, scan_id: str, recommendations: list[dict]) -> int:
+        """Insert advisor recommendations for a scan. Returns count inserted."""
+        if not recommendations:
+            return 0
+
+        rows = []
+        for rec in recommendations:
+            rows.append(
+                AdvisorRecommendation(
+                    scan_id=scan_id,
+                    category=rec.get("category"),
+                    title=rec.get("title", "Untitled"),
+                    description=rec.get("description"),
+                    priority=rec.get("priority"),
+                    data=rec,
+                    created_at=datetime.now(UTC),
+                )
+            )
+
+        async with self._session() as session:
+            session.add_all(rows)
+            await session.commit()
+
+        logger.info(f"Persisted {len(rows)} advisor recommendations for scan {scan_id}")
+        return len(rows)
+
+    async def get_recommendations(self, scan_id: str) -> list[dict]:
+        """Get advisor recommendations for a scan."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(AdvisorRecommendation)
+                .where(AdvisorRecommendation.scan_id == scan_id)
+                .order_by(AdvisorRecommendation.id)
+            )
+            return [_advisor_rec_to_dict(r) for r in result.scalars().all()]
+
+
+def _advisor_rec_to_dict(r: AdvisorRecommendation) -> dict:
+    """Convert an AdvisorRecommendation ORM object to a JSON-safe dict."""
+    return r.data if r.data else {
+        "category": r.category,
+        "title": r.title,
+        "description": r.description,
+        "priority": r.priority,
         "created_at": r.created_at.isoformat() if r.created_at else None,
     }

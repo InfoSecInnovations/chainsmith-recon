@@ -54,7 +54,7 @@ output:
   agent_frameworks:
     - "langgraph"
 
-findings:
+observations:
   - title: "Agent endpoint: /invoke"
     description: "Agent endpoint discovered at /invoke. Framework: langgraph. No authentication required - potential unauthorized access. Capabilities: memory, tools, streaming, state, threads."
     severity: "high"

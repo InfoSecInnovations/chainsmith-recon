@@ -16,4 +16,4 @@ output:
     - "content-security-policy"
     - "x-frame-options"
     - "referrer-policy"
-  findings_count: 2
+  observations_count: 2

@@ -420,6 +420,11 @@ class TestScanDictShape:
             "profile_name",
             "scenario_name",
             "error_message",
+            "adjudication_status",
+            "adjudication_error",
+            "chain_status",
+            "chain_error",
+            "chain_llm_analysis",
         }
         assert expected_keys == set(scan.keys())
 

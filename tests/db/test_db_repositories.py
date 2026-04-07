@@ -496,20 +496,6 @@ class TestPersistOrchestrator:
             "xss_check": "completed",
             "header_check": "failed",
         }
-        state.observations = [
-            {
-                "title": "XSS Found",
-                "severity": "high",
-                "check_name": "xss_check",
-                "host": "example.com",
-            },
-        ]
-        state.chains = [
-            {"title": "Attack Chain", "severity": "high", "source": "rule-based"},
-        ]
-        state.check_log = [
-            {"check": "port_scan", "event": "completed", "observations": 0},
-        ]
         return state
 
     @pytest.mark.asyncio
@@ -556,44 +542,29 @@ class TestPersistOrchestrator:
         assert scan_id is None
 
     @pytest.mark.asyncio
-    async def test_on_scan_complete_persists_all(self, db, mock_state):
-        """on_scan_complete writes observations, chains, log, and updates scan."""
+    async def test_on_scan_complete_updates_scan_record(self, db, mock_state):
+        """on_scan_complete updates scan record with final stats."""
         import time
 
         from app.db.persist import on_scan_complete, on_scan_start
+
+        # Create a mock obs_writer with a count
+        obs_writer = MagicMock()
+        obs_writer.count = 5
 
         with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = True
             scan_id = await on_scan_start(mock_state, db=db)
             started_at = time.time() - 5.0  # 5 seconds ago
-            await on_scan_complete(mock_state, scan_id, started_at, db=db)
+            await on_scan_complete(mock_state, scan_id, started_at, db=db, obs_writer=obs_writer)
 
         async with db.session() as session:
-            # Scan updated
             result = await session.execute(select(Scan).where(Scan.id == scan_id))
             scan = result.scalar_one()
             assert scan.status == "complete"
-            assert scan.observations_count == 1
+            assert scan.observations_count == 5  # from obs_writer.count
             assert scan.checks_failed == 1
             assert scan.duration_ms >= 5000
-
-            # Observations persisted
-            result = await session.execute(
-                select(func.count()).select_from(ObservationRecord).where(ObservationRecord.scan_id == scan_id)
-            )
-            assert result.scalar() == 1
-
-            # Chains persisted
-            result = await session.execute(
-                select(func.count()).select_from(Chain).where(Chain.scan_id == scan_id)
-            )
-            assert result.scalar() == 1
-
-            # Check log persisted
-            result = await session.execute(
-                select(func.count()).select_from(CheckLog).where(CheckLog.scan_id == scan_id)
-            )
-            assert result.scalar() == 1
 
     @pytest.mark.asyncio
     async def test_on_scan_complete_skips_when_no_scan_id(self, db, mock_state):
