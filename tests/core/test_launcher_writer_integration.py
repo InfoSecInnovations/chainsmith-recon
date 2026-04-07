@@ -120,8 +120,6 @@ class TestLauncherWriterIntegration:
 
     async def test_writer_db_failure_does_not_halt_scan(self, mock_obs_repo, tmp_path):
         """If the writer's DB fails, the scan still completes."""
-        from unittest.mock import patch
-
         mock_obs_repo.bulk_create.side_effect = Exception("DB down")
 
         check = FakeCheck(
@@ -129,10 +127,9 @@ class TestLauncherWriterIntegration:
             _observations=[make_observation("Obs 1"), make_observation("Obs 2")],
         )
 
-        with patch("app.db.writers.SCRATCH_DIR", tmp_path):
-            writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=1)
-            launcher = CheckLauncher([check], {}, observation_writer=writer)
-            observations = await launcher.run_all()
+        writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=1, scratch_dir=tmp_path)
+        launcher = CheckLauncher([check], {}, observation_writer=writer)
+        observations = await launcher.run_all()
 
         # Scan still produces observations in memory
         assert len(observations) == 2

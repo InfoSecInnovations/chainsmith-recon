@@ -11,7 +11,7 @@ Covers:
 """
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -121,65 +121,61 @@ class TestObservationWriterScratchFallback:
     async def test_switches_to_scratch_on_db_failure(self, mock_obs_repo, tmp_path):
         mock_obs_repo.bulk_create.side_effect = Exception("DB unreachable")
 
-        with patch("app.db.writers.SCRATCH_DIR", tmp_path):
-            writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=2)
+        writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=2, scratch_dir=tmp_path)
 
-            await writer.write(_make_obs("Obs 1"))
-            await writer.write(_make_obs("Obs 2"))  # triggers flush
+        await writer.write(_make_obs("Obs 1"))
+        await writer.write(_make_obs("Obs 2"))  # triggers flush
 
-            assert writer.db_failed is True
-            assert writer.count == 2
+        assert writer.db_failed is True
+        assert writer.count == 2
 
-            # Check scratch files were created
-            scratch_dir = tmp_path / "scan-1" / "observations"
-            assert scratch_dir.exists()
-            files = sorted(scratch_dir.glob("*.json"))
-            assert len(files) == 2
+        # Check scratch files were created
+        scratch_dir = tmp_path / "scan-1" / "observations"
+        assert scratch_dir.exists()
+        files = sorted(scratch_dir.glob("*.json"))
+        assert len(files) == 2
 
-            # Verify content
-            data = json.loads(files[0].read_text())
-            assert data["title"] == "Obs 1"
+        # Verify content
+        data = json.loads(files[0].read_text())
+        assert data["title"] == "Obs 1"
 
     async def test_metadata_file_written_on_fallback(self, mock_obs_repo, tmp_path):
         mock_obs_repo.bulk_create.side_effect = Exception("DB unreachable")
 
-        with patch("app.db.writers.SCRATCH_DIR", tmp_path):
-            writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=1)
-            await writer.write(_make_obs("Obs 1"))
+        writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=1, scratch_dir=tmp_path)
+        await writer.write(_make_obs("Obs 1"))
 
-            meta_path = tmp_path / "scan-1" / "metadata.json"
-            assert meta_path.exists()
-            meta = json.loads(meta_path.read_text())
-            assert meta["scan_id"] == "scan-1"
+        meta_path = tmp_path / "scan-1" / "metadata.json"
+        assert meta_path.exists()
+        meta = json.loads(meta_path.read_text())
+        assert meta["scan_id"] == "scan-1"
 
     async def test_subsequent_writes_go_to_scratch(self, mock_obs_repo, tmp_path):
         mock_obs_repo.bulk_create.side_effect = Exception("DB unreachable")
 
-        with patch("app.db.writers.SCRATCH_DIR", tmp_path):
-            writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=1)
+        writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=1, scratch_dir=tmp_path)
 
-            # First write triggers DB failure and scratch fallback
-            await writer.write(_make_obs("Obs 1"))
+        # First write triggers DB failure and scratch fallback
+        await writer.write(_make_obs("Obs 1"))
 
-            # Second write should go straight to scratch (no DB attempt)
-            await writer.write(_make_obs("Obs 2"))
+        # Second write should go straight to scratch (no DB attempt)
+        await writer.write(_make_obs("Obs 2"))
 
-            # DB was only called once (first batch), not for the second
-            assert mock_obs_repo.bulk_create.call_count == 1
+        # DB was only called once (first batch), not for the second
+        assert mock_obs_repo.bulk_create.call_count == 1
 
-            scratch_dir = tmp_path / "scan-1" / "observations"
-            files = sorted(scratch_dir.glob("*.json"))
-            assert len(files) == 2
+        scratch_dir = tmp_path / "scan-1" / "observations"
+        files = sorted(scratch_dir.glob("*.json"))
+        assert len(files) == 2
 
     async def test_no_scratch_on_success(self, mock_obs_repo, tmp_path):
-        with patch("app.db.writers.SCRATCH_DIR", tmp_path):
-            writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=2)
+        writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=2, scratch_dir=tmp_path)
 
-            await writer.write(_make_obs("Obs 1"))
-            await writer.write(_make_obs("Obs 2"))
+        await writer.write(_make_obs("Obs 1"))
+        await writer.write(_make_obs("Obs 2"))
 
-            assert writer.db_failed is False
-            assert not (tmp_path / "scan-1").exists()
+        assert writer.db_failed is False
+        assert not (tmp_path / "scan-1").exists()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

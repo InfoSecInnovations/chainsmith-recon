@@ -41,6 +41,7 @@ class ObservationWriter:
         repo: ObservationRepository | None = None,
         db: Database | None = None,
         batch_size: int = 10,
+        scratch_dir: Path | None = None,
     ):
         self.scan_id = scan_id
         self._repo = repo or ObservationRepository(db)
@@ -48,6 +49,7 @@ class ObservationWriter:
         self._buffer: list[dict] = []
         self._count = 0
         self._db_failed = False
+        self._scratch_dir = scratch_dir or SCRATCH_DIR
         self._scratch_path: Path | None = None
         self._scratch_seq = 0
 
@@ -111,11 +113,11 @@ class ObservationWriter:
     def _get_scratch_path(self) -> Path:
         """Get or create the scratch directory for this scan."""
         if self._scratch_path is None:
-            self._scratch_path = SCRATCH_DIR / self.scan_id / "observations"
+            self._scratch_path = self._scratch_dir / self.scan_id / "observations"
             self._scratch_path.mkdir(parents=True, exist_ok=True)
 
             # Write metadata file for the scratch-to-db tool
-            meta_path = SCRATCH_DIR / self.scan_id / "metadata.json"
+            meta_path = self._scratch_dir / self.scan_id / "metadata.json"
             if not meta_path.exists():
                 try:
                     meta_path.write_text(
