@@ -149,7 +149,9 @@ class TestAgentInstantiation:
         assert agent.approach == AdjudicationApproach.AUTO
 
     def test_explicit_approach(self, mock_llm_client):
-        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.ADVERSARIAL_DEBATE)
+        agent = AdjudicatorAgent(
+            client=mock_llm_client, approach=AdjudicationApproach.ADVERSARIAL_DEBATE
+        )
         assert agent.approach == AdjudicationApproach.ADVERSARIAL_DEBATE
 
     def test_event_callback_stored(self, mock_llm_client):
@@ -190,7 +192,9 @@ class TestAutoTiering:
         assert agent._resolve_approach(finding) == AdjudicationApproach.STRUCTURED_CHALLENGE
 
     def test_explicit_approach_overrides_auto(self, mock_llm_client):
-        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.EVIDENCE_RUBRIC)
+        agent = AdjudicatorAgent(
+            client=mock_llm_client, approach=AdjudicationApproach.EVIDENCE_RUBRIC
+        )
         finding = _make_finding(severity="critical")
         assert agent._resolve_approach(finding) == AdjudicationApproach.EVIDENCE_RUBRIC
 
@@ -204,7 +208,9 @@ class TestStructuredChallenge:
     async def test_severity_adjusted(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("medium"))
 
-        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
+        agent = AdjudicatorAgent(
+            client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
+        )
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -217,7 +223,9 @@ class TestStructuredChallenge:
     async def test_severity_upheld(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response(_challenge_response("high"))
 
-        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
+        agent = AdjudicatorAgent(
+            client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
+        )
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -227,7 +235,9 @@ class TestStructuredChallenge:
     async def test_llm_failure_upholds_severity(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response({}, success=False)
 
-        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
+        agent = AdjudicatorAgent(
+            client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
+        )
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -262,7 +272,9 @@ class TestAdversarialDebate:
             _make_llm_response(verdict),
         ]
 
-        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.ADVERSARIAL_DEBATE)
+        agent = AdjudicatorAgent(
+            client=mock_llm_client, approach=AdjudicationApproach.ADVERSARIAL_DEBATE
+        )
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -281,7 +293,9 @@ class TestEvidenceRubric:
     async def test_rubric_scoring(self, mock_llm_client):
         mock_llm_client.chat.return_value = _make_llm_response(_rubric_response("medium"))
 
-        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.EVIDENCE_RUBRIC)
+        agent = AdjudicatorAgent(
+            client=mock_llm_client, approach=AdjudicationApproach.EVIDENCE_RUBRIC
+        )
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -440,7 +454,9 @@ class TestEdgeCases:
             success=True,
         )
 
-        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
+        agent = AdjudicatorAgent(
+            client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
+        )
         finding = _make_finding(severity="high")
         results = await agent.adjudicate_findings([finding])
 
@@ -460,7 +476,9 @@ class TestEdgeCases:
 
         mock_llm_client.chat.side_effect = chat_side_effect
 
-        agent = AdjudicatorAgent(client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE)
+        agent = AdjudicatorAgent(
+            client=mock_llm_client, approach=AdjudicationApproach.STRUCTURED_CHALLENGE
+        )
         findings = [_make_finding(finding_id=f"F-{i:03d}") for i in range(5)]
         results = await agent.adjudicate_findings(findings)
         # Stop called after 2nd LLM call, so should have fewer than 5 results
