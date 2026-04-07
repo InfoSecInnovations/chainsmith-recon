@@ -8,8 +8,8 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.ai_helpers import extract_response_text, fmt_filter_evidence, format_chat_request
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 
 class ContentFilterCheck(BaseCheck):

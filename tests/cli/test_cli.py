@@ -18,10 +18,10 @@ from click.testing import CliRunner
 
 from app.cli import cli
 from app.cli_formatters import (
+    format_observation_terminal,
     observations_to_json,
     observations_to_markdown,
     observations_to_sarif,
-    format_observation_terminal,
 )
 
 pytestmark = pytest.mark.unit

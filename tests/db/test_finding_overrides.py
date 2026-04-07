@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.db.engine import close_db, get_session, init_db
-from app.db.models import ObservationRecord, ObservationOverride
+from app.db.models import ObservationOverride, ObservationRecord
 from app.db.repositories import (
     ComparisonRepository,
     ObservationOverrideRepository,

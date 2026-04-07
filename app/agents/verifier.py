@@ -12,7 +12,14 @@ from datetime import datetime
 from openai import AsyncOpenAI
 
 from app.config import LITELLM_BASE_URL, LITELLM_MODEL_VERIFIER
-from app.models import AgentEvent, AgentType, EventImportance, EventType, Observation, ObservationStatus
+from app.models import (
+    AgentEvent,
+    AgentType,
+    EventImportance,
+    EventType,
+    Observation,
+    ObservationStatus,
+)
 from app.tools import verify_cve, verify_endpoint_exists, verify_version_claim
 
 VERIFIER_SYSTEM_PROMPT = """You are Verifier, an AI agent that validates reconnaissance observations.

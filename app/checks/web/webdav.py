@@ -12,8 +12,8 @@ from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
 from app.lib.evidence import fmt_status_evidence
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 
 class WebDAVCheck(ServiceIteratingCheck):

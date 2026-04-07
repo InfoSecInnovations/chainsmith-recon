@@ -14,8 +14,8 @@ from app.lib.ai_helpers import (
     format_chat_request,
     format_chat_request_with_extra,
 )
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 from app.lib.parsing import safe_json
 
 

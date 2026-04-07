@@ -16,9 +16,7 @@ from typing import TYPE_CHECKING
 from app.config import get_config
 from app.db.repositories import (
     AdjudicationRepository,
-    ChainRepository,
     ComparisonRepository,
-    ObservationRepository,
     ScanRepository,
 )
 
@@ -79,7 +77,7 @@ async def on_scan_complete(
     scan_id: str | None,
     started_at: float,
     db: Database | None = None,
-    obs_writer: "ObservationWriter | None" = None,
+    obs_writer: ObservationWriter | None = None,
 ) -> None:
     """
     Called when a scan completes (success or error). Updates the scan

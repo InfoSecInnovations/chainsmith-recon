@@ -21,8 +21,8 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import cap_response
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 # Injection payloads by type
 INJECTION_PAYLOADS = {

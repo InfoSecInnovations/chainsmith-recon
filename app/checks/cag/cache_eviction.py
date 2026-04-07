@@ -17,8 +17,8 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 # Cache management endpoints to probe
 EVICTION_ENDPOINTS = [

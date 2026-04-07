@@ -18,8 +18,8 @@ from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
 from app.checks.mcp.invocation_safety import cap_response, log_invocation
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 # Traversal payloads — read-only probes only
 TRAVERSAL_PAYLOADS = [

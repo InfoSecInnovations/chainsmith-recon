@@ -26,8 +26,8 @@ from app.checks.mcp.invocation_safety import (
     is_payload_safe,
     log_invocation,
 )
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 
 class MCPToolInvocationCheck(BaseCheck):

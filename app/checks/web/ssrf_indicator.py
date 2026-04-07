@@ -15,8 +15,8 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 

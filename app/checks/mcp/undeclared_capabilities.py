@@ -13,8 +13,8 @@ import json
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 # Standard MCP capabilities and their probe methods
 STANDARD_CAPABILITIES = [

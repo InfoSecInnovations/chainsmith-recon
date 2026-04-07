@@ -8,8 +8,8 @@ vectors, test similarity relationships, and check for information leakage.
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 from app.lib.parsing import safe_json
 
 

@@ -2106,7 +2106,6 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
     import asyncio
     import json
     import shutil
-    from pathlib import Path
 
     from app.db.writers import SCRATCH_DIR
 

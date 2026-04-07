@@ -13,8 +13,8 @@ References:
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 # Large filler text to consume context
 FILLER_BLOCK = "The quick brown fox jumps over the lazy dog. " * 50  # ~2.4KB

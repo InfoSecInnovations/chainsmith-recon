@@ -12,6 +12,7 @@ scratch-to-db tool can import them later.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from pathlib import Path
@@ -119,13 +120,11 @@ class ObservationWriter:
             # Write metadata file for the scratch-to-db tool
             meta_path = self._scratch_dir / self.scan_id / "metadata.json"
             if not meta_path.exists():
-                try:
+                with contextlib.suppress(Exception):
                     meta_path.write_text(
                         json.dumps({"scan_id": self.scan_id, "reason": "db_write_failure"}),
                         encoding="utf-8",
                     )
-                except Exception:
-                    pass
 
             logger.warning("Scratch space initialized at %s", self._scratch_path)
 

@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.db.writers import ObservationWriter, CheckLogWriter
+from app.db.writers import CheckLogWriter, ObservationWriter
 
 pytestmark = pytest.mark.unit
 

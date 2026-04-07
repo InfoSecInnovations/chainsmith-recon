@@ -19,8 +19,8 @@ from app.scenario_services.common.config import (
     WAF_ENABLED,
     ScenarioConfig,
     SessionState,
-    get_active_observations,
     get_active_hallucinations,
+    get_active_observations,
     get_brand_domain,
     # Brand helpers
     get_brand_name,

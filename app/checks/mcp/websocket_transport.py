@@ -15,8 +15,8 @@ import os
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 
 class WebSocketTransportCheck(BaseCheck):

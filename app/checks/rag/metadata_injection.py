@@ -14,8 +14,8 @@ import json
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
-from app.lib.observations import build_observation
 from app.lib.http import AsyncHttpClient, HttpConfig
+from app.lib.observations import build_observation
 
 # Metadata fields to test with injection payloads
 METADATA_INJECTION_TESTS = [
