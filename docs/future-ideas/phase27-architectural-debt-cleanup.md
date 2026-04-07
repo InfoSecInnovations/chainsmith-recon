@@ -191,7 +191,7 @@ related routers:
 | 1. Delete dead scanners | Minutes | Noise reduction | **Done** (previously deleted) |
 | 2. Fix or remove verification | Small | Correctness | **Done** — removed no-op; verification is a future feature |
 | 3. Consolidate AttackChain | Small | Prevent drift | **Done** — removed unused duplicate from api_models.py |
-| 4. Unify Finding models | Medium | Maintainability | **Deferred** — future session |
+| 4. Unify Finding models | Medium | Maintainability | **Superseded** by Phase 30 (Finding → Observation rename + unification) |
 | 5. Remove route doubling | Small | API clarity | **Done** — kept /api/v1/, removed unversioned /api/ |
 | 6. Fix global state | Large | Correctness | **Deferred** — future session, needs concurrency decision |
 | 7. Unify LLM client usage | Small | Consistency | **Done** — chainsmith.py now uses get_llm_client() |
