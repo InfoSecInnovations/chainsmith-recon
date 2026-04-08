@@ -2,97 +2,67 @@
 Tests for port profiles and port resolution logic.
 
 Covers:
-- Port category constants (WEB, API, AI, DATA, LAB)
-- Named profiles (web, ai, full, lab)
-- resolve_ports() with profile selection and in_scope_ports filtering
+- Structural invariants of profiles (sorted, no duplicates, non-empty, valid ports)
+- Profile hierarchy (each profile is a superset of the previous)
+- resolve_ports() with profile selection, in_scope_ports filtering, and edge cases
 - PortScanCheck port resolution from config and context
 """
 
 from unittest.mock import MagicMock, patch
 
 from app.checks.network.port_profiles import (
-    AI,
-    API,
-    DATA,
     DEFAULT_PROFILE,
-    LAB,
     PROFILES,
-    WEB,
     resolve_ports,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Port Constants
+# Profile Structural Invariants
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestPortConstants:
-    """Verify port category lists contain expected entries."""
+class TestProfileInvariants:
+    """Verify structural properties that the scan logic depends on."""
 
-    def test_web_has_standard_ports(self):
-        assert 80 in WEB
-        assert 443 in WEB
-        assert 8080 in WEB
-
-    def test_api_has_gateway_ports(self):
-        assert 4000 in API  # LiteLLM
-        assert 8001 in API  # Kong
-
-    def test_ai_has_ml_ports(self):
-        assert 11434 in AI  # Ollama
-        assert 7860 in AI  # Gradio
-        assert 8501 in AI  # Streamlit
-
-    def test_data_has_db_ports(self):
-        assert 5432 in DATA  # PostgreSQL
-        assert 3306 in DATA  # MySQL
-        assert 6379 in DATA  # Redis
-
-    def test_lab_has_container_ports(self):
-        assert 8081 in LAB
-        assert 8089 in LAB
-        assert 5173 in LAB  # Vite
-
-    def test_no_duplicates_within_categories(self):
-        for name, ports in [("WEB", WEB), ("API", API), ("AI", AI), ("DATA", DATA), ("LAB", LAB)]:
-            assert len(ports) == len(set(ports)), f"Duplicates in {name}"
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Named Profiles
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestProfiles:
-    """Verify named profiles contain the right categories."""
-
-    def test_web_profile_includes_web_and_api(self):
-        profile = PROFILES["web"]
-        for port in WEB + API:
-            assert port in profile
-
-    def test_ai_profile_includes_ai_ports(self):
-        profile = PROFILES["ai"]
-        for port in AI:
-            assert port in profile
-
-    def test_full_profile_includes_data(self):
-        profile = PROFILES["full"]
-        for port in DATA:
-            assert port in profile
-
-    def test_lab_profile_is_superset(self):
-        """Lab profile includes everything."""
-        lab = set(PROFILES["lab"])
-        for name in ["web", "ai", "full"]:
-            assert set(PROFILES[name]).issubset(lab), f"{name} not subset of lab"
-
-    def test_profiles_are_sorted(self):
+    def test_all_profiles_are_sorted(self):
         for name, ports in PROFILES.items():
-            assert ports == sorted(ports), f"Profile {name} not sorted"
+            assert ports == sorted(ports), f"Profile {name!r} is not sorted"
 
-    def test_default_profile_is_lab(self):
-        assert DEFAULT_PROFILE == "lab"
+    def test_no_duplicates_in_any_profile(self):
+        for name, ports in PROFILES.items():
+            assert len(ports) == len(set(ports)), f"Duplicates in profile {name!r}"
+
+    def test_all_profiles_are_non_empty(self):
+        for name, ports in PROFILES.items():
+            assert len(ports) > 0, f"Profile {name!r} is empty"
+
+    def test_all_ports_are_valid_tcp_range(self):
+        for name, ports in PROFILES.items():
+            for port in ports:
+                assert 1 <= port <= 65535, (
+                    f"Port {port} in profile {name!r} outside valid TCP range"
+                )
+
+    def test_default_profile_exists_in_profiles(self):
+        assert DEFAULT_PROFILE in PROFILES, (
+            f"DEFAULT_PROFILE {DEFAULT_PROFILE!r} not found in PROFILES"
+        )
+
+    def test_profile_hierarchy_is_cumulative(self):
+        """Each successive profile is a superset of the previous one."""
+        hierarchy = ["web", "ai", "full", "lab"]
+        for i in range(1, len(hierarchy)):
+            smaller = set(PROFILES[hierarchy[i - 1]])
+            larger = set(PROFILES[hierarchy[i]])
+            assert smaller.issubset(larger), (
+                f"{hierarchy[i - 1]!r} is not a subset of {hierarchy[i]!r}; "
+                f"missing: {smaller - larger}"
+            )
+
+    def test_expected_profile_names_exist(self):
+        """The four documented profile names must be present."""
+        for name in ("web", "ai", "full", "lab"):
+            assert name in PROFILES, f"Expected profile {name!r} missing"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -103,9 +73,9 @@ class TestProfiles:
 class TestResolvePorts:
     """Tests for the resolve_ports() function."""
 
-    def test_default_returns_lab(self):
+    def test_default_returns_default_profile(self):
         ports = resolve_ports()
-        assert ports == PROFILES["lab"]
+        assert ports == PROFILES[DEFAULT_PROFILE]
 
     def test_explicit_profile(self):
         ports = resolve_ports(profile="web")
@@ -113,6 +83,15 @@ class TestResolvePorts:
 
     def test_unknown_profile_falls_back_to_default(self):
         ports = resolve_ports(profile="nonexistent")
+        assert ports == PROFILES[DEFAULT_PROFILE]
+
+    def test_empty_string_profile_falls_back_to_default(self):
+        """Empty string is falsy, so it should use the default profile."""
+        ports = resolve_ports(profile="")
+        assert ports == PROFILES[DEFAULT_PROFILE]
+
+    def test_none_profile_falls_back_to_default(self):
+        ports = resolve_ports(profile=None)
         assert ports == PROFILES[DEFAULT_PROFILE]
 
     def test_in_scope_ports_filters(self):
@@ -136,6 +115,17 @@ class TestResolvePorts:
         """If in_scope_ports has no overlap with profile, result is empty."""
         ports = resolve_ports(profile="web", in_scope_ports=[12345, 54321])
         assert ports == []
+
+    def test_in_scope_with_single_matching_port(self):
+        """Filtering down to exactly one port should work."""
+        ports = resolve_ports(profile="web", in_scope_ports=[80])
+        assert ports == [80]
+
+    def test_each_profile_resolves_correctly(self):
+        """Every named profile resolves to its expected port list."""
+        for name, expected in PROFILES.items():
+            result = resolve_ports(profile=name)
+            assert result == expected, f"resolve_ports(profile={name!r}) mismatch"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -79,7 +79,7 @@ class TestPersistOrchestrator:
 
     @pytest.mark.asyncio
     async def test_on_scan_start_graceful_on_error(self, db, mock_state):
-        """on_scan_start returns None (doesn't raise) on DB error."""
+        """on_scan_start returns None (doesn't raise) on DB error and logs a warning."""
         from app.db.persist import on_scan_start
 
         broken_db = MagicMock()
@@ -87,9 +87,12 @@ class TestPersistOrchestrator:
 
         with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = True
-            scan_id = await on_scan_start(mock_state, db=broken_db)
+            with patch("app.db.persist.logger") as mock_logger:
+                scan_id = await on_scan_start(mock_state, db=broken_db)
 
         assert scan_id is None
+        mock_logger.warning.assert_called_once()
+        assert "persist" in mock_logger.warning.call_args[0][0].lower()
 
     @pytest.mark.asyncio
     async def test_on_scan_complete_updates_scan_record(self, db, mock_state):
@@ -142,5 +145,9 @@ class TestPersistOrchestrator:
 
         with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = True
-            # Should not raise
-            await on_scan_complete(mock_state, "scan-999", time.time(), db=broken_db)
+            with patch("app.db.persist.logger") as mock_logger:
+                # Should not raise
+                await on_scan_complete(mock_state, "scan-999", time.time(), db=broken_db)
+
+        mock_logger.warning.assert_called_once()
+        assert "persist" in mock_logger.warning.call_args[0][0].lower()

@@ -183,6 +183,36 @@ class TestObservationHandling:
         # IDs should be sequential across checks
         assert observations[4].id == "F-005"
 
+    async def test_observation_missing_required_fields(self):
+        """Observations with missing required fields are handled gracefully."""
+
+        class MalformedObservationCheck(BaseCheck):
+            name = "malformed_obs_check"
+            description = "Produces an observation missing fields"
+            conditions = []
+
+            async def run(self, context: dict) -> CheckResult:
+                # Create observation with empty title and missing description
+                obs = Observation(
+                    id="",
+                    title="",
+                    description="",
+                    severity="medium",
+                    evidence="",
+                )
+                return CheckResult(success=True, observations=[obs])
+
+        runner = CheckRunner()
+        runner.register_check(MalformedObservationCheck())
+
+        observations = await runner.run()
+
+        # Runner should still collect the observation (it assigns an ID)
+        assert len(observations) == 1
+        assert observations[0].id == "F-001"
+        assert observations[0].title == ""
+        assert observations[0].evidence == ""
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Service Handling Tests

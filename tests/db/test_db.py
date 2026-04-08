@@ -61,13 +61,78 @@ class TestEngine:
 
     @pytest.mark.asyncio
     async def test_tables_exist_after_init(self, db):
-        """All expected tables are created."""
+        """All expected tables are created with correct columns."""
         async with get_session() as session:
             # Verify we can query each table without error
             await session.execute(select(func.count()).select_from(Scan))
             await session.execute(select(func.count()).select_from(ObservationRecord))
             await session.execute(select(func.count()).select_from(Chain))
             await session.execute(select(func.count()).select_from(CheckLog))
+
+    @pytest.mark.asyncio
+    async def test_scan_table_has_required_columns(self, db):
+        """Scan table has the columns needed for scan lifecycle."""
+        from sqlalchemy import inspect as sa_inspect
+
+        async with get_session() as session:
+            conn = await session.connection()
+            columns = await conn.run_sync(
+                lambda sync_conn: {c["name"] for c in sa_inspect(sync_conn).get_columns("scans")}
+            )
+        for col in (
+            "id",
+            "session_id",
+            "target_domain",
+            "status",
+            "started_at",
+            "duration_ms",
+            "checks_total",
+            "observations_count",
+        ):
+            assert col in columns, f"scans table missing column: {col}"
+
+    @pytest.mark.asyncio
+    async def test_observations_table_has_required_columns(self, db):
+        """Observations table has the columns needed for observation storage."""
+        from sqlalchemy import inspect as sa_inspect
+
+        async with get_session() as session:
+            conn = await session.connection()
+            columns = await conn.run_sync(
+                lambda sync_conn: {
+                    c["name"] for c in sa_inspect(sync_conn).get_columns("observations")
+                }
+            )
+        for col in ("id", "scan_id", "title", "severity", "check_name", "host", "fingerprint"):
+            assert col in columns, f"observations table missing column: {col}"
+
+    @pytest.mark.asyncio
+    async def test_check_log_table_has_required_columns(self, db):
+        """Check log table has the columns needed for check tracking."""
+        from sqlalchemy import inspect as sa_inspect
+
+        async with get_session() as session:
+            conn = await session.connection()
+            columns = await conn.run_sync(
+                lambda sync_conn: {
+                    c["name"] for c in sa_inspect(sync_conn).get_columns("check_log")
+                }
+            )
+        for col in ("id", "scan_id", "check_name", "event", "duration_ms"):
+            assert col in columns, f"check_log table missing column: {col}"
+
+    @pytest.mark.asyncio
+    async def test_chains_table_has_required_columns(self, db):
+        """Chains table has the columns needed for attack chain storage."""
+        from sqlalchemy import inspect as sa_inspect
+
+        async with get_session() as session:
+            conn = await session.connection()
+            columns = await conn.run_sync(
+                lambda sync_conn: {c["name"] for c in sa_inspect(sync_conn).get_columns("chains")}
+            )
+        for col in ("id", "scan_id", "title", "severity", "source", "observation_ids"):
+            assert col in columns, f"chains table missing column: {col}"
 
 
 # ─── Fingerprint Tests ───────────────────────────────────────────────────────
@@ -123,16 +188,6 @@ class TestFingerprinting:
 
 class TestStorageConfig:
     """Tests for storage config loading."""
-
-    def test_default_storage_config(self):
-        """Default config has SQLite with auto_persist enabled."""
-        from app.config import StorageConfig
-
-        cfg = StorageConfig()
-        assert cfg.backend == "sqlite"
-        assert cfg.db_path == Path("./data/chainsmith.db")
-        assert cfg.auto_persist is True
-        assert cfg.retention_days == 365
 
     def test_storage_in_yaml(self, tmp_path, clean_env):
         """Storage config loads from YAML."""

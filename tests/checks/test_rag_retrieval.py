@@ -141,6 +141,7 @@ class TestDocumentExfiltration:
 
     @pytest.mark.asyncio
     async def test_detects_credentials(self, sample_service, rag_context):
+        """Credential patterns (password=, api_key=) in RAG results trigger critical observation."""
         check = RAGDocumentExfiltrationCheck()
 
         async def mock_post(url, **kw):
@@ -151,7 +152,16 @@ class TestDocumentExfiltration:
                     body=json.dumps(
                         {
                             "results": [
-                                {"content": "DB password: secretpass123\nAPI_KEY=sk-abc123"}
+                                {
+                                    "content": (
+                                        "Configuration reference for staging environment:\n"
+                                        "  host: staging-db.internal.corp\n"
+                                        "  password = changeme_staging_2024\n"
+                                        "  api_key: sk-proj-Rt7xKpLmNqWvYz3a8B2c\n"
+                                        "Refer to the onboarding runbook for rotation schedule."
+                                    ),
+                                    "source": "runbook/staging-config.md",
+                                }
                             ],
                         }
                     )
@@ -166,17 +176,33 @@ class TestDocumentExfiltration:
         assert result.success
         critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
-        assert "credentials" in critical[0].title.lower() or "api" in str(result.outputs).lower()
+        assert "credentials" in critical[0].title.lower()
+        assert "sensitive_content_categories" in result.outputs
+        cats = result.outputs["sensitive_content_categories"]
+        assert "password" in cats
+        assert "api_key" in cats
 
     @pytest.mark.asyncio
     async def test_detects_pii(self, sample_service, rag_context):
+        """Email and SSN patterns in RAG results trigger PII observation."""
         check = RAGDocumentExfiltrationCheck()
 
         async def mock_post(url, **kw):
             return make_response(
                 body=json.dumps(
                     {
-                        "results": [{"content": "Employee: john@company.com, SSN: 123-45-6789"}],
+                        "results": [
+                            {
+                                "content": (
+                                    "Employee onboarding record for Acme Corp:\n"
+                                    "  Name: J. Smith\n"
+                                    "  Contact: j.smith@acme-corp.example.com\n"
+                                    "  Tax ID: 876-54-3210\n"
+                                    "Please submit form W-4 to payroll by end of quarter."
+                                ),
+                                "source": "hr/onboarding-checklist.md",
+                            }
+                        ],
                     }
                 )
             )
@@ -189,10 +215,15 @@ class TestDocumentExfiltration:
         assert result.success
         assert "sensitive_content_categories" in result.outputs
         cats = result.outputs["sensitive_content_categories"]
-        assert "email" in cats or "ssn" in cats
+        assert "email" in cats
+        assert "ssn" in cats
+        critical = [f for f in result.observations if f.severity == "critical"]
+        assert len(critical) >= 1
+        assert "pii" in critical[0].title.lower()
 
     @pytest.mark.asyncio
     async def test_clean_knowledge_base(self, sample_service, rag_context):
+        """Responses without sensitive patterns produce a low-severity non-sensitive observation."""
         check = RAGDocumentExfiltrationCheck()
 
         async def mock_post(url, **kw):
@@ -205,8 +236,49 @@ class TestDocumentExfiltration:
 
         assert result.success
         low = [f for f in result.observations if f.severity == "low"]
-        assert len(low) >= 1
+        assert len(low) == 1
         assert "non-sensitive" in low[0].title.lower()
+        # No sensitive categories should be reported
+        assert "sensitive_content_categories" not in result.outputs
+
+    @pytest.mark.asyncio
+    async def test_generic_public_content_no_exfiltration(self, sample_service, rag_context):
+        """Queries returning only generic public content should NOT produce critical/high observations."""
+        check = RAGDocumentExfiltrationCheck()
+
+        async def mock_post(url, **kw):
+            return make_response(
+                body=json.dumps(
+                    {
+                        "results": [
+                            {
+                                "content": (
+                                    "Our company was founded in 2015. We provide cloud "
+                                    "consulting services to mid-market enterprises. For more "
+                                    "details, visit our public website or contact sales."
+                                ),
+                            },
+                            {
+                                "content": (
+                                    "FAQ: How do I reset my account? Navigate to Settings > "
+                                    "Security and click 'Reset'. You will receive a confirmation "
+                                    "email at your registered address."
+                                ),
+                            },
+                        ],
+                    }
+                )
+            )
+
+        client = _mock_client(post_fn=mock_post)
+
+        with patch("app.checks.rag.document_exfiltration.AsyncHttpClient", return_value=client):
+            result = await check.check_service(sample_service, rag_context)
+
+        assert result.success
+        critical_or_high = [f for f in result.observations if f.severity in ("critical", "high")]
+        assert len(critical_or_high) == 0
+        assert "sensitive_content_categories" not in result.outputs
 
 
 class TestRetrievalManipulation:
@@ -217,12 +289,17 @@ class TestRetrievalManipulation:
 
     @pytest.mark.asyncio
     async def test_detects_topk_override(self, sample_service, rag_context):
+        """When the server returns different result counts for different k values, topk_overridable is True."""
         check = RAGRetrievalManipulationCheck()
 
         async def mock_post(url, **kw):
             body = kw.get("json", {})
-            k = body.get("top_k", body.get("k", 5))
-            # Return different counts based on k
+            # Find whichever top_k param variant was sent
+            k = 5
+            for param in ["top_k", "k", "n_results", "limit", "topK", "num_results", "max_results"]:
+                if param in body:
+                    k = body[param]
+                    break
             docs = [{"content": f"doc{i}"} for i in range(min(k, 50))]
             return make_response(body=json.dumps({"results": docs}))
 
@@ -233,17 +310,18 @@ class TestRetrievalManipulation:
 
         assert result.success
         assert "retrieval_control" in result.outputs
-        # Should detect that top_k is overridable
-        if result.outputs["retrieval_control"]["topk_overridable"]:
-            high = [f for f in result.observations if f.severity == "high"]
-            assert len(high) >= 1
+        assert result.outputs["retrieval_control"]["topk_overridable"] is True
+        high = [f for f in result.observations if f.severity == "high"]
+        assert len(high) >= 1
+        assert "client override" in high[0].title.lower()
 
     @pytest.mark.asyncio
     async def test_topk_bounded(self, sample_service, rag_context):
+        """When the server ignores k and always returns the same count, topk_overridable is False."""
         check = RAGRetrievalManipulationCheck()
 
         async def mock_post(url, **kw):
-            # Always return same number regardless of k
+            # Always return exactly 2 results regardless of k
             return make_response(
                 body=json.dumps({"results": [{"content": "doc1"}, {"content": "doc2"}]})
             )
@@ -254,8 +332,16 @@ class TestRetrievalManipulation:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
+        assert "retrieval_control" in result.outputs
+        assert result.outputs["retrieval_control"]["topk_overridable"] is False
         low = [f for f in result.observations if f.severity == "low"]
         assert len(low) >= 1
+        assert "bounded" in low[0].title.lower()
+        # Ensure no high-severity observations for topk override
+        high_topk = [
+            f for f in result.observations if f.severity == "high" and "override" in f.title.lower()
+        ]
+        assert len(high_topk) == 0
 
 
 class TestSourceAttribution:

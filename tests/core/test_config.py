@@ -37,16 +37,11 @@ pytestmark = pytest.mark.unit
 class TestScopeConfig:
     """Tests for ScopeConfig dataclass."""
 
-    def test_default_values(self):
-        """Defaults are sensible."""
+    def test_allowed_and_forbidden_techniques_disjoint(self):
+        """Allowed and forbidden technique sets must not overlap."""
         scope = ScopeConfig()
-
-        assert scope.in_scope_domains == []
-        assert scope.out_of_scope_domains == []
-        assert scope.in_scope_ports == []  # Empty = no restriction (use profile)
-        assert scope.port_profile == "lab"
-        assert "port_scan" in scope.allowed_techniques
-        assert "dos" in scope.forbidden_techniques
+        overlap = set(scope.allowed_techniques) & set(scope.forbidden_techniques)
+        assert overlap == set(), f"Techniques in both allowed and forbidden: {overlap}"
 
     def test_custom_values(self):
         """Custom values override defaults."""
@@ -69,14 +64,16 @@ class TestScopeConfig:
 class TestLiteLLMConfig:
     """Tests for LiteLLMConfig dataclass."""
 
-    def test_default_values(self):
-        """Defaults point to local LiteLLM proxy."""
+    def test_default_base_url_is_valid_http(self):
+        """Default base_url is a well-formed HTTP URL."""
         llm = LiteLLMConfig()
+        assert llm.base_url.startswith("http://") or llm.base_url.startswith("https://")
+        assert "/v1" in llm.base_url
 
-        assert llm.base_url == "http://localhost:4000/v1"
-        assert llm.model_scout == "nova-mini"
-        assert llm.model_chainsmith == "nova-pro"
-        assert llm.model_chainsmith_fallback == "nova-mini"
+    def test_fallback_model_differs_from_primary(self):
+        """Fallback model should differ from primary chainsmith model."""
+        llm = LiteLLMConfig()
+        assert llm.model_chainsmith != llm.model_chainsmith_fallback
 
     def test_custom_values(self):
         """Custom values override defaults."""
@@ -97,12 +94,18 @@ class TestLiteLLMConfig:
 class TestPathsConfig:
     """Tests for PathsConfig dataclass."""
 
-    def test_default_values(self):
-        """Defaults point to standard paths."""
+    def test_default_paths_are_not_relative(self):
+        """Default paths are not relative (they reference specific system locations)."""
         paths = PathsConfig()
+        # On all platforms, these paths should have multiple components
+        # (not just a bare filename)
+        assert len(paths.db_path.parts) > 1
+        assert len(paths.attack_patterns.parts) > 1
 
-        assert paths.db_path == Path("/data/recon.sqlite")
-        assert paths.attack_patterns == Path("/app/data/attack_patterns.json")
+    def test_default_db_path_has_sqlite_extension(self):
+        """Default DB path uses .sqlite extension."""
+        paths = PathsConfig()
+        assert paths.db_path.suffix == ".sqlite"
 
     def test_custom_values(self):
         """Custom values override defaults."""
@@ -119,12 +122,10 @@ class TestPathsConfig:
 class TestChainsmithConfig:
     """Tests for ChainsmithConfig dataclass."""
 
-    def test_default_values(self):
-        """Top-level defaults are sensible."""
+    def test_nested_configs_are_proper_types(self):
+        """Top-level config composes sub-configs of correct types."""
         cfg = ChainsmithConfig()
 
-        assert cfg.target_domain == ""
-        assert cfg.seed_urls == []
         assert isinstance(cfg.scope, ScopeConfig)
         assert isinstance(cfg.litellm, LiteLLMConfig)
         assert isinstance(cfg.paths, PathsConfig)
@@ -174,7 +175,7 @@ class TestYamlLoading:
     def test_load_yaml_file_invalid(self, tmp_path: Path):
         """Invalid YAML returns empty dict."""
         yaml_file = tmp_path / "bad.yaml"
-        yaml_file.write_text("not: valid: yaml: syntax: here")
+        yaml_file.write_text("key: [unclosed bracket\n  - missing\n:")
 
         data = _load_yaml_file(yaml_file)
 

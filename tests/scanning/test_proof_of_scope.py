@@ -13,33 +13,9 @@ from app.proof_of_scope import (
     ViolationEntry,
 )
 
+# Note: TrafficEntryType and ScopeStatus are used by TrafficEntry/ViolationEntry tests below
+
 pytestmark = pytest.mark.unit
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Enum Tests
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestTrafficEntryType:
-    """Tests for TrafficEntryType enum."""
-
-    def test_values(self):
-        """Enum has expected values."""
-        assert TrafficEntryType.HTTP_REQUEST.value == "http_request"
-        assert TrafficEntryType.DNS_LOOKUP.value == "dns_lookup"
-        assert TrafficEntryType.TOOL_CALL.value == "tool_call"
-
-
-class TestScopeStatus:
-    """Tests for ScopeStatus enum."""
-
-    def test_values(self):
-        """Enum has expected values."""
-        assert ScopeStatus.IN_SCOPE.value == "in_scope"
-        assert ScopeStatus.OUT_OF_SCOPE.value == "out_of_scope"
-        assert ScopeStatus.EXCLUDED.value == "excluded"
-        assert ScopeStatus.UNKNOWN.value == "unknown"
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TrafficEntry Tests

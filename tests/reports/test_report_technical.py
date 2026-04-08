@@ -233,4 +233,8 @@ class TestTechnicalReportPDF:
     async def test_pdf_not_empty(self, db, scan_repo, observation_repo, chain_repo, check_log_repo):
         await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
         result = await generate_technical_report("report-scan", "pdf")
-        assert len(result["content"]) > 1000
+        content = result["content"]
+        assert len(content) > 1000
+        assert content[:4] == PDF_MAGIC, "PDF must start with %PDF magic bytes"
+        # Verify PDF has a valid trailer structure (%%EOF marker)
+        assert b"%%EOF" in content[-128:], "PDF must end with %%EOF trailer"

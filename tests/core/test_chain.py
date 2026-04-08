@@ -57,15 +57,9 @@ class TestSuiteOrdering:
     """Tests for suite ordering."""
 
     def test_suite_order_defined(self):
-        """Test that suite order is defined."""
-        assert len(SUITE_ORDER) >= 7
-        assert "network" in SUITE_ORDER
-        assert "web" in SUITE_ORDER
-        assert "ai" in SUITE_ORDER
-        assert "mcp" in SUITE_ORDER
-        assert "agent" in SUITE_ORDER
-        assert "rag" in SUITE_ORDER
-        assert "cag" in SUITE_ORDER
+        """Test that suite order is defined with exactly the expected suites."""
+        expected = ["network", "web", "ai", "mcp", "agent", "rag", "cag"]
+        assert expected == SUITE_ORDER
 
     def test_network_is_first(self):
         """Test that network suite runs first."""
@@ -221,7 +215,7 @@ class TestExecutionPlan:
         assert suite_order.index("web") < suite_order.index("ai")
 
     def test_parallel_flag_propagates(self):
-        """Test parallel flag propagates to phases."""
+        """Test parallel flag propagates to phases with multiple checks."""
         orchestrator = ChainOrchestrator(parallel_within_phase=True)
 
         check1 = MockCheck("check1")
@@ -232,10 +226,26 @@ class TestExecutionPlan:
 
         plan = orchestrator.get_execution_plan()
 
-        # First phase with multiple checks should be parallel
+        # Both checks are in the same suite with no dependencies,
+        # so they must land in one phase together
         multi_check_phases = [p for p in plan if len(p.checks) > 1]
-        if multi_check_phases:
-            assert multi_check_phases[0].parallel
+        assert len(multi_check_phases) == 1, "Expected exactly one phase with multiple checks"
+        assert multi_check_phases[0].parallel
+
+    def test_parallel_flag_false_by_default(self):
+        """Test parallel flag is False when not enabled."""
+        orchestrator = ChainOrchestrator()  # parallel_within_phase defaults False
+
+        check1 = MockCheck("check1")
+        check2 = MockCheck("check2")
+
+        orchestrator.add_check(check1, suite="network")
+        orchestrator.add_check(check2, suite="network")
+
+        plan = orchestrator.get_execution_plan()
+
+        for phase in plan:
+            assert not phase.parallel
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -359,3 +369,26 @@ class TestDiagnostics:
 
         assert orchestrator.checks_run > 0
         assert orchestrator.phases_completed > 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Duplicate Registration Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestDuplicateRegistration:
+    """Tests for duplicate check registration."""
+
+    def test_duplicate_check_overwrites(self, orchestrator):
+        """Adding a check with the same name overwrites the previous one."""
+        check1 = MockCheck("dup_check", produces=["data_v1"])
+        check2 = MockCheck("dup_check", produces=["data_v2"])
+
+        orchestrator.add_check(check1, suite="network")
+        orchestrator.add_check(check2, suite="web")
+
+        # The node dict should have only one entry for that name
+        assert len([n for n in orchestrator.nodes if n == "dup_check"]) == 1
+        # The latest registration wins
+        assert orchestrator.nodes["dup_check"].suite == "web"
+        assert orchestrator.nodes["dup_check"].check is check2

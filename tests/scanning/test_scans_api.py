@@ -432,8 +432,15 @@ class TestScanDictShape:
 
     @pytest.mark.asyncio
     async def test_scan_timestamps_are_iso(self, seeded_db):
+        import re
+
         repo = ScanRepository()
         scan = await repo.get_scan("scan-aaa")
-        # ISO format strings contain 'T'
-        assert "T" in scan["started_at"]
-        assert "T" in scan["completed_at"]
+        # Validate full ISO 8601 format: YYYY-MM-DDTHH:MM:SS (with optional fractional seconds and timezone)
+        iso_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+        assert iso_pattern.match(scan["started_at"]), (
+            f"started_at is not ISO 8601: {scan['started_at']}"
+        )
+        assert iso_pattern.match(scan["completed_at"]), (
+            f"completed_at is not ISO 8601: {scan['completed_at']}"
+        )

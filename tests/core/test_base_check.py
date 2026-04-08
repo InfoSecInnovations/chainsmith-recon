@@ -229,13 +229,24 @@ class TestCheckCondition:
 class TestSeverity:
     """Tests for Severity enum."""
 
-    def test_severity_values(self):
-        """Severity enum has expected values."""
-        assert Severity.INFO.value == "info"
-        assert Severity.LOW.value == "low"
-        assert Severity.MEDIUM.value == "medium"
-        assert Severity.HIGH.value == "high"
-        assert Severity.CRITICAL.value == "critical"
+    def test_severity_member_count(self):
+        """Severity enum has exactly 5 levels."""
+        assert len(Severity) == 5
+
+    def test_severity_members_are_lowercase(self):
+        """All severity values are lowercase strings matching their member names."""
+        for member in Severity:
+            assert member.value == member.name.lower()
+
+    def test_severity_constructible_from_value(self):
+        """Severity members can be looked up by their string value."""
+        assert Severity("info") is Severity.INFO
+        assert Severity("critical") is Severity.CRITICAL
+
+    def test_severity_rejects_unknown_value(self):
+        """Severity raises ValueError for unknown strings."""
+        with pytest.raises(ValueError):
+            Severity("super_critical")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -246,10 +257,21 @@ class TestSeverity:
 class TestCheckStatus:
     """Tests for CheckStatus enum."""
 
-    def test_status_values(self):
-        """CheckStatus enum has expected values."""
-        assert CheckStatus.PENDING.value == "pending"
-        assert CheckStatus.RUNNING.value == "running"
-        assert CheckStatus.COMPLETED.value == "completed"
-        assert CheckStatus.FAILED.value == "failed"
-        assert CheckStatus.SKIPPED.value == "skipped"
+    def test_status_member_count(self):
+        """CheckStatus enum has exactly 5 states."""
+        assert len(CheckStatus) == 5
+
+    def test_status_members_are_lowercase(self):
+        """All status values are lowercase strings matching their member names."""
+        for member in CheckStatus:
+            assert member.value == member.name.lower()
+
+    def test_status_constructible_from_value(self):
+        """CheckStatus members can be looked up by their string value."""
+        assert CheckStatus("pending") is CheckStatus.PENDING
+        assert CheckStatus("skipped") is CheckStatus.SKIPPED
+
+    def test_status_rejects_unknown_value(self):
+        """CheckStatus raises ValueError for unknown strings."""
+        with pytest.raises(ValueError):
+            CheckStatus("cancelled")

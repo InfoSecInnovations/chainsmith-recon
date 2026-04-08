@@ -343,6 +343,45 @@ class TestHeatmapDataLogic:
 # --- CSS tests ----------------------------------------------------------------
 
 
+class TestHeatmapDataRendering:
+    """Behavioral tests that exercise data rendering logic end-to-end."""
+
+    def test_worst_severity_drives_cell_color(self):
+        """The worst severity in a cell determines the visual weight, not the count."""
+        observations = [
+            {"host": "h.com", "suite": "web", "severity": "info", "title": "A"},
+            {"host": "h.com", "suite": "web", "severity": "info", "title": "B"},
+            {"host": "h.com", "suite": "web", "severity": "critical", "title": "C"},
+        ]
+        result = TestHeatmapDataLogic.build_heatmap_data(observations)
+        cell = result["matrix"]["h.com"]["web"]
+        assert cell["worst"] == "critical"
+        assert cell["count"] == 3
+
+    def test_suite_inference_routes_observations_to_correct_cells(self):
+        """Observations without explicit suite are routed by check_name pattern matching."""
+        observations = [
+            {"host": "h.com", "check_name": "dns_lookup", "severity": "info", "title": "DNS"},
+            {"host": "h.com", "check_name": "mcp_discovery", "severity": "high", "title": "MCP"},
+            {"host": "h.com", "check_name": "rag_poisoning", "severity": "medium", "title": "RAG"},
+        ]
+        result = TestHeatmapDataLogic.build_heatmap_data(observations)
+        matrix = result["matrix"]["h.com"]
+        assert "network" in matrix, "dns_lookup should map to network suite"
+        assert "mcp" in matrix, "mcp_discovery should map to mcp suite"
+        assert "rag" in matrix, "rag_poisoning should map to rag suite"
+        assert matrix["network"]["count"] == 1
+        assert matrix["mcp"]["count"] == 1
+        assert matrix["rag"]["count"] == 1
+
+    def test_empty_observations_produce_empty_matrix(self):
+        """No observations means no cells to render — empty matrix."""
+        result = TestHeatmapDataLogic.build_heatmap_data([])
+        assert result["matrix"] == {}
+        assert result["hosts"] == []
+        assert result["suites"] == []
+
+
 class TestHeatmapCSS:
     """Verify heatmap CSS classes exist."""
 

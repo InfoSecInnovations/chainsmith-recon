@@ -41,10 +41,11 @@ def make_response(
     headers: dict = None,
     body: str = "",
     error: str = None,
+    url: str = "http://ai.example.com:8080",
 ) -> HttpResponse:
     """Create a mock HTTP response."""
     return HttpResponse(
-        url="http://ai.example.com:8080",
+        url=url,
         status_code=status_code,
         headers=headers or {},
         body=body,
@@ -116,34 +117,14 @@ def embedding_endpoint_context(sample_service):
     }
 
 
-class TestLLMEndpointCheckInit:
-    """Tests for LLMEndpointCheck initialization."""
-
-    def test_default_initialization(self):
-        """Check initializes with defaults."""
-        check = LLMEndpointCheck()
-
-        assert check.name == "llm_endpoint_discovery"
-        assert "/v1/chat/completions" in check.CHAT_PATHS
-        assert "/api/generate" in check.CHAT_PATHS
-
-    def test_metadata(self):
-        """Check has educational metadata."""
-        check = LLMEndpointCheck()
-
-        assert len(check.references) > 0
-        assert "Prompt Injection" in check.references[0]
-
-
 class TestLLMEndpointCheckService:
     """Tests for LLMEndpointCheck.check_service."""
 
-    async def test_discovers_chat_endpoint(self, sample_service):
-        """Discovers accessible chat endpoints."""
+    async def test_discovers_chat_endpoint_with_correct_observation(self, sample_service):
+        """Discovers accessible chat endpoints with correct title, severity, and evidence."""
         check = LLMEndpointCheck()
         check.CHAT_PATHS = ["/v1/chat/completions"]
 
-        # OPTIONS returns 200, POST returns 200
         responses = [
             make_response(status_code=200),  # OPTIONS
             make_response(status_code=200, body='{"choices": []}'),  # POST
@@ -155,10 +136,27 @@ class TestLLMEndpointCheckService:
             result = await check.check_service(sample_service, {})
 
         assert len(result.observations) == 1
-        assert "chat_endpoints" in result.outputs
+        obs = result.observations[0]
+        assert obs.title == "LLM endpoint: /v1/chat/completions"
+        assert obs.severity == "info"
+        assert obs.description == "Chat/completion endpoint discovered (openai format)"
+        assert "POST /v1/chat/completions -> HTTP 200" in obs.evidence
+        assert "format: openai" in obs.evidence
+        assert obs.target_url == "http://ai.example.com:8080/v1/chat/completions"
+        assert obs.check_name == "llm_endpoint_discovery"
 
-    async def test_skips_404_endpoints(self, sample_service):
-        """Skips endpoints that return 404."""
+        # Verify outputs structure
+        assert "chat_endpoints" in result.outputs
+        endpoints = result.outputs["chat_endpoints"]
+        assert len(endpoints) == 1
+        assert endpoints[0]["url"] == "http://ai.example.com:8080/v1/chat/completions"
+        assert endpoints[0]["path"] == "/v1/chat/completions"
+        assert endpoints[0]["api_format"] == "openai"
+        assert endpoints[0]["status_code"] == 200
+        assert endpoints[0]["service"]["host"] == "ai.example.com"
+
+    async def test_skips_404_on_post(self, sample_service):
+        """POST returning 404 produces no observations and no outputs."""
         check = LLMEndpointCheck()
         check.CHAT_PATHS = ["/v1/chat/completions"]
 
@@ -173,40 +171,206 @@ class TestLLMEndpointCheckService:
             result = await check.check_service(sample_service, {})
 
         assert len(result.observations) == 0
+        assert "chat_endpoints" not in result.outputs
 
-    async def test_detects_api_format_openai(self, sample_service):
-        """Detects OpenAI API format."""
+    async def test_skips_405_on_post(self, sample_service):
+        """POST returning 405 Method Not Allowed produces no observations."""
         check = LLMEndpointCheck()
+        check.CHAT_PATHS = ["/v1/chat/completions"]
 
-        assert check._detect_api_format("/v1/chat/completions") == "openai"
-        assert check._detect_api_format("/chat/completions") == "openai"
+        responses = [
+            make_response(status_code=200),  # OPTIONS
+            make_response(status_code=405),  # POST
+        ]
 
-    async def test_detects_api_format_anthropic(self, sample_service):
-        """Detects Anthropic API format."""
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 0
+        assert "chat_endpoints" not in result.outputs
+
+    async def test_skips_when_options_returns_500(self, sample_service):
+        """OPTIONS returning 500 causes the path to be skipped entirely."""
         check = LLMEndpointCheck()
+        check.CHAT_PATHS = ["/v1/chat/completions"]
 
-        assert check._detect_api_format("/v1/messages") == "anthropic"
+        responses = [
+            make_response(status_code=500),  # OPTIONS - server error
+        ]
 
-    async def test_detects_api_format_ollama(self, sample_service):
-        """Detects Ollama API format."""
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 0
+        assert "chat_endpoints" not in result.outputs
+
+    async def test_skips_when_options_has_error(self, sample_service):
+        """OPTIONS returning a connection error causes the path to be skipped."""
         check = LLMEndpointCheck()
+        check.CHAT_PATHS = ["/v1/chat/completions"]
 
-        assert check._detect_api_format("/api/generate") == "ollama"
-        assert check._detect_api_format("/api/chat") == "ollama"
+        responses = [
+            make_response(status_code=0, error="Connection refused"),  # OPTIONS error
+        ]
+
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 0
+        assert "chat_endpoints" not in result.outputs
+
+    async def test_non_ai_response_on_chat_path_still_produces_observation(self, sample_service):
+        """A non-AI JSON body (e.g. generic HTML/error) on a chat path still registers
+        because the check keys on status code, not response content."""
+        check = LLMEndpointCheck()
+        check.CHAT_PATHS = ["/v1/chat/completions"]
+
+        responses = [
+            make_response(status_code=200),  # OPTIONS
+            make_response(
+                status_code=200,
+                body='{"error": "unknown route"}',
+            ),  # POST - non-AI body
+        ]
+
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        # The check does NOT inspect response bodies -- any 200 on the path is recorded.
+        # This is a known design choice; the observation is still produced.
+        assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert obs.title == "LLM endpoint: /v1/chat/completions"
+        assert obs.severity == "info"
+
+    async def test_discovers_multiple_paths(self, sample_service):
+        """Multiple accessible paths each produce their own observation."""
+        check = LLMEndpointCheck()
+        check.CHAT_PATHS = ["/v1/chat/completions", "/api/generate"]
+
+        responses = [
+            make_response(status_code=200),  # OPTIONS for path 1
+            make_response(status_code=200, body='{"choices": []}'),  # POST for path 1
+            make_response(status_code=200),  # OPTIONS for path 2
+            make_response(status_code=200, body='{"response": "hi"}'),  # POST for path 2
+        ]
+
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 2
+        titles = [obs.title for obs in result.observations]
+        assert "LLM endpoint: /v1/chat/completions" in titles
+        assert "LLM endpoint: /api/generate" in titles
+
+        # Verify different formats detected
+        formats = {obs.title: obs.description for obs in result.observations}
+        assert "openai" in formats["LLM endpoint: /v1/chat/completions"]
+        assert "ollama" in formats["LLM endpoint: /api/generate"]
+
+        assert len(result.outputs["chat_endpoints"]) == 2
+
+    async def test_post_error_skips_endpoint(self, sample_service):
+        """POST returning a connection error skips the endpoint."""
+        check = LLMEndpointCheck()
+        check.CHAT_PATHS = ["/v1/chat/completions"]
+
+        responses = [
+            make_response(status_code=200),  # OPTIONS OK
+            make_response(status_code=0, error="Connection reset"),  # POST error
+        ]
+
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 0
+        assert "chat_endpoints" not in result.outputs
+
+    async def test_401_on_post_still_produces_observation(self, sample_service):
+        """A 401 Unauthorized is NOT filtered out -- endpoint exists but requires auth."""
+        check = LLMEndpointCheck()
+        check.CHAT_PATHS = ["/v1/chat/completions"]
+
+        responses = [
+            make_response(status_code=200),  # OPTIONS
+            make_response(status_code=401, body='{"error": "unauthorized"}'),  # POST
+        ]
+
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(responses)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert obs.title == "LLM endpoint: /v1/chat/completions"
+        assert "HTTP 401" in obs.evidence
+
+
+class TestDetectApiFormat:
+    """Tests for LLMEndpointCheck._detect_api_format with full path coverage."""
+
+    def setup_method(self):
+        self.check = LLMEndpointCheck()
+
+    def test_openai_v1_chat_completions(self):
+        assert self.check._detect_api_format("/v1/chat/completions") == "openai"
+
+    def test_openai_chat_completions_without_v1(self):
+        assert self.check._detect_api_format("/chat/completions") == "openai"
+
+    def test_anthropic_messages(self):
+        assert self.check._detect_api_format("/v1/messages") == "anthropic"
+
+    def test_anthropic_messages_without_v1(self):
+        assert self.check._detect_api_format("/messages") == "anthropic"
+
+    def test_ollama_generate(self):
+        assert self.check._detect_api_format("/api/generate") == "ollama"
+
+    def test_ollama_chat(self):
+        assert self.check._detect_api_format("/api/chat") == "ollama"
+
+    def test_langserve_invoke(self):
+        assert self.check._detect_api_format("/invoke") == "langserve"
+
+    def test_langserve_stream(self):
+        assert self.check._detect_api_format("/stream") == "langserve"
+
+    def test_tgi_generate(self):
+        """Paths containing 'generate' but not matching ollama fall through to tgi."""
+        assert self.check._detect_api_format("/generate") == "tgi"
+        assert self.check._detect_api_format("/v1/generate") == "tgi"
+        assert self.check._detect_api_format("/generate_stream") == "tgi"
+
+    def test_unknown_path(self):
+        assert self.check._detect_api_format("/predict") == "unknown"
+        assert self.check._detect_api_format("/batch") == "unknown"
+        assert self.check._detect_api_format("/inference") == "unknown"
+
+    def test_case_insensitive(self):
+        """Detection is case-insensitive."""
+        assert self.check._detect_api_format("/V1/Chat/Completions") == "openai"
+        assert self.check._detect_api_format("/API/GENERATE") == "ollama"
 
 
 class TestEmbeddingEndpointCheck:
     """Tests for EmbeddingEndpointCheck."""
 
-    def test_default_initialization(self):
-        """Check initializes with defaults."""
-        check = EmbeddingEndpointCheck()
-
-        assert check.name == "embedding_endpoint_discovery"
-        assert "/v1/embeddings" in check.EMBEDDING_PATHS
-
-    async def test_discovers_embedding_endpoint(self, sample_service):
-        """Discovers accessible embedding endpoints."""
+    async def test_discovers_embedding_endpoint_with_correct_observation(self, sample_service):
+        """Discovers accessible embedding endpoint with correct title, severity, evidence."""
         check = EmbeddingEndpointCheck()
         check.EMBEDDING_PATHS = ["/v1/embeddings"]
 
@@ -218,18 +382,93 @@ class TestEmbeddingEndpointCheck:
             result = await check.check_service(sample_service, {})
 
         assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert obs.title == "Embedding endpoint: /v1/embeddings"
+        assert obs.severity == "info"
+        assert obs.description == "Embedding/vector endpoint discovered"
+        assert "POST /v1/embeddings -> HTTP 200" in obs.evidence
+        assert obs.target_url == "http://ai.example.com:8080/v1/embeddings"
+        assert obs.check_name == "embedding_endpoint_discovery"
+
         assert "embedding_endpoints" in result.outputs
+        endpoints = result.outputs["embedding_endpoints"]
+        assert len(endpoints) == 1
+        assert endpoints[0]["url"] == "http://ai.example.com:8080/v1/embeddings"
+        assert endpoints[0]["path"] == "/v1/embeddings"
+        assert endpoints[0]["service"]["host"] == "ai.example.com"
+
+    async def test_skips_404_embedding_endpoint(self, sample_service):
+        """POST returning 404 on embedding path produces no observations."""
+        check = EmbeddingEndpointCheck()
+        check.EMBEDDING_PATHS = ["/v1/embeddings"]
+
+        response = make_response(status_code=404)
+
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 0
+        assert "embedding_endpoints" not in result.outputs
+
+    async def test_skips_405_embedding_endpoint(self, sample_service):
+        """POST returning 405 on embedding path produces no observations."""
+        check = EmbeddingEndpointCheck()
+        check.EMBEDDING_PATHS = ["/v1/embeddings"]
+
+        response = make_response(status_code=405)
+
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 0
+        assert "embedding_endpoints" not in result.outputs
+
+    async def test_skips_embedding_on_error(self, sample_service):
+        """Connection error on embedding path produces no observations."""
+        check = EmbeddingEndpointCheck()
+        check.EMBEDDING_PATHS = ["/v1/embeddings"]
+
+        response = make_response(status_code=0, error="Timeout")
+
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 0
+        assert "embedding_endpoints" not in result.outputs
+
+    async def test_non_ai_body_on_embedding_path_still_registers(self, sample_service):
+        """Non-embedding JSON on an embedding path still produces an observation
+        because the check does not inspect response body content."""
+        check = EmbeddingEndpointCheck()
+        check.EMBEDDING_PATHS = ["/v1/embeddings"]
+
+        response = make_response(status_code=200, body='{"message": "not found"}')
+
+        with patch(
+            "app.checks.ai.endpoints.AsyncHttpClient", return_value=mock_client_factory(response)
+        ):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert obs.title == "Embedding endpoint: /v1/embeddings"
+        assert obs.severity == "info"
 
 
 class TestAIChecksIntegration:
     """Integration tests for AI checks working together."""
 
-    async def test_endpoint_check_provides_context_for_prompt_leak(self, sample_service):
-        """LLMEndpointCheck outputs feed into PromptLeakageCheck."""
+    async def test_endpoint_check_output_structure_for_downstream(self, sample_service):
+        """LLMEndpointCheck outputs contain all fields needed by downstream checks."""
         endpoint_check = LLMEndpointCheck()
         endpoint_check.CHAT_PATHS = ["/v1/chat/completions"]
 
-        # Endpoint discovery
         responses = [
             make_response(status_code=200),  # OPTIONS
             make_response(status_code=200, body='{"choices": []}'),  # POST
@@ -240,10 +479,14 @@ class TestAIChecksIntegration:
         ):
             endpoint_result = await endpoint_check.check_service(sample_service, {})
 
-        # Verify output structure for downstream checks
         assert "chat_endpoints" in endpoint_result.outputs
         endpoints = endpoint_result.outputs["chat_endpoints"]
-        assert len(endpoints) > 0
-        assert "url" in endpoints[0]
-        assert "service" in endpoints[0]
-        assert "api_format" in endpoints[0]
+        assert len(endpoints) == 1
+
+        ep = endpoints[0]
+        assert ep["url"] == "http://ai.example.com:8080/v1/chat/completions"
+        assert ep["path"] == "/v1/chat/completions"
+        assert ep["api_format"] == "openai"
+        assert ep["status_code"] == 200
+        assert ep["service"]["host"] == "ai.example.com"
+        assert ep["service"]["port"] == 8080

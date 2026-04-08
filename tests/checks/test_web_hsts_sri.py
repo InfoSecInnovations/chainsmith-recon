@@ -204,8 +204,48 @@ class TestHSTSPreloadCheck:
         assert "max-age too short" in not_preloaded[0].description
 
     @pytest.mark.asyncio
+    async def test_preloaded_but_missing_include_subdomains(self, https_service):
+        """Preloaded domain whose HSTS header lacks includeSubDomains still
+        reports preloaded status. The observation title reflects preloaded state
+        and outputs capture the missing directive."""
+        api_response = json.dumps({"status": "preloaded", "domain": "target.com"})
+        hsts_header = "max-age=31536000; preload"  # no includeSubDomains
+
+        client = mock_client_multi(
+            response_map={
+                ("GET", "hstspreload.org"): resp(200, body=api_response),
+                ("GET", "target.com"): resp(
+                    200, headers={"strict-transport-security": hsts_header}
+                ),
+            },
+        )
+        with patch("app.checks.web.hsts_preload.AsyncHttpClient", return_value=client):
+            check = HSTSPreloadCheck()
+            result = await check.check_service(https_service, {})
+
+        assert result.success
+        info = result.outputs["hsts_preload_info"]
+        assert info["preloaded"] is True
+        assert info["has_include_subdomains"] is False
+        assert info["has_preload_directive"] is True
+        assert info["max_age"] == 31536000
+
+        # The "preloaded" observation fires (not "not-preloaded")
+        preloaded_obs = [f for f in result.observations if "HSTS preloaded" in f.title]
+        assert len(preloaded_obs) == 1
+        assert preloaded_obs[0].severity == "info"
+        assert "target.com" in preloaded_obs[0].title
+        assert "preloaded" in preloaded_obs[0].evidence
+
+        # No "not preloaded" observation should appear
+        not_preloaded = [f for f in result.observations if "not preloaded" in f.title]
+        assert len(not_preloaded) == 0
+
+    @pytest.mark.asyncio
     async def test_api_unreachable(self, https_service):
-        """Graceful handling when hstspreload.org API is down."""
+        """When hstspreload.org API is down, preload status is api_unreachable.
+        Because the header has preload directive and is_preloaded=False, the
+        'preload-pending' observation fires."""
         hsts_header = "max-age=31536000; includeSubDomains; preload"
         client = mock_client_multi(
             response_map={
@@ -220,6 +260,49 @@ class TestHSTSPreloadCheck:
             result = await check.check_service(https_service, {})
 
         assert result.success
+        # Verify output metadata
+        info = result.outputs["hsts_preload_info"]
+        assert info["preloaded"] is False
+        assert info["status"] == "api_unreachable"
+        assert info["has_preload_directive"] is True
+        assert info["has_include_subdomains"] is True
+        assert info["max_age"] == 31536000
+
+        # With preload directive + not preloaded -> "preload-pending" observation
+        pending_obs = [f for f in result.observations if "not yet preloaded" in f.title]
+        assert len(pending_obs) == 1
+        assert pending_obs[0].severity == "info"
+        assert "api_unreachable" in pending_obs[0].evidence
+        assert "target.com" in pending_obs[0].title
+
+    @pytest.mark.asyncio
+    async def test_api_unreachable_no_preload_directive(self, https_service):
+        """API unreachable with HSTS header that lacks preload directive falls
+        into the 'not-preloaded' branch with missing directives listed."""
+        hsts_header = "max-age=31536000; includeSubDomains"  # no preload
+        client = mock_client_multi(
+            response_map={
+                ("GET", "hstspreload.org"): resp(500, error="Server Error"),
+                ("GET", "target.com"): resp(
+                    200, headers={"strict-transport-security": hsts_header}
+                ),
+            },
+        )
+        with patch("app.checks.web.hsts_preload.AsyncHttpClient", return_value=client):
+            check = HSTSPreloadCheck()
+            result = await check.check_service(https_service, {})
+
+        assert result.success
+        info = result.outputs["hsts_preload_info"]
+        assert info["preloaded"] is False
+        assert info["status"] == "api_unreachable"
+        assert info["has_preload_directive"] is False
+
+        # Falls into "not-preloaded" branch
+        not_preloaded = [f for f in result.observations if "not preloaded" in f.title]
+        assert len(not_preloaded) == 1
+        assert not_preloaded[0].severity == "low"
+        assert "preload directive" in not_preloaded[0].description
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

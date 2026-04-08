@@ -311,6 +311,49 @@ class TestTimelineDataLogic:
         assert result["lanes"]["a.com"][1]["title"] == "C"
 
 
+class TestTimelineDataRendering:
+    """Behavioral tests that exercise data rendering logic end-to-end."""
+
+    def test_group_by_host_vs_suite_produces_different_lanes(self):
+        """Same observations grouped by host vs suite produce different lane structures."""
+        observations = [
+            {"host": "a.com", "suite": "web", "severity": "high", "title": "A"},
+            {"host": "b.com", "suite": "web", "severity": "low", "title": "B"},
+            {"host": "a.com", "suite": "network", "severity": "info", "title": "C"},
+        ]
+        by_host = TestTimelineDataLogic.build_timeline_data(observations, "host")
+        by_suite = TestTimelineDataLogic.build_timeline_data(observations, "suite")
+        # Host grouping: 2 lanes (a.com, b.com)
+        assert sorted(by_host["laneKeys"]) == ["a.com", "b.com"]
+        assert len(by_host["lanes"]["a.com"]) == 2
+        # Suite grouping: 2 lanes (web, network)
+        assert "web" in by_suite["laneKeys"]
+        assert "network" in by_suite["laneKeys"]
+        assert len(by_suite["lanes"]["web"]) == 2
+
+    def test_point_index_matches_observation_order(self):
+        """Each point's index reflects the original observation order for X-axis positioning."""
+        observations = [
+            {"host": "h.com", "suite": "web", "severity": "high", "title": "First"},
+            {"host": "h.com", "suite": "web", "severity": "low", "title": "Second"},
+            {"host": "h.com", "suite": "web", "severity": "info", "title": "Third"},
+        ]
+        result = TestTimelineDataLogic.build_timeline_data(observations, "host")
+        titles_by_index = {p["index"]: p["title"] for p in result["points"]}
+        assert titles_by_index == {0: "First", 1: "Second", 2: "Third"}
+
+    def test_mixed_host_normalization_collapses_lanes(self):
+        """URL and port-variant hosts collapse into one lane for clean rendering."""
+        observations = [
+            {"host": "http://api.example.com/a", "suite": "web", "severity": "high", "title": "A"},
+            {"host": "api.example.com:8080", "suite": "web", "severity": "low", "title": "B"},
+            {"host": "api.example.com", "suite": "web", "severity": "info", "title": "C"},
+        ]
+        result = TestTimelineDataLogic.build_timeline_data(observations, "host")
+        assert result["laneKeys"] == ["api.example.com"]
+        assert len(result["lanes"]["api.example.com"]) == 3
+
+
 class TestTimelineCSS:
     """Verify timeline CSS classes exist."""
 

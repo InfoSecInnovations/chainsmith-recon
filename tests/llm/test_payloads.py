@@ -22,6 +22,41 @@ from app.lib.payloads import (
 pytestmark = pytest.mark.unit
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Expected counts — update these when payloads are added/removed
+# ═══════════════════════════════════════════════════════════════════════════════
+
+EXPECTED_TOTAL_PAYLOADS = 50
+EXPECTED_CATEGORY_COUNT = 9
+EXPECTED_CATEGORIES = [
+    "goal_injection",
+    "indirect_injection",
+    "jailbreak",
+    "information_extraction",
+    "delimiter_escape",
+    "authority_bypass",
+    "context_manipulation",
+    "mcp_specific",
+    "cache_specific",
+]
+EXPECTED_COUNTS_BY_CATEGORY = {
+    "goal_injection": 8,
+    "indirect_injection": 8,
+    "jailbreak": 6,
+    "information_extraction": 6,
+    "delimiter_escape": 5,
+    "authority_bypass": 5,
+    "context_manipulation": 4,
+    "mcp_specific": 4,
+    "cache_specific": 4,
+}
+EXPECTED_CHECK_TYPE_COUNTS = {
+    "agent": 20,
+    "rag": 17,
+    "mcp": 15,
+    "cag": 8,
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PayloadLibrary Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -41,19 +76,12 @@ class TestPayloadLibrary:
 
     def test_has_expected_categories(self, library):
         """Test library has expected payload categories."""
-        expected = [
-            "goal_injection",
-            "indirect_injection",
-            "jailbreak",
-            "information_extraction",
-            "delimiter_escape",
-            "authority_bypass",
-            "context_manipulation",
-            "mcp_specific",
-            "cache_specific",
-        ]
-        for cat in expected:
+        for cat in EXPECTED_CATEGORIES:
             assert cat in library.categories, f"Missing category: {cat}"
+
+    def test_category_count(self, library):
+        """Test library has the exact expected number of categories."""
+        assert len(library.categories) == EXPECTED_CATEGORY_COUNT
 
     def test_get_category(self, library):
         """Test getting payloads by category."""
@@ -98,11 +126,19 @@ class TestPayloadLibrary:
         assert len(high_payloads) > 0
         assert all(p.severity == "high" for p in high_payloads)
 
-    def test_get_all(self, library):
-        """Test getting all payloads."""
+    def test_get_all_exact_count(self, library):
+        """Test getting all payloads returns the exact expected count."""
         all_payloads = library.get_all()
-        assert len(all_payloads) >= 40  # Should have at least 40 payloads
+        assert len(all_payloads) == EXPECTED_TOTAL_PAYLOADS
         assert all(isinstance(p, Payload) for p in all_payloads)
+
+    def test_per_category_counts(self, library):
+        """Test each category has the exact expected number of payloads."""
+        for category, expected_count in EXPECTED_COUNTS_BY_CATEGORY.items():
+            actual = library.get_category(category)
+            assert len(actual) == expected_count, (
+                f"Category '{category}': expected {expected_count}, got {len(actual)}"
+            )
 
     def test_search_by_name(self, library):
         """Test searching by payload name."""
@@ -125,8 +161,7 @@ class TestPayloadLibrary:
     def test_get_for_check_agent(self, library):
         """Test getting payloads for agent checks."""
         payloads = library.get_for_check("agent")
-        assert len(payloads) > 10
-        # Should include goal injection, jailbreak, and info extraction
+        assert len(payloads) == EXPECTED_CHECK_TYPE_COUNTS["agent"]
         categories = {p.category for p in payloads}
         assert "goal_injection" in categories
         assert "jailbreak" in categories
@@ -134,8 +169,7 @@ class TestPayloadLibrary:
     def test_get_for_check_rag(self, library):
         """Test getting payloads for RAG checks."""
         payloads = library.get_for_check("rag")
-        assert len(payloads) > 10
-        # Should include indirect injection and delimiter escape
+        assert len(payloads) == EXPECTED_CHECK_TYPE_COUNTS["rag"]
         categories = {p.category for p in payloads}
         assert "indirect_injection" in categories
         assert "delimiter_escape" in categories
@@ -143,14 +177,14 @@ class TestPayloadLibrary:
     def test_get_for_check_mcp(self, library):
         """Test getting payloads for MCP checks."""
         payloads = library.get_for_check("mcp")
-        assert len(payloads) > 5
+        assert len(payloads) == EXPECTED_CHECK_TYPE_COUNTS["mcp"]
         categories = {p.category for p in payloads}
         assert "mcp_specific" in categories
 
     def test_get_for_check_cag(self, library):
         """Test getting payloads for CAG checks."""
         payloads = library.get_for_check("cag")
-        assert len(payloads) > 3
+        assert len(payloads) == EXPECTED_CHECK_TYPE_COUNTS["cag"]
         categories = {p.category for p in payloads}
         assert "cache_specific" in categories
 
@@ -163,19 +197,14 @@ class TestPayloadLibrary:
         """Test count by category."""
         counts = library.count()
         assert isinstance(counts, dict)
-        assert len(counts) > 0
-        assert all(isinstance(v, int) for v in counts.values())
-        assert all(v > 0 for v in counts.values())
+        assert counts == EXPECTED_COUNTS_BY_CATEGORY
 
     def test_stats(self, library):
         """Test statistics generation."""
         stats = library.stats()
 
-        assert "total_payloads" in stats
-        assert stats["total_payloads"] >= 40
-
-        assert "categories" in stats
-        assert stats["categories"] >= 8
+        assert stats["total_payloads"] == EXPECTED_TOTAL_PAYLOADS
+        assert stats["categories"] == EXPECTED_CATEGORY_COUNT
 
         assert "by_category" in stats
         assert "by_severity" in stats

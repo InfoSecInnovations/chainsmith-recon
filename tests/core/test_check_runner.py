@@ -203,6 +203,31 @@ class TestCheckRegistration:
         assert check.is_in_scope("http://example.com") is True
         assert check.is_in_scope("http://other.com") is False
 
+    def test_register_check_missing_name(self):
+        """Registering a check with missing/default name still works but is identifiable."""
+        runner = CheckRunner()
+
+        class NoNameCheck(BaseCheck):
+            # name left as default "base_check"
+            description = "Missing a proper name"
+            conditions = []
+
+            async def run(self, context: dict) -> CheckResult:
+                return CheckResult(success=True)
+
+        check = NoNameCheck()
+        runner.register_check(check)
+
+        assert len(runner.checks) == 1
+        assert runner.checks[0].name == "base_check"
+
+    def test_register_non_check_object_raises(self):
+        """Registering a non-BaseCheck object raises an error."""
+        runner = CheckRunner()
+
+        with pytest.raises(AttributeError):
+            runner.register_check("not_a_check")
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Scope Checking Tests

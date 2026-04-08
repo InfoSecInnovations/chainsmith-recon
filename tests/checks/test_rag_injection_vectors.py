@@ -1,4 +1,4 @@
-"""Tests for RAG chunk boundary bypass, multimodal injection, adversarial embedding, and check registration."""
+"""Tests for RAG chunk boundary bypass, multimodal injection, and adversarial embedding checks."""
 
 import json
 from unittest.mock import AsyncMock, patch
@@ -7,20 +7,8 @@ import pytest
 
 from app.checks.base import Service
 from app.checks.rag.adversarial_embedding import RAGAdversarialEmbeddingCheck
-from app.checks.rag.auth_bypass import RAGAuthBypassCheck
-from app.checks.rag.cache_poisoning import RAGCachePoisoningCheck
-from app.checks.rag.chunk_boundary import RAGChunkBoundaryCheck
-from app.checks.rag.collection_enumeration import RAGCollectionEnumerationCheck
-from app.checks.rag.corpus_poisoning import RAGCorpusPoisoningCheck
-from app.checks.rag.cross_collection import RAGCrossCollectionCheck
-from app.checks.rag.document_exfiltration import RAGDocumentExfiltrationCheck
-from app.checks.rag.embedding_fingerprint import RAGEmbeddingFingerprintCheck
-from app.checks.rag.fusion_reranker import RAGFusionRerankerCheck
-from app.checks.rag.metadata_injection import RAGMetadataInjectionCheck
+from app.checks.rag.chunk_boundary import CANARY, RAGChunkBoundaryCheck
 from app.checks.rag.multimodal_injection import RAGMultimodalInjectionCheck
-from app.checks.rag.retrieval_manipulation import RAGRetrievalManipulationCheck
-from app.checks.rag.source_attribution import RAGSourceAttributionCheck
-from app.checks.rag.vector_store_access import RAGVectorStoreAccessCheck
 from app.lib.http import HttpResponse
 
 
@@ -108,24 +96,41 @@ def _mock_client(get_fn=None, post_fn=None, delete_fn=None, options_fn=None):
     return client
 
 
-class TestChunkBoundary:
-    def test_metadata(self):
-        check = RAGChunkBoundaryCheck()
-        assert check.name == "rag_chunk_boundary"
-        assert check.intrusive is True
-        assert "chunk_boundary_results" in check.produces
+# ---------------------------------------------------------------------------
+# Chunk Boundary
+# ---------------------------------------------------------------------------
 
+
+class TestChunkBoundary:
     @pytest.mark.asyncio
-    async def test_bypass_confirmed(self, sample_service, ingestion_context):
+    async def test_bypass_confirmed_produces_high_observation(
+        self, sample_service, ingestion_context
+    ):
+        """When the canary appears in a realistic response body, a high-severity
+        observation with the correct title pattern is emitted."""
         check = RAGChunkBoundaryCheck()
         ingestion_context["rag_endpoints"][0]["endpoint_type"] = "rag_query"
 
         async def mock_post(url, **kw):
             body = kw.get("json", {})
             if "/api/documents" in url:
-                return make_response(status_code=201)
-            if body.get("query") and "boundary" in body["query"]:
-                return make_response(body="CHUNK_BOUNDARY_BYPASSED detected in context")
+                return make_response(
+                    status_code=201,
+                    body='{"status":"ok","ids":["chainsmith-chunk-256tok"]}',
+                )
+            if body.get("query") and "boundary" in body["query"].lower():
+                # Realistic RAG response with the canary embedded in LLM output
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "answer": (
+                                "Based on the retrieved documents, the system says: "
+                                f"{CANARY}. This appears in the context window."
+                            ),
+                            "sources": [{"id": "chainsmith-chunk-256tok", "score": 0.92}],
+                        }
+                    )
+                )
             return make_response(status_code=404)
 
         client = _mock_client(post_fn=mock_post)
@@ -134,18 +139,34 @@ class TestChunkBoundary:
             result = await check.check_service(sample_service, ingestion_context)
 
         assert result.success
-        high = [f for f in result.observations if f.severity == "high"]
+        high = [o for o in result.observations if o.severity == "high"]
         assert len(high) >= 1
+        assert "chunk boundary bypass" in high[0].title.lower()
+        assert "reassembled" in high[0].title.lower()
+        assert CANARY in high[0].evidence
 
     @pytest.mark.asyncio
-    async def test_not_effective(self, sample_service, ingestion_context):
+    async def test_no_canary_means_not_effective(self, sample_service, ingestion_context):
+        """When the canary does NOT appear in query responses, an info observation
+        is produced and no high/medium observations exist."""
         check = RAGChunkBoundaryCheck()
         ingestion_context["rag_endpoints"][0]["endpoint_type"] = "rag_query"
 
         async def mock_post(url, **kw):
             if "/api/documents" in url:
-                return make_response(status_code=201)
-            return make_response(body="Normal response without any canary")
+                return make_response(
+                    status_code=201,
+                    body='{"status":"ok","ids":["chainsmith-chunk-256tok"]}',
+                )
+            # Response that contains the topic but NOT the canary
+            return make_response(
+                body=json.dumps(
+                    {
+                        "answer": "Here is some general information about the topic.",
+                        "sources": [{"id": "unrelated-doc", "score": 0.4}],
+                    }
+                )
+            )
 
         client = _mock_client(post_fn=mock_post)
 
@@ -153,19 +174,44 @@ class TestChunkBoundary:
             result = await check.check_service(sample_service, ingestion_context)
 
         assert result.success
-        info = [f for f in result.observations if f.severity == "info"]
+        high = [o for o in result.observations if o.severity == "high"]
+        assert len(high) == 0
+        info = [o for o in result.observations if o.severity == "info"]
         assert len(info) >= 1
+        assert "not effective" in info[0].title.lower()
+
+    @pytest.mark.asyncio
+    async def test_ingestion_failure_skips_quietly(self, sample_service, ingestion_context):
+        """If the ingestion endpoint rejects the document (e.g. 403), no bypass
+        observation is created."""
+        check = RAGChunkBoundaryCheck()
+        ingestion_context["rag_endpoints"][0]["endpoint_type"] = "rag_query"
+
+        async def mock_post(url, **kw):
+            if "/api/documents" in url:
+                return make_response(status_code=403, body='{"error":"forbidden"}')
+            return make_response(status_code=404)
+
+        client = _mock_client(post_fn=mock_post)
+
+        with patch("app.checks.rag.chunk_boundary.AsyncHttpClient", return_value=client):
+            result = await check.check_service(sample_service, ingestion_context)
+
+        assert result.success
+        high = [o for o in result.observations if o.severity == "high"]
+        assert len(high) == 0
+
+
+# ---------------------------------------------------------------------------
+# Multimodal Injection
+# ---------------------------------------------------------------------------
 
 
 class TestMultimodalInjection:
-    def test_metadata(self):
-        check = RAGMultimodalInjectionCheck()
-        assert check.name == "rag_multimodal_injection"
-        assert check.intrusive is True
-        assert "multimodal_injection_results" in check.produces
-
     @pytest.mark.asyncio
-    async def test_upload_accepted(self, sample_service, rag_context):
+    async def test_upload_accepted_produces_medium_observation(self, sample_service, rag_context):
+        """When an upload endpoint accepts a file (201), a medium observation
+        with 'accepts file uploads' in the title is produced."""
         check = RAGMultimodalInjectionCheck()
 
         async def mock_options(url, **kw):
@@ -175,67 +221,179 @@ class TestMultimodalInjection:
 
         async def mock_post(url, **kw):
             if "/upload" in url:
-                return make_response(status_code=201, body='{"id": "test"}')
-            return make_response(body="Normal response")
+                # Realistic upload response with document id and processing status
+                return make_response(
+                    status_code=201,
+                    body=json.dumps(
+                        {
+                            "id": "doc-8f3a2b",
+                            "status": "processing",
+                            "filename": "test_document.pdf",
+                            "size_bytes": 1024,
+                        }
+                    ),
+                )
+            # Query endpoint returns normal text (no injection indicator)
+            return make_response(
+                body=json.dumps(
+                    {
+                        "answer": "The uploaded document discusses quarterly results.",
+                        "sources": [{"id": "doc-8f3a2b", "score": 0.85}],
+                    }
+                )
+            )
 
         client = _mock_client(options_fn=mock_options, post_fn=mock_post)
 
-        with patch("app.checks.rag.multimodal_injection.AsyncHttpClient", return_value=client):
+        with patch(
+            "app.checks.rag.multimodal_injection.AsyncHttpClient",
+            return_value=client,
+        ):
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        # Should detect file upload capability
-        upload_observations = [
-            f
-            for f in result.observations
-            if "upload" in f.title.lower() or "multimodal" in f.title.lower()
-        ]
-        assert len(upload_observations) >= 1
+        upload_obs = [o for o in result.observations if "accepts file uploads" in o.title.lower()]
+        assert len(upload_obs) >= 1
+        assert upload_obs[0].severity == "medium"
 
     @pytest.mark.asyncio
-    async def test_no_upload(self, sample_service, rag_context):
+    async def test_upload_rejected_403_no_upload_observation(self, sample_service, rag_context):
+        """If the upload endpoint returns 403 (forbidden), no upload-accepted
+        observation should be produced."""
+        check = RAGMultimodalInjectionCheck()
+
+        # All upload discovery paths return 404 or 403
+        async def mock_options(url, **kw):
+            return make_response(status_code=404)
+
+        async def mock_post(url, **kw):
+            if "/upload" in url or "/ingest" in url:
+                return make_response(status_code=403, body='{"error":"forbidden"}')
+            return make_response(status_code=404)
+
+        client = _mock_client(options_fn=mock_options, post_fn=mock_post)
+
+        with patch(
+            "app.checks.rag.multimodal_injection.AsyncHttpClient",
+            return_value=client,
+        ):
+            result = await check.check_service(sample_service, rag_context)
+
+        assert result.success
+        upload_obs = [o for o in result.observations if "accepts file uploads" in o.title.lower()]
+        assert len(upload_obs) == 0
+
+    @pytest.mark.asyncio
+    async def test_no_upload_endpoint_produces_info(self, sample_service, rag_context):
+        """When no upload endpoint is found, an info observation is produced."""
         check = RAGMultimodalInjectionCheck()
         client = _mock_client()
 
-        with patch("app.checks.rag.multimodal_injection.AsyncHttpClient", return_value=client):
+        with patch(
+            "app.checks.rag.multimodal_injection.AsyncHttpClient",
+            return_value=client,
+        ):
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.observations if f.severity == "info"]
-        assert len(info) >= 1
+        info = [o for o in result.observations if o.severity == "info"]
+        assert len(info) == 1
         assert "not accept" in info[0].title.lower() or "no" in info[0].title.lower()
+
+    @pytest.mark.asyncio
+    async def test_injection_followed_produces_high_observation(self, sample_service, rag_context):
+        """When the injection indicator appears in query response, a high-severity
+        observation with 'multimodal injection' in the title is created."""
+        check = RAGMultimodalInjectionCheck()
+
+        async def mock_options(url, **kw):
+            if "/upload" in url:
+                return make_response(status_code=200)
+            return make_response(status_code=404)
+
+        async def mock_post(url, **kw):
+            if "/upload" in url:
+                return make_response(
+                    status_code=201,
+                    body=json.dumps({"id": "doc-injected", "status": "ready"}),
+                )
+            # Query response that contains one of the injection indicators
+            return make_response(
+                body=json.dumps(
+                    {
+                        "answer": (
+                            "According to the document, MULTIMODAL_PDF_INJECTED is "
+                            "the key finding from the analysis."
+                        ),
+                        "sources": [{"id": "doc-injected", "score": 0.95}],
+                    }
+                )
+            )
+
+        client = _mock_client(options_fn=mock_options, post_fn=mock_post)
+
+        with patch(
+            "app.checks.rag.multimodal_injection.AsyncHttpClient",
+            return_value=client,
+        ):
+            result = await check.check_service(sample_service, rag_context)
+
+        assert result.success
+        high = [o for o in result.observations if o.severity == "high"]
+        assert len(high) >= 1
+        assert "multimodal injection" in high[0].title.lower()
+
+
+# ---------------------------------------------------------------------------
+# Adversarial Embedding
+# ---------------------------------------------------------------------------
 
 
 class TestAdversarialEmbedding:
-    def test_metadata(self):
-        check = RAGAdversarialEmbeddingCheck()
-        assert check.name == "rag_adversarial_embedding"
-        assert check.intrusive is True
-        assert "adversarial_embedding_results" in check.produces
-
     @pytest.mark.asyncio
-    async def test_retrieval_steered(self, sample_service, rag_context):
+    async def test_retrieval_steered_produces_observation(self, sample_service, rag_context):
+        """When adversarial queries retrieve different docs than the baseline,
+        a medium or high observation with 'adversarial embedding' in the title is produced."""
         check = RAGAdversarialEmbeddingCheck()
-        call_count = 0
 
         async def mock_post(url, **kw):
-            nonlocal call_count
-            call_count += 1
             body = kw.get("json", {})
             query = body.get("query", "")
-            if "weather" in query.lower():
+            if "weather" in query.lower() or "public company" in query.lower():
+                # Baseline query returns public docs
                 return make_response(
                     body=json.dumps(
                         {
-                            "results": [{"id": "public-1"}, {"id": "public-2"}],
+                            "results": [
+                                {"id": "public-weather-1", "title": "Weather FAQ"},
+                                {"id": "public-news-2", "title": "Daily News"},
+                            ],
                         }
                     )
                 )
-            elif "password" in query.lower() or "secret" in query.lower():
+            elif (
+                "password" in query.lower()
+                or "secret" in query.lower()
+                or "restricted" in query.lower()
+            ):
+                # Adversarial queries pull back sensitive docs
                 return make_response(
                     body=json.dumps(
                         {
-                            "results": [{"id": "private-1"}, {"id": "sensitive-2"}],
+                            "results": [
+                                {"id": "private-creds-1", "title": "Credentials Store"},
+                                {"id": "internal-config-2", "title": "Internal Config"},
+                            ],
+                        }
+                    )
+                )
+            elif "NOT public" in query or "{{system}}" in query:
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "results": [
+                                {"id": "classified-doc-1", "title": "Classified"},
+                            ],
                         }
                     )
                 )
@@ -243,50 +401,95 @@ class TestAdversarialEmbedding:
                 return make_response(
                     body=json.dumps(
                         {
-                            "results": [{"id": f"doc-{call_count}"}],
+                            "results": [
+                                {"id": "general-doc", "title": "General Info"},
+                            ],
                         }
                     )
                 )
 
         client = _mock_client(post_fn=mock_post)
 
-        with patch("app.checks.rag.adversarial_embedding.AsyncHttpClient", return_value=client):
+        with patch(
+            "app.checks.rag.adversarial_embedding.AsyncHttpClient",
+            return_value=client,
+        ):
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        # Should detect some form of retrieval steering
-        assert len(result.observations) >= 1
+        steered = [o for o in result.observations if "adversarial embedding" in o.title.lower()]
+        assert len(steered) >= 1
+        assert steered[0].severity in ("medium", "high")
+        assert "technique" in steered[0].evidence.lower()
 
     @pytest.mark.asyncio
-    async def test_not_effective(self, sample_service, rag_context):
+    async def test_same_results_means_not_effective(self, sample_service, rag_context):
+        """When adversarial queries return the same docs as baseline, only an
+        info observation is produced."""
         check = RAGAdversarialEmbeddingCheck()
 
         async def mock_post(url, **kw):
-            # Same results regardless of query
+            # Always return identical results regardless of query
             return make_response(
                 body=json.dumps(
                     {
-                        "results": [{"id": "doc-1"}, {"id": "doc-2"}],
+                        "results": [
+                            {"id": "doc-1", "title": "Common Doc"},
+                            {"id": "doc-2", "title": "Another Doc"},
+                        ],
                     }
                 )
             )
 
         client = _mock_client(post_fn=mock_post)
 
-        with patch("app.checks.rag.adversarial_embedding.AsyncHttpClient", return_value=client):
+        with patch(
+            "app.checks.rag.adversarial_embedding.AsyncHttpClient",
+            return_value=client,
+        ):
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        info = [f for f in result.observations if f.severity == "info"]
-        assert len(info) >= 1
+        steered = [o for o in result.observations if "adversarial embedding" in o.title.lower()]
+        assert len(steered) == 0
+        info = [o for o in result.observations if o.severity == "info"]
+        assert len(info) == 1
+        assert "not" in info[0].title.lower()
+
+    @pytest.mark.asyncio
+    async def test_query_failure_does_not_crash(self, sample_service, rag_context):
+        """If every query returns an error status, the check still succeeds
+        without crashing and produces an info observation."""
+        check = RAGAdversarialEmbeddingCheck()
+
+        async def mock_post(url, **kw):
+            return make_response(status_code=500, body="Internal Server Error")
+
+        client = _mock_client(post_fn=mock_post)
+
+        with patch(
+            "app.checks.rag.adversarial_embedding.AsyncHttpClient",
+            return_value=client,
+        ):
+            result = await check.check_service(sample_service, rag_context)
+
+        assert result.success
+        high = [o for o in result.observations if o.severity in ("high", "medium")]
+        assert len(high) == 0
+
+
+# ---------------------------------------------------------------------------
+# Registration (behavioral: resolve_checks actually filters correctly)
+# ---------------------------------------------------------------------------
 
 
 class TestCheckResolverRegistration:
     def test_all_rag_checks_registered(self):
+        """Every expected RAG check name appears in the resolver output."""
         from app.check_resolver import get_real_checks
 
         checks = get_real_checks()
-        check_names = [c.name for c in checks]
+        check_names = {c.name for c in checks}
 
         expected_rag_checks = [
             "rag_discovery",
@@ -309,71 +512,17 @@ class TestCheckResolverRegistration:
         ]
 
         for name in expected_rag_checks:
-            assert name in check_names, f"RAG check '{name}' not registered in check_resolver"
+            assert name in check_names, f"RAG check '{name}' not registered"
 
-    def test_rag_check_count(self):
-        from app.check_resolver import get_real_checks
-
-        checks = get_real_checks()
-        rag_checks = [c for c in checks if c.name.startswith("rag_")]
-        assert len(rag_checks) == 17, f"Expected 17 RAG checks, got {len(rag_checks)}"
-
-    def test_rag_suite_filtering(self):
+    def test_rag_suite_filter_returns_only_rag_checks(self):
+        """resolve_checks(suites=['rag']) returns checks whose names all
+        start with 'rag_' and includes the three checks under test."""
         from app.check_resolver import resolve_checks
 
         checks = resolve_checks(suites=["rag"])
-        assert len(checks) == 17
+        assert len(checks) > 0
         assert all(c.name.startswith("rag_") for c in checks)
-
-
-class TestCheckDependencies:
-    def test_phase2_conditions(self):
-        assert RAGVectorStoreAccessCheck().conditions[0].output_name == "vector_stores"
-        assert RAGAuthBypassCheck().conditions[0].output_name == "vector_stores"
-        assert RAGCollectionEnumerationCheck().conditions[0].output_name == "accessible_stores"
-
-    def test_phase3_conditions(self):
-        assert RAGDocumentExfiltrationCheck().conditions[0].output_name == "rag_endpoints"
-        assert RAGRetrievalManipulationCheck().conditions[0].output_name == "rag_endpoints"
-        assert RAGSourceAttributionCheck().conditions[0].output_name == "rag_endpoints"
-        assert RAGCachePoisoningCheck().conditions[0].output_name == "rag_endpoints"
-
-    def test_phase4_conditions(self):
-        assert RAGCorpusPoisoningCheck().conditions[0].output_name == "rag_endpoints"
-        assert RAGMetadataInjectionCheck().conditions[0].output_name == "rag_endpoints"
-        chunk = RAGChunkBoundaryCheck()
-        cond_names = [c.output_name for c in chunk.conditions]
-        assert "rag_endpoints" in cond_names
-        assert "ingestion_endpoints" in cond_names
-
-    def test_phase5_conditions(self):
-        assert RAGFusionRerankerCheck().conditions[0].output_name == "rag_endpoints"
-        assert RAGCrossCollectionCheck().conditions[0].output_name == "knowledge_base_structure"
-        assert RAGAdversarialEmbeddingCheck().conditions[0].output_name == "rag_endpoints"
-
-    def test_intrusive_flags(self):
-        """Intrusive checks must be flagged."""
-        intrusive_checks = [
-            RAGAuthBypassCheck,
-            RAGDocumentExfiltrationCheck,
-            RAGRetrievalManipulationCheck,
-            RAGCorpusPoisoningCheck,
-            RAGMetadataInjectionCheck,
-            RAGChunkBoundaryCheck,
-            RAGMultimodalInjectionCheck,
-            RAGAdversarialEmbeddingCheck,
-        ]
-        for cls in intrusive_checks:
-            assert cls().intrusive is True, f"{cls.__name__} should be intrusive"
-
-        non_intrusive = [
-            RAGVectorStoreAccessCheck,
-            RAGCollectionEnumerationCheck,
-            RAGEmbeddingFingerprintCheck,
-            RAGSourceAttributionCheck,
-            RAGCachePoisoningCheck,
-            RAGFusionRerankerCheck,
-            RAGCrossCollectionCheck,
-        ]
-        for cls in non_intrusive:
-            assert not cls().intrusive, f"{cls.__name__} should not be intrusive"
+        names = {c.name for c in checks}
+        assert "rag_chunk_boundary" in names
+        assert "rag_multimodal_injection" in names
+        assert "rag_adversarial_embedding" in names

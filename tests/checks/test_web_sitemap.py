@@ -131,7 +131,11 @@ class TestSitemapCheck:
         # Should find 6 paths
         info_observations = [f for f in result.observations if "sitemap-discovered" in (f.id or "")]
         assert len(info_observations) == 1
-        assert "6" in info_observations[0].title
+        assert "6 URLs" in info_observations[0].title
+        assert info_observations[0].severity == "info"
+        # Evidence contains sample paths from the sitemap
+        assert "/page1" in info_observations[0].evidence
+        assert "/admin/dashboard" in info_observations[0].evidence
 
     @pytest.mark.asyncio
     async def test_sitemap_default_location(self, service):
@@ -148,7 +152,10 @@ class TestSitemapCheck:
             result = await check.check_service(service, context)
 
         assert result.success
-        assert any("sitemap-discovered" in (f.id or "") for f in result.observations)
+        discovered = [f for f in result.observations if "sitemap-discovered" in (f.id or "")]
+        assert len(discovered) == 1
+        assert "6" in discovered[0].title
+        assert "/page1" in discovered[0].evidence
 
     @pytest.mark.asyncio
     async def test_sitemap_not_found(self, service):
@@ -169,7 +176,7 @@ class TestSitemapCheck:
 
     @pytest.mark.asyncio
     async def test_sensitive_paths_detected(self, service):
-        """Sensitive paths (admin, internal) are flagged."""
+        """Sensitive paths (admin, internal) are flagged with count and evidence."""
         check = SitemapCheck()
         context = {}
 
@@ -183,6 +190,12 @@ class TestSitemapCheck:
 
         sensitive = [f for f in result.observations if "sensitive-paths" in (f.id or "")]
         assert len(sensitive) == 1
+        # SITEMAP_XML has /admin/dashboard, /api/v1/users, /api/v2/users, /internal/tools
+        assert sensitive[0].severity == "medium"  # /internal/ triggers medium
+        assert "/admin/dashboard" in sensitive[0].evidence
+        assert "/internal/tools" in sensitive[0].evidence
+        # The title shows the count of sensitive paths
+        assert "4" in sensitive[0].title
 
     @pytest.mark.asyncio
     async def test_api_versioning_detected(self, service):
@@ -222,7 +235,16 @@ class TestSitemapCheck:
             result = await check.check_service(service, context)
 
         assert result.success
-        assert any("sitemap-discovered" in (f.id or "") for f in result.observations)
+        discovered = [f for f in result.observations if "sitemap-discovered" in (f.id or "")]
+        assert len(discovered) == 1
+        # SUB_SITEMAP_XML has 2 paths (/about, /staging/test); fetched for both
+        # sub-sitemaps = 4 total, then deduplicated to 2 unique paths
+        assert "2 unique paths" in discovered[0].title
+        # Evidence should contain the sample paths
+        assert "/about" in discovered[0].evidence
+        assert "/staging/test" in discovered[0].evidence
+        # Outputs should reflect the deduplicated paths
+        assert len(result.outputs["sitemap_paths"]["all_paths"]) == 2
 
     @pytest.mark.asyncio
     async def test_outputs_sitemap_paths(self, service):

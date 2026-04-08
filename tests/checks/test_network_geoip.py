@@ -1,8 +1,81 @@
-"""Tests for GeoIpCheck — GeoIP classification and observations."""
+"""Tests for GeoIpCheck -- GeoIP classification and observations."""
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.checks.network.geoip import HOSTING_ASNS, RESIDENTIAL_ASNS, GeoIpCheck
+
+# ---------------------------------------------------------------------------
+# Mock helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_city_response(
+    country="United States",
+    iso_code="US",
+    region="Virginia",
+    city="Ashburn",
+    lat=39.0438,
+    lon=-77.4874,
+):
+    """Build a mock geoip2 city response."""
+    resp = MagicMock()
+    resp.country.name = country
+    resp.country.iso_code = iso_code
+    resp.subdivisions.most_specific.name = region
+    resp.subdivisions.__bool__ = lambda self: True
+    resp.city.name = city
+    resp.location.latitude = lat
+    resp.location.longitude = lon
+    return resp
+
+
+def _make_asn_response(asn_number, org_name):
+    """Build a mock geoip2 ASN response."""
+    resp = MagicMock()
+    resp.autonomous_system_number = asn_number
+    resp.autonomous_system_organization = org_name
+    return resp
+
+
+def _setup_readers(mock_reader_cls, city_resp, asn_resp, city_available=True, asn_available=True):
+    """Wire a patched geoip2.database.Reader to return pre-built city/asn readers.
+
+    Returns (city_reader, asn_reader) so tests can make per-IP assertions on
+    the reader objects if needed.
+    """
+    city_reader = MagicMock()
+    asn_reader = MagicMock()
+
+    if city_resp is not None:
+        city_reader.city.return_value = city_resp
+    if asn_resp is not None:
+        asn_reader.asn.return_value = asn_resp
+
+    if city_available and asn_available:
+        mock_reader_cls.side_effect = [city_reader, asn_reader]
+    elif asn_available:
+        mock_reader_cls.return_value = asn_reader
+    elif city_available:
+        mock_reader_cls.return_value = city_reader
+
+    return city_reader, asn_reader
+
+
+def _find_db_stub(filename):
+    """Stub for _find_db_file that returns a fake path for any filename."""
+    return f"/fake/{filename}"
+
+
+def _find_db_asn_only(filename):
+    """Stub for _find_db_file that only finds the ASN database."""
+    return f"/fake/{filename}" if "ASN" in filename else None
+
+
+# ---------------------------------------------------------------------------
+# Init / metadata
+# ---------------------------------------------------------------------------
 
 
 class TestGeoIpCheckInit:
@@ -14,198 +87,246 @@ class TestGeoIpCheckInit:
         assert "geoip_data" in check.produces
         assert len(check.conditions) == 1  # depends on dns_records
 
-    def test_hosting_asn_list(self):
-        """Hosting ASN list contains major providers."""
-        assert 16509 in HOSTING_ASNS  # AWS
-        assert 13335 in HOSTING_ASNS  # Cloudflare
-        assert 15169 in HOSTING_ASNS  # Google Cloud
+    def test_hosting_asn_list_contains_major_providers(self):
+        assert HOSTING_ASNS[16509] == "Amazon AWS"
+        assert HOSTING_ASNS[13335] == "Cloudflare"
+        assert HOSTING_ASNS[15169] == "Google Cloud"
 
-    def test_residential_asn_list(self):
-        """Residential ASN list contains major ISPs."""
-        assert 7922 in RESIDENTIAL_ASNS  # Comcast
-        assert 7018 in RESIDENTIAL_ASNS  # AT&T
+    def test_residential_asn_list_contains_major_isps(self):
+        assert RESIDENTIAL_ASNS[7922] == "Comcast"
+        assert RESIDENTIAL_ASNS[7018] == "AT&T"
 
 
-class TestGeoIpCheckRun:
-    """Tests for GeoIpCheck run behavior."""
+# ---------------------------------------------------------------------------
+# Run – early exits
+# ---------------------------------------------------------------------------
 
-    @patch("app.checks.network.geoip._find_db_file")
-    async def test_no_dns_records(self, mock_find):
-        """Check returns early if no dns_records in context."""
-        mock_find.side_effect = lambda f: f"/fake/{f}"
+
+class TestGeoIpCheckEarlyExits:
+    """Tests for error handling before lookups."""
+
+    @patch("app.checks.network.geoip._find_db_file", side_effect=_find_db_stub)
+    async def test_no_dns_records(self, _mock_find):
         check = GeoIpCheck()
         result = await check.run({"dns_records": {}})
         assert any("dns_records" in e for e in result.errors)
 
     @patch("app.checks.network.geoip.HAS_GEOIP2", False)
-    async def test_missing_geoip2(self):
-        """Check fails gracefully without geoip2."""
+    async def test_missing_geoip2_library(self):
         check = GeoIpCheck()
         result = await check.run({"dns_records": {"example.com": "1.2.3.4"}})
         assert result.success is False
-        assert any("geoip2" in e for e in result.errors)
+        assert any("geoip2 not installed" in e for e in result.errors)
 
-    @patch("app.checks.network.geoip._find_db_file")
-    async def test_missing_db_files(self, mock_find):
-        """Check fails gracefully without database files."""
-        mock_find.return_value = None
+    @patch("app.checks.network.geoip._find_db_file", return_value=None)
+    async def test_missing_db_files(self, _mock_find):
         check = GeoIpCheck()
         result = await check.run({"dns_records": {"example.com": "1.2.3.4"}})
         assert result.success is False
         assert any("GeoLite2" in e for e in result.errors)
 
-    @patch("app.checks.network.geoip._find_db_file")
+
+# ---------------------------------------------------------------------------
+# Run – classification logic
+# ---------------------------------------------------------------------------
+
+
+class TestGeoIpClassification:
+    """Tests proving real classification logic in _lookup_ip (HOSTING_ASNS / RESIDENTIAL_ASNS)."""
+
+    @patch("app.checks.network.geoip._find_db_file", side_effect=_find_db_stub)
     @patch("app.checks.network.geoip.geoip2.database.Reader")
-    async def test_hosting_ip_classification(self, MockReader, mock_find):
-        """AWS IP is classified as hosting."""
-        mock_find.side_effect = lambda f: f"/fake/{f}"
-
-        city_reader = MagicMock()
-        asn_reader = MagicMock()
-
-        # City response
-        city_resp = MagicMock()
-        city_resp.country.name = "United States"
-        city_resp.country.iso_code = "US"
-        city_resp.subdivisions.most_specific.name = "Virginia"
-        city_resp.subdivisions.__bool__ = lambda self: True
-        city_resp.city.name = "Ashburn"
-        city_resp.location.latitude = 39.0438
-        city_resp.location.longitude = -77.4874
-        city_reader.city.return_value = city_resp
-
-        # ASN response — AWS
-        asn_resp = MagicMock()
-        asn_resp.autonomous_system_number = 16509
-        asn_resp.autonomous_system_organization = "Amazon.com, Inc."
-        asn_reader.asn.return_value = asn_resp
-
-        MockReader.side_effect = [city_reader, asn_reader]
+    async def test_hosting_asn_classified_as_hosting(self, MockReader, _mock_find):
+        """ASN 16509 (AWS) maps to classification='hosting', provider='Amazon AWS'."""
+        city_resp = _make_city_response()
+        asn_resp = _make_asn_response(16509, "Amazon.com, Inc.")
+        _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run(
-            {
-                "dns_records": {"api.example.com": "54.239.28.85"},
-            }
-        )
+        result = await check.run({"dns_records": {"api.example.com": "54.239.28.85"}})
 
         assert result.success is True
         data = result.outputs["geoip_data"]["54.239.28.85"]
         assert data["classification"] == "hosting"
-        assert data["provider"] == "Amazon AWS"
+        assert data["provider"] == "Amazon AWS"  # from HOSTING_ASNS lookup, not the mock org
         assert data["country_code"] == "US"
+        assert data["asn"] == 16509
+        assert data["org"] == "Amazon.com, Inc."
 
-        # Should have one info observation (geo) and no medium observations (not residential)
-        severities = [f.severity for f in result.observations]
-        assert "info" in severities
-        assert "medium" not in severities
+        # Hosting IPs produce exactly one info-level geo observation
+        assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert obs.severity == "info"
+        assert obs.title == "Host geo: api.example.com -> US, Virginia, Ashburn (Amazon.com, Inc.)"
+        assert "54.239.28.85" in obs.evidence
+        assert obs.check_name == "geoip"
 
-    @patch("app.checks.network.geoip._find_db_file")
+    @patch("app.checks.network.geoip._find_db_file", side_effect=_find_db_stub)
     @patch("app.checks.network.geoip.geoip2.database.Reader")
-    async def test_residential_ip_flagged(self, MockReader, mock_find):
-        """Residential ISP IP generates a medium severity observation."""
-        mock_find.side_effect = lambda f: f"/fake/{f}"
-
-        city_reader = MagicMock()
-        asn_reader = MagicMock()
-
-        city_resp = MagicMock()
-        city_resp.country.name = "United States"
-        city_resp.country.iso_code = "US"
-        city_resp.subdivisions.most_specific.name = "Pennsylvania"
-        city_resp.subdivisions.__bool__ = lambda self: True
-        city_resp.city.name = "Philadelphia"
-        city_resp.location.latitude = 39.95
-        city_resp.location.longitude = -75.16
-        city_reader.city.return_value = city_resp
-
-        # ASN response — Comcast (residential)
-        asn_resp = MagicMock()
-        asn_resp.autonomous_system_number = 7922
-        asn_resp.autonomous_system_organization = "Comcast Cable Communications"
-        asn_reader.asn.return_value = asn_resp
-
-        MockReader.side_effect = [city_reader, asn_reader]
+    async def test_non_hosting_asn_not_classified_as_hosting(self, MockReader, _mock_find):
+        """ASN 7922 (Comcast) must NOT be classified as 'hosting' -- proves the
+        lookup table gate is real, not just round-tripping mock values."""
+        city_resp = _make_city_response(region="Pennsylvania", city="Philadelphia")
+        asn_resp = _make_asn_response(7922, "Comcast Cable Communications")
+        _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run(
-            {
-                "dns_records": {"dev.example.com": "73.100.50.25"},
-            }
-        )
+        result = await check.run({"dns_records": {"dev.example.com": "73.100.50.25"}})
 
         data = result.outputs["geoip_data"]["73.100.50.25"]
+        assert data["classification"] != "hosting"
         assert data["classification"] == "residential"
+        assert data["provider"] == "Comcast"  # from RESIDENTIAL_ASNS, not mock org
 
-        residential_observations = [f for f in result.observations if f.severity == "medium"]
-        assert len(residential_observations) == 1
-        assert "Residential IP" in residential_observations[0].title
-
-    @patch("app.checks.network.geoip._find_db_file")
+    @patch("app.checks.network.geoip._find_db_file", side_effect=_find_db_stub)
     @patch("app.checks.network.geoip.geoip2.database.Reader")
-    async def test_unknown_asn_flagged_low(self, MockReader, mock_find):
-        """Unknown ASN (not in hosting or residential list) generates low observation."""
-        mock_find.side_effect = lambda f: f"/fake/{f}"
-
-        city_reader = MagicMock()
-        asn_reader = MagicMock()
-
-        city_resp = MagicMock()
-        city_resp.country.name = "Germany"
-        city_resp.country.iso_code = "DE"
-        city_resp.subdivisions.most_specific.name = "Bavaria"
-        city_resp.subdivisions.__bool__ = lambda self: True
-        city_resp.city.name = "Munich"
-        city_resp.location.latitude = 48.1
-        city_resp.location.longitude = 11.5
-        city_reader.city.return_value = city_resp
-
-        asn_resp = MagicMock()
-        asn_resp.autonomous_system_number = 99999
-        asn_resp.autonomous_system_organization = "Obscure Hosting GmbH"
-        asn_reader.asn.return_value = asn_resp
-
-        MockReader.side_effect = [city_reader, asn_reader]
+    async def test_unknown_asn_classified_as_other(self, MockReader, _mock_find):
+        """ASN not in either lookup table gets classification='other'."""
+        city_resp = _make_city_response(
+            country="Germany",
+            iso_code="DE",
+            region="Bavaria",
+            city="Munich",
+            lat=48.1,
+            lon=11.5,
+        )
+        asn_resp = _make_asn_response(99999, "Obscure Hosting GmbH")
+        _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run(
-            {
-                "dns_records": {"ml.example.com": "185.1.2.3"},
-            }
-        )
+        result = await check.run({"dns_records": {"ml.example.com": "185.1.2.3"}})
 
         data = result.outputs["geoip_data"]["185.1.2.3"]
         assert data["classification"] == "other"
+        assert data["asn"] == 99999
+        assert data["country_code"] == "DE"
+        assert "provider" not in data  # 'other' classification does not set provider
 
-        low_observations = [f for f in result.observations if f.severity == "low"]
-        assert len(low_observations) == 1
-        assert "Non-standard" in low_observations[0].title
-
-    @patch("app.checks.network.geoip._find_db_file")
+    @pytest.mark.parametrize(
+        "asn_number,expected_provider",
+        [
+            (13335, "Cloudflare"),
+            (8075, "Microsoft Azure"),
+            (14061, "DigitalOcean"),
+        ],
+    )
+    @patch("app.checks.network.geoip._find_db_file", side_effect=_find_db_stub)
     @patch("app.checks.network.geoip.geoip2.database.Reader")
-    async def test_multiple_hosts_same_ip(self, MockReader, mock_find):
-        """Multiple hostnames resolving to the same IP are grouped."""
-        mock_find.side_effect = lambda f: f"/fake/{f}"
+    async def test_multiple_hosting_asns(
+        self,
+        MockReader,
+        _mock_find,
+        asn_number,
+        expected_provider,
+    ):
+        """Several hosting ASNs are classified correctly via HOSTING_ASNS table."""
+        city_resp = _make_city_response()
+        asn_resp = _make_asn_response(asn_number, "SomeOrg")
+        _setup_readers(MockReader, city_resp, asn_resp)
 
-        city_reader = MagicMock()
-        asn_reader = MagicMock()
+        check = GeoIpCheck()
+        result = await check.run({"dns_records": {"svc.example.com": "10.0.0.1"}})
 
-        city_resp = MagicMock()
-        city_resp.country.name = "United States"
-        city_resp.country.iso_code = "US"
-        city_resp.subdivisions.most_specific.name = "Virginia"
-        city_resp.subdivisions.__bool__ = lambda self: True
-        city_resp.city.name = "Ashburn"
-        city_resp.location.latitude = 39.0
-        city_resp.location.longitude = -77.4
-        city_reader.city.return_value = city_resp
+        data = result.outputs["geoip_data"]["10.0.0.1"]
+        assert data["classification"] == "hosting"
+        assert data["provider"] == expected_provider
 
-        asn_resp = MagicMock()
-        asn_resp.autonomous_system_number = 16509
-        asn_resp.autonomous_system_organization = "Amazon.com, Inc."
-        asn_reader.asn.return_value = asn_resp
 
-        MockReader.side_effect = [city_reader, asn_reader]
+# ---------------------------------------------------------------------------
+# Run – observation generation
+# ---------------------------------------------------------------------------
+
+
+class TestGeoIpObservations:
+    """Tests for observation content, severity, and evidence fields."""
+
+    @patch("app.checks.network.geoip._find_db_file", side_effect=_find_db_stub)
+    @patch("app.checks.network.geoip.geoip2.database.Reader")
+    async def test_residential_ip_generates_medium_observation(self, MockReader, _mock_find):
+        """Residential ISP IP (Comcast, ASN 7922) emits a medium-severity observation."""
+        city_resp = _make_city_response(
+            region="Pennsylvania", city="Philadelphia", lat=39.95, lon=-75.16
+        )
+        asn_resp = _make_asn_response(7922, "Comcast Cable Communications")
+        _setup_readers(MockReader, city_resp, asn_resp)
+
+        check = GeoIpCheck()
+        result = await check.run({"dns_records": {"dev.example.com": "73.100.50.25"}})
+
+        # Should have info geo obs + medium residential obs
+        assert len(result.observations) == 2
+        info_obs = [o for o in result.observations if o.severity == "info"]
+        med_obs = [o for o in result.observations if o.severity == "medium"]
+        assert len(info_obs) == 1
+        assert len(med_obs) == 1
+
+        obs = med_obs[0]
+        assert obs.title == "Residential IP hosting service: dev.example.com"
+        assert obs.check_name == "geoip"
+        assert "73.100.50.25" in obs.evidence
+        assert "Comcast" in obs.evidence
+        assert "AS7922" in obs.evidence
+        assert (
+            "residential ISP" in obs.description.lower() or "residential" in obs.description.lower()
+        )
+
+    @patch("app.checks.network.geoip._find_db_file", side_effect=_find_db_stub)
+    @patch("app.checks.network.geoip.geoip2.database.Reader")
+    async def test_unknown_asn_generates_low_observation(self, MockReader, _mock_find):
+        """Non-standard hosting (ASN not in known lists) emits a low-severity observation."""
+        city_resp = _make_city_response(
+            country="Germany",
+            iso_code="DE",
+            region="Bavaria",
+            city="Munich",
+            lat=48.1,
+            lon=11.5,
+        )
+        asn_resp = _make_asn_response(99999, "Obscure Hosting GmbH")
+        _setup_readers(MockReader, city_resp, asn_resp)
+
+        check = GeoIpCheck()
+        result = await check.run({"dns_records": {"ml.example.com": "185.1.2.3"}})
+
+        low_obs = [o for o in result.observations if o.severity == "low"]
+        assert len(low_obs) == 1
+        obs = low_obs[0]
+        assert obs.title == "Non-standard hosting: ml.example.com"
+        assert obs.check_name == "geoip"
+        assert "185.1.2.3" in obs.evidence
+        assert "AS99999" in obs.evidence
+        assert "Obscure Hosting GmbH" in obs.evidence
+
+    @patch("app.checks.network.geoip._find_db_file", side_effect=_find_db_stub)
+    @patch("app.checks.network.geoip.geoip2.database.Reader")
+    async def test_hosting_ip_no_medium_or_low_observations(self, MockReader, _mock_find):
+        """A known hosting ASN should only produce an info observation -- no warnings."""
+        city_resp = _make_city_response()
+        asn_resp = _make_asn_response(16509, "Amazon.com, Inc.")
+        _setup_readers(MockReader, city_resp, asn_resp)
+
+        check = GeoIpCheck()
+        result = await check.run({"dns_records": {"api.example.com": "54.239.28.85"}})
+
+        severities = {o.severity for o in result.observations}
+        assert severities == {"info"}, f"Expected only info observations, got {severities}"
+
+
+# ---------------------------------------------------------------------------
+# Run – deduplication & partial DB
+# ---------------------------------------------------------------------------
+
+
+class TestGeoIpEdgeCases:
+    """Tests for deduplication, partial databases, etc."""
+
+    @patch("app.checks.network.geoip._find_db_file", side_effect=_find_db_stub)
+    @patch("app.checks.network.geoip.geoip2.database.Reader")
+    async def test_multiple_hosts_same_ip_deduplicated(self, MockReader, _mock_find):
+        """Multiple hostnames resolving to the same IP produce a single lookup."""
+        city_resp = _make_city_response()
+        asn_resp = _make_asn_response(16509, "Amazon.com, Inc.")
+        _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
         result = await check.run(
@@ -217,36 +338,31 @@ class TestGeoIpCheckRun:
             }
         )
 
-        # Should only look up the IP once (deduplicated)
         assert result.targets_checked == 1
         assert "54.1.2.3" in result.outputs["geoip_data"]
+        assert result.outputs["geoip_data"]["54.1.2.3"]["classification"] == "hosting"
 
-    @patch("app.checks.network.geoip._find_db_file")
+    @patch("app.checks.network.geoip._find_db_file", side_effect=_find_db_asn_only)
     @patch("app.checks.network.geoip.geoip2.database.Reader")
-    async def test_asn_only_db(self, MockReader, mock_find):
-        """Check works with only ASN database (no city)."""
-        mock_find.side_effect = lambda f: f"/fake/{f}" if "ASN" in f else None
-
-        asn_reader = MagicMock()
-        asn_resp = MagicMock()
-        asn_resp.autonomous_system_number = 13335
-        asn_resp.autonomous_system_organization = "Cloudflare, Inc."
-        asn_reader.asn.return_value = asn_resp
-
-        MockReader.return_value = asn_reader
+    async def test_asn_only_db(self, MockReader, _mock_find):
+        """Check works with only ASN database (no city DB)."""
+        asn_resp = _make_asn_response(13335, "Cloudflare, Inc.")
+        _setup_readers(MockReader, city_resp=None, asn_resp=asn_resp, city_available=False)
 
         check = GeoIpCheck()
-        result = await check.run(
-            {
-                "dns_records": {"cdn.example.com": "104.16.1.1"},
-            }
-        )
+        result = await check.run({"dns_records": {"cdn.example.com": "104.16.1.1"}})
 
         assert result.success is True
         data = result.outputs["geoip_data"]["104.16.1.1"]
         assert data["classification"] == "hosting"
         assert data["provider"] == "Cloudflare"
         assert data["country"] is None  # No city DB
+        assert data["asn"] == 13335
+
+
+# ---------------------------------------------------------------------------
+# Registration
+# ---------------------------------------------------------------------------
 
 
 class TestGeoIpRegistration:

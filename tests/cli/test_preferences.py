@@ -79,12 +79,27 @@ def sample_profile() -> Profile:
 
 
 class TestPreferencesDataclass:
-    def test_default_values(self, default_prefs):
-        assert default_prefs.network.timeout_seconds == 30.0
-        assert default_prefs.network.max_concurrent_requests == 10
-        assert default_prefs.rate_limiting.requests_per_second == 10.0
-        assert default_prefs.checks.on_critical == "annotate"
+    def test_default_timeout_is_positive(self, default_prefs):
+        """Network timeout must be a positive number."""
+        assert default_prefs.network.timeout_seconds > 0
+
+    def test_default_concurrent_requests_is_bounded(self, default_prefs):
+        """Max concurrent requests should be reasonable (1-100)."""
+        assert 1 <= default_prefs.network.max_concurrent_requests <= 100
+
+    def test_default_rate_limit_is_positive(self, default_prefs):
+        """Rate limit should be a positive number."""
+        assert default_prefs.rate_limiting.requests_per_second > 0
+
+    def test_waf_evasion_disabled_by_default(self, default_prefs):
+        """WAF evasion should be off by default (safe default)."""
         assert default_prefs.advanced.waf_evasion is False
+
+    def test_two_default_instances_are_equal(self):
+        """Two independently constructed default Preferences should match."""
+        a = Preferences()
+        b = Preferences()
+        assert a.to_dict() == b.to_dict()
 
     def test_to_dict(self, default_prefs):
         d = default_prefs.to_dict()

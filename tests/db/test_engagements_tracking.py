@@ -150,7 +150,8 @@ class TestObservationStatusTracking:
         assert result2["recurring"] == 1  # XSS still present
         assert result2["resolved"] == 2  # SQLi and Open Port gone
         assert result2["previous_scan_id"] == "scan-v1"
-        assert result2["new"] + result2["regressed"] >= 1
+        assert result2["new"] >= 1  # CSRF is new
+        assert result2["regressed"] >= 0  # regressed may or may not be present
 
     @pytest.mark.asyncio
     async def test_comparison_stored(self, db, scan_repo, observation_repo, comparison_repo):

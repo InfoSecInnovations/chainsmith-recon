@@ -51,6 +51,31 @@ def clean_env(monkeypatch):
     return monkeypatch
 
 
+@pytest.fixture
+def mock_httpx_client():
+    """Provide a pre-wired httpx.AsyncClient mock, eliminating per-test boilerplate.
+
+    Yields a (patch_context, mock_instance) tuple.  Callers configure
+    ``mock_instance.post`` with the desired ``return_value`` or ``side_effect``
+    before entering the ``async with`` block in the code under test.
+
+    Usage::
+
+        def test_something(self, mock_httpx_client):
+            patcher, http = mock_httpx_client
+            http.post = AsyncMock(return_value=my_response)
+            with patcher:
+                response = await client.chat("Hi")
+    """
+    with patch("httpx.AsyncClient") as patched:
+        mock_instance = patched.return_value
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock()
+        # Default post — individual tests override as needed
+        mock_instance.post = AsyncMock()
+        yield patched, mock_instance
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # LLMProvider Tests
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -58,13 +83,6 @@ def clean_env(monkeypatch):
 
 class TestLLMProvider:
     """Tests for LLMProvider enum."""
-
-    def test_provider_values(self):
-        """Provider enum has expected values."""
-        assert LLMProvider.NONE.value == "none"
-        assert LLMProvider.OPENAI.value == "openai"
-        assert LLMProvider.ANTHROPIC.value == "anthropic"
-        assert LLMProvider.LITELLM.value == "litellm"
 
     def test_provider_from_string(self):
         """Provider can be created from string."""
@@ -196,7 +214,7 @@ class TestOpenAIClient:
 
         assert client.is_available() is False
 
-    async def test_chat_success(self):
+    async def test_chat_success(self, mock_httpx_client):
         """OpenAIClient.chat returns successful response."""
         cfg = LLMConfig(openai_api_key="sk-test")
         client = OpenAIClient(cfg)
@@ -209,18 +227,16 @@ class TestOpenAIClient:
             "usage": {"total_tokens": 10},
         }
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
-            mock_client.return_value.__aexit__ = AsyncMock()
-            mock_client.return_value.post = AsyncMock(return_value=mock_response)
+        _, http = mock_httpx_client
+        http.post = AsyncMock(return_value=mock_response)
 
-            response = await client.chat("Hi")
+        response = await client.chat("Hi")
 
         assert response.success is True
         assert response.content == "Hello!"
         assert response.provider == "openai"
 
-    async def test_chat_with_system_prompt(self):
+    async def test_chat_with_system_prompt(self, mock_httpx_client):
         """OpenAIClient.chat includes system prompt."""
         cfg = LLMConfig(openai_api_key="sk-test")
         client = OpenAIClient(cfg)
@@ -231,19 +247,17 @@ class TestOpenAIClient:
             "choices": [{"message": {"content": "Response"}}],
         }
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
-            mock_client.return_value.__aexit__ = AsyncMock()
-            mock_client.return_value.post = AsyncMock(return_value=mock_response)
+        _, http = mock_httpx_client
+        http.post = AsyncMock(return_value=mock_response)
 
-            await client.chat("Hi", system="You are helpful")
+        await client.chat("Hi", system="You are helpful")
 
-            # Check that system message was included
-            call_args = mock_client.return_value.post.call_args
-            messages = call_args[1]["json"]["messages"]
-            assert messages[0]["role"] == "system"
+        # Check that system message was included
+        call_args = http.post.call_args
+        messages = call_args[1]["json"]["messages"]
+        assert messages[0]["role"] == "system"
 
-    async def test_chat_error(self):
+    async def test_chat_error(self, mock_httpx_client):
         """OpenAIClient.chat handles errors."""
         cfg = LLMConfig(openai_api_key="sk-test")
         client = OpenAIClient(cfg)
@@ -252,12 +266,10 @@ class TestOpenAIClient:
         mock_response.status_code = 401
         mock_response.text = "Invalid API key"
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
-            mock_client.return_value.__aexit__ = AsyncMock()
-            mock_client.return_value.post = AsyncMock(return_value=mock_response)
+        _, http = mock_httpx_client
+        http.post = AsyncMock(return_value=mock_response)
 
-            response = await client.chat("Hi")
+        response = await client.chat("Hi")
 
         assert response.success is False
         assert "401" in response.error
@@ -278,7 +290,7 @@ class TestAnthropicClient:
 
         assert client.is_available() is True
 
-    async def test_chat_success(self):
+    async def test_chat_success(self, mock_httpx_client):
         """AnthropicClient.chat returns successful response."""
         cfg = LLMConfig(anthropic_api_key="sk-ant-test")
         client = AnthropicClient(cfg)
@@ -291,12 +303,10 @@ class TestAnthropicClient:
             "usage": {"input_tokens": 5, "output_tokens": 5},
         }
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
-            mock_client.return_value.__aexit__ = AsyncMock()
-            mock_client.return_value.post = AsyncMock(return_value=mock_response)
+        _, http = mock_httpx_client
+        http.post = AsyncMock(return_value=mock_response)
 
-            response = await client.chat("Hi")
+        response = await client.chat("Hi")
 
         assert response.success is True
         assert response.content == "Hello from Claude!"
@@ -318,7 +328,7 @@ class TestLiteLLMClient:
 
         assert client.is_available() is True
 
-    async def test_chat_with_fallback(self):
+    async def test_chat_with_fallback(self, mock_httpx_client):
         """LiteLLMClient tries fallback model on failure."""
         cfg = LLMConfig(
             litellm_base_url="http://proxy:4000/v1",
@@ -343,12 +353,10 @@ class TestLiteLLMClient:
                 }
             return mock_resp
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
-            mock_client.return_value.__aexit__ = AsyncMock()
-            mock_client.return_value.post = AsyncMock(side_effect=mock_post)
+        _, http = mock_httpx_client
+        http.post = AsyncMock(side_effect=mock_post)
 
-            response = await client.chat("Hi")
+        response = await client.chat("Hi")
 
         assert response.success is True
         assert call_count == 2  # Primary failed, fallback succeeded

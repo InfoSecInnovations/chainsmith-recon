@@ -409,8 +409,11 @@ class TestRealSimulationFiles:
         result = await check.run({})
 
         assert result.success is True
-        assert len(result.services) > 0
-        assert len(result.observations) > 0
+        assert len(result.services) >= 1, "DNS success should discover at least 1 service"
+        assert len(result.observations) >= 1, "DNS success should produce at least 1 observation"
+        # Verify observations have expected check_name from the simulation
+        for obs in result.observations:
+            assert obs.check_name == "dns_enumeration"
 
     def test_load_dns_exception(self, simulations_dir: Path):
         """Load actual dns_exception.yaml file."""
@@ -444,10 +447,15 @@ class TestRealSimulationFiles:
 
         checks = load_simulated_checks_from_dir(simulations_dir, suite="network")
 
-        # Should load at least some checks
-        assert len(checks) > 0
+        # Should load at least 2 checks (dns_success, dns_exception at minimum)
+        assert len(checks) >= 2, f"Expected at least 2 network simulations, got {len(checks)}"
 
-        # All should be SimulatedCheck instances
+        # All should be SimulatedCheck instances with correct suite
+        names = set()
         for check in checks:
             assert isinstance(check, SimulatedCheck)
             assert check.suite == "network"
+            names.add(check.name)
+
+        # Verify known simulation names are present
+        assert "dns_enumeration" in names, "dns_enumeration simulation should be loaded"

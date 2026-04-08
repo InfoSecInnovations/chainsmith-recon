@@ -1,5 +1,6 @@
 """Tests for OpenAPI discovery and CORS misconfiguration checks."""
 
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -88,20 +89,24 @@ class TestOpenAPICheckService:
     """Tests for OpenAPICheck.check_service."""
 
     async def test_openapi_json_discovery(self, sample_service):
-        """OpenAPI JSON spec is detected."""
+        """OpenAPI JSON spec is detected with correct title, severity, and evidence."""
         check = OpenAPICheck()
         check.OPENAPI_PATHS = ["/openapi.json"]
 
         spec = {
             "openapi": "3.0.0",
+            "info": {"title": "Example API", "version": "1.0.0"},
             "paths": {
-                "/api/users": {"get": {}},
-                "/api/items": {"get": {}, "post": {}},
+                "/api/products": {"get": {"summary": "List products"}},
+                "/api/orders": {
+                    "get": {"summary": "List orders"},
+                    "post": {"summary": "Create order"},
+                },
             },
         }
         response = make_response(
             headers={"content-type": "application/json"},
-            body=str(spec).replace("'", '"'),
+            body=json.dumps(spec),
         )
 
         with patch("app.checks.web.openapi.AsyncHttpClient", return_value=mock_client(response)):
@@ -109,59 +114,94 @@ class TestOpenAPICheckService:
 
         spec_observations = [f for f in result.observations if "OpenAPI" in f.title]
         assert len(spec_observations) == 1
+        obs = spec_observations[0]
+        assert "2 endpoints" in obs.title
+        assert obs.severity == "medium"
+        assert "/openapi.json" in obs.evidence
 
     async def test_swagger_json_discovery(self, sample_service):
-        """Swagger JSON spec is detected."""
+        """Swagger 2.0 JSON spec is detected with correct title and severity."""
         check = OpenAPICheck()
         check.OPENAPI_PATHS = ["/swagger.json"]
 
         spec = {
             "swagger": "2.0",
+            "info": {"title": "Legacy API", "version": "1.0"},
             "paths": {
-                "/api/v1/data": {"get": {}},
+                "/api/v1/data": {"get": {"summary": "Fetch data"}},
             },
         }
         response = make_response(
             headers={"content-type": "application/json"},
-            body=str(spec).replace("'", '"'),
+            body=json.dumps(spec),
         )
 
         with patch("app.checks.web.openapi.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
         assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert "OpenAPI documentation exposed" in obs.title
+        assert "1 endpoints" in obs.title
+        assert obs.severity == "medium"
 
     async def test_sensitive_endpoints_high_severity(self, sample_service):
-        """Sensitive endpoints increase severity."""
+        """Sensitive endpoints increase severity to high."""
         check = OpenAPICheck()
         check.OPENAPI_PATHS = ["/openapi.json"]
 
         spec = {
             "openapi": "3.0.0",
+            "info": {"title": "Internal API", "version": "2.0.0"},
             "paths": {
-                "/api/admin/users": {"get": {}},
-                "/api/internal/config": {"get": {}},
+                "/api/admin/users": {"get": {"summary": "List admin users"}},
+                "/api/internal/config": {"get": {"summary": "Get runtime config"}},
+                "/api/public/health": {"get": {"summary": "Health check"}},
             },
         }
         response = make_response(
             headers={"content-type": "application/json"},
-            body=str(spec).replace("'", '"'),
+            body=json.dumps(spec),
         )
 
         with patch("app.checks.web.openapi.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
         assert len(result.observations) == 1
-        assert result.observations[0].severity == "high"
+        obs = result.observations[0]
+        assert obs.severity == "high"
+        assert "3 endpoints" in obs.title
+        assert "OpenAPI documentation exposed" in obs.title
 
     async def test_swagger_ui_detection(self, sample_service):
-        """Swagger UI HTML is detected."""
+        """Swagger UI HTML page is detected with correct title and severity."""
         check = OpenAPICheck()
         check.OPENAPI_PATHS = ["/swagger"]
 
+        # Realistic Swagger UI page with the keyword embedded in a full HTML document
+        html_body = (
+            "<!DOCTYPE html>\n"
+            '<html lang="en">\n'
+            "<head>\n"
+            '  <meta charset="UTF-8">\n'
+            "  <title>API Reference - Developer Portal</title>\n"
+            '  <link rel="stylesheet" href="/static/css/swagger-ui.css">\n'
+            "</head>\n"
+            "<body>\n"
+            '  <div id="swagger-ui-container"></div>\n'
+            '  <script src="/static/js/swagger-ui-bundle.js"></script>\n'
+            "  <script>\n"
+            "    SwaggerUIBundle({\n"
+            '      url: "/openapi.json",\n'
+            '      dom_id: "#swagger-ui-container"\n'
+            "    });\n"
+            "  </script>\n"
+            "</body>\n"
+            "</html>"
+        )
         response = make_response(
             headers={"content-type": "text/html"},
-            body="<html><title>Swagger UI</title></html>",
+            body=html_body,
         )
 
         with patch("app.checks.web.openapi.AsyncHttpClient", return_value=mock_client(response)):
@@ -169,6 +209,33 @@ class TestOpenAPICheckService:
 
         ui_observations = [f for f in result.observations if "UI" in f.title]
         assert len(ui_observations) == 1
+        obs = ui_observations[0]
+        assert "API documentation UI" in obs.title
+        assert obs.severity == "low"
+        assert "/swagger" in obs.evidence
+
+    async def test_non_openapi_json_no_observation(self, sample_service):
+        """JSON at /openapi.json that is not an OpenAPI spec produces no observation."""
+        check = OpenAPICheck()
+        check.OPENAPI_PATHS = ["/openapi.json"]
+
+        # A generic JSON response with no openapi/swagger/paths keys
+        non_spec_body = json.dumps(
+            {
+                "status": "ok",
+                "version": "1.2.3",
+                "features": ["search", "export"],
+            }
+        )
+        response = make_response(
+            headers={"content-type": "application/json"},
+            body=non_spec_body,
+        )
+
+        with patch("app.checks.web.openapi.AsyncHttpClient", return_value=mock_client(response)):
+            result = await check.check_service(sample_service, {})
+
+        assert len(result.observations) == 0
 
     async def test_sets_outputs_on_discovery(self, sample_service):
         """Outputs contain spec data."""
@@ -177,11 +244,12 @@ class TestOpenAPICheckService:
 
         spec = {
             "openapi": "3.0.0",
-            "paths": {"/api/test": {"get": {}}},
+            "info": {"title": "Test API", "version": "0.1.0"},
+            "paths": {"/api/test": {"get": {"summary": "Test endpoint"}}},
         }
         response = make_response(
             headers={"content-type": "application/json"},
-            body=str(spec).replace("'", '"'),
+            body=json.dumps(spec),
         )
 
         with patch("app.checks.web.openapi.AsyncHttpClient", return_value=mock_client(response)):

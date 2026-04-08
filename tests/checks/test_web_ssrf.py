@@ -103,8 +103,16 @@ class TestSSRFIndicatorCheck:
             result = await check.check_service(service, context)
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
-        assert len(ssrf) >= 1
-        assert any("OpenAPI" in f.title for f in ssrf)
+        assert len(ssrf) == 1
+        assert "OpenAPI" in ssrf[0].title
+        assert "url" in ssrf[0].title.lower()
+        assert ssrf[0].severity == "medium"
+        assert "OpenAPI spec" in ssrf[0].evidence
+
+        candidates = result.outputs["ssrf_candidates"]
+        assert len(candidates) == 1
+        assert candidates[0]["path"] == "/api/summarize"
+        assert candidates[0]["source"] == "openapi"
 
     @pytest.mark.asyncio
     async def test_openapi_body_field_detected(self, service):
@@ -142,20 +150,59 @@ class TestSSRFIndicatorCheck:
             result = await check.check_service(service, context)
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
-        assert len(ssrf) >= 1
-        assert any("image_url" in f.title for f in ssrf)
+        assert len(ssrf) == 1
+        assert "image_url" in ssrf[0].title
+        assert ssrf[0].severity == "medium"
+        assert "body field 'image_url'" in ssrf[0].evidence
 
     @pytest.mark.asyncio
-    async def test_probe_ssrf_prone_path(self, service):
-        """SSRF-prone paths returning validation errors are detected."""
+    async def test_openapi_no_url_params_clean(self, service):
+        """OpenAPI spec with no URL params produces no SSRF observations."""
+        check = SSRFIndicatorCheck()
+        context = {
+            "openapi_spec": {
+                "paths": {
+                    "/api/users": {
+                        "get": {
+                            "parameters": [
+                                {"name": "page", "in": "query", "schema": {"type": "integer"}},
+                                {"name": "limit", "in": "query", "schema": {"type": "integer"}},
+                            ],
+                        },
+                    },
+                },
+            },
+        }
+
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(404)),
+        ):
+            result = await check.check_service(service, context)
+
+        ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
+        assert len(ssrf) == 0
+        assert result.outputs["ssrf_candidates"] == []
+
+    @pytest.mark.asyncio
+    async def test_probe_ssrf_prone_path_validation_error(self, service):
+        """SSRF-prone paths returning validation errors mentioning URL params are detected."""
         check = SSRFIndicatorCheck()
 
+        # Realistic: a 400 response that mentions the missing 'url' field,
+        # and a 422 that mentions the required 'url' field
         with patch(
             "app.checks.web.ssrf_indicator.AsyncHttpClient",
             return_value=mock_client_multi(
                 response_map={
-                    ("GET", "/api/fetch"): resp(400, body='{"error": "url parameter is required"}'),
-                    ("GET", "/api/proxy"): resp(422, body='{"detail": "field required: url"}'),
+                    ("GET", "/api/fetch"): resp(
+                        400,
+                        body='{"error": "Missing required parameter", "detail": "url is required"}',
+                    ),
+                    ("GET", "/api/proxy"): resp(
+                        422,
+                        body='{"detail": [{"loc": ["query", "url"], "msg": "field required"}]}',
+                    ),
                 },
                 default=resp(404),
             ),
@@ -163,7 +210,61 @@ class TestSSRFIndicatorCheck:
             result = await check.check_service(service, {})
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
-        assert len(ssrf) >= 2
+        assert len(ssrf) == 2
+
+        fetch_obs = [f for f in ssrf if "api-fetch" in (f.id or "")]
+        assert len(fetch_obs) == 1
+        assert "url" in fetch_obs[0].description.lower()
+
+        proxy_obs = [f for f in ssrf if "api-proxy" in (f.id or "")]
+        assert len(proxy_obs) == 1
+
+    @pytest.mark.asyncio
+    async def test_probe_200_with_url_form_input(self, service):
+        """SSRF-prone path returning HTML form with type='url' input is detected."""
+        check = SSRFIndicatorCheck()
+
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={
+                    ("GET", "/api/preview"): resp(
+                        200,
+                        body='<form action="/api/preview" method="post"><input type="url" name="target_url" /><button>Preview</button></form>',
+                    ),
+                },
+                default=resp(404),
+            ),
+        ):
+            result = await check.check_service(service, {})
+
+        ssrf = [f for f in result.observations if "preview" in (f.id or "")]
+        assert len(ssrf) == 1
+        assert "url" in ssrf[0].description.lower()
+        assert ssrf[0].severity in ("low", "medium")
+
+    @pytest.mark.asyncio
+    async def test_probe_200_without_url_hints_not_flagged(self, service):
+        """SSRF-prone path returning 200 without URL hints is not flagged."""
+        check = SSRFIndicatorCheck()
+
+        # Returns 200 but body does not suggest URL parameter
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(
+                response_map={
+                    ("GET", "/api/fetch"): resp(
+                        200,
+                        body="<html><body><h1>Welcome to our API</h1></body></html>",
+                    ),
+                },
+                default=resp(404),
+            ),
+        ):
+            result = await check.check_service(service, {})
+
+        fetch_obs = [f for f in result.observations if "api-fetch" in (f.id or "")]
+        assert len(fetch_obs) == 0
 
     @pytest.mark.asyncio
     async def test_no_ssrf_when_all_404(self, service):
@@ -180,6 +281,7 @@ class TestSSRFIndicatorCheck:
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) == 0
+        assert result.outputs["ssrf_candidates"] == []
 
     @pytest.mark.asyncio
     async def test_discovered_paths_with_url_params(self, service):
@@ -205,12 +307,37 @@ class TestSSRFIndicatorCheck:
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         # Should find /proxy?url= but not /page?id= or /view?name=
-        url_param_observations = [f for f in ssrf if "url" in f.title.lower()]
-        assert len(url_param_observations) >= 1
+        assert len(ssrf) == 1
+        assert "url" in ssrf[0].title.lower()
+        assert ssrf[0].severity == "low"
+        assert "discovered" in result.outputs["ssrf_candidates"][0]["source"]
 
     @pytest.mark.asyncio
-    async def test_outputs_ssrf_candidates(self, service):
-        """Check outputs ssrf_candidates list."""
+    async def test_discovered_paths_without_url_params_clean(self, service):
+        """Discovered paths without URL-accepting params produce no SSRF observations."""
+        check = SSRFIndicatorCheck()
+        context = {
+            "discovered_paths": {
+                "all_paths": [
+                    "/page?id=1",
+                    "/search?q=test",
+                    "/view?name=hello",
+                ],
+            },
+        }
+
+        with patch(
+            "app.checks.web.ssrf_indicator.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(404)),
+        ):
+            result = await check.check_service(service, context)
+
+        ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
+        assert len(ssrf) == 0
+
+    @pytest.mark.asyncio
+    async def test_outputs_ssrf_candidates_structure(self, service):
+        """Check outputs ssrf_candidates list with expected fields."""
         check = SSRFIndicatorCheck()
         context = {
             "openapi_spec": {
@@ -235,7 +362,12 @@ class TestSSRFIndicatorCheck:
             result = await check.check_service(service, context)
 
         assert "ssrf_candidates" in result.outputs
-        assert isinstance(result.outputs["ssrf_candidates"], list)
+        candidates = result.outputs["ssrf_candidates"]
+        assert isinstance(candidates, list)
+        assert len(candidates) == 1
+        assert candidates[0]["path"] == "/api/fetch"
+        assert candidates[0]["param"] == "url"
+        assert candidates[0]["source"] == "openapi"
 
     @pytest.mark.asyncio
     async def test_proxy_param_medium_severity(self, service):
@@ -264,8 +396,9 @@ class TestSSRFIndicatorCheck:
             result = await check.check_service(service, context)
 
         proxy_observations = [f for f in result.observations if "proxy" in (f.id or "")]
-        assert len(proxy_observations) >= 1
+        assert len(proxy_observations) == 1
         assert proxy_observations[0].severity == "medium"
+        assert "'proxy'" in proxy_observations[0].title
 
     @pytest.mark.asyncio
     async def test_deduplication(self, service):
@@ -299,10 +432,11 @@ class TestSSRFIndicatorCheck:
         # /api/fetch should appear only once despite being in both sources
         fetch_observations = [f for f in result.observations if "api-fetch" in (f.id or "")]
         assert len(fetch_observations) == 1
+        assert len(result.outputs["ssrf_candidates"]) == 1
 
     @pytest.mark.asyncio
     async def test_connection_error_handled(self, service):
-        """Connection errors don't crash the check."""
+        """Connection errors don't crash the check, error is recorded."""
         check = SSRFIndicatorCheck()
 
         with patch(
@@ -314,24 +448,22 @@ class TestSSRFIndicatorCheck:
             result = await check.check_service(service, {})
 
         assert result.success
+        # No SSRF observations from errored responses
+        ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
+        assert len(ssrf) == 0
 
     @pytest.mark.asyncio
-    async def test_form_with_url_input(self, service):
-        """HTML form with type='url' input is detected."""
+    async def test_exception_in_http_client(self, service):
+        """Unhandled exception in HTTP client is caught and recorded."""
         check = SSRFIndicatorCheck()
 
-        with patch(
-            "app.checks.web.ssrf_indicator.AsyncHttpClient",
-            return_value=mock_client_multi(
-                response_map={
-                    ("GET", "/api/preview"): resp(
-                        200, body='<form><input type="url" name="url" /></form>'
-                    ),
-                },
-                default=resp(404),
-            ),
-        ):
+        mock = AsyncMock()
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        mock.get = AsyncMock(side_effect=OSError("Network unreachable"))
+
+        with patch("app.checks.web.ssrf_indicator.AsyncHttpClient", return_value=mock):
             result = await check.check_service(service, {})
 
-        ssrf = [f for f in result.observations if "preview" in (f.id or "")]
-        assert len(ssrf) >= 1
+        assert len(result.errors) >= 1
+        assert "SSRF probe error" in result.errors[0]

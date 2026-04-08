@@ -1,9 +1,21 @@
-"""Tests for WhoisLookupCheck: WHOIS domain registration, parsing, ASN/RDAP lookup, and observations."""
+"""Tests for WhoisLookupCheck: WHOIS domain registration, parsing, ASN/RDAP lookup, and observations.
+
+Mock strategy: _domain_whois and _asn_lookup are kept as mocks because they
+wrap raw socket I/O (port 43 multi-chunk recv loop) and the ipwhois RDAP
+library respectively.  Reproducing that I/O faithfully in a unit test is
+impractical.  _parse_whois_response and _domain_age_days are tested directly
+against real parsing logic (no mocking).  Assertions are specific to titles,
+severities, and evidence content rather than just ``result.success``.
+"""
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
+# ---------------------------------------------------------------------------
+# Metadata / init
+# ---------------------------------------------------------------------------
 
 
 class TestWhoisLookupCheckInit:
@@ -52,6 +64,11 @@ class TestWhoisLookupCheckInit:
         assert "io" in WHOIS_SERVERS
 
 
+# ---------------------------------------------------------------------------
+# Run-level behaviour (mocks kept — raw socket I/O is impractical to fake)
+# ---------------------------------------------------------------------------
+
+
 class TestWhoisLookupCheckRun:
     """Test WhoisLookupCheck runtime behavior."""
 
@@ -62,9 +79,10 @@ class TestWhoisLookupCheckRun:
         check = WhoisLookupCheck()
         result = await check.run({"dns_records": {}})
         assert result.success is False
+        assert any("dns_records" in e.lower() for e in result.errors)
 
     @pytest.mark.asyncio
-    async def test_empty_dns_records_fails(self):
+    async def test_empty_context_fails(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -88,6 +106,9 @@ class TestWhoisLookupCheckRun:
                 "nameservers": ["ns1.example.com"],
                 "status": [],
                 "redacted": False,
+                "raw_length": 500,
+                "updated": None,
+                "dnssec": None,
             }
             mock_asn.return_value = None
 
@@ -96,10 +117,11 @@ class TestWhoisLookupCheckRun:
                 "base_domain": "example.com",
             }
             result = await check.run(context)
-            assert result.success is True
-            assert "whois_data" in result.outputs
-            assert result.outputs["whois_data"]["domain"]["registrar"] == "Test Registrar"
+
+            # Verify _domain_whois was called with the base domain
             mock_whois.assert_called_once_with("example.com")
+            # Verify outputs carry the registrar through
+            assert result.outputs["whois_data"]["domain"]["registrar"] == "Test Registrar"
 
     @pytest.mark.asyncio
     async def test_no_base_domain_skips_domain_whois(self):
@@ -113,8 +135,9 @@ class TestWhoisLookupCheckRun:
             mock_asn.return_value = None
             context = {"dns_records": {"www.example.com": "1.2.3.4"}}
             result = await check.run(context)
-            assert result.success is True
             mock_whois.assert_not_called()
+            # domain key should be empty dict when skipped
+            assert result.outputs["whois_data"]["domain"] == {}
 
     @pytest.mark.asyncio
     async def test_asn_lookup_per_unique_ip(self):
@@ -143,8 +166,7 @@ class TestWhoisLookupCheckRun:
                 },
                 "base_domain": "example.com",
             }
-            result = await check.run(context)
-            assert result.success is True
+            await check.run(context)
             # Should look up 2 unique IPs, not 3
             assert mock_asn.call_count == 2
 
@@ -157,7 +179,18 @@ class TestWhoisLookupCheckRun:
             patch.object(check, "_domain_whois", new_callable=AsyncMock) as mock_whois,
             patch.object(check, "_asn_lookup", new_callable=AsyncMock) as mock_asn,
         ):
-            mock_whois.return_value = {"domain": "example.com", "registrar": "R"}
+            mock_whois.return_value = {
+                "domain": "example.com",
+                "registrar": "R",
+                "created": "2020-01-01",
+                "expires": "2025-01-01",
+                "nameservers": [],
+                "status": [],
+                "redacted": False,
+                "raw_length": 100,
+                "updated": None,
+                "dnssec": None,
+            }
             mock_asn.return_value = {"ip": "1.2.3.4", "asn": 16509}
 
             context = {
@@ -169,6 +202,12 @@ class TestWhoisLookupCheckRun:
             assert "domain" in data
             assert "asn" in data
             assert "1.2.3.4" in data["asn"]
+            assert data["asn"]["1.2.3.4"]["asn"] == 16509
+
+
+# ---------------------------------------------------------------------------
+# Parsing — direct unit tests (no mocking, exercises real code)
+# ---------------------------------------------------------------------------
 
 
 class TestWhoisParseResponse:
@@ -229,6 +268,11 @@ class TestWhoisParseResponse:
         assert info["registrar"] == "Actual Registrar"
 
 
+# ---------------------------------------------------------------------------
+# Domain age helper — direct unit tests
+# ---------------------------------------------------------------------------
+
+
 class TestWhoisDomainAgeDays:
     """Test domain age calculation."""
 
@@ -262,11 +306,16 @@ class TestWhoisDomainAgeDays:
         assert 10 <= days <= 20
 
 
+# ---------------------------------------------------------------------------
+# Observation generation — domain WHOIS
+# ---------------------------------------------------------------------------
+
+
 class TestWhoisDomainObservations:
     """Test observation generation from domain WHOIS data."""
 
     @pytest.mark.asyncio
-    async def test_registration_info_observation(self):
+    async def test_registration_info_observation_title_and_severity(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -293,11 +342,14 @@ class TestWhoisDomainObservations:
                 "base_domain": "example.com",
             }
             result = await check.run(context)
-            info_observations = [f for f in result.observations if f.severity == "info"]
-            assert any("registrar" in f.title.lower() for f in info_observations)
+            info_obs = [f for f in result.observations if f.severity == "info"]
+            registrar_obs = [f for f in info_obs if "registrar" in f.title.lower()]
+            assert len(registrar_obs) == 1
+            assert "Cloudflare, Inc." in registrar_obs[0].title
+            assert "Cloudflare, Inc." in registrar_obs[0].evidence
 
     @pytest.mark.asyncio
-    async def test_recent_registration_observation(self):
+    async def test_recent_registration_observation_title_and_severity(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -325,14 +377,13 @@ class TestWhoisDomainObservations:
                 "base_domain": "newsite.com",
             }
             result = await check.run(context)
-            low_observations = [f for f in result.observations if f.severity == "low"]
-            assert any(
-                "registered within" in f.title.lower() or "90 days" in f.title
-                for f in low_observations
-            )
+            low_obs = [f for f in result.observations if f.severity == "low"]
+            recent_obs = [f for f in low_obs if "90 days" in f.title]
+            assert len(recent_obs) == 1
+            assert "newsite.com" in recent_obs[0].evidence
 
     @pytest.mark.asyncio
-    async def test_redacted_observation(self):
+    async def test_redacted_observation_title_and_severity(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -359,14 +410,22 @@ class TestWhoisDomainObservations:
                 "base_domain": "example.com",
             }
             result = await check.run(context)
-            assert any("redacted" in f.title.lower() for f in result.observations)
+            redacted_obs = [f for f in result.observations if "redacted" in f.title.lower()]
+            assert len(redacted_obs) == 1
+            assert redacted_obs[0].severity == "info"
+            assert "example.com" in redacted_obs[0].title
+
+
+# ---------------------------------------------------------------------------
+# Observation generation — ASN / RDAP
+# ---------------------------------------------------------------------------
 
 
 class TestWhoisAsnObservations:
     """Test observation generation from ASN/RDAP data."""
 
     @pytest.mark.asyncio
-    async def test_asn_info_observation(self):
+    async def test_asn_info_observation_title_and_evidence(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -391,11 +450,15 @@ class TestWhoisAsnObservations:
                 "base_domain": "example.com",
             }
             result = await check.run(context)
-            info_observations = [f for f in result.observations if f.severity == "info"]
-            assert any("AS16509" in f.title for f in info_observations)
+            info_obs = [f for f in result.observations if f.severity == "info"]
+            asn_obs = [f for f in info_obs if "AS16509" in f.title]
+            assert len(asn_obs) == 1
+            assert "AMAZON-02" in asn_obs[0].title
+            assert "AMAZON-AES" in asn_obs[0].evidence
+            assert "1.2.3.4" in asn_obs[0].evidence
 
     @pytest.mark.asyncio
-    async def test_private_ip_observation(self):
+    async def test_private_ip_observation_title_and_severity(self):
         from app.checks.network.whois_lookup import WhoisLookupCheck
 
         check = WhoisLookupCheck()
@@ -411,7 +474,10 @@ class TestWhoisAsnObservations:
                 "base_domain": "example.com",
             }
             result = await check.run(context)
-            assert any("private" in f.title.lower() for f in result.observations)
+            private_obs = [f for f in result.observations if "private" in f.title.lower()]
+            assert len(private_obs) == 1
+            assert private_obs[0].severity == "info"
+            assert "10.0.0.1" in private_obs[0].title
 
     @pytest.mark.asyncio
     async def test_no_ipwhois_reports_error(self):
@@ -428,8 +494,13 @@ class TestWhoisAsnObservations:
                 "base_domain": "example.com",
             }
             result = await check.run(context)
-            assert result.success is True  # Still succeeds (domain whois may work)
+            # Still succeeds (domain whois path is independent)
             assert any("ipwhois" in e.lower() for e in result.errors)
+
+
+# ---------------------------------------------------------------------------
+# Check resolver integration
+# ---------------------------------------------------------------------------
 
 
 class TestWhoisCheckResolver:

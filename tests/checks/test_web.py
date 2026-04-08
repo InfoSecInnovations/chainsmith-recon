@@ -239,22 +239,52 @@ Disallow: /public/
         assert len(sensitive_observations) == 1
 
     async def test_detects_sensitive_paths(self, sample_service):
-        """Sensitive patterns are flagged."""
+        """Sensitive patterns in robots.txt are flagged with correct title and severity."""
         check = RobotsTxtCheck()
-        robots_content = """
-User-agent: *
-Disallow: /api/internal/
-Disallow: /.git/
-Disallow: /model/weights/
-"""
+        # Realistic robots.txt with sensitive paths embedded among normal directives
+        robots_content = (
+            "# robots.txt for example.com\n"
+            "User-agent: *\n"
+            "Disallow: /search\n"
+            "Disallow: /cgi-bin/\n"
+            "Disallow: /wp-content/uploads/\n"
+            "Disallow: /staging/api/v2/health\n"
+            "Disallow: /data/export/reports\n"
+            "Disallow: /internal/debug/console\n"
+            "Allow: /public/\n"
+        )
         response = make_response(body=robots_content)
 
         with patch("app.checks.web.robots.AsyncHttpClient", return_value=mock_client(response)):
             result = await check.check_service(sample_service, {})
 
-        assert len(result.observations) > 0
-        observation = result.observations[0]
-        assert "Sensitive" in observation.title
+        sensitive_observations = [f for f in result.observations if "Sensitive paths" in f.title]
+        assert len(sensitive_observations) == 1
+        obs = sensitive_observations[0]
+        assert obs.severity == "low"
+        assert obs.title.startswith("Sensitive paths in robots.txt")
+        # Evidence should contain the matching paths
+        assert "/staging/api/v2/health" in obs.evidence or "/data/export/reports" in obs.evidence
+
+    async def test_benign_robots_no_sensitive_observation(self, sample_service):
+        """A robots.txt with only benign paths produces no sensitive-path observation."""
+        check = RobotsTxtCheck()
+        robots_content = (
+            "# Standard robots.txt\n"
+            "User-agent: *\n"
+            "Disallow: /search\n"
+            "Disallow: /cgi-bin/\n"
+            "Disallow: /wp-content/uploads/\n"
+            "Disallow: /tmp/\n"
+            "Allow: /public/\n"
+        )
+        response = make_response(body=robots_content)
+
+        with patch("app.checks.web.robots.AsyncHttpClient", return_value=mock_client(response)):
+            result = await check.check_service(sample_service, {})
+
+        sensitive_observations = [f for f in result.observations if "Sensitive paths" in f.title]
+        assert len(sensitive_observations) == 0
 
     async def test_extracts_sitemaps(self, sample_service):
         """Sitemap URLs are extracted."""

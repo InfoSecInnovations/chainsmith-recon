@@ -1,6 +1,6 @@
 """Tests for WebDAV, VCS exposure, and config exposure checks."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -70,6 +70,13 @@ def mock_client_multi(response_map=None, default=None):
     return mock
 
 
+def _mock_preferences(intrusive_web=False):
+    """Return a mock get_preferences function with the given intrusive_web setting."""
+    prefs = MagicMock()
+    prefs.checks.intrusive_web = intrusive_web
+    return MagicMock(return_value=prefs)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # WebDAVCheck
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -84,7 +91,7 @@ class TestWebDAVCheck:
     @pytest.mark.asyncio
     async def test_skips_when_intrusive_disabled(self, service):
         check = WebDAVCheck()
-        with patch.object(WebDAVCheck, "_is_intrusive_allowed", return_value=False):
+        with patch("app.preferences.get_preferences", _mock_preferences(intrusive_web=False)):
             result = await check.check_service(service, {})
         assert len(result.observations) == 0
         assert result.outputs.get("webdav_skipped") is True
@@ -98,14 +105,18 @@ class TestWebDAVCheck:
             ("MKCOL", "chainsmith-webdav-test"): resp(403),
         }
         with (
-            patch.object(WebDAVCheck, "_is_intrusive_allowed", return_value=True),
+            patch("app.preferences.get_preferences", _mock_preferences(intrusive_web=True)),
             patch(
                 "app.checks.web.webdav.AsyncHttpClient", return_value=mock_client_multi(responses)
             ),
         ):
             result = await check.check_service(service, {})
-        assert any("PROPFIND" in f.title for f in result.observations)
-        assert any(f.severity == "high" for f in result.observations)
+
+        propfind_obs = [f for f in result.observations if "PROPFIND" in f.title]
+        assert len(propfind_obs) == 1
+        assert propfind_obs[0].title == "WebDAV PROPFIND enabled: target.com"
+        assert propfind_obs[0].severity == "high"
+        assert "207" in propfind_obs[0].evidence
 
     @pytest.mark.asyncio
     async def test_detects_put_write(self, service):
@@ -117,15 +128,18 @@ class TestWebDAVCheck:
             ("MKCOL", "chainsmith-webdav-test"): resp(403),
         }
         with (
-            patch.object(WebDAVCheck, "_is_intrusive_allowed", return_value=True),
+            patch("app.preferences.get_preferences", _mock_preferences(intrusive_web=True)),
             patch(
                 "app.checks.web.webdav.AsyncHttpClient", return_value=mock_client_multi(responses)
             ),
         ):
             result = await check.check_service(service, {})
+
         critical = [f for f in result.observations if f.severity == "critical"]
-        assert len(critical) >= 1
-        assert any("PUT" in f.title for f in critical)
+        assert len(critical) == 1
+        assert "PUT" in critical[0].title
+        assert critical[0].title == f"WebDAV write access: PUT accepted at {service.host}"
+        assert "201" in critical[0].evidence
 
     @pytest.mark.asyncio
     async def test_detects_auth_required(self, service):
@@ -136,19 +150,83 @@ class TestWebDAVCheck:
             ("MKCOL", "chainsmith-webdav-test"): resp(401),
         }
         with (
-            patch.object(WebDAVCheck, "_is_intrusive_allowed", return_value=True),
+            patch("app.preferences.get_preferences", _mock_preferences(intrusive_web=True)),
             patch(
                 "app.checks.web.webdav.AsyncHttpClient", return_value=mock_client_multi(responses)
             ),
         ):
             result = await check.check_service(service, {})
+
         medium = [f for f in result.observations if f.severity == "medium"]
-        assert len(medium) >= 1
+        assert len(medium) == 1
+        assert medium[0].title == f"WebDAV methods require auth: {service.host}"
+        assert "401" in medium[0].evidence
+
+    @pytest.mark.asyncio
+    async def test_no_observations_when_all_forbidden(self, service):
+        """All WebDAV methods return 403 -- no observations should be created."""
+        check = WebDAVCheck()
+        responses = {
+            ("PROPFIND", "target.com"): resp(403),
+            ("PUT", "chainsmith-webdav-test"): resp(403),
+            ("MKCOL", "chainsmith-webdav-test"): resp(403),
+        }
+        with (
+            patch("app.preferences.get_preferences", _mock_preferences(intrusive_web=True)),
+            patch(
+                "app.checks.web.webdav.AsyncHttpClient", return_value=mock_client_multi(responses)
+            ),
+        ):
+            result = await check.check_service(service, {})
+
+        assert len(result.observations) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # VCSExposureCheck
 # ═══════════════════════════════════════════════════════════════════════════════
+
+
+# Realistic multi-section git config body (not a minimal stub)
+REALISTIC_GIT_CONFIG = """\
+[core]
+\trepositoryformatversion = 0
+\tfilemode = true
+\tbare = false
+\tlogallrefupdates = true
+\tignorecase = true
+\tprecomposeunicode = true
+[remote "origin"]
+\turl = git@github.com:acme-corp/webapp.git
+\tfetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+\tremote = origin
+\tmerge = refs/heads/main
+[user]
+\tname = deploy-bot
+\temail = deploy-bot@acme-corp.example
+"""
+
+# Git config with embedded credentials in remote URL (realistic multi-section)
+REALISTIC_GIT_CONFIG_WITH_CREDS = """\
+[core]
+\trepositoryformatversion = 0
+\tfilemode = true
+\tbare = false
+\tlogallrefupdates = true
+[remote "origin"]
+\turl = https://deploy-bot:ghp_aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV3w@github.com/acme-corp/webapp.git
+\tfetch = +refs/heads/*:refs/remotes/origin/*
+[remote "staging"]
+\turl = https://gitlab.acme-corp.internal/webapp-staging.git
+\tfetch = +refs/heads/*:refs/remotes/staging/*
+[branch "main"]
+\tremote = origin
+\tmerge = refs/heads/main
+[user]
+\tname = deploy-bot
+\temail = deploy@acme-corp.internal
+"""
 
 
 class TestVCSExposureCheck:
@@ -160,11 +238,16 @@ class TestVCSExposureCheck:
     async def test_detects_git_exposure(self, service):
         check = VCSExposureCheck()
         responses = {
-            ("GET", ".git/config"): resp(200, body="[core]\n\trepositoryformatversion = 0"),
-            ("GET", ".git/COMMIT_EDITMSG"): resp(200, body="Initial commit"),
-            ("GET", ".git/refs/heads/main"): resp(200, body="abc123"),
-            ("GET", ".git/logs/HEAD"): resp(200, body="log data"),
-            ("GET", ".gitignore"): resp(200, body=".env"),
+            ("GET", ".git/config"): resp(200, body=REALISTIC_GIT_CONFIG),
+            ("GET", ".git/COMMIT_EDITMSG"): resp(
+                200, body="feat: add user auth endpoint\n\nSigned-off-by: deploy-bot"
+            ),
+            ("GET", ".git/refs/heads/main"): resp(
+                200, body="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+            ),
+            ("GET", ".git/refs/heads/master"): resp(404),
+            ("GET", ".git/logs/HEAD"): resp(200, body="0000000 a1b2c3d initial commit"),
+            ("GET", ".gitignore"): resp(200, body=".env\nnode_modules/\n__pycache__/"),
             ("GET", ".svn/entries"): resp(404),
             ("GET", ".hg/store"): resp(404),
         }
@@ -175,21 +258,20 @@ class TestVCSExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        assert len(result.observations) >= 1
-        git_observation = result.observations[0]
-        assert git_observation.severity in ("critical", "high")
-        assert "Git" in git_observation.title or "git" in git_observation.title.lower()
+        assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert obs.title == f"Git repository exposed: {service.host}"
+        assert obs.severity == "critical"
+        assert "/.git/config" in obs.evidence
 
     @pytest.mark.asyncio
     async def test_detects_git_credentials(self, service):
         check = VCSExposureCheck()
         responses = {
-            ("GET", ".git/config"): resp(
-                200,
-                body='[remote "origin"]\n\turl = https://user:ghp_secret123@github.com/org/repo',
-            ),
+            ("GET", ".git/config"): resp(200, body=REALISTIC_GIT_CONFIG_WITH_CREDS),
             ("GET", ".git/COMMIT_EDITMSG"): resp(404),
-            ("GET", ".git/refs"): resp(404),
+            ("GET", ".git/refs/heads/main"): resp(404),
+            ("GET", ".git/refs/heads/master"): resp(404),
             ("GET", ".git/logs"): resp(404),
             ("GET", ".gitignore"): resp(404),
             ("GET", ".svn"): resp(404),
@@ -202,15 +284,73 @@ class TestVCSExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        cred_observations = [f for f in result.observations if "credential" in f.title.lower()]
-        assert len(cred_observations) >= 1
-        assert cred_observations[0].severity == "critical"
+        assert len(result.observations) == 1
+        cred_obs = result.observations[0]
+        assert cred_obs.title == f"Git config contains credentials: {service.host}"
+        assert cred_obs.severity == "critical"
+        assert "redacted" in cred_obs.evidence.lower()
+
+    @pytest.mark.asyncio
+    async def test_git_config_404_no_observation(self, service):
+        """A 404 at /.git/config should not produce a git exposure observation."""
+        check = VCSExposureCheck()
+        responses = {
+            ("GET", ".git/config"): resp(404),
+            ("GET", ".git/COMMIT_EDITMSG"): resp(404),
+            ("GET", ".git/refs/heads/main"): resp(404),
+            ("GET", ".git/refs/heads/master"): resp(404),
+            ("GET", ".git/logs/HEAD"): resp(404),
+            ("GET", ".gitignore"): resp(404),
+            ("GET", ".svn/entries"): resp(404),
+            ("GET", ".hg/store"): resp(404),
+        }
+        context = {f"paths_{service.port}": {"accessible": ["/.git/config"]}}
+
+        with patch(
+            "app.checks.web.vcs_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)
+        ):
+            result = await check.check_service(service, context)
+
+        git_obs = [o for o in result.observations if "git" in o.title.lower() or "Git" in o.title]
+        assert len(git_obs) == 0
+
+    @pytest.mark.asyncio
+    async def test_git_config_not_git_syntax(self, service):
+        """A 200 at /.git/config with non-git content (e.g., an HTML 404 page) should still
+        be counted as accessible but won't match credential patterns."""
+        check = VCSExposureCheck()
+        html_body = "<html><head><title>Not Found</title></head><body><h1>404</h1></body></html>"
+        responses = {
+            ("GET", ".git/config"): resp(200, body=html_body),
+            ("GET", ".git/COMMIT_EDITMSG"): resp(404),
+            ("GET", ".git/refs/heads/main"): resp(404),
+            ("GET", ".git/refs/heads/master"): resp(404),
+            ("GET", ".git/logs/HEAD"): resp(404),
+            ("GET", ".gitignore"): resp(404),
+            ("GET", ".svn/entries"): resp(404),
+            ("GET", ".hg/store"): resp(404),
+        }
+        context = {f"paths_{service.port}": {"accessible": ["/.git/config"]}}
+
+        with patch(
+            "app.checks.web.vcs_exposure.AsyncHttpClient", return_value=mock_client_multi(responses)
+        ):
+            result = await check.check_service(service, context)
+
+        # Only 1 accessible path so severity should be high (not critical)
+        if result.observations:
+            obs = result.observations[0]
+            assert obs.severity == "high"
+            # Should not be flagged as containing credentials
+            assert "credential" not in obs.title.lower()
 
     @pytest.mark.asyncio
     async def test_detects_svn(self, service):
         check = VCSExposureCheck()
         responses = {
-            ("GET", ".svn/entries"): resp(200, body="12\ndir\n"),
+            ("GET", ".svn/entries"): resp(
+                200, body="12\ndir\n\nhttps://svn.acme-corp.internal/webapp/trunk\n"
+            ),
             ("GET", ".hg/store"): resp(404),
         }
         context = {f"paths_{service.port}": {"accessible": ["/.svn/entries"]}}
@@ -220,7 +360,10 @@ class TestVCSExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        assert any("SVN" in f.title for f in result.observations)
+        assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert obs.title == f"SVN metadata exposed: {service.host}"
+        assert obs.severity == "high"
 
     @pytest.mark.asyncio
     async def test_no_observations_when_no_vcs(self, service):
@@ -252,7 +395,22 @@ class TestConfigExposureCheck:
     @pytest.mark.asyncio
     async def test_detects_env_with_secrets(self, service):
         check = ConfigExposureCheck()
-        env_content = "DB_HOST=localhost\nOPENAI_API_KEY=sk-1234567890abcdefghij\nDEBUG=true"
+        env_content = (
+            "# Application configuration\n"
+            "APP_NAME=acme-webapp\n"
+            "APP_PORT=8080\n"
+            "DEBUG=true\n"
+            "LOG_LEVEL=info\n"
+            "\n"
+            "# Database\n"
+            "DB_HOST=localhost\n"
+            "DB_PORT=5432\n"
+            "DB_NAME=acme_prod\n"
+            "\n"
+            "# Third-party integrations\n"
+            "OPENAI_API_KEY=sk-proj-1a2B3c4D5e6F7g8H9iJkLmNoPqRsTuVwXyZ0123456\n"
+            "SENTRY_DSN=https://abc@sentry.io/123\n"
+        )
         responses = {
             ("GET", ".env"): resp(200, body=env_content),
         }
@@ -264,21 +422,22 @@ class TestConfigExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        secrets = [
-            f
-            for f in result.observations
-            if "secret" in f.title.lower() or "contains" in f.title.lower()
-        ]
-        assert len(secrets) >= 1
+        secrets = [f for f in result.observations if "contains secrets" in f.title.lower()]
+        assert len(secrets) == 1
         assert secrets[0].severity == "critical"
+        assert secrets[0].title == f"Configuration file contains secrets: /.env at {service.host}"
+        assert "OPENAI_API_KEY" in secrets[0].evidence
         # Verify actual secret values are NOT in evidence
-        assert "sk-1234567890" not in secrets[0].evidence
+        assert "sk-proj-1a2B3c" not in secrets[0].evidence
 
     @pytest.mark.asyncio
     async def test_config_accessible_no_secrets(self, service):
         check = ConfigExposureCheck()
         responses = {
-            ("GET", "config.json"): resp(200, body='{"debug": true, "port": 8080}'),
+            ("GET", "config.json"): resp(
+                200,
+                body='{"debug": true, "port": 8080, "log_level": "info", "workers": 4}',
+            ),
         }
         context = {f"paths_{service.port}": {"accessible": ["/config.json"]}}
 
@@ -288,12 +447,58 @@ class TestConfigExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        assert len(result.observations) >= 1
-        assert result.observations[0].severity == "high"
-        assert (
-            "no secrets detected" in result.observations[0].description.lower()
-            or "accessible" in result.observations[0].title.lower()
+        assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert obs.title == f"Configuration file accessible: /config.json at {service.host}"
+        assert obs.severity == "high"
+        assert "no secret" in obs.description.lower()
+
+    @pytest.mark.asyncio
+    async def test_empty_env_file_no_secrets(self, service):
+        """An empty .env file is still accessible but contains no secrets."""
+        check = ConfigExposureCheck()
+        responses = {
+            ("GET", ".env"): resp(200, body=""),
+        }
+        context = {f"paths_{service.port}": {"accessible": ["/.env"]}}
+
+        with patch(
+            "app.checks.web.config_exposure.AsyncHttpClient",
+            return_value=mock_client_multi(responses),
+        ):
+            result = await check.check_service(service, context)
+
+        # Empty body -> check skips (resp.body is falsy)
+        secret_obs = [f for f in result.observations if "secret" in f.title.lower()]
+        assert len(secret_obs) == 0
+
+    @pytest.mark.asyncio
+    async def test_env_file_no_secret_patterns(self, service):
+        """An .env file with only non-secret configuration values."""
+        check = ConfigExposureCheck()
+        env_content = (
+            "# Application settings\n"
+            "APP_NAME=my-app\n"
+            "PORT=3000\n"
+            "NODE_ENV=production\n"
+            "LOG_FORMAT=json\n"
         )
+        responses = {
+            ("GET", ".env"): resp(200, body=env_content),
+        }
+        context = {f"paths_{service.port}": {"accessible": ["/.env"]}}
+
+        with patch(
+            "app.checks.web.config_exposure.AsyncHttpClient",
+            return_value=mock_client_multi(responses),
+        ):
+            result = await check.check_service(service, context)
+
+        assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert obs.title == f"Configuration file accessible: /.env at {service.host}"
+        assert obs.severity == "high"
+        assert "no secret" in obs.description.lower()
 
     @pytest.mark.asyncio
     async def test_no_observations_when_no_config(self, service):
@@ -317,7 +522,18 @@ class TestConfigExposureCheck:
     @pytest.mark.asyncio
     async def test_detects_aws_credentials(self, service):
         check = ConfigExposureCheck()
-        env_content = "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\nAWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        env_content = (
+            "# Production environment\n"
+            "APP_ENV=production\n"
+            "REGION=us-east-1\n"
+            "\n"
+            "# AWS credentials (rotated quarterly)\n"
+            "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n"
+            "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n"
+            "\n"
+            "# S3 bucket\n"
+            "S3_BUCKET=acme-uploads-prod\n"
+        )
         responses = {
             ("GET", ".env"): resp(200, body=env_content),
         }
@@ -329,4 +545,10 @@ class TestConfigExposureCheck:
         ):
             result = await check.check_service(service, context)
 
-        assert any(f.severity == "critical" for f in result.observations)
+        secret_obs = [f for f in result.observations if "contains secrets" in f.title.lower()]
+        assert len(secret_obs) == 1
+        assert secret_obs[0].severity == "critical"
+        assert (
+            "AWS_ACCESS_KEY_ID" in secret_obs[0].evidence
+            or "AWS_SECRET_ACCESS_KEY" in secret_obs[0].evidence
+        )

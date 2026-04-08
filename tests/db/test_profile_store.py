@@ -172,6 +172,11 @@ class TestFileIO:
         result = save_profile_store(store, temp_prefs_path)
         assert result is True
 
+        # Verify the file was actually written with expected content
+        raw_content = temp_prefs_path.read_text()
+        assert "saved-profile" in raw_content
+        assert "active_profile" in raw_content
+
         loaded = load_profile_store(temp_prefs_path)
         assert loaded.active_profile == "saved-profile"
         assert "saved-profile" in loaded.profiles

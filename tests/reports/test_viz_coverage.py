@@ -342,6 +342,54 @@ class TestCoverageDataLogic:
         assert result["isGlobal"] is True  # Both normalize to same host
 
 
+class TestCoverageDataRendering:
+    """Behavioral tests that exercise data rendering logic end-to-end."""
+
+    def test_found_status_only_when_observations_exist(self):
+        """A check transitions to 'found' only when it has actual observations."""
+        observations = [
+            {"host": "h.com", "check_name": "dns_lookup", "severity": "info", "title": "A"},
+        ]
+        checks = [
+            {"name": "dns_lookup", "status": "completed"},
+            {"name": "port_scan", "status": "completed"},
+        ]
+        result = TestCoverageDataLogic.build_coverage_data(observations, checks)
+        host = result["hosts"][0]
+        # dns_lookup has an observation -> found
+        assert result["matrix"][host]["dns_lookup"]["status"] == "found"
+        assert result["matrix"][host]["dns_lookup"]["observationCount"] == 1
+        # port_scan has no observations -> stays completed
+        assert result["matrix"][host]["port_scan"]["status"] == "completed"
+        assert result["matrix"][host]["port_scan"]["observationCount"] == 0
+
+    def test_observation_count_accumulates_per_check(self):
+        """Multiple observations for the same check accumulate correctly."""
+        observations = [
+            {"host": "h.com", "check_name": "dns_lookup", "severity": "info", "title": "A"},
+            {"host": "h.com", "check_name": "dns_lookup", "severity": "low", "title": "B"},
+            {"host": "h.com", "check_name": "dns_lookup", "severity": "high", "title": "C"},
+        ]
+        checks = [{"name": "dns_lookup", "status": "completed"}]
+        result = TestCoverageDataLogic.build_coverage_data(observations, checks)
+        host = result["hosts"][0]
+        assert result["matrix"][host]["dns_lookup"]["observationCount"] == 3
+        assert len(result["matrix"][host]["dns_lookup"]["observations"]) == 3
+
+    def test_multi_host_observations_attributed_correctly(self):
+        """Observations are attributed to the correct host row in multi-host view."""
+        observations = [
+            {"host": "a.com", "check_name": "check_x", "severity": "high", "title": "A1"},
+            {"host": "a.com", "check_name": "check_x", "severity": "low", "title": "A2"},
+            {"host": "b.com", "check_name": "check_x", "severity": "info", "title": "B1"},
+        ]
+        checks = [{"name": "check_x", "status": "completed"}]
+        result = TestCoverageDataLogic.build_coverage_data(observations, checks)
+        assert result["isGlobal"] is False
+        assert result["matrix"]["a.com"]["check_x"]["observationCount"] == 2
+        assert result["matrix"]["b.com"]["check_x"]["observationCount"] == 1
+
+
 class TestCoverageCSS:
     """Verify coverage CSS classes exist."""
 

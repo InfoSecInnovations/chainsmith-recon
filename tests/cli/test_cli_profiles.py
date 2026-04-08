@@ -186,6 +186,7 @@ class TestProfileCreate:
         with _patch_client(client):
             result = runner.invoke(cli, ["prefs", "profile", "create", "has spaces"])
             assert result.exit_code == 1
+            assert "Invalid" in result.output or "error" in result.output.lower()
 
     def test_create_profile_duplicate(self, runner):
         client = _mock_client()
@@ -279,6 +280,7 @@ class TestProfileDelete:
         with _patch_client(client):
             result = runner.invoke(cli, ["prefs", "profile", "delete", "nonexistent", "-y"])
             assert result.exit_code == 1
+            assert "not found" in result.output.lower()
 
     def test_delete_active_fails(self, runner):
         client = _mock_client()
@@ -319,6 +321,7 @@ class TestProfileReset:
         with _patch_client(client):
             result = runner.invoke(cli, ["prefs", "profile", "reset", "nonexistent", "-y"])
             assert result.exit_code == 1
+            assert "not found" in result.output.lower()
 
 
 class TestProfileCopy:
@@ -354,6 +357,7 @@ class TestProfileCopy:
         with _patch_client(client):
             result = runner.invoke(cli, ["prefs", "profile", "copy", "nonexistent", "new"])
             assert result.exit_code == 1
+            assert "not found" in result.output.lower()
 
     def test_copy_dest_exists(self, runner):
         client = _mock_client()

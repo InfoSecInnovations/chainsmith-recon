@@ -252,7 +252,8 @@ class TestReportGenerationFromUI:
     async def test_technical_report_md(self, seeded_db):
         result = await generate_technical_report("scan-001", "md")
         assert result["format"] == "md"
-        assert "# Technical" in result["content"] or "XSS" in result["content"]
+        assert "# Technical" in result["content"]
+        assert "XSS" in result["content"]
 
     @pytest.mark.asyncio
     async def test_technical_report_json(self, seeded_db):
@@ -313,17 +314,18 @@ class TestReportGenerationFromUI:
 
     @pytest.mark.asyncio
     async def test_all_formats_for_executive(self, seeded_db):
-        """All 4 formats produce valid output for executive report."""
+        """All 3 text formats produce valid output for executive report."""
         for fmt in ["md", "json", "html"]:
             result = await generate_executive_report("scan-001", fmt)
             assert result["format"] == fmt
-            assert result["content"]
+            assert len(result["content"]) > 0, f"Empty content for format {fmt}"
 
     @pytest.mark.asyncio
     async def test_pdf_format_technical(self, seeded_db):
-        """PDF format produces bytes output."""
+        """PDF format produces valid PDF output with correct magic bytes."""
         pytest.importorskip("xhtml2pdf")
         result = await generate_technical_report("scan-001", "pdf")
         assert result["format"] == "pdf"
         assert isinstance(result["content"], bytes)
         assert result["filename"].endswith(".pdf")
+        assert result["content"][:4] == b"%PDF", "PDF output must start with %PDF magic bytes"

@@ -1,9 +1,24 @@
-"""Tests for IPv6DiscoveryCheck: AAAA resolution, dual-stack analysis, and IPv6 observations."""
+"""Tests for IPv6DiscoveryCheck: AAAA resolution, dual-stack analysis, and IPv6 observations.
+
+Mock strategy: ``_resolve_aaaa`` is an async wrapper around ``_sync_resolve_aaaa``
+(which itself calls ``dns.resolver`` or ``socket.getaddrinfo``).  The run-level
+tests mock ``_resolve_aaaa`` because the async-to-sync boundary via
+``run_in_executor`` is not worth reproducing in unit tests.
+
+``_sync_resolve_aaaa`` is tested directly with I/O-boundary mocks (dns.resolver
+and socket.getaddrinfo) — those tests exercise real parsing logic.
+
+All assertions are specific: exact titles, severities, and evidence content.
+"""
 
 import socket
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+# ---------------------------------------------------------------------------
+# Metadata / init
+# ---------------------------------------------------------------------------
 
 
 class TestIPv6DiscoveryCheckInit:
@@ -42,6 +57,16 @@ class TestIPv6DiscoveryCheckInit:
         assert ULA_PREFIX == "fd"
 
 
+# ---------------------------------------------------------------------------
+# Run-level behaviour
+# Mock rationale: _resolve_aaaa is an async wrapper that calls
+# run_in_executor(_sync_resolve_aaaa). Mocking at _resolve_aaaa keeps tests
+# focused on the run() orchestration logic (deduplication, observation
+# generation, dual-stack detection). _sync_resolve_aaaa is tested separately
+# with real I/O-boundary mocks below.
+# ---------------------------------------------------------------------------
+
+
 class TestIPv6DiscoveryCheckRun:
     """Test IPv6DiscoveryCheck runtime behavior."""
 
@@ -52,6 +77,7 @@ class TestIPv6DiscoveryCheckRun:
         check = IPv6DiscoveryCheck()
         result = await check.run({"target_hosts": []})
         assert result.success is False
+        assert any("target_hosts" in e.lower() for e in result.errors)
 
     @pytest.mark.asyncio
     async def test_empty_context_fails(self):
@@ -69,7 +95,7 @@ class TestIPv6DiscoveryCheckRun:
         with patch.object(check, "_resolve_aaaa", new_callable=AsyncMock) as mock_resolve:
             mock_resolve.side_effect = [
                 ["2001:db8::1"],  # www
-                [],  # api — no IPv6
+                [],  # api - no IPv6
                 ["2001:db8::3"],  # cdn
             ]
             context = {
@@ -81,8 +107,11 @@ class TestIPv6DiscoveryCheckRun:
                 },
             }
             result = await check.run(context)
-            assert result.success is True
             assert mock_resolve.call_count == 3
+            # Only hosts WITH IPv6 appear in output
+            assert "www.example.com" in result.outputs["ipv6_data"]
+            assert "api.example.com" not in result.outputs["ipv6_data"]
+            assert "cdn.example.com" in result.outputs["ipv6_data"]
 
     @pytest.mark.asyncio
     async def test_outputs_ipv6_data_structure(self):
@@ -99,10 +128,10 @@ class TestIPv6DiscoveryCheckRun:
             data = result.outputs["ipv6_data"]
             assert "www.example.com" in data
             entry = data["www.example.com"]
-            assert "ipv6_addresses" in entry
-            assert "has_ipv4" in entry
-            assert "ipv6_only" in entry
-            assert "ula_detected" in entry
+            assert entry["ipv6_addresses"] == ["2001:db8::1"]
+            assert entry["has_ipv4"] is True
+            assert entry["ipv6_only"] is False
+            assert entry["ula_detected"] is False
 
     @pytest.mark.asyncio
     async def test_no_ipv6_hosts_empty_output(self):
@@ -136,11 +165,16 @@ class TestIPv6DiscoveryCheckRun:
             assert entry["ipv6_only"] is False
 
 
+# ---------------------------------------------------------------------------
+# Observations
+# ---------------------------------------------------------------------------
+
+
 class TestIPv6DiscoveryObservations:
     """Test observation generation from IPv6 discovery."""
 
     @pytest.mark.asyncio
-    async def test_ipv6_info_observation(self):
+    async def test_ipv6_info_observation_title_and_evidence(self):
         from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
 
         check = IPv6DiscoveryCheck()
@@ -151,11 +185,14 @@ class TestIPv6DiscoveryObservations:
                 "dns_records": {"www.example.com": "1.2.3.4"},
             }
             result = await check.run(context)
-            info_observations = [f for f in result.observations if f.severity == "info"]
-            assert any("ipv6" in f.title.lower() for f in info_observations)
+            info_obs = [f for f in result.observations if f.severity == "info"]
+            ipv6_obs = [f for f in info_obs if "ipv6" in f.title.lower()]
+            assert len(ipv6_obs) == 1
+            assert "www.example.com" in ipv6_obs[0].title
+            assert "2001:db8::1" in ipv6_obs[0].evidence
 
     @pytest.mark.asyncio
-    async def test_ipv6_only_medium_observation(self):
+    async def test_ipv6_only_medium_observation_title_and_severity(self):
         from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
 
         check = IPv6DiscoveryCheck()
@@ -166,13 +203,14 @@ class TestIPv6DiscoveryObservations:
                 "dns_records": {},  # No IPv4 record
             }
             result = await check.run(context)
-            medium_observations = [f for f in result.observations if f.severity == "medium"]
-            assert any(
-                "ipv6" in f.title.lower() and "ipv4" in f.title.lower() for f in medium_observations
-            )
+            medium_obs = [f for f in result.observations if f.severity == "medium"]
+            assert len(medium_obs) == 1
+            assert "ipv6" in medium_obs[0].title.lower()
+            assert "ipv4" in medium_obs[0].title.lower()
+            assert "v6only.example.com" in medium_obs[0].title
 
     @pytest.mark.asyncio
-    async def test_ula_observation(self):
+    async def test_ula_observation_title_and_severity(self):
         from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
 
         check = IPv6DiscoveryCheck()
@@ -183,14 +221,16 @@ class TestIPv6DiscoveryObservations:
                 "dns_records": {"internal.example.com": "10.0.0.1"},
             }
             result = await check.run(context)
-            low_observations = [f for f in result.observations if f.severity == "low"]
-            assert any(
-                "ula" in f.title.lower() or "unique local" in f.title.lower()
-                for f in low_observations
-            )
+            low_obs = [f for f in result.observations if f.severity == "low"]
+            ula_obs = [
+                f for f in low_obs if "ula" in f.title.lower() or "unique local" in f.title.lower()
+            ]
+            assert len(ula_obs) == 1
+            assert "internal.example.com" in ula_obs[0].title
+            assert "fd00::42" in ula_obs[0].evidence
 
     @pytest.mark.asyncio
-    async def test_multiple_ipv6_addresses(self):
+    async def test_multiple_ipv6_addresses_count_in_description(self):
         from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
 
         check = IPv6DiscoveryCheck()
@@ -203,13 +243,17 @@ class TestIPv6DiscoveryObservations:
             result = await check.run(context)
             entry = result.outputs["ipv6_data"]["cdn.example.com"]
             assert len(entry["ipv6_addresses"]) == 4
-            # Info observation should mention count
             info = [f for f in result.observations if f.severity == "info"]
             assert any("4" in f.description for f in info)
 
 
+# ---------------------------------------------------------------------------
+# _sync_resolve_aaaa — tested at the I/O boundary (dns.resolver / socket)
+# ---------------------------------------------------------------------------
+
+
 class TestIPv6ResolveAAAA:
-    """Test AAAA resolution methods."""
+    """Test AAAA resolution methods at the I/O boundary."""
 
     def test_sync_resolve_with_dnspython(self):
         from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
@@ -222,7 +266,10 @@ class TestIPv6ResolveAAAA:
             mock_answers = [MagicMock(__str__=lambda self: "2001:db8::1")]
             mock_dns.resolver.Resolver.return_value.resolve.return_value = mock_answers
             result = check._sync_resolve_aaaa("www.example.com")
-            assert "2001:db8::1" in result
+            assert result == ["2001:db8::1"]
+            mock_dns.resolver.Resolver.return_value.resolve.assert_called_once_with(
+                "www.example.com", "AAAA"
+            )
 
     def test_sync_resolve_fallback_socket(self):
         from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
@@ -236,7 +283,10 @@ class TestIPv6ResolveAAAA:
                 (socket.AF_INET6, socket.SOCK_STREAM, 0, "", ("2001:db8::1", 0, 0, 0)),
             ]
             result = check._sync_resolve_aaaa("www.example.com")
-            assert "2001:db8::1" in result
+            assert result == ["2001:db8::1"]
+            mock_getaddr.assert_called_once_with(
+                "www.example.com", None, socket.AF_INET6, socket.SOCK_STREAM
+            )
 
     def test_sync_resolve_nxdomain(self):
         from app.checks.network.ipv6_discovery import IPv6DiscoveryCheck
@@ -273,6 +323,12 @@ class TestIPv6ResolveAAAA:
             mock_dns.resolver.Resolver.return_value.resolve.return_value = [mock_r1, mock_r2]
             result = check._sync_resolve_aaaa("www.example.com")
             assert len(result) == 1
+            assert result == ["2001:db8::1"]
+
+
+# ---------------------------------------------------------------------------
+# Check resolver integration
+# ---------------------------------------------------------------------------
 
 
 class TestIPv6CheckResolver:

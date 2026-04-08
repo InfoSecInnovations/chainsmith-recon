@@ -11,6 +11,7 @@ Covers:
 """
 
 import json
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -78,10 +79,29 @@ def sample_observations(sample_observation):
     ]
 
 
-def _mock_client():
-    """Create a mock ChainsmithClient."""
+def _mock_client(**overrides):
+    """Create a mock ChainsmithClient with scan-ready defaults.
+
+    Provides sensible defaults for all methods called during a scan so
+    individual tests only need to override what they care about.
+    """
+    defaults = {
+        "health.return_value": {"status": "healthy"},
+        "set_scope.return_value": {"status": "ok", "target": "example.com"},
+        "update_settings.return_value": {"status": "ok"},
+        "start_scan.return_value": {"status": "accepted"},
+        "poll_scan.return_value": {"status": "complete"},
+        "get_observations.return_value": {"total": 0, "observations": []},
+    }
+    defaults.update(overrides)
     client = MagicMock()
-    client.health.return_value = {"status": "healthy"}
+    for attr, value in defaults.items():
+        # Support dotted attribute paths like "health.return_value"
+        parts = attr.rsplit(".", 1)
+        if len(parts) == 2:
+            setattr(getattr(client, parts[0]), parts[1], value)
+        else:
+            setattr(client, attr, value)
     return client
 
 
@@ -164,10 +184,14 @@ class TestCLIHelp:
         assert "scenarios" in result.output
 
     def test_cli_version(self, runner):
-        """CLI shows version."""
+        """CLI shows version in semver format."""
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "1.3.0" in result.output
+        assert "chainsmith" in result.output.lower()
+        # Verify version is a valid semver pattern (e.g., 1.3.0)
+        assert re.search(r"\d+\.\d+\.\d+", result.output), (
+            f"Expected semver version in output: {result.output}"
+        )
 
 
 class TestListChecksCommand:
@@ -366,11 +390,6 @@ class TestScanCommand:
     def test_scan_basic(self, runner):
         """scan runs with basic target via API."""
         client = _mock_client()
-        client.set_scope.return_value = {"status": "ok", "target": "example.com"}
-        client.update_settings.return_value = {"status": "ok"}
-        client.start_scan.return_value = {"status": "accepted"}
-        client.poll_scan.return_value = {"status": "complete"}
-        client.get_observations.return_value = {"total": 0, "observations": []}
 
         with _patch_client(client):
             result = runner.invoke(cli, ["scan", "example.com", "--quiet"])
@@ -382,11 +401,6 @@ class TestScanCommand:
     def test_scan_with_suite(self, runner):
         """scan --suite passes suite filter to start_scan."""
         client = _mock_client()
-        client.set_scope.return_value = {"status": "ok", "target": "example.com"}
-        client.update_settings.return_value = {"status": "ok"}
-        client.start_scan.return_value = {"status": "accepted"}
-        client.poll_scan.return_value = {"status": "complete"}
-        client.get_observations.return_value = {"total": 0, "observations": []}
 
         with _patch_client(client):
             result = runner.invoke(cli, ["scan", "example.com", "--suite", "network", "--quiet"])
@@ -401,11 +415,6 @@ class TestScanCommand:
     def test_scan_with_checks(self, runner):
         """scan --checks passes check names to start_scan."""
         client = _mock_client()
-        client.set_scope.return_value = {"status": "ok", "target": "example.com"}
-        client.update_settings.return_value = {"status": "ok"}
-        client.start_scan.return_value = {"status": "accepted"}
-        client.poll_scan.return_value = {"status": "complete"}
-        client.get_observations.return_value = {"total": 0, "observations": []}
 
         with _patch_client(client):
             result = runner.invoke(
@@ -428,13 +437,15 @@ class TestScanCommand:
 
     def test_scan_with_scenario(self, runner):
         """scan --scenario loads scenario via API."""
-        client = _mock_client()
-        client.set_scope.return_value = {"status": "ok"}
-        client.update_settings.return_value = {"status": "ok"}
-        client.load_scenario.return_value = {"loaded": True, "simulation_count": 5, "scenario": {}}
-        client.start_scan.return_value = {"status": "accepted"}
-        client.poll_scan.return_value = {"status": "complete"}
-        client.get_observations.return_value = {"total": 0, "observations": []}
+        client = _mock_client(
+            **{
+                "load_scenario.return_value": {
+                    "loaded": True,
+                    "simulation_count": 5,
+                    "scenario": {},
+                },
+            }
+        )
 
         with _patch_client(client):
             result = runner.invoke(
@@ -447,8 +458,6 @@ class TestScanCommand:
     def test_scan_plan(self, runner):
         """scan --plan shows execution plan."""
         client = _mock_client()
-        client.set_scope.return_value = {"status": "ok"}
-        client.update_settings.return_value = {"status": "ok"}
         client.get_scan_checks.return_value = {
             "checks": [
                 {
@@ -469,8 +478,6 @@ class TestScanCommand:
     def test_scan_dry_run(self, runner):
         """scan --dry-run validates without running."""
         client = _mock_client()
-        client.set_scope.return_value = {"status": "ok"}
-        client.update_settings.return_value = {"status": "ok"}
         client.get_scan_checks.return_value = {
             "checks": [
                 {"name": "dns_enumeration", "suite": "network"},

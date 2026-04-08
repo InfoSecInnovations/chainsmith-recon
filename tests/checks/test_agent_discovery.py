@@ -106,19 +106,38 @@ class TestMultiAgentDetection:
             result = await check.check_service(sample_service, agent_context)
 
         assert result.success
-        assert len(result.observations) >= 1
+        assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert "orchestrator endpoint" in obs.title.lower()
+        assert obs.severity == "medium"
         assert "multi_agent_topology" in result.outputs
-        assert result.outputs["multi_agent_topology"]["agent_count"] >= 2
+        assert result.outputs["multi_agent_topology"]["agent_count"] == 2
+        assert set(result.outputs["multi_agent_topology"]["agent_names"]) == {
+            "researcher",
+            "reviewer",
+        }
 
     @pytest.mark.asyncio
     async def test_detects_delegation_patterns(self, sample_service, agent_context):
+        """Delegation indicators are embedded in a longer realistic AI response, not bare."""
         check = AgentMultiAgentDetectionCheck()
 
         async def mock_get(url, **kw):
             return make_response(status_code=404)
 
         async def mock_post(url, **kw):
-            return make_response(body="I'm delegating to the research agent for this task.")
+            # Realistic long response with delegation indicator buried inside
+            return make_response(
+                body=(
+                    "Thank you for your question about climate change impacts on coastal "
+                    "ecosystems. To provide the most comprehensive answer, I need to gather "
+                    "data from multiple sources. Let me coordinate the response -- I am "
+                    "forwarding to the research agent who has access to the latest IPCC "
+                    "datasets and peer-reviewed literature. Once that analysis is complete, "
+                    "we will synthesize the findings into actionable recommendations for "
+                    "your coastal management plan."
+                )
+            )
 
         client = _mock_client(get_fn=mock_get, post_fn=mock_post)
 
@@ -126,22 +145,74 @@ class TestMultiAgentDetection:
             result = await check.check_service(sample_service, agent_context)
 
         assert result.success
-        # Check for delegation-related observations
-        assert any(
-            "delegation" in f.title.lower() or "multi-agent" in f.title.lower()
-            for f in result.observations
+        assert len(result.observations) == 1
+        obs = result.observations[0]
+        assert obs.title == "Multi-agent system detected via delegation patterns"
+        assert obs.severity == "medium"
+        # Verify the specific patterns that were detected appear in the evidence
+        assert (
+            "forwarding to" in obs.evidence.lower() or "the research agent" in obs.evidence.lower()
         )
 
     @pytest.mark.asyncio
-    async def test_no_multi_agent_indicators(self, sample_service, agent_context):
+    async def test_no_multi_agent_indicators_neutral_reply(self, sample_service, agent_context):
+        """A generic helpful agent reply without any delegation language should produce zero observations."""
         check = AgentMultiAgentDetectionCheck()
-        client = _mock_client()
+
+        async def mock_get(url, **kw):
+            return make_response(status_code=404)
+
+        async def mock_post(url, **kw):
+            return make_response(
+                body=(
+                    "I'd be happy to help you with that question. Based on my training "
+                    "data, the primary factors affecting coastal erosion include wave action, "
+                    "tidal patterns, and sea-level rise. I recommend consulting the NOAA "
+                    "technical reports for region-specific projections. Would you like me "
+                    "to elaborate on any of these factors?"
+                )
+            )
+
+        client = _mock_client(get_fn=mock_get, post_fn=mock_post)
 
         with patch("app.checks.agent.multi_agent_detection.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
         assert result.success
         assert len(result.observations) == 0
+        assert "multi_agent_topology" not in result.outputs
+
+    @pytest.mark.asyncio
+    async def test_academic_delegation_discussion_no_trigger(self, sample_service, agent_context):
+        """Response discussing delegation patterns academically should NOT trigger detection."""
+        check = AgentMultiAgentDetectionCheck()
+
+        async def mock_get(url, **kw):
+            return make_response(status_code=404)
+
+        async def mock_post(url, **kw):
+            # Discusses multi-agent concepts but doesn't use the exact delegation phrases
+            # from DELEGATION_PATTERNS in a way that indicates actual delegation behavior
+            return make_response(
+                body=(
+                    "Multi-agent systems are a fascinating area of AI research. In these "
+                    "architectures, tasks can be distributed across multiple components. "
+                    "Common design patterns include the hub-and-spoke model where a central "
+                    "coordinator distributes work, and the peer-to-peer model where agents "
+                    "collaborate directly. The key challenge is ensuring that communication "
+                    "overhead does not outweigh the benefits of parallelism. Would you like "
+                    "to learn more about any specific architecture?"
+                )
+            )
+
+        client = _mock_client(get_fn=mock_get, post_fn=mock_post)
+
+        with patch("app.checks.agent.multi_agent_detection.AsyncHttpClient", return_value=client):
+            result = await check.check_service(sample_service, agent_context)
+
+        assert result.success
+        assert len(result.observations) == 0
+        assert "multi_agent_topology" not in result.outputs
 
 
 class TestFrameworkVersion:
@@ -169,7 +240,12 @@ class TestFrameworkVersion:
 
         assert result.success
         assert "framework_versions" in result.outputs
-        assert "langserve" in result.outputs["framework_versions"]
+        assert result.outputs["framework_versions"]["langserve"] == "0.0.15"
+        # Version 0.0.15 is <= 0.0.21, so it should flag as vulnerable
+        vuln_obs = [f for f in result.observations if f.severity == "medium"]
+        assert len(vuln_obs) == 1
+        assert "vulnerable" in vuln_obs[0].title.lower()
+        assert "langserve" in vuln_obs[0].title.lower()
 
     @pytest.mark.asyncio
     async def test_detects_vulnerable_version(self, sample_service, agent_context):
@@ -187,11 +263,12 @@ class TestFrameworkVersion:
         with patch("app.checks.agent.framework_version.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
-        vuln_observations = [f for f in result.observations if f.severity in ("high", "medium")]
-        assert len(vuln_observations) >= 1
-        assert any(
-            "vulnerable" in f.title.lower() or "vuln" in f.title.lower() for f in vuln_observations
-        )
+        vuln_observations = [f for f in result.observations if f.severity == "medium"]
+        assert len(vuln_observations) == 1
+        assert "vulnerable" in vuln_observations[0].title.lower()
+        assert "langserve" in vuln_observations[0].title.lower()
+        assert "0.0.10" in vuln_observations[0].title
+        assert "Input validation bypass" in vuln_observations[0].description
 
     def test_version_comparison(self):
         check = AgentFrameworkVersionCheck()
@@ -233,7 +310,14 @@ class TestMemoryExtraction:
             result = await check.check_service(sample_service, agent_context)
 
         assert result.success
-        assert len(result.observations) >= 1
+        # /memory and /agent/memory both match, plus /agent/history, /agent/state, /agent/context,
+        # /v1/memory, /api/memory -- count depends on which paths match the mock.
+        # The mock matches any URL containing "/memory" or "/agent/memory".
+        memory_obs = [f for f in result.observations if "memory" in f.title.lower()]
+        assert len(memory_obs) >= 1
+        for obs in memory_obs:
+            assert obs.severity == "high"
+            assert "accessible" in obs.title.lower() or "agent memory" in obs.title.lower()
         assert "memory_contents" in result.outputs
 
     @pytest.mark.asyncio
@@ -253,7 +337,13 @@ class TestMemoryExtraction:
         with patch("app.checks.agent.memory_extraction.AsyncHttpClient", return_value=client):
             result = await check.check_service(sample_service, agent_context)
 
-        assert any(f.severity == "critical" for f in result.observations)
+        critical_obs = [f for f in result.observations if f.severity == "critical"]
+        assert len(critical_obs) >= 1
+        # PII observation should mention PII type in its description
+        assert any(
+            "pii" in obs.description.lower() or "email" in obs.description.lower()
+            for obs in critical_obs
+        )
 
     @pytest.mark.asyncio
     async def test_auth_required_memory(self, sample_service, agent_context):
@@ -270,4 +360,9 @@ class TestMemoryExtraction:
             result = await check.check_service(sample_service, agent_context)
 
         info_observations = [f for f in result.observations if f.severity == "info"]
+        # Multiple memory-related paths will match: /memory, /agent/memory, /v1/memory, /api/memory
         assert len(info_observations) >= 1
+        for obs in info_observations:
+            assert "requires auth" in obs.title.lower()
+            assert obs.severity == "info"
+            assert "401" in obs.evidence

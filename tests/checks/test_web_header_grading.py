@@ -390,3 +390,68 @@ class TestHeaderPermissionsPolicyGrading:
             result = await check.check_service(service, {})
         pp_observations = [f for f in result.observations if "permissions" in (f.id or "").lower()]
         assert len(pp_observations) == 0
+
+    @pytest.mark.asyncio
+    async def test_absent_permissions_policy_no_grading_observation(self, service):
+        """When Permissions-Policy header is completely absent, no *grading*
+        observation is emitted. Permissions-Policy is NOT in the SECURITY_HEADERS
+        dict, so it also does not appear in the missing-security-headers list."""
+        check = HeaderAnalysisCheck()
+        headers = {
+            # All other security headers present, but NO Permissions-Policy
+            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+            "Content-Security-Policy": "default-src 'self'",
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+            "X-XSS-Protection": "1",
+            "Referrer-Policy": "no-referrer",
+        }
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
+            result = await check.check_service(service, {})
+        # No Permissions-Policy grading observation should appear
+        pp_observations = [f for f in result.observations if "permissions" in (f.id or "").lower()]
+        assert len(pp_observations) == 0
+        # Permissions-Policy is NOT in the SECURITY_HEADERS dict, so the
+        # missing-security-headers observation (if any) must NOT mention it.
+        missing_obs = [
+            f for f in result.observations if "missing-security-headers" in (f.id or "").lower()
+        ]
+        for obs in missing_obs:
+            assert "permissions-policy" not in obs.evidence.lower()
+
+    @pytest.mark.asyncio
+    async def test_absent_permissions_policy_all_headers_missing(self, service):
+        """When ALL security headers are absent (including Permissions-Policy),
+        the missing-security-headers observation lists the 6 tracked headers but
+        NOT Permissions-Policy (which is graded separately, not tracked in
+        SECURITY_HEADERS)."""
+        check = HeaderAnalysisCheck()
+        # Completely bare response — no security headers at all
+        headers = {}
+        with patch(
+            "app.checks.web.headers.AsyncHttpClient",
+            return_value=mock_client_multi(default=resp(200, headers=headers)),
+        ):
+            result = await check.check_service(service, {})
+        missing_obs = [
+            f for f in result.observations if "missing-security-headers" in (f.id or "").lower()
+        ]
+        assert len(missing_obs) == 1
+        obs = missing_obs[0]
+        assert obs.severity == "low"
+        # Should report exactly the 6 headers from SECURITY_HEADERS
+        assert "Missing security headers (6)" in obs.title
+        assert "strict-transport-security" in obs.evidence
+        assert "content-security-policy" in obs.evidence
+        assert "x-content-type-options" in obs.evidence
+        assert "x-frame-options" in obs.evidence
+        assert "x-xss-protection" in obs.evidence
+        assert "referrer-policy" in obs.evidence
+        # Permissions-Policy is NOT in SECURITY_HEADERS, so not listed as missing
+        assert "permissions-policy" not in obs.evidence.lower()
+        # No Permissions-Policy grading observation either
+        pp_obs = [f for f in result.observations if "permissions" in (f.id or "").lower()]
+        assert len(pp_obs) == 0

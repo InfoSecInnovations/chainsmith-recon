@@ -1,7 +1,7 @@
 """Tests for DnsEnumerationCheck: DNS enumeration, resolution, and host discovery."""
 
 import socket
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from app.checks.network.dns_enumeration import DEFAULT_WORDLIST, DnsEnumerationCheck
 
@@ -38,6 +38,21 @@ class TestDnsEnumerationCheckInit:
         assert len(check.techniques) > 0
 
 
+def _fake_getaddrinfo(mapping):
+    """Return a getaddrinfo side_effect that resolves hostnames via *mapping*.
+
+    Keys are hostnames; values are IP strings.  Hostnames absent from the
+    mapping raise ``socket.gaierror``.
+    """
+
+    def _resolver(hostname, port, family=None):
+        if hostname in mapping:
+            return [(socket.AF_INET, None, None, None, (mapping[hostname], 0))]
+        raise socket.gaierror(f"Name resolution failed: {hostname}")
+
+    return _resolver
+
+
 class TestDnsEnumerationCheckRun:
     """Tests for DnsEnumerationCheck run behavior."""
 
@@ -51,30 +66,25 @@ class TestDnsEnumerationCheckRun:
 
     async def test_run_uses_context_base_domain(self):
         """Run uses base_domain from context."""
-        check = DnsEnumerationCheck()
+        check = DnsEnumerationCheck(wordlist=["www"])
 
-        with patch.object(check, "_resolve_host", new_callable=AsyncMock) as mock_resolve:
-            mock_resolve.return_value = None  # All lookups fail
+        resolver = _fake_getaddrinfo({"www.example.com": "10.0.0.1"})
+        with patch("socket.getaddrinfo", side_effect=resolver):
+            result = await check.run({"base_domain": "example.com"})
 
-            await check.run({"base_domain": "example.com"})
-
-            # Should have attempted resolution
-            assert mock_resolve.called
-            # Check that candidates were formed correctly
-            call_args = [call[0][0] for call in mock_resolve.call_args_list]
-            assert any("example.com" in arg for arg in call_args)
+        assert result.success is True
+        assert "www.example.com" in result.outputs["target_hosts"]
 
     async def test_run_uses_constructor_base_domain(self):
         """Run uses base_domain from constructor."""
         check = DnsEnumerationCheck(base_domain="constructor.com", wordlist=["www"])
 
-        with patch.object(check, "_resolve_host", new_callable=AsyncMock) as mock_resolve:
-            mock_resolve.return_value = None
+        resolver = _fake_getaddrinfo({"www.constructor.com": "10.0.0.1"})
+        with patch("socket.getaddrinfo", side_effect=resolver):
+            result = await check.run({})
 
-            await check.run({})
-
-            call_args = [call[0][0] for call in mock_resolve.call_args_list]
-            assert "www.constructor.com" in call_args
+        assert "www.constructor.com" in result.outputs["target_hosts"]
+        assert result.outputs["dns_records"]["www.constructor.com"] == "10.0.0.1"
 
     async def test_run_resolves_hosts(self):
         """Run resolves hosts and outputs target_hosts and dns_records."""
@@ -83,14 +93,13 @@ class TestDnsEnumerationCheckRun:
             wordlist=["www", "api"],
         )
 
-        async def mock_resolve(hostname):
-            if hostname == "www.example.com":
-                return "192.168.1.1"
-            elif hostname == "api.example.com":
-                return "192.168.1.2"
-            return None
-
-        with patch.object(check, "_resolve_host", side_effect=mock_resolve):
+        resolver = _fake_getaddrinfo(
+            {
+                "www.example.com": "192.168.1.1",
+                "api.example.com": "192.168.1.2",
+            }
+        )
+        with patch("socket.getaddrinfo", side_effect=resolver):
             result = await check.run({})
 
         assert result.success is True
@@ -109,14 +118,8 @@ class TestDnsEnumerationCheckRun:
             wordlist=["www", "nonexistent", "api"],
         )
 
-        async def mock_resolve(hostname):
-            if "nonexistent" in hostname:
-                raise socket.gaierror("Name resolution failed")
-            if hostname == "www.example.com":
-                return "192.168.1.1"
-            return None
-
-        with patch.object(check, "_resolve_host", side_effect=mock_resolve):
+        resolver = _fake_getaddrinfo({"www.example.com": "192.168.1.1"})
+        with patch("socket.getaddrinfo", side_effect=resolver):
             result = await check.run({})
 
         assert result.success is True
@@ -130,9 +133,8 @@ class TestDnsEnumerationCheckRun:
             wordlist=["www"],
         )
 
-        with patch.object(check, "_resolve_host", new_callable=AsyncMock) as mock_resolve:
-            mock_resolve.return_value = "192.168.1.1"
-
+        resolver = _fake_getaddrinfo({"www.example.com": "192.168.1.1"})
+        with patch("socket.getaddrinfo", side_effect=resolver):
             result = await check.run({})
 
         assert "target_hosts" in result.outputs
@@ -147,9 +149,8 @@ class TestDnsEnumerationCheckRun:
             wordlist=["www"],
         )
 
-        with patch.object(check, "_resolve_host", new_callable=AsyncMock) as mock_resolve:
-            mock_resolve.return_value = "192.168.1.1"
-
+        resolver = _fake_getaddrinfo({"www.example.com": "192.168.1.1"})
+        with patch("socket.getaddrinfo", side_effect=resolver):
             result = await check.run({})
 
         assert len(result.observations) == 1

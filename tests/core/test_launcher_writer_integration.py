@@ -104,8 +104,8 @@ class TestLauncherWriterIntegration:
         launcher = CheckLauncher([check1, check2], {}, observation_writer=writer)
         await launcher.run_all()
 
-        # At least 2 flushes: one per check completion (final flush may be empty)
-        assert mock_obs_repo.bulk_create.call_count >= 2
+        # Exactly 2 flushes: one per check completion (final flush is a no-op on empty buffer)
+        assert mock_obs_repo.bulk_create.call_count == 2
         assert writer.count == 2
 
     async def test_no_writer_still_works(self):

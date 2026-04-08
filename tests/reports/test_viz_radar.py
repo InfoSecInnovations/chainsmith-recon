@@ -237,6 +237,45 @@ class TestRadarDataLogic:
         assert len(result["scores"]["mcp"]["observations"]) == 2
 
 
+class TestRadarDataRendering:
+    """Behavioral tests that exercise data rendering logic end-to-end."""
+
+    def test_risk_scores_reflect_severity_weighting(self):
+        """A single critical observation outweighs multiple info observations."""
+        observations = [
+            {"suite": "web", "severity": "critical", "title": "A"},
+            {"suite": "network", "severity": "info", "title": "B"},
+            {"suite": "network", "severity": "info", "title": "C"},
+            {"suite": "network", "severity": "info", "title": "D"},
+        ]
+        result = TestRadarDataLogic.build_radar_data(observations)
+        # critical=16 vs 3*info=3
+        assert result["scores"]["web"]["score"] > result["scores"]["network"]["score"]
+
+    def test_suite_scores_are_independent(self):
+        """Each suite accumulates its own independent risk score."""
+        observations = [
+            {"suite": "ai", "severity": "high", "title": "A"},
+            {"suite": "ai", "severity": "medium", "title": "B"},
+            {"suite": "mcp", "severity": "low", "title": "C"},
+        ]
+        result = TestRadarDataLogic.build_radar_data(observations)
+        assert result["scores"]["ai"]["score"] == 12  # 8 + 4
+        assert result["scores"]["mcp"]["score"] == 2
+        assert "ai" in result["suites"]
+        assert "mcp" in result["suites"]
+
+    def test_inferred_suites_score_correctly(self):
+        """Observations without suite field still produce correct risk scores via inference."""
+        observations = [
+            {"check_name": "agent_discovery", "severity": "critical", "title": "A"},
+            {"check_name": "cache_poisoning", "severity": "low", "title": "B"},
+        ]
+        result = TestRadarDataLogic.build_radar_data(observations)
+        assert result["scores"]["agent"]["score"] == 16
+        assert result["scores"]["cag"]["score"] == 2
+
+
 class TestRadarCSS:
     """Verify radar CSS classes exist."""
 

@@ -346,6 +346,19 @@ class TestEdgeCases:
         assert results[0].adjudicated_severity == ObservationSeverity.HIGH
         assert results[0].confidence == 0.0
 
+    async def test_unparseable_severity_upholds_original(self, mock_llm_client):
+        """LLM returning an invalid severity string falls back to original severity."""
+        rubric = _rubric_response("SUPER_CRITICAL")  # not a valid ObservationSeverity
+        mock_llm_client.chat.return_value = _make_llm_response(rubric)
+
+        agent = AdjudicatorAgent(client=mock_llm_client)
+        observation = _make_observation(severity="high")
+        results = await agent.adjudicate_observations([observation])
+
+        assert len(results) == 1
+        # Invalid severity should fall back to original
+        assert results[0].adjudicated_severity == ObservationSeverity.HIGH
+
     async def test_stop_halts_processing(self, mock_llm_client):
         call_count = 0
 
@@ -382,7 +395,21 @@ class TestAdjudicatedRiskModel:
             factors={"exploitability": 0.3},
         )
         assert risk.observation_id == "F-001"
-        assert risk.adjudicated_by == AgentType.ADJUDICATOR
+        assert risk.approach_used == AdjudicationApproach.EVIDENCE_RUBRIC
+        assert risk.factors == {"exploitability": 0.3}
+
+    def test_adjudicated_by_can_be_overridden(self):
+        """adjudicated_by defaults to ADJUDICATOR but accepts other agent types."""
+        risk = AdjudicatedRisk(
+            observation_id="F-002",
+            original_severity=ObservationSeverity.HIGH,
+            adjudicated_severity=ObservationSeverity.HIGH,
+            confidence=0.9,
+            approach_used=AdjudicationApproach.EVIDENCE_RUBRIC,
+            rationale="Overridden by scout",
+            adjudicated_by=AgentType.SCOUT,
+        )
+        assert risk.adjudicated_by == AgentType.SCOUT
 
     def test_confidence_bounds(self):
         with pytest.raises(ValueError):

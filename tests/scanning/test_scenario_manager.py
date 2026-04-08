@@ -453,12 +453,7 @@ class TestGetScenarioManager:
 
         mgr = get_scenario_manager()
 
-        # If auto-load didn't pick up env var (CI caching), load directly
-        if not mgr.is_active:
-            mgr._scenarios_dirs = [tmp_path] + mgr._scenarios_dirs
-            mgr.load("auto-scenario")
-
-        assert mgr.is_active is True
+        assert mgr.is_active is True, "CHAINSMITH_SCENARIO env var should auto-load the scenario"
         assert mgr.active.name == "auto-scenario"
 
 
@@ -495,8 +490,9 @@ class TestRealScenarios:
         mgr = ScenarioManager(scenarios_dirs=[scenarios_dir])
         available = mgr.list_available()
 
-        # Should find at least demo-domain and fakobanko
-        {s["name"] for s in available}
+        names = {s["name"] for s in available}
 
-        # At least one should exist
-        assert len(available) > 0
+        # Should find demo-domain, fakobanko, and _template
+        assert "demo-domain" in names, "demo-domain scenario should be discovered"
+        assert "fakobanko" in names, "fakobanko scenario should be discovered"
+        assert len(available) == 3

@@ -70,6 +70,20 @@ def make_critical_observation(
     return make_observation(title=title, severity="critical", host=host, check_name=check_name)
 
 
+def _make_prefs(on_critical: str = "annotate", **suite_overrides) -> Preferences:
+    """Build a Preferences object with the given on_critical settings.
+
+    Args:
+        on_critical: Global on_critical value.
+        **suite_overrides: Per-suite overrides, e.g. on_critical_web="stop".
+    """
+    prefs = Preferences()
+    prefs.checks.on_critical = on_critical
+    for key, value in suite_overrides.items():
+        setattr(prefs.checks, key, value)
+    return prefs
+
+
 # ─── Preference Resolution ──────────────────────────────────────────────
 
 
@@ -137,6 +151,11 @@ class TestCheckPreferencesFields:
 
 
 # ─── CheckLauncher: on_critical behavior ─────────────────────────────────
+#
+# Instead of patching _resolve_on_critical directly (which hides the real
+# preference→behavior integration), we patch get_preferences to return a
+# Preferences object with the desired on_critical settings.  The real
+# _resolve_on_critical → resolve_on_critical path runs end-to-end.
 
 
 class TestLauncherAnnotate:
@@ -168,8 +187,9 @@ class TestLauncherAnnotate:
 
         context = {}
         launcher = CheckLauncher([web_check, ai_check], context)
+        prefs = _make_prefs(on_critical="annotate")
 
-        with patch.object(launcher, "_resolve_on_critical", return_value="annotate"):
+        with patch("app.preferences.get_preferences", return_value=prefs):
             observations = await launcher.run_all()
 
         assert len(observations) == 2
@@ -204,11 +224,12 @@ class TestLauncherAnnotate:
 
         context = {}
         launcher = CheckLauncher([check1, check2], context)
+        prefs = _make_prefs(on_critical="annotate")
 
-        with patch.object(launcher, "_resolve_on_critical", return_value="annotate"):
+        with patch("app.preferences.get_preferences", return_value=prefs):
             observations = await launcher.run_all()
 
-        # robots_txt is also "web" suite — should NOT be annotated
+        # robots_txt is also "web" suite -- should NOT be annotated
         robots_observation = next(f for f in observations if f.get("check_name") == "robots_txt")
         raw = robots_observation.get("raw_data") or {}
         assert raw.get("critical_observation_on_host") is not True
@@ -243,8 +264,9 @@ class TestLauncherSkipDownstream:
 
         context = {}
         launcher = CheckLauncher([web_check, ai_check], context)
+        prefs = _make_prefs(on_critical="skip_downstream")
 
-        with patch.object(launcher, "_resolve_on_critical", return_value="skip_downstream"):
+        with patch("app.preferences.get_preferences", return_value=prefs):
             observations = await launcher.run_all()
 
         # Only the web observation should be present
@@ -278,11 +300,12 @@ class TestLauncherSkipDownstream:
 
         context = {}
         launcher = CheckLauncher([check1, check2], context)
+        prefs = _make_prefs(on_critical="skip_downstream")
 
-        with patch.object(launcher, "_resolve_on_critical", return_value="skip_downstream"):
+        with patch("app.preferences.get_preferences", return_value=prefs):
             observations = await launcher.run_all()
 
-        # Both are web suite — path_probe should NOT be skipped
+        # Both are web suite -- path_probe should NOT be skipped
         assert len(observations) == 2
         assert "path_probe" not in launcher.skipped
 
@@ -316,8 +339,9 @@ class TestLauncherStop:
 
         context = {}
         launcher = CheckLauncher([web_check, ai_check], context)
+        prefs = _make_prefs(on_critical="stop")
 
-        with patch.object(launcher, "_resolve_on_critical", return_value="stop"):
+        with patch("app.preferences.get_preferences", return_value=prefs):
             observations = await launcher.run_all()
 
         assert launcher.scan_stopped is True
@@ -360,8 +384,9 @@ class TestLauncherNoCriticals:
 
         context = {}
         launcher = CheckLauncher([check1, check2], context)
+        prefs = _make_prefs(on_critical="skip_downstream")
 
-        with patch.object(launcher, "_resolve_on_critical", return_value="skip_downstream"):
+        with patch("app.preferences.get_preferences", return_value=prefs):
             observations = await launcher.run_all()
 
         assert len(observations) == 2
@@ -383,13 +408,74 @@ class TestLauncherCriticalHosts:
 
         context = {}
         launcher = CheckLauncher([web_check], context)
+        prefs = _make_prefs(on_critical="annotate")
 
-        with patch.object(launcher, "_resolve_on_critical", return_value="annotate"):
+        with patch("app.preferences.get_preferences", return_value=prefs):
             await launcher.run_all()
 
         assert "host1.com" in context["critical_hosts"]
         assert "host2.com" in context["critical_hosts"]
         assert context["critical_hosts"]["host1.com"][0]["suite"] == "web"
+
+
+class TestLauncherPerSuiteOverride:
+    """Test that per-suite on_critical overrides work through the real resolution path."""
+
+    @pytest.mark.asyncio
+    async def test_per_suite_skip_with_global_annotate(self):
+        """Global=annotate but web=skip_downstream: downstream checks should be skipped."""
+        web_check = FakeCheck(
+            name="header_analysis",
+            produces=["header_observations"],
+            _observations=[
+                make_critical_observation(host="target.com", check_name="header_analysis")
+            ],
+            _outputs={"header_observations": True},
+        )
+        ai_check = FakeCheck(
+            name="llm_endpoint",
+            conditions=[CheckCondition("header_observations", "truthy")],
+            _observations=[
+                make_observation(
+                    title="Should not appear",
+                    severity="high",
+                    host="target.com",
+                    check_name="llm_endpoint",
+                )
+            ],
+        )
+
+        context = {}
+        launcher = CheckLauncher([web_check, ai_check], context)
+        # Global says annotate, but the web suite override says skip_downstream
+        prefs = _make_prefs(on_critical="annotate", on_critical_web="skip_downstream")
+
+        with patch("app.preferences.get_preferences", return_value=prefs):
+            observations = await launcher.run_all()
+
+        # The web suite override should cause downstream skipping
+        assert len(observations) == 1
+        assert observations[0]["check_name"] == "header_analysis"
+        assert "llm_endpoint" in launcher.skipped
+
+    @pytest.mark.asyncio
+    async def test_per_suite_stop_with_global_annotate(self):
+        """Global=annotate but web=stop: scan should stop on web critical."""
+        web_check = FakeCheck(
+            name="header_analysis",
+            _observations=[
+                make_critical_observation(host="target.com", check_name="header_analysis")
+            ],
+        )
+
+        context = {}
+        launcher = CheckLauncher([web_check], context)
+        prefs = _make_prefs(on_critical="annotate", on_critical_web="stop")
+
+        with patch("app.preferences.get_preferences", return_value=prefs):
+            await launcher.run_all()
+
+        assert launcher.scan_stopped is True
 
 
 # ─── Intrusive Gating ───────────────────────────────────────────────────

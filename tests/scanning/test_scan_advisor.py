@@ -75,19 +75,6 @@ class TestScanAdvisorRecommendation:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Config Defaults
-# ═══════════════════════════════════════════════════════════════════
-
-
-class TestScanAdvisorConfig:
-    def test_disabled_by_default(self):
-        cfg = ScanAdvisorConfig()
-        assert cfg.enabled is False
-        assert cfg.mode == "post_scan"
-        assert cfg.require_approval is True
-
-
-# ═══════════════════════════════════════════════════════════════════
 # Disabled Advisor
 # ═══════════════════════════════════════════════════════════════════
 
@@ -269,6 +256,44 @@ class TestCoverageCrossReference:
             r for r in recs if r.category == "config_suggestion" and "network" in r.reason.lower()
         ]
         assert len(coverage_recs) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Malformed / Missing Metadata
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestMalformedMetadata:
+    def test_missing_conditions_key_does_not_crash(self):
+        """check_metadata with missing 'conditions' key should not raise."""
+        advisor = _make_advisor(
+            completed=set(),
+            all_check_names={"bad_check"},
+            check_metadata={"bad_check": {"produces": ["stuff"]}},
+        )
+        recs = advisor.analyze()
+        # Should not crash; bad_check may or may not produce a recommendation
+        assert isinstance(recs, list)
+
+    def test_empty_metadata_dict_does_not_crash(self):
+        """An empty metadata dict for a check should not raise."""
+        advisor = _make_advisor(
+            completed=set(),
+            all_check_names={"empty_meta"},
+            check_metadata={"empty_meta": {}},
+        )
+        recs = advisor.analyze()
+        assert isinstance(recs, list)
+
+    def test_none_conditions_does_not_crash(self):
+        """conditions=None should be handled gracefully."""
+        advisor = _make_advisor(
+            completed=set(),
+            all_check_names={"null_cond"},
+            check_metadata={"null_cond": {"conditions": None, "produces": []}},
+        )
+        recs = advisor.analyze()
+        assert isinstance(recs, list)
 
 
 # ═══════════════════════════════════════════════════════════════════

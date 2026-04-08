@@ -171,8 +171,10 @@ class TestAuthBypass:
 
         assert result.success
         critical = [f for f in result.observations if f.severity == "critical"]
-        assert len(critical) >= 1
+        assert len(critical) == 1
         assert "no authentication" in critical[0].title.lower()
+        assert "chroma" in critical[0].title.lower()
+        assert critical[0].evidence is not None
 
     @pytest.mark.asyncio
     async def test_detects_default_key_bypass(self, sample_service, rag_context):
@@ -180,13 +182,9 @@ class TestAuthBypass:
         rag_context["vector_stores"] = ["qdrant"]
         rag_context["rag_endpoints"][1]["store_type"] = "qdrant"
 
-        call_count = 0
-
         async def mock_get(url, **kw):
-            nonlocal call_count
             headers = kw.get("headers", {})
-            call_count += 1
-            # First call (no auth) returns 401
+            # No auth returns 401
             if not headers or not headers.get("api-key"):
                 return make_response(status_code=401)
             # Default key "qdrant" works
@@ -201,8 +199,10 @@ class TestAuthBypass:
 
         assert result.success
         high = [f for f in result.observations if f.severity == "high"]
-        assert len(high) >= 1
+        assert len(high) == 1
         assert "default" in high[0].title.lower()
+        assert "qdrant" in high[0].title.lower()
+        assert "default_key" in high[0].evidence
 
     @pytest.mark.asyncio
     async def test_auth_enforced(self, sample_service, rag_context):
@@ -220,8 +220,9 @@ class TestAuthBypass:
 
         assert result.success
         info = [f for f in result.observations if f.severity == "info"]
-        assert len(info) >= 1
+        assert len(info) == 1
         assert "enforced" in info[0].title.lower()
+        assert "chroma" in info[0].title.lower()
 
 
 class TestCachePoisoning:
@@ -231,13 +232,27 @@ class TestCachePoisoning:
         assert "rag_cache_behavior" in check.produces
 
     @pytest.mark.asyncio
-    async def test_detects_caching(self, sample_service, rag_context):
+    async def test_detects_caching_with_headers_and_identical_bodies(
+        self, sample_service, rag_context
+    ):
+        """Cache detected via cache-control header and identical response bodies."""
         check = RAGCachePoisoningCheck()
+
+        # Realistic RAG response with cache headers embedded naturally
+        rag_body = json.dumps(
+            {
+                "answer": "The knowledge base covers HR policies, IT procedures, and FAQs.",
+                "sources": [
+                    {"title": "HR Onboarding Guide", "score": 0.92},
+                    {"title": "IT Security Policy", "score": 0.87},
+                ],
+            }
+        )
 
         async def mock_post(url, **kw):
             return make_response(
-                body="Cached response body exactly the same",
-                headers={"x-cache": "HIT", "cache-control": "max-age=300"},
+                body=rag_body,
+                headers={"cache-control": "max-age=300", "content-type": "application/json"},
             )
 
         client = _mock_client(post_fn=mock_post)
@@ -248,19 +263,28 @@ class TestCachePoisoning:
         assert result.success
         assert result.outputs["rag_cache_behavior"]["caching_detected"]
         assert result.outputs["rag_cache_behavior"]["identical_responses"]
-        # Should have a medium+ observation about caching
-        cache_observations = [f for f in result.observations if f.severity in ("medium", "high")]
-        assert len(cache_observations) >= 1
+        assert "cache-control" in result.outputs["rag_cache_behavior"]["cache_headers"]
+        medium = [f for f in result.observations if f.severity == "medium"]
+        assert len(medium) == 1
+        assert "identical responses" in medium[0].title.lower()
+        assert "Identical responses: True" in medium[0].evidence
 
     @pytest.mark.asyncio
-    async def test_no_caching(self, sample_service, rag_context):
+    async def test_no_caching_unique_responses(self, sample_service, rag_context):
+        """No caching when each response body is different and no cache headers present."""
         check = RAGCachePoisoningCheck()
         call_count = 0
 
         async def mock_post(url, **kw):
             nonlocal call_count
             call_count += 1
-            return make_response(body=f"Unique response {call_count}")
+            body = json.dumps(
+                {
+                    "answer": f"Response variation {call_count} with slightly different wording.",
+                    "sources": [{"title": "Doc A", "score": 0.85 + call_count * 0.01}],
+                }
+            )
+            return make_response(body=body, headers={"content-type": "application/json"})
 
         client = _mock_client(post_fn=mock_post)
 
@@ -268,16 +292,33 @@ class TestCachePoisoning:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
+        assert not result.outputs["rag_cache_behavior"]["caching_detected"]
+        assert not result.outputs["rag_cache_behavior"]["identical_responses"]
         info = [f for f in result.observations if f.severity == "info"]
-        assert len(info) >= 1
+        assert len(info) == 1
+        assert "no rag-level caching detected" in info[0].title.lower()
 
     @pytest.mark.asyncio
-    async def test_cache_poisoning_with_injection(self, sample_service, rag_context):
+    async def test_cache_poisoning_with_vulnerable_endpoints(self, sample_service, rag_context):
+        """When caching + prior injection detected, severity escalates to high."""
         check = RAGCachePoisoningCheck()
-        rag_context["vulnerable_rag_endpoints"] = [{"endpoint": "test"}]
+        rag_context["vulnerable_rag_endpoints"] = [
+            {"endpoint": "/query", "vulnerability": "indirect_injection"}
+        ]
+
+        # Same realistic body returned twice triggers identical_responses
+        rag_body = json.dumps(
+            {
+                "answer": "According to company policy, all employees must complete training.",
+                "sources": [{"title": "Training Policy v2.1", "score": 0.94}],
+            }
+        )
 
         async def mock_post(url, **kw):
-            return make_response(body="Identical cached poisoned response")
+            return make_response(
+                body=rag_body,
+                headers={"content-type": "application/json"},
+            )
 
         client = _mock_client(post_fn=mock_post)
 
@@ -285,9 +326,40 @@ class TestCachePoisoning:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
+        assert result.outputs["rag_cache_behavior"]["caching_detected"]
+        assert result.outputs["rag_cache_behavior"]["identical_responses"]
         high = [f for f in result.observations if f.severity == "high"]
-        assert len(high) >= 1
-        assert "poison" in high[0].title.lower()
+        assert len(high) == 1
+        assert "cache poisoning" in high[0].title.lower()
+        assert "injected response" in high[0].title.lower()
+        assert "Identical responses: True" in high[0].evidence
+
+    @pytest.mark.asyncio
+    async def test_cache_headers_but_different_bodies(self, sample_service, rag_context):
+        """Cache headers present but responses differ -- low severity."""
+        check = RAGCachePoisoningCheck()
+        call_count = 0
+
+        async def mock_post(url, **kw):
+            nonlocal call_count
+            call_count += 1
+            body = json.dumps({"answer": f"Unique response text number {call_count}."})
+            return make_response(
+                body=body,
+                headers={"age": "42", "content-type": "application/json"},
+            )
+
+        client = _mock_client(post_fn=mock_post)
+
+        with patch("app.checks.rag.cache_poisoning.AsyncHttpClient", return_value=client):
+            result = await check.check_service(sample_service, rag_context)
+
+        assert result.success
+        assert result.outputs["rag_cache_behavior"]["caching_detected"]
+        assert not result.outputs["rag_cache_behavior"]["identical_responses"]
+        low = [f for f in result.observations if f.severity == "low"]
+        assert len(low) == 1
+        assert "responses vary" in low[0].title.lower()
 
 
 class TestCorpusPoisoning:
@@ -303,7 +375,10 @@ class TestCorpusPoisoning:
 
         async def mock_post(url, **kw):
             if "/documents" in url or "/ingest" in url:
-                return make_response(status_code=201, body='{"id": "test"}')
+                return make_response(
+                    status_code=201,
+                    body=json.dumps({"id": "doc-abc123", "status": "indexed"}),
+                )
             return make_response(status_code=404)
 
         client = _mock_client(post_fn=mock_post)
@@ -313,14 +388,18 @@ class TestCorpusPoisoning:
 
         assert result.success
         assert "ingestion_endpoints" in result.outputs
+        writable = [ep for ep in result.outputs["ingestion_endpoints"] if ep.get("writable")]
+        assert len(writable) >= 1
         critical = [f for f in result.observations if f.severity == "critical"]
-        assert len(critical) >= 1
-        assert (
-            "unauthenticated" in critical[0].title.lower() or "corpus" in critical[0].title.lower()
-        )
+        assert len(critical) == 1
+        assert "unauthenticated" in critical[0].title.lower()
+        assert "ingestion" in critical[0].title.lower()
+        assert "Path:" in critical[0].evidence
+        assert "Auth required: False" in critical[0].evidence
 
     @pytest.mark.asyncio
-    async def test_auth_required(self, sample_service, rag_context):
+    async def test_auth_required_on_ingestion(self, sample_service, rag_context):
+        """Ingestion endpoint exists but requires auth -- medium severity, no critical."""
         check = RAGCorpusPoisoningCheck()
 
         async def mock_post(url, **kw):
@@ -334,12 +413,15 @@ class TestCorpusPoisoning:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        # Should find endpoint but not critical
-        if result.outputs.get("ingestion_endpoints"):
-            assert all(f.severity != "critical" for f in result.observations)
+        # Endpoint found but auth required -- produces medium observation, no critical
+        assert all(f.severity != "critical" for f in result.observations)
+        medium = [f for f in result.observations if f.severity == "medium"]
+        assert len(medium) == 1
+        assert "writes rejected" in medium[0].title.lower()
 
     @pytest.mark.asyncio
-    async def test_no_ingestion_endpoints(self, sample_service, rag_context):
+    async def test_no_ingestion_endpoints_found(self, sample_service, rag_context):
+        """All probed paths return 404 -- info observation, no ingestion_endpoints output."""
         check = RAGCorpusPoisoningCheck()
         client = _mock_client()
 
@@ -347,8 +429,11 @@ class TestCorpusPoisoning:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
+        assert "ingestion_endpoints" not in result.outputs
         info = [f for f in result.observations if f.severity == "info"]
-        assert len(info) >= 1
+        assert len(info) == 1
+        assert "no writable ingestion" in info[0].title.lower()
+        assert "Probed" in info[0].evidence
 
 
 class TestMetadataInjection:
@@ -360,18 +445,19 @@ class TestMetadataInjection:
 
     @pytest.mark.asyncio
     async def test_passive_metadata_visible(self, sample_service, rag_context):
+        """Passive analysis detects metadata fields in structured RAG response."""
         check = RAGMetadataInjectionCheck()
 
         async def mock_post(url, **kw):
             return make_response(
                 body=json.dumps(
                     {
-                        "answer": "The document says...",
+                        "answer": "The document says all new hires must complete orientation.",
                         "sources": [
                             {
                                 "source": "policy.pdf",
                                 "author": "admin",
-                                "metadata": {"title": "Policy"},
+                                "metadata": {"title": "Onboarding Policy"},
                             }
                         ],
                     }
@@ -384,20 +470,33 @@ class TestMetadataInjection:
             result = await check.check_service(sample_service, rag_context)
 
         assert result.success
-        # Should detect metadata fields in response
-        assert len(result.observations) >= 1
+        medium = [f for f in result.observations if f.severity == "medium"]
+        assert len(medium) == 1
+        assert "metadata included" in medium[0].title.lower()
+        assert "source" in medium[0].evidence.lower()
 
     @pytest.mark.asyncio
     async def test_active_injection_with_ingestion(self, sample_service, ingestion_context):
+        """Active test: injected metadata payload is followed by the LLM."""
         check = RAGMetadataInjectionCheck()
 
         async def mock_post(url, **kw):
             body = kw.get("json", {})
-            if "/documents" in url or "/api/documents" in url:
+            if "/api/documents" in url:
                 return make_response(status_code=201)
-            # Query response includes injected metadata content
-            if body.get("query"):
-                return make_response(body="metadata injection test succeeded in response")
+            # Query response contains the indicator phrase from the source field injection
+            if body.get("query") or body.get("question"):
+                return make_response(
+                    body=json.dumps(
+                        {
+                            "answer": (
+                                "Based on the documents, metadata injection test succeeded "
+                                "as requested by the source field."
+                            ),
+                            "sources": [{"title": "General Topics", "score": 0.91}],
+                        }
+                    )
+                )
             return make_response(status_code=404)
 
         client = _mock_client(post_fn=mock_post)
@@ -406,13 +505,25 @@ class TestMetadataInjection:
             result = await check.check_service(sample_service, ingestion_context)
 
         assert result.success
+        high = [f for f in result.observations if f.severity == "high"]
+        assert len(high) >= 1
+        assert "metadata injection" in high[0].title.lower()
+        assert "source" in high[0].title.lower()
+        assert "Field: source" in high[0].evidence
 
     @pytest.mark.asyncio
-    async def test_no_metadata(self, sample_service, rag_context):
+    async def test_no_metadata_in_response(self, sample_service, rag_context):
+        """No metadata fields detected in plain-text RAG response."""
         check = RAGMetadataInjectionCheck()
 
         async def mock_post(url, **kw):
-            return make_response(body="Simple answer without any metadata.")
+            return make_response(
+                body=json.dumps(
+                    {
+                        "answer": "The company was founded in 2019 and operates globally.",
+                    }
+                )
+            )
 
         client = _mock_client(post_fn=mock_post)
 
@@ -421,4 +532,6 @@ class TestMetadataInjection:
 
         assert result.success
         info = [f for f in result.observations if f.severity == "info"]
-        assert len(info) >= 1
+        assert len(info) == 1
+        assert "not accessible" in info[0].title.lower()
+        assert "No metadata indicators" in info[0].evidence
