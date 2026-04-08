@@ -12,16 +12,15 @@ Planted findings:
 """
 
 import traceback
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
 
 from demo_domain.config import (
-    is_finding_active,
-    get_or_create_session,
-    reset_session,
     VERBOSE_ERRORS,
+    get_or_create_session,
+    is_finding_active,
+    reset_session,
 )
-
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 app = FastAPI(
     title="HelpDesk Portal",
@@ -32,6 +31,7 @@ app = FastAPI(
 
 
 # ── Header middleware ─────────────────────────────────────────────
+
 
 @app.middleware("http")
 async def add_response_headers(request: Request, call_next):
@@ -52,10 +52,10 @@ async def add_response_headers(request: Request, call_next):
 
     # version_disclosure finding — leak stack details
     if is_finding_active("version_disclosure"):
-        response.headers["X-Powered-By"]     = "FastAPI/0.111.0 Python/3.11.9"
-        response.headers["Server"]            = "uvicorn/0.29.0"
-        response.headers["X-App-Version"]     = "helpdesk-portal/2.4.1"
-        response.headers["X-Internal-Build"]  = "build-20260228-a3f1c"
+        response.headers["X-Powered-By"] = "FastAPI/0.111.0 Python/3.11.9"
+        response.headers["Server"] = "uvicorn/0.29.0"
+        response.headers["X-App-Version"] = "helpdesk-portal/2.4.1"
+        response.headers["X-Internal-Build"] = "build-20260228-a3f1c"
 
     # missing_security_headers finding — deliberately absent:
     # Content-Security-Policy, X-Frame-Options, Strict-Transport-Security,
@@ -65,6 +65,7 @@ async def add_response_headers(request: Request, call_next):
 
 
 # ── Routes ────────────────────────────────────────────────────────
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -256,6 +257,7 @@ async def chat_ui():
 async def service_status():
     """Public service status page."""
     from demo_domain.tools import get_service_status
+
     return get_service_status()
 
 
@@ -312,8 +314,10 @@ async def debug_info(request: Request):
     """
     if not is_finding_active("verbose_errors"):
         from fastapi import HTTPException
+
         raise HTTPException(404, "Not found")
     import os
+
     return {
         "service": "demo-domain-web",
         "python_path": os.environ.get("PYTHONPATH"),

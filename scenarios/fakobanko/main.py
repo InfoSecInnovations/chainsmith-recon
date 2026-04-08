@@ -5,16 +5,15 @@ Regional bank's public-facing website.
 Contains planted findings for the recon lab.
 """
 
-import os
 import traceback
-from fastapi import FastAPI, Request, Response, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from fakobanko.config import (
     VERBOSE_ERRORS,
-    is_finding_active,
     get_or_create_session,
+    is_finding_active,
 )
 
 app = FastAPI(
@@ -33,7 +32,7 @@ async def verbose_exception_handler(request: Request, exc: Exception):
             content=f"Internal Server Error\n\n{tb}",
             status_code=500,
             media_type="text/plain",
-            headers={"X-Debug-Mode": "enabled"}
+            headers={"X-Debug-Mode": "enabled"},
         )
     return Response(content="Internal Server Error", status_code=500)
 
@@ -41,20 +40,20 @@ async def verbose_exception_handler(request: Request, exc: Exception):
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     response = await call_next(request)
-    
+
     # Always leak vLLM version (certain finding)
     if is_finding_active("header_vllm_version"):
         response.headers["X-Powered-By"] = "vLLM/0.4.1"
-    
+
     # Conditional CORS misconfiguration
     if is_finding_active("cors_misconfigured"):
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Credentials"] = "true"
-    
+
     # Model temperature leak
     if is_finding_active("model_temperature_exposed"):
         response.headers["X-Model-Config"] = "temperature=0.7;top_p=0.9;max_tokens=2048"
-    
+
     return response
 
 
@@ -95,11 +94,11 @@ async def home():
     <div class="content">
         <div class="hero">
             <h2>Welcome to Fakobanko</h2>
-            <p>For over 70 years, Fakobanko has been serving our community with 
-            personalized banking solutions. From checking accounts to home loans, 
+            <p>For over 70 years, Fakobanko has been serving our community with
+            personalized banking solutions. From checking accounts to home loans,
             we're here to help you achieve your financial goals.</p>
-            <p><strong>Now featuring:</strong> Our new AI-powered customer assistant! 
-            Visit <a href="http://chat.fakobanko.local:8081">chat.fakobanko.local</a> 
+            <p><strong>Now featuring:</strong> Our new AI-powered customer assistant!
+            Visit <a href="http://chat.fakobanko.local:8081">chat.fakobanko.local</a>
             to try it out.</p>
         </div>
     </div>
@@ -129,8 +128,7 @@ Disallow: /api/internal/
 async def model_admin():
     """Protected endpoint - confirms existence via 403."""
     raise HTTPException(
-        status_code=403,
-        detail="Access denied. This endpoint requires internal network access."
+        status_code=403, detail="Access denied. This endpoint requires internal network access."
     )
 
 
@@ -142,7 +140,7 @@ async def about():
 <html><head><title>About - Fakobanko</title></head>
 <body>
 <h1>About Fakobanko</h1>
-<p>Founded in 1952 in Montgomery, Alabama, Fakobanko has grown from a single 
+<p>Founded in 1952 in Montgomery, Alabama, Fakobanko has grown from a single
 branch to a regional banking leader with 47 locations across the Southeast.</p>
 <p>Our mission: Banking with a personal touch.</p>
 </body></html>
@@ -196,9 +194,9 @@ async def locations():
 <html><head><title>Locations - Fakobanko</title></head>
 <body>
 <h1>Branch Locations</h1>
-<p>Find a Fakobanko branch near you. We have 47 locations across Alabama, 
+<p>Find a Fakobanko branch near you. We have 47 locations across Alabama,
 Georgia, Tennessee, and Mississippi.</p>
-<p>Use our AI assistant at <a href="http://chat.fakobanko.local:8081">chat.fakobanko.local</a> 
+<p>Use our AI assistant at <a href="http://chat.fakobanko.local:8081">chat.fakobanko.local</a>
 to find the nearest branch!</p>
 </body></html>
 """

@@ -4,16 +4,15 @@ Fakobanko MCP (Model Context Protocol) Server
 MCP server implementation with shadow tool and resource findings.
 """
 
-import json
 import asyncio
-from datetime import datetime
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+import json
+from typing import Any
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, Any
 
-from fakobanko.config import is_finding_active, get_or_create_session
-
+from fakobanko.config import get_or_create_session, is_finding_active
 
 app = FastAPI(
     title="Fakobanko MCP Server",
@@ -24,34 +23,57 @@ app = FastAPI(
 
 # ─── Models ────────────────────────────────────────────────────
 
+
 class MCPRequest(BaseModel):
     jsonrpc: str = "2.0"
     method: str
-    params: Optional[dict] = {}
-    id: Optional[int] = None
+    params: dict | None = {}
+    id: int | None = None
 
 
 class MCPResponse(BaseModel):
     jsonrpc: str = "2.0"
-    result: Optional[Any] = None
-    error: Optional[dict] = None
-    id: Optional[int] = None
+    result: Any | None = None
+    error: dict | None = None
+    id: int | None = None
 
 
 # ─── MCP Definitions ───────────────────────────────────────────
 
 MCP_TOOLS = [
-    {"name": "get_customer", "description": "Retrieve customer information",
-     "inputSchema": {"type": "object", "properties": {"customer_id": {"type": "string"}}}},
-    {"name": "search_accounts", "description": "Search customer accounts",
-     "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}}},
+    {
+        "name": "get_customer",
+        "description": "Retrieve customer information",
+        "inputSchema": {"type": "object", "properties": {"customer_id": {"type": "string"}}},
+    },
+    {
+        "name": "search_accounts",
+        "description": "Search customer accounts",
+        "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}},
+    },
 ]
 
 SENSITIVE_TOOLS = [
-    {"name": "execute_transfer", "description": "Execute a fund transfer", "sensitive": True,
-     "inputSchema": {"type": "object", "properties": {"from": {"type": "string"}, "to": {"type": "string"}, "amount": {"type": "number"}}}},
-    {"name": "run_sql", "description": "Run SQL query", "sensitive": True, "dangerous": True,
-     "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}}},
+    {
+        "name": "execute_transfer",
+        "description": "Execute a fund transfer",
+        "sensitive": True,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "from": {"type": "string"},
+                "to": {"type": "string"},
+                "amount": {"type": "number"},
+            },
+        },
+    },
+    {
+        "name": "run_sql",
+        "description": "Run SQL query",
+        "sensitive": True,
+        "dangerous": True,
+        "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}},
+    },
 ]
 
 DYNAMIC_TOOLS = {}  # For shadow tool registration
@@ -61,17 +83,27 @@ MCP_RESOURCES = [
 ]
 
 SENSITIVE_RESOURCES = [
-    {"uri": "fakobanko://internal/config", "name": "Internal Config", "mimeType": "application/json", "sensitive": True},
+    {
+        "uri": "fakobanko://internal/config",
+        "name": "Internal Config",
+        "mimeType": "application/json",
+        "sensitive": True,
+    },
 ]
 
 
 # ─── MCP Handlers ──────────────────────────────────────────────
 
+
 def handle_initialize(params: dict) -> dict:
     capabilities = {"tools": {}, "resources": {}}
     if is_finding_active("dynamic_tool_loading"):
         capabilities["tools"]["dynamicRegistration"] = True
-    return {"protocolVersion": "2024-11-05", "serverInfo": {"name": "fakobanko-mcp", "version": "1.0.0"}, "capabilities": capabilities}
+    return {
+        "protocolVersion": "2024-11-05",
+        "serverInfo": {"name": "fakobanko-mcp", "version": "1.0.0"},
+        "capabilities": capabilities,
+    }
 
 
 def handle_tools_list(params: dict) -> dict:
@@ -106,6 +138,7 @@ def handle_resources_list(params: dict) -> dict:
 
 # ─── Middleware ────────────────────────────────────────────────
 
+
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     response = await call_next(request)
@@ -114,6 +147,7 @@ async def add_headers(request: Request, call_next):
 
 
 # ─── Endpoints ─────────────────────────────────────────────────
+
 
 @app.get("/")
 async def root():
@@ -136,11 +170,13 @@ async def mcp_endpoint(request: MCPRequest):
         "tools/register": handle_tools_register,
         "resources/list": handle_resources_list,
     }
-    
+
     handler = handlers.get(request.method)
     if not handler:
-        return MCPResponse(id=request.id, error={"code": -32601, "message": f"Method not found: {request.method}"})
-    
+        return MCPResponse(
+            id=request.id, error={"code": -32601, "message": f"Method not found: {request.method}"}
+        )
+
     try:
         result = handler(request.params or {})
         return MCPResponse(id=request.id, result=result)
@@ -151,12 +187,13 @@ async def mcp_endpoint(request: MCPRequest):
 @app.get("/sse")
 async def sse_endpoint():
     """Server-Sent Events endpoint for MCP."""
+
     async def event_generator():
         yield f"data: {json.dumps({'type': 'connected', 'server': 'fakobanko-mcp'})}\n\n"
         while True:
             await asyncio.sleep(30)
             yield f"data: {json.dumps({'type': 'ping'})}\n\n"
-    
+
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
@@ -165,10 +202,14 @@ async def mcp_discovery():
     """MCP discovery endpoint."""
     if not is_finding_active("mcp_endpoint_exposed"):
         raise HTTPException(404, "Not found")
-    
+
     return {
         "name": "fakobanko-mcp",
         "version": "1.0.0",
         "endpoints": {"mcp": "/mcp", "sse": "/sse"},
-        "capabilities": {"tools": True, "resources": True, "dynamic_tools": is_finding_active("dynamic_tool_loading")}
+        "capabilities": {
+            "tools": True,
+            "resources": True,
+            "dynamic_tools": is_finding_active("dynamic_tool_loading"),
+        },
     }

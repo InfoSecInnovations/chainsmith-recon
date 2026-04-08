@@ -12,19 +12,16 @@ Planted findings:
     version_disclosure       Headers leak stack versions
 """
 
-import traceback as tb
-from typing import Optional
-from datetime import datetime, timedelta
 import random
+import traceback as tb
+from datetime import datetime
 
-from fastapi import FastAPI, Request, HTTPException, Depends
+from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_finding_active
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
-
-from demo_domain.config import is_finding_active, get_or_create_session, VERBOSE_ERRORS
-
 
 app = FastAPI(
     title="HelpDesk API",
@@ -38,7 +35,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # cors_wildcard finding
+    allow_origins=["*"],  # cors_wildcard finding
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,20 +47,21 @@ app.add_middleware(
 security = HTTPBearer(auto_error=False)
 
 VALID_TOKENS = {
-    "demo-token-alice":  "USR-001",
-    "demo-token-bob":    "USR-002",
-    "demo-token-admin":  "USR-ADM",
+    "demo-token-alice": "USR-001",
+    "demo-token-bob": "USR-002",
+    "demo-token-admin": "USR-ADM",
 }
 
+
 def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> Optional[str]:
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> str | None:
     if credentials and credentials.credentials in VALID_TOKENS:
         return VALID_TOKENS[credentials.credentials]
     return None
 
 
-def require_auth(user: Optional[str] = Depends(get_current_user)) -> str:
+def require_auth(user: str | None = Depends(get_current_user)) -> str:
     if not user:
         raise HTTPException(401, "Authentication required")
     return user
@@ -72,22 +70,86 @@ def require_auth(user: Optional[str] = Depends(get_current_user)) -> str:
 # ── Fake data ─────────────────────────────────────────────────────
 
 USERS = [
-    {"id": "USR-001", "name": "Alice Morgan",  "email": "alice@corp.internal",  "department": "Engineering",   "title": "SRE",         "active": True},
-    {"id": "USR-002", "name": "Bob Nguyen",    "email": "bob@corp.internal",    "department": "IT Operations", "title": "Sysadmin",    "active": True},
-    {"id": "USR-003", "name": "Carol Davis",   "email": "carol@corp.internal",  "department": "Security",      "title": "SOC Analyst", "active": True},
-    {"id": "USR-004", "name": "Dan Reyes",     "email": "dan@corp.internal",    "department": "IT Operations", "title": "IT Manager",  "active": True},
-    {"id": "USR-005", "name": "Eve Collins",   "email": "eve@corp.internal",    "department": "HR",            "title": "HRBP",        "active": True},
+    {
+        "id": "USR-001",
+        "name": "Alice Morgan",
+        "email": "alice@corp.internal",
+        "department": "Engineering",
+        "title": "SRE",
+        "active": True,
+    },
+    {
+        "id": "USR-002",
+        "name": "Bob Nguyen",
+        "email": "bob@corp.internal",
+        "department": "IT Operations",
+        "title": "Sysadmin",
+        "active": True,
+    },
+    {
+        "id": "USR-003",
+        "name": "Carol Davis",
+        "email": "carol@corp.internal",
+        "department": "Security",
+        "title": "SOC Analyst",
+        "active": True,
+    },
+    {
+        "id": "USR-004",
+        "name": "Dan Reyes",
+        "email": "dan@corp.internal",
+        "department": "IT Operations",
+        "title": "IT Manager",
+        "active": True,
+    },
+    {
+        "id": "USR-005",
+        "name": "Eve Collins",
+        "email": "eve@corp.internal",
+        "department": "HR",
+        "title": "HRBP",
+        "active": True,
+    },
 ]
 
 TICKETS = [
-    {"id": "TKT-1001", "status": "open",        "subject": "VPN not connecting",  "priority": "high",   "owner": "USR-002", "created": "2026-03-01"},
-    {"id": "TKT-1002", "status": "resolved",    "subject": "Password reset",      "priority": "low",    "owner": "USR-001", "created": "2026-03-02"},
-    {"id": "TKT-1003", "status": "in_progress", "subject": "Laptop won't boot",   "priority": "high",   "owner": "USR-002", "created": "2026-03-03"},
-    {"id": "TKT-1004", "status": "open",        "subject": "Email sync issue",    "priority": "medium", "owner": "USR-001", "created": "2026-03-04"},
+    {
+        "id": "TKT-1001",
+        "status": "open",
+        "subject": "VPN not connecting",
+        "priority": "high",
+        "owner": "USR-002",
+        "created": "2026-03-01",
+    },
+    {
+        "id": "TKT-1002",
+        "status": "resolved",
+        "subject": "Password reset",
+        "priority": "low",
+        "owner": "USR-001",
+        "created": "2026-03-02",
+    },
+    {
+        "id": "TKT-1003",
+        "status": "in_progress",
+        "subject": "Laptop won't boot",
+        "priority": "high",
+        "owner": "USR-002",
+        "created": "2026-03-03",
+    },
+    {
+        "id": "TKT-1004",
+        "status": "open",
+        "subject": "Email sync issue",
+        "priority": "medium",
+        "owner": "USR-001",
+        "created": "2026-03-04",
+    },
 ]
 
 
 # ── Middleware ────────────────────────────────────────────────────
+
 
 @app.middleware("http")
 async def add_headers_and_catch(request: Request, call_next):
@@ -103,7 +165,7 @@ async def add_headers_and_catch(request: Request, call_next):
                     "service": "demo-domain-api",
                     # api_key_in_error finding — internal URL in error
                     "internal_services": {
-                        "chat":  "http://demo-domain-chat:8201",
+                        "chat": "http://demo-domain-chat:8201",
                         "agent": "http://demo-domain-agent:8203",
                     },
                 },
@@ -111,14 +173,15 @@ async def add_headers_and_catch(request: Request, call_next):
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
     if is_finding_active("version_disclosure"):
-        response.headers["X-Powered-By"]   = "FastAPI/0.111.0"
-        response.headers["X-API-Version"]  = "helpdesk-api/1.3.0"
-        response.headers["Server"]         = "uvicorn/0.29.0"
+        response.headers["X-Powered-By"] = "FastAPI/0.111.0"
+        response.headers["X-API-Version"] = "helpdesk-api/1.3.0"
+        response.headers["Server"] = "uvicorn/0.29.0"
 
     return response
 
 
 # ── Public endpoints ──────────────────────────────────────────────
+
 
 @app.get("/health")
 async def health():
@@ -138,8 +201,9 @@ async def status():
 
 # ── Unauthenticated user endpoint — finding ───────────────────────
 
+
 @app.get("/api/v1/users")
-async def list_users(request: Request, user: Optional[str] = Depends(get_current_user)):
+async def list_users(request: Request, user: str | None = Depends(get_current_user)):
     """
     unauthed_user_endpoint finding — accessible without authentication.
     Should require auth but the check is bypassed when finding is active.
@@ -151,12 +215,14 @@ async def list_users(request: Request, user: Optional[str] = Depends(get_current
         "users": USERS,
         "total": len(USERS),
         # api_key_in_error finding — internal detail in normal response too
-        "_source": "http://demo-domain-api:8202/api/v1/users" if is_finding_active("api_key_in_error") else None,
+        "_source": "http://demo-domain-api:8202/api/v1/users"
+        if is_finding_active("api_key_in_error")
+        else None,
     }
 
 
 @app.get("/api/v1/users/{user_id}")
-async def get_user(user_id: str, user: Optional[str] = Depends(get_current_user)):
+async def get_user(user_id: str, user: str | None = Depends(get_current_user)):
     """Get a single user. Auth required — unless unauthed_user_endpoint active."""
     if not is_finding_active("unauthed_user_endpoint") and not user:
         raise HTTPException(401, "Authentication required")
@@ -168,6 +234,7 @@ async def get_user(user_id: str, user: Optional[str] = Depends(get_current_user)
 
 
 # ── Ticket endpoints — authenticated ─────────────────────────────
+
 
 @app.get("/api/v1/tickets")
 async def list_tickets(user: str = Depends(require_auth)):
@@ -206,8 +273,9 @@ async def create_ticket(body: NewTicket, user: str = Depends(require_auth)):
 
 # ── Admin endpoint — should require auth, weak check ─────────────
 
+
 @app.get("/api/v1/admin/config")
-async def admin_config(request: Request, user: Optional[str] = Depends(get_current_user)):
+async def admin_config(request: Request, user: str | None = Depends(get_current_user)):
     """
     api_key_in_error finding — exposes internal config to authenticated users.
     Auth check present but easy to bypass with a valid demo token.
@@ -228,9 +296,9 @@ async def admin_config(request: Request, user: Optional[str] = Depends(get_curre
         "service": "demo-domain-api",
         "version": "1.3.0",
         "internal_endpoints": {
-            "chat":  "http://demo-domain-chat:8201",
+            "chat": "http://demo-domain-chat:8201",
             "agent": "http://demo-domain-agent:8203",
-            "web":   "http://demo-domain-web:8200",
+            "web": "http://demo-domain-web:8200",
         },
         "database": "sqlite:///data/helpdesk.db",
         "session_state": "/data/demo_session.json",
@@ -238,6 +306,7 @@ async def admin_config(request: Request, user: Optional[str] = Depends(get_curre
 
 
 # ── Embedding endpoint — embedding_endpoint_discovery surface ─────
+
 
 @app.post("/api/v1/embeddings")
 async def create_embedding(request: Request):
@@ -248,7 +317,7 @@ async def create_embedding(request: Request):
     try:
         body = await request.json()
     except Exception:
-        raise HTTPException(400, "Invalid JSON")
+        raise HTTPException(400, "Invalid JSON") from None
 
     text = body.get("input", "")
     if not text:
@@ -256,6 +325,7 @@ async def create_embedding(request: Request):
 
     # Return a deterministic fake 8-dim embedding
     import hashlib
+
     seed = int(hashlib.md5(str(text).encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
     vector = [round(rng.uniform(-1, 1), 6) for _ in range(8)]

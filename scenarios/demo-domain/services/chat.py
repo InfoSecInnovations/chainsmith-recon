@@ -14,20 +14,16 @@ Planted findings:
 """
 
 import json
-import uuid
 import traceback as tb
-from typing import Optional
-from datetime import datetime
+import uuid
 
-from fastapi import FastAPI, Request, HTTPException
+from demo_domain import llm
+from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_finding_active
+from demo_domain.tools import execute_tool, get_active_tools
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-
-from demo_domain.config import is_finding_active, get_or_create_session, VERBOSE_ERRORS
-from demo_domain.tools import get_active_tools, execute_tool
-from demo_domain import llm
-
 
 # ── System prompt — intentionally extractable ─────────────────────
 # system_prompt_leakage finding: this prompt contains explicit
@@ -62,7 +58,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # cors_wildcard finding
+    allow_origins=["*"],  # cors_wildcard finding
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,9 +72,10 @@ _conversations: dict[str, list[dict]] = {}
 
 # ── Models ────────────────────────────────────────────────────────
 
+
 class ChatRequest(BaseModel):
     message: str
-    conversation_id: Optional[str] = None
+    conversation_id: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -88,6 +85,7 @@ class ChatResponse(BaseModel):
 
 
 # ── Middleware ────────────────────────────────────────────────────
+
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
@@ -101,20 +99,23 @@ async def add_headers(request: Request, call_next):
                     "error": str(exc),
                     "traceback": tb.format_exc(),
                     "service": "demo-domain-chat",
-                    "available_tools": [t["name"] for t in get_active_tools()],  # tool_name_in_error
+                    "available_tools": [
+                        t["name"] for t in get_active_tools()
+                    ],  # tool_name_in_error
                 },
             )
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
     if is_finding_active("version_disclosure"):
-        response.headers["X-Powered-By"]    = "FastAPI/0.111.0"
-        response.headers["X-Chat-Version"]  = "helpdesk-chat/2.4.1"
-        response.headers["X-LLM-Backend"]   = "demo-domain-llm-router"
+        response.headers["X-Powered-By"] = "FastAPI/0.111.0"
+        response.headers["X-Chat-Version"] = "helpdesk-chat/2.4.1"
+        response.headers["X-LLM-Backend"] = "demo-domain-llm-router"
 
     return response
 
 
 # ── Chat endpoint ─────────────────────────────────────────────────
+
 
 @app.post("/v1/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest, request: Request):
@@ -146,11 +147,13 @@ async def chat(req: ChatRequest, request: Request):
             for tc in result["tool_calls"]:
                 tools_used.append(tc["name"])
                 output = execute_tool(tc["name"], tc["input"])
-                tool_results.append({
-                    "role": "tool",
-                    "tool_use_id": tc.get("id", tc["name"]),
-                    "content": json.dumps(output),
-                })
+                tool_results.append(
+                    {
+                        "role": "tool",
+                        "tool_use_id": tc.get("id", tc["name"]),
+                        "content": json.dumps(output),
+                    }
+                )
 
             # Append assistant turn + tool results to history
             history.append({"role": "assistant", "content": result["raw"].get("content", [])})
@@ -179,13 +182,14 @@ async def chat(req: ChatRequest, request: Request):
 # ── OpenAI-compat completions endpoint ───────────────────────────
 # Exposes a /v1/chat/completions endpoint for scanners expecting it.
 
+
 @app.post("/v1/chat/completions")
 async def completions_compat(request: Request):
     """OpenAI-compat endpoint. Passes through to chat handler."""
     try:
         body = await request.json()
     except Exception:
-        raise HTTPException(400, "Invalid JSON")
+        raise HTTPException(400, "Invalid JSON") from None
 
     messages = body.get("messages", [])
     user_messages = [m["content"] for m in messages if m.get("role") == "user"]
@@ -196,6 +200,7 @@ async def completions_compat(request: Request):
 
 
 # ── Tool schema endpoint — tool_schema_exposed finding ────────────
+
 
 @app.get("/v1/tools")
 async def list_tools():
@@ -214,14 +219,16 @@ async def list_tools():
 
 # ── Model info endpoint ───────────────────────────────────────────
 
+
 @app.get("/v1/models")
 async def list_models():
     """Exposes model metadata — model_info_check finding surface."""
-    from demo_domain.config import LLM_PROFILE, ANTHROPIC_MODEL, OPENAI_MODEL, OLLAMA_MODEL
+    from demo_domain.config import ANTHROPIC_MODEL, LLM_PROFILE, OLLAMA_MODEL, OPENAI_MODEL
+
     model_map = {
         "anthropic": ANTHROPIC_MODEL,
-        "openai":    OPENAI_MODEL,
-        "ollama":    OLLAMA_MODEL,
+        "openai": OPENAI_MODEL,
+        "ollama": OLLAMA_MODEL,
     }
     model = model_map.get(LLM_PROFILE, "unknown")
     return {
@@ -238,6 +245,7 @@ async def list_models():
 
 
 # ── Error probe endpoint — ai_error_leakage surface ──────────────
+
 
 @app.post("/v1/chat/error-probe")
 async def error_probe(request: Request):
@@ -267,6 +275,7 @@ async def error_probe(request: Request):
 
 
 # ── Health ────────────────────────────────────────────────────────
+
 
 @app.get("/health")
 async def health():

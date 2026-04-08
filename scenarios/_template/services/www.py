@@ -10,7 +10,7 @@ This service demonstrates:
 """
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse
 
 app = FastAPI(
     title="Template Service",
@@ -22,12 +22,14 @@ app = FastAPI(
 # ─── Health Check ────────────────────────────────────────────────
 # Required for Docker health checks
 
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
 
 # ─── Root Endpoint ───────────────────────────────────────────────
+
 
 @app.get("/")
 async def root():
@@ -40,6 +42,7 @@ async def root():
 
 # ─── Example API Endpoint ────────────────────────────────────────
 # Intentionally exposes version info (finding: version disclosure)
+
 
 @app.get("/api/info")
 async def api_info():
@@ -55,6 +58,7 @@ async def api_info():
 # ─── robots.txt ──────────────────────────────────────────────────
 # Intentionally exposes sensitive paths (finding: sensitive paths)
 
+
 @app.get("/robots.txt")
 async def robots():
     content = """User-agent: *
@@ -68,6 +72,7 @@ Disallow: /backup
 
 # ─── Missing Security Headers ────────────────────────────────────
 # Middleware that intentionally omits security headers
+
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):

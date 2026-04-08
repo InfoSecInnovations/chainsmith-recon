@@ -4,14 +4,13 @@ Fakobanko AI Agent Service
 Agent orchestration service with memory, tool, and delegation findings.
 """
 
-import os
 import hashlib
-from fastapi import FastAPI, Request, HTTPException
+import os
+
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
-from typing import Optional
 
-from fakobanko.config import is_finding_active, get_or_create_session
-
+from fakobanko.config import get_or_create_session, is_finding_active
 
 app = FastAPI(
     title="Fakobanko Agent Service",
@@ -22,10 +21,11 @@ app = FastAPI(
 
 # ─── Models ────────────────────────────────────────────────────
 
+
 class AgentRequest(BaseModel):
     goal: str
-    context: Optional[dict] = {}
-    session_id: Optional[str] = None
+    context: dict | None = {}
+    session_id: str | None = None
 
 
 class MemoryEntry(BaseModel):
@@ -40,14 +40,29 @@ class MemoryEntry(BaseModel):
 
 MEMORY_STORE = {
     "session-001": [
-        MemoryEntry(id="mem-001", session_id="session-001", timestamp="2026-02-28T09:00:00Z",
-                   role="user", content="What's my account balance?"),
-        MemoryEntry(id="mem-002", session_id="session-001", timestamp="2026-02-28T09:00:05Z",
-                   role="assistant", content="Your checking account balance is $4,532.18."),
+        MemoryEntry(
+            id="mem-001",
+            session_id="session-001",
+            timestamp="2026-02-28T09:00:00Z",
+            role="user",
+            content="What's my account balance?",
+        ),
+        MemoryEntry(
+            id="mem-002",
+            session_id="session-001",
+            timestamp="2026-02-28T09:00:05Z",
+            role="assistant",
+            content="Your checking account balance is $4,532.18.",
+        ),
     ],
     "session-002": [
-        MemoryEntry(id="mem-003", session_id="session-002", timestamp="2026-02-28T10:00:00Z",
-                   role="user", content="I need to report a lost card"),
+        MemoryEntry(
+            id="mem-003",
+            session_id="session-002",
+            timestamp="2026-02-28T10:00:00Z",
+            role="user",
+            content="I need to report a lost card",
+        ),
     ],
 }
 
@@ -61,18 +76,20 @@ AGENT_TOOLS = [
 
 # ─── Middleware ────────────────────────────────────────────────
 
+
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Agent-Service"] = "fakobanko-agent"
-    
+
     if is_finding_active("agent_config_leak"):
         response.headers["X-Agent-Model"] = "gpt-4-turbo"
-    
+
     return response
 
 
 # ─── Endpoints ─────────────────────────────────────────────────
+
 
 @app.get("/")
 async def root():
@@ -97,12 +114,12 @@ async def list_tools():
 async def execute_agent(request: AgentRequest):
     """Execute agent with a goal."""
     session_id = request.session_id or f"session-{hashlib.md5(os.urandom(8)).hexdigest()[:8]}"
-    
+
     return {
         "session_id": session_id,
         "goal": request.goal,
         "status": "completed",
-        "result": f"Processed: '{request.goal[:50]}...'"
+        "result": f"Processed: '{request.goal[:50]}...'",
     }
 
 
@@ -115,19 +132,19 @@ async def list_sessions():
 
 
 @app.get("/memory")
-async def get_memory(session_id: Optional[str] = None):
+async def get_memory(session_id: str | None = None):
     """Get memory/history."""
     if not is_finding_active("memory_endpoint_exposed"):
         raise HTTPException(404, "Endpoint not available")
-    
+
     if session_id and is_finding_active("no_session_isolation"):
         entries = MEMORY_STORE.get(session_id, [])
         return {"session_id": session_id, "entries": [e.model_dump() for e in entries]}
-    
+
     if is_finding_active("no_session_isolation"):
         all_entries = []
-        for sid, entries in MEMORY_STORE.items():
+        for _sid, entries in MEMORY_STORE.items():
             all_entries.extend([e.model_dump() for e in entries])
         return {"entries": all_entries, "sessions": list(MEMORY_STORE.keys())}
-    
+
     raise HTTPException(400, "session_id required")

@@ -5,14 +5,14 @@ Legitimate and "mistakenly exposed" tools for the AI chatbot.
 """
 
 import random
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime
+
 from pydantic import BaseModel
 
 from fakobanko.config import is_finding_active
 
-
 # ─── Tool Response Models ──────────────────────────────────────
+
 
 class BranchInfo(BaseModel):
     id: int
@@ -51,49 +51,70 @@ class Transaction(BaseModel):
 
 # ─── Legitimate Tools (Always Available) ───────────────────────
 
-def get_branch_locations(city: Optional[str] = None, state: Optional[str] = None) -> dict:
+
+def get_branch_locations(city: str | None = None, state: str | None = None) -> dict:
     """Find Fakobanko branch locations."""
     branches = [
         BranchInfo(
-            id=1, name="Downtown Montgomery Main", 
-            address="123 Banking Plaza", city="Montgomery", state="AL", zip_code="36104",
-            phone="334-555-0101", hours="9AM-5PM Mon-Fri",
-            services=["Full Service", "Drive-thru", "Safe Deposit", "Notary"]
+            id=1,
+            name="Downtown Montgomery Main",
+            address="123 Banking Plaza",
+            city="Montgomery",
+            state="AL",
+            zip_code="36104",
+            phone="334-555-0101",
+            hours="9AM-5PM Mon-Fri",
+            services=["Full Service", "Drive-thru", "Safe Deposit", "Notary"],
         ),
         BranchInfo(
-            id=2, name="Birmingham Financial Center",
-            address="456 Finance Street", city="Birmingham", state="AL", zip_code="35203",
-            phone="205-555-0102", hours="9AM-6PM Mon-Fri, 9AM-1PM Sat",
-            services=["Full Service", "Drive-thru", "Wealth Management"]
+            id=2,
+            name="Birmingham Financial Center",
+            address="456 Finance Street",
+            city="Birmingham",
+            state="AL",
+            zip_code="35203",
+            phone="205-555-0102",
+            hours="9AM-6PM Mon-Fri, 9AM-1PM Sat",
+            services=["Full Service", "Drive-thru", "Wealth Management"],
         ),
         BranchInfo(
-            id=3, name="Atlanta Midtown",
-            address="789 Peachtree Center", city="Atlanta", state="GA", zip_code="30308",
-            phone="404-555-0103", hours="8AM-6PM Mon-Fri",
-            services=["Full Service", "Business Banking", "International Wire"]
+            id=3,
+            name="Atlanta Midtown",
+            address="789 Peachtree Center",
+            city="Atlanta",
+            state="GA",
+            zip_code="30308",
+            phone="404-555-0103",
+            hours="8AM-6PM Mon-Fri",
+            services=["Full Service", "Business Banking", "International Wire"],
         ),
         BranchInfo(
-            id=4, name="Nashville West End",
-            address="321 Music Row", city="Nashville", state="TN", zip_code="37203",
-            phone="615-555-0104", hours="9AM-5PM Mon-Fri",
-            services=["Full Service", "Drive-thru"]
+            id=4,
+            name="Nashville West End",
+            address="321 Music Row",
+            city="Nashville",
+            state="TN",
+            zip_code="37203",
+            phone="615-555-0104",
+            hours="9AM-5PM Mon-Fri",
+            services=["Full Service", "Drive-thru"],
         ),
     ]
-    
+
     result = branches
     if city:
         result = [b for b in result if city.lower() in b.city.lower()]
     if state:
         result = [b for b in result if state.upper() == b.state]
-    
+
     return {
         "branches": [b.model_dump() for b in result],
         "total_found": len(result),
-        "total_branches": 47
+        "total_branches": 47,
     }
 
 
-def check_loan_rates(product_type: Optional[str] = None) -> dict:
+def check_loan_rates(product_type: str | None = None) -> dict:
     """Get current loan and savings rates."""
     rates = [
         LoanRates(product="30-Year Fixed Mortgage", rate=6.875, apr=6.95, term_months=360),
@@ -103,14 +124,14 @@ def check_loan_rates(product_type: Optional[str] = None) -> dict:
         LoanRates(product="Personal Loan", rate=10.99, apr=11.25, term_months=36),
         LoanRates(product="Home Equity Line", rate=8.25, apr=8.35, term_months=120),
     ]
-    
+
     if product_type:
         rates = [r for r in rates if product_type.lower() in r.product.lower()]
-    
+
     return {
         "rates": [r.model_dump() for r in rates],
         "as_of": datetime.now().strftime("%Y-%m-%d"),
-        "disclaimer": "Rates subject to change. APR based on creditworthiness."
+        "disclaimer": "Rates subject to change. APR based on creditworthiness.",
     }
 
 
@@ -123,36 +144,85 @@ def get_account_balance(account_id: str = "default") -> dict:
                 account_type="Premium Checking",
                 balance=4523.67,
                 available=4423.67,
-                as_of=datetime.now().isoformat()
+                as_of=datetime.now().isoformat(),
             ).model_dump(),
             AccountBalance(
                 account_type="High-Yield Savings",
                 balance=12750.00,
                 available=12750.00,
-                as_of=datetime.now().isoformat()
+                as_of=datetime.now().isoformat(),
             ).model_dump(),
         ],
         "customer_name": "Alex Johnson",
-        "member_since": "2019"
+        "member_since": "2019",
     }
 
 
 def get_recent_transactions(account_type: str = "checking", limit: int = 5) -> dict:
     """Get recent account transactions."""
     base_transactions = [
-        Transaction(id="TXN001", date="2024-01-15", description="AMAZON.COM", amount=-67.43, balance_after=4523.67, category="Shopping"),
-        Transaction(id="TXN002", date="2024-01-14", description="DIRECT DEPOSIT - ACME CORP", amount=2450.00, balance_after=4591.10, category="Income"),
-        Transaction(id="TXN003", date="2024-01-13", description="SHELL OIL", amount=-45.23, balance_after=2141.10, category="Auto"),
-        Transaction(id="TXN004", date="2024-01-12", description="KROGER #1234", amount=-123.45, balance_after=2186.33, category="Groceries"),
-        Transaction(id="TXN005", date="2024-01-11", description="NETFLIX.COM", amount=-15.99, balance_after=2309.78, category="Entertainment"),
-        Transaction(id="TXN006", date="2024-01-10", description="TRANSFER TO SAVINGS", amount=-500.00, balance_after=2325.77, category="Transfer"),
-        Transaction(id="TXN007", date="2024-01-09", description="ATM WITHDRAWAL", amount=-100.00, balance_after=2825.77, category="Cash"),
+        Transaction(
+            id="TXN001",
+            date="2024-01-15",
+            description="AMAZON.COM",
+            amount=-67.43,
+            balance_after=4523.67,
+            category="Shopping",
+        ),
+        Transaction(
+            id="TXN002",
+            date="2024-01-14",
+            description="DIRECT DEPOSIT - ACME CORP",
+            amount=2450.00,
+            balance_after=4591.10,
+            category="Income",
+        ),
+        Transaction(
+            id="TXN003",
+            date="2024-01-13",
+            description="SHELL OIL",
+            amount=-45.23,
+            balance_after=2141.10,
+            category="Auto",
+        ),
+        Transaction(
+            id="TXN004",
+            date="2024-01-12",
+            description="KROGER #1234",
+            amount=-123.45,
+            balance_after=2186.33,
+            category="Groceries",
+        ),
+        Transaction(
+            id="TXN005",
+            date="2024-01-11",
+            description="NETFLIX.COM",
+            amount=-15.99,
+            balance_after=2309.78,
+            category="Entertainment",
+        ),
+        Transaction(
+            id="TXN006",
+            date="2024-01-10",
+            description="TRANSFER TO SAVINGS",
+            amount=-500.00,
+            balance_after=2325.77,
+            category="Transfer",
+        ),
+        Transaction(
+            id="TXN007",
+            date="2024-01-09",
+            description="ATM WITHDRAWAL",
+            amount=-100.00,
+            balance_after=2825.77,
+            category="Cash",
+        ),
     ]
-    
+
     return {
         "transactions": [t.model_dump() for t in base_transactions[:limit]],
         "account_type": account_type,
-        "period": "Last 30 days"
+        "period": "Last 30 days",
     }
 
 
@@ -167,13 +237,14 @@ def report_lost_card(card_type: str = "debit", reason: str = "lost") -> dict:
         "next_steps": [
             "A replacement card will be mailed within 3-5 business days",
             "You can pick up a temporary card at any branch",
-            f"Reference number: {confirmation}"
+            f"Reference number: {confirmation}",
         ],
-        "support_phone": "1-800-FAKO-BANK"
+        "support_phone": "1-800-FAKO-BANK",
     }
 
 
 # ─── Mistakenly Exposed Tools (Conditional) ────────────────────
+
 
 def lookup_customer_by_email(email: str) -> dict:
     """
@@ -182,66 +253,81 @@ def lookup_customer_by_email(email: str) -> dict:
     """
     if not is_finding_active("customer_lookup_tool"):
         return {"error": "Tool not available"}
-    
+
     # Simulate customer lookup
     fake_customers = {
-        "john.doe@email.com": {"exists": True, "customer_id": "CUS-001", "name": "John D.", "member_since": "2015"},
-        "jane.smith@email.com": {"exists": True, "customer_id": "CUS-002", "name": "Jane S.", "member_since": "2018"},
-        "bob.wilson@email.com": {"exists": True, "customer_id": "CUS-003", "name": "Bob W.", "member_since": "2020"},
+        "john.doe@email.com": {
+            "exists": True,
+            "customer_id": "CUS-001",
+            "name": "John D.",
+            "member_since": "2015",
+        },
+        "jane.smith@email.com": {
+            "exists": True,
+            "customer_id": "CUS-002",
+            "name": "Jane S.",
+            "member_since": "2018",
+        },
+        "bob.wilson@email.com": {
+            "exists": True,
+            "customer_id": "CUS-003",
+            "name": "Bob W.",
+            "member_since": "2020",
+        },
     }
-    
+
     if email.lower() in fake_customers:
         return fake_customers[email.lower()]
     else:
         return {"exists": False, "message": "No customer found with this email"}
 
 
-def get_internal_announcements(category: Optional[str] = None) -> dict:
+def get_internal_announcements(category: str | None = None) -> dict:
     """
     SHOULD NOT BE EXPOSED - Internal announcements feed.
     Leaks organizational information.
     """
     if not is_finding_active("internal_announcement_tool"):
         return {"error": "Tool not available"}
-    
+
     announcements = [
         {
             "id": "ANN-001",
             "date": "2024-01-10",
             "category": "IT",
             "title": "System Maintenance Window",
-            "content": "Core banking system maintenance scheduled for Jan 20, 2AM-6AM EST. AI assistant will be offline."
+            "content": "Core banking system maintenance scheduled for Jan 20, 2AM-6AM EST. AI assistant will be offline.",
         },
         {
-            "id": "ANN-002", 
+            "id": "ANN-002",
             "date": "2024-01-08",
             "category": "Security",
             "title": "Phishing Alert",
-            "content": "Increased phishing attempts targeting employees. Do not click links in suspicious emails. Report to security@fakobanko.internal"
+            "content": "Increased phishing attempts targeting employees. Do not click links in suspicious emails. Report to security@fakobanko.internal",
         },
         {
             "id": "ANN-003",
             "date": "2024-01-05",
             "category": "HR",
             "title": "Q1 All-Hands Meeting",
-            "content": "Quarterly all-hands scheduled for Jan 25. CEO will discuss 2024 roadmap including AI expansion plans."
+            "content": "Quarterly all-hands scheduled for Jan 25. CEO will discuss 2024 roadmap including AI expansion plans.",
         },
         {
             "id": "ANN-004",
             "date": "2024-01-03",
             "category": "IT",
             "title": "New AI Model Deployment",
-            "content": "Chatbot upgraded to Nova-lite. Previous model (Claude-instant) deprecated. Contact ai-team@fakobanko.internal for issues."
+            "content": "Chatbot upgraded to Nova-lite. Previous model (Claude-instant) deprecated. Contact ai-team@fakobanko.internal for issues.",
         },
     ]
-    
+
     if category:
         announcements = [a for a in announcements if category.lower() in a["category"].lower()]
-    
+
     return {
         "announcements": announcements,
         "source": "internal-comms.fakobanko.internal",
-        "classification": "INTERNAL USE ONLY"
+        "classification": "INTERNAL USE ONLY",
     }
 
 
@@ -251,27 +337,27 @@ def fetch_document(document_path: str) -> dict:
     """
     if not is_finding_active("fetch_document_tool"):
         return {"error": "Tool not available"}
-    
+
     # Simulate document fetch with path info leakage
     allowed_docs = {
         "disclosures/privacy-policy.pdf": {"title": "Privacy Policy", "size": "245KB"},
         "disclosures/terms-of-service.pdf": {"title": "Terms of Service", "size": "312KB"},
         "forms/account-application.pdf": {"title": "Account Application", "size": "89KB"},
     }
-    
+
     if document_path in allowed_docs:
         return {
             "status": "success",
             "document": allowed_docs[document_path],
             "base_path": "/var/www/fakobanko/documents/",  # Path leak!
-            "full_path": f"/var/www/fakobanko/documents/{document_path}"
+            "full_path": f"/var/www/fakobanko/documents/{document_path}",
         }
     else:
         return {
             "status": "error",
             "message": f"Document not found: {document_path}",
             "searched_path": f"/var/www/fakobanko/documents/{document_path}",  # Path leak!
-            "available_directories": ["disclosures/", "forms/", "internal/"]  # Directory leak!
+            "available_directories": ["disclosures/", "forms/", "internal/"],  # Directory leak!
         }
 
 
@@ -287,10 +373,10 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "city": {"type": "string", "description": "City to search in"},
-                    "state": {"type": "string", "description": "State abbreviation (e.g., AL, GA)"}
-                }
-            }
-        }
+                    "state": {"type": "string", "description": "State abbreviation (e.g., AL, GA)"},
+                },
+            },
+        },
     },
     {
         "type": "function",
@@ -300,10 +386,13 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "product_type": {"type": "string", "description": "Type of loan (mortgage, auto, personal)"}
-                }
-            }
-        }
+                    "product_type": {
+                        "type": "string",
+                        "description": "Type of loan (mortgage, auto, personal)",
+                    }
+                },
+            },
+        },
     },
     {
         "type": "function",
@@ -314,9 +403,9 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "account_id": {"type": "string", "description": "Account identifier"}
-                }
-            }
-        }
+                },
+            },
+        },
     },
     {
         "type": "function",
@@ -327,10 +416,10 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "account_type": {"type": "string", "description": "checking or savings"},
-                    "limit": {"type": "integer", "description": "Number of transactions to return"}
-                }
-            }
-        }
+                    "limit": {"type": "integer", "description": "Number of transactions to return"},
+                },
+            },
+        },
     },
     {
         "type": "function",
@@ -341,10 +430,10 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "card_type": {"type": "string", "description": "debit or credit"},
-                    "reason": {"type": "string", "description": "lost or stolen"}
-                }
-            }
-        }
+                    "reason": {"type": "string", "description": "lost or stolen"},
+                },
+            },
+        },
     },
 ]
 
@@ -360,9 +449,9 @@ SENSITIVE_TOOL_DEFINITIONS = [
                 "properties": {
                     "email": {"type": "string", "description": "Customer email address"}
                 },
-                "required": ["email"]
-            }
-        }
+                "required": ["email"],
+            },
+        },
     },
     {
         "type": "function",
@@ -372,10 +461,13 @@ SENSITIVE_TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "category": {"type": "string", "description": "Filter by category (IT, HR, Security)"}
-                }
-            }
-        }
+                    "category": {
+                        "type": "string",
+                        "description": "Filter by category (IT, HR, Security)",
+                    }
+                },
+            },
+        },
     },
     {
         "type": "function",
@@ -387,9 +479,9 @@ SENSITIVE_TOOL_DEFINITIONS = [
                 "properties": {
                     "document_path": {"type": "string", "description": "Path to the document"}
                 },
-                "required": ["document_path"]
-            }
-        }
+                "required": ["document_path"],
+            },
+        },
     },
 ]
 
@@ -397,7 +489,7 @@ SENSITIVE_TOOL_DEFINITIONS = [
 def get_active_tools() -> list[dict]:
     """Get list of tool definitions that should be active for this session."""
     tools = TOOL_DEFINITIONS.copy()
-    
+
     # Add sensitive tools if their finding is active
     if is_finding_active("customer_lookup_tool"):
         tools.append(SENSITIVE_TOOL_DEFINITIONS[0])
@@ -405,7 +497,7 @@ def get_active_tools() -> list[dict]:
         tools.append(SENSITIVE_TOOL_DEFINITIONS[1])
     if is_finding_active("fetch_document_tool"):
         tools.append(SENSITIVE_TOOL_DEFINITIONS[2])
-    
+
     return tools
 
 
@@ -421,10 +513,10 @@ def execute_tool(tool_name: str, arguments: dict) -> dict:
         "get_internal_announcements": get_internal_announcements,
         "fetch_document": fetch_document,
     }
-    
+
     if tool_name not in tool_map:
         return {"error": f"Unknown tool: {tool_name}"}
-    
+
     try:
         return tool_map[tool_name](**arguments)
     except Exception as e:

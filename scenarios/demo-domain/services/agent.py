@@ -14,22 +14,20 @@ Planted findings:
     verbose_errors               Error responses include internal paths
 """
 
+import asyncio
 import json
-import uuid
 import traceback as tb
-from typing import Optional, Any
+import uuid
 from datetime import datetime
+from typing import Any
 
-from fastapi import FastAPI, Request, HTTPException
+from demo_domain import llm
+from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_finding_active
+from demo_domain.tools import execute_tool, get_active_tools
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-import asyncio
-
-from demo_domain.config import is_finding_active, get_or_create_session, VERBOSE_ERRORS
-from demo_domain.tools import get_active_tools, execute_tool
-from demo_domain import llm
-
 
 app = FastAPI(
     title="HelpDesk Agent",
@@ -106,8 +104,8 @@ MCP_SENSITIVE_TOOLS = [
             "type": "object",
             "properties": {
                 "ticket_id": {"type": "string"},
-                "user_id":   {"type": "string", "description": "Requesting user ID — unvalidated"},
-                "reason":    {"type": "string"},
+                "user_id": {"type": "string", "description": "Requesting user ID — unvalidated"},
+                "reason": {"type": "string"},
             },
             "required": ["ticket_id", "user_id"],
         },
@@ -133,15 +131,34 @@ MCP_SENSITIVE_TOOLS = [
 ]
 
 MCP_PUBLIC_RESOURCES = [
-    {"uri": "helpdesk://kb/index",     "name": "Knowledge Base Index",    "mimeType": "application/json"},
-    {"uri": "helpdesk://status/live",  "name": "Live Service Status",     "mimeType": "application/json"},
+    {"uri": "helpdesk://kb/index", "name": "Knowledge Base Index", "mimeType": "application/json"},
+    {
+        "uri": "helpdesk://status/live",
+        "name": "Live Service Status",
+        "mimeType": "application/json",
+    },
 ]
 
 MCP_SENSITIVE_RESOURCES = [
-    {"uri": "helpdesk://internal/runbooks",  "name": "Internal Runbooks",     "mimeType": "text/markdown",     "sensitive": True},
-    {"uri": "helpdesk://internal/config",    "name": "Service Configuration", "mimeType": "application/json",  "sensitive": True},
-    {"uri": "helpdesk://db/tickets",         "name": "Ticket Database",       "mimeType": "application/json",  "sensitive": True,
-     "_note": "sqlite:///data/helpdesk.db"},  # backend leak
+    {
+        "uri": "helpdesk://internal/runbooks",
+        "name": "Internal Runbooks",
+        "mimeType": "text/markdown",
+        "sensitive": True,
+    },
+    {
+        "uri": "helpdesk://internal/config",
+        "name": "Service Configuration",
+        "mimeType": "application/json",
+        "sensitive": True,
+    },
+    {
+        "uri": "helpdesk://db/tickets",
+        "name": "Ticket Database",
+        "mimeType": "application/json",
+        "sensitive": True,
+        "_note": "sqlite:///data/helpdesk.db",
+    },  # backend leak
 ]
 
 MCP_PROMPTS = [
@@ -157,7 +174,7 @@ MCP_PROMPTS = [
         "description": "Generate escalation summary for Tier 2",
         "arguments": [
             {"name": "ticket_id", "required": True},
-            {"name": "context",   "required": False},
+            {"name": "context", "required": False},
         ],
     },
 ]
@@ -165,21 +182,23 @@ MCP_PROMPTS = [
 
 # ── MCP request/response models ───────────────────────────────────
 
+
 class MCPRequest(BaseModel):
     jsonrpc: str = "2.0"
     method: str
-    params: Optional[dict] = {}
-    id: Optional[int] = None
+    params: dict | None = {}
+    id: int | None = None
 
 
 class MCPResponse(BaseModel):
     jsonrpc: str = "2.0"
-    result: Optional[Any] = None
-    error: Optional[dict] = None
-    id: Optional[int] = None
+    result: Any | None = None
+    error: dict | None = None
+    id: int | None = None
 
 
 # ── Middleware ────────────────────────────────────────────────────
+
 
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
@@ -195,9 +214,9 @@ async def add_headers(request: Request, call_next):
                     "service": "demo-domain-agent",
                     # mcp_backend_leakage — backend paths in error
                     "backend": {
-                        "api_url":  "http://demo-domain-api:8202",
+                        "api_url": "http://demo-domain-api:8202",
                         "chat_url": "http://demo-domain-chat:8201",
-                        "db_path":  "sqlite:///data/helpdesk.db",
+                        "db_path": "sqlite:///data/helpdesk.db",
                     },
                 },
             )
@@ -205,12 +224,13 @@ async def add_headers(request: Request, call_next):
 
     if is_finding_active("version_disclosure"):
         response.headers["X-Agent-Version"] = "helpdesk-agent/0.4.0-beta"
-        response.headers["X-MCP-Server"]    = "helpdesk-mcp/1.0"
+        response.headers["X-MCP-Server"] = "helpdesk-mcp/1.0"
 
     return response
 
 
 # ── MCP handlers ──────────────────────────────────────────────────
+
 
 def handle_initialize(params: dict) -> dict:
     return {
@@ -232,11 +252,11 @@ def handle_tools_call(params: dict) -> dict:
     args = params.get("arguments", {})
 
     tool_map = {
-        "get_ticket":        lambda a: execute_tool("get_ticket_status", a),
-        "search_kb":         lambda a: execute_tool("get_kb_article", a),
-        "escalate_ticket":   lambda a: execute_tool("escalate_ticket", a),
-        "fetch_internal_doc":lambda a: execute_tool("fetch_internal_doc", a),
-        "lookup_user":       lambda a: execute_tool("lookup_user", a),
+        "get_ticket": lambda a: execute_tool("get_ticket_status", a),
+        "search_kb": lambda a: execute_tool("get_kb_article", a),
+        "escalate_ticket": lambda a: execute_tool("escalate_ticket", a),
+        "fetch_internal_doc": lambda a: execute_tool("fetch_internal_doc", a),
+        "lookup_user": lambda a: execute_tool("lookup_user", a),
     }
 
     fn = tool_map.get(name)
@@ -244,14 +264,18 @@ def handle_tools_call(params: dict) -> dict:
         if is_finding_active("mcp_backend_leakage"):
             available = list(tool_map.keys())
             return {
-                "content": [{
-                    "type": "text",
-                    "text": json.dumps({
-                        "error": f"Unknown tool: {name}",
-                        "available_tools": available,
-                        "backend": "http://demo-domain-api:8202",
-                    }),
-                }]
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "error": f"Unknown tool: {name}",
+                                "available_tools": available,
+                                "backend": "http://demo-domain-api:8202",
+                            }
+                        ),
+                    }
+                ]
             }
         raise HTTPException(404, f"Tool not found: {name}")
 
@@ -271,16 +295,20 @@ def handle_resources_read(params: dict) -> dict:
     # Simulate resource content with topology leakage
     if is_finding_active("mcp_backend_leakage"):
         return {
-            "contents": [{
-                "uri": uri,
-                "mimeType": "application/json",
-                "text": json.dumps({
+            "contents": [
+                {
                     "uri": uri,
-                    "backend_resolved_from": "http://demo-domain-api:8202",
-                    "db": "sqlite:///data/helpdesk.db",
-                    "note": "Resource content unavailable in demo mode",
-                }),
-            }]
+                    "mimeType": "application/json",
+                    "text": json.dumps(
+                        {
+                            "uri": uri,
+                            "backend_resolved_from": "http://demo-domain-api:8202",
+                            "db": "sqlite:///data/helpdesk.db",
+                            "note": "Resource content unavailable in demo mode",
+                        }
+                    ),
+                }
+            ]
         }
     return {"contents": [{"uri": uri, "text": "Resource content unavailable"}]}
 
@@ -300,22 +328,25 @@ def handle_prompts_get(params: dict) -> dict:
     }
     return {
         "description": prompt["description"],
-        "messages": [{"role": "user", "content": {"type": "text", "text": templates.get(name, "")}}],
+        "messages": [
+            {"role": "user", "content": {"type": "text", "text": templates.get(name, "")}}
+        ],
     }
 
 
 MCP_HANDLERS = {
-    "initialize":       handle_initialize,
-    "tools/list":       handle_tools_list,
-    "tools/call":       handle_tools_call,
-    "resources/list":   handle_resources_list,
-    "resources/read":   handle_resources_read,
-    "prompts/list":     handle_prompts_list,
-    "prompts/get":      handle_prompts_get,
+    "initialize": handle_initialize,
+    "tools/list": handle_tools_list,
+    "tools/call": handle_tools_call,
+    "resources/list": handle_resources_list,
+    "resources/read": handle_resources_read,
+    "prompts/list": handle_prompts_list,
+    "prompts/get": handle_prompts_get,
 }
 
 
 # ── MCP endpoint ──────────────────────────────────────────────────
+
 
 @app.post("/mcp")
 async def mcp_endpoint(req: MCPRequest):
@@ -337,7 +368,10 @@ async def mcp_endpoint(req: MCPRequest):
                 error={
                     "code": -32603,
                     "message": str(e),
-                    "data": {"traceback": tb.format_exc(), "backend": "http://demo-domain-api:8202"},
+                    "data": {
+                        "traceback": tb.format_exc(),
+                        "backend": "http://demo-domain-api:8202",
+                    },
                 },
             )
         return MCPResponse(id=req.id, error={"code": -32603, "message": "Internal error"})
@@ -346,11 +380,13 @@ async def mcp_endpoint(req: MCPRequest):
 @app.get("/mcp/sse")
 async def mcp_sse():
     """SSE endpoint for MCP — mcp_surface_discovery finding."""
+
     async def gen():
         yield f"data: {json.dumps({'type': 'connected', 'server': 'helpdesk-agent', 'version': '0.4.0-beta'})}\n\n"
         while True:
             await asyncio.sleep(30)
             yield f"data: {json.dumps({'type': 'ping'})}\n\n"
+
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
@@ -367,8 +403,9 @@ async def mcp_discovery():
 
 # ── Memory endpoints — cross_session_memory finding ──────────────
 
+
 @app.get("/memory")
-async def get_memory(session_id: Optional[str] = None):
+async def get_memory(session_id: str | None = None):
     """
     cross_session_memory finding — returns all memory, not scoped to session.
     If session_id is passed it's ignored.
@@ -410,10 +447,11 @@ async def clear_memory():
 
 # ── Agent execute endpoint ────────────────────────────────────────
 
+
 class AgentRequest(BaseModel):
     goal: str
-    context: Optional[dict] = {}
-    session_id: Optional[str] = None
+    context: dict | None = {}
+    session_id: str | None = None
 
 
 @app.post("/agent/execute")
@@ -428,10 +466,13 @@ async def agent_execute(req: AgentRequest):
 
     messages = [{"role": "user", "content": req.goal}]
     if req.context:
-        messages.insert(0, {
-            "role": "user",
-            "content": f"Context: {json.dumps(req.context)}",
-        })
+        messages.insert(
+            0,
+            {
+                "role": "user",
+                "content": f"Context: {json.dumps(req.context)}",
+            },
+        )
 
     system = (
         "You are an IT support automation agent. Execute the given goal using available tools. "
@@ -454,11 +495,13 @@ async def agent_execute(req: AgentRequest):
             for tc in result["tool_calls"]:
                 tools_called.append(tc["name"])
                 output = execute_tool(tc["name"], tc["input"])
-                tool_results.append({
-                    "role": "tool",
-                    "tool_use_id": tc.get("id", tc["name"]),
-                    "content": json.dumps(output),
-                })
+                tool_results.append(
+                    {
+                        "role": "tool",
+                        "tool_use_id": tc.get("id", tc["name"]),
+                        "content": json.dumps(output),
+                    }
+                )
             messages.append({"role": "assistant", "content": result["raw"].get("content", [])})
             messages.extend(tool_results)
             continue
@@ -480,6 +523,7 @@ async def agent_execute(req: AgentRequest):
 
 # ── Trust relay endpoint — inter_agent_trust finding ─────────────
 
+
 @app.post("/agent/relay")
 async def agent_relay(request: Request):
     """
@@ -495,10 +539,12 @@ async def agent_relay(request: Request):
         raise HTTPException(400, "instruction required")
 
     # Execute as if it came from a trusted source
-    result = await agent_execute(AgentRequest(
-        goal=instruction,
-        context={"source": source_agent, "relayed": True},
-    ))
+    result = await agent_execute(
+        AgentRequest(
+            goal=instruction,
+            context={"source": source_agent, "relayed": True},
+        )
+    )
 
     return {
         "relayed_from": source_agent,
@@ -509,6 +555,7 @@ async def agent_relay(request: Request):
 
 # ── Health ────────────────────────────────────────────────────────
 
+
 @app.get("/health")
 async def health():
     session = get_or_create_session()
@@ -517,5 +564,6 @@ async def health():
         "service": "demo-domain-agent",
         "session_id": session.session_id,
         "memory_entries": len(GLOBAL_MEMORY),
-        "mcp_tools": len(MCP_PUBLIC_TOOLS) + (len(MCP_SENSITIVE_TOOLS) if is_finding_active("mcp_tools_exposed") else 0),
+        "mcp_tools": len(MCP_PUBLIC_TOOLS)
+        + (len(MCP_SENSITIVE_TOOLS) if is_finding_active("mcp_tools_exposed") else 0),
     }

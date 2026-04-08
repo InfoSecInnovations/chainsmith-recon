@@ -5,12 +5,11 @@ Administrative interface with debug and configuration exposure findings.
 """
 
 import traceback
-from datetime import datetime
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, HTMLResponse
 
-from fakobanko.config import is_finding_active, get_or_create_session
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 
+from fakobanko.config import get_or_create_session, is_finding_active
 
 app = FastAPI(
     title="Fakobanko Admin Panel",
@@ -20,6 +19,7 @@ app = FastAPI(
 
 
 # ─── Exception Handler ─────────────────────────────────────────
+
 
 @app.exception_handler(Exception)
 async def verbose_exception_handler(request: Request, exc: Exception):
@@ -35,26 +35,28 @@ async def verbose_exception_handler(request: Request, exc: Exception):
                 "server_info": {
                     "python_version": "3.11.4",
                     "framework": "FastAPI 0.109.0",
-                }
-            }
+                },
+            },
         )
     return JSONResponse(status_code=500, content={"error": "Internal Server Error"})
 
 
 # ─── Middleware ────────────────────────────────────────────────
 
+
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Admin-Panel"] = "true"
-    
+
     if is_finding_active("debug_mode_enabled"):
         response.headers["X-Debug-Mode"] = "enabled"
-    
+
     return response
 
 
 # ─── Endpoints ─────────────────────────────────────────────────
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -81,11 +83,11 @@ async def debug_info():
     """Debug endpoint - may expose sensitive info."""
     if not is_finding_active("debug_endpoints_enabled"):
         raise HTTPException(404, "Not found")
-    
+
     return {
         "debug_mode": True,
         "environment": "production",
-        "server": {"hostname": "admin-prod-01.fakobanko.internal", "ip": "10.0.5.12"}
+        "server": {"hostname": "admin-prod-01.fakobanko.internal", "ip": "10.0.5.12"},
     }
 
 
@@ -94,7 +96,7 @@ async def debug_dump():
     """Full debug dump - very sensitive!"""
     if not is_finding_active("config_dump_endpoint"):
         raise HTTPException(403, "Access denied")
-    
+
     return {
         "environment_variables": {
             "DATABASE_URL": "postgresql://admin:Fak0bank0_Pr0d!@db-prod.fakobanko.internal:5432/fakobanko",

@@ -5,11 +5,10 @@ API documentation portal with OpenAPI exposure findings.
 """
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import HTMLResponse
 
-from fakobanko.config import is_finding_active, get_or_create_session
-
+from fakobanko.config import get_or_create_session, is_finding_active
 
 app = FastAPI(
     title="Fakobanko API Documentation",
@@ -20,17 +19,18 @@ app = FastAPI(
 
 # ─── Custom OpenAPI Schema ─────────────────────────────────────
 
+
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     openapi_schema = get_openapi(
         title="Fakobanko API",
         version="2.0.0",
         description="Fakobanko Banking API - Internal Documentation",
         routes=app.routes,
     )
-    
+
     # Add extra info if finding active
     if is_finding_active("openapi_exposed"):
         openapi_schema["info"]["x-internal"] = True
@@ -39,23 +39,23 @@ def custom_openapi():
             {"url": "https://api-staging.fakobanko.internal", "description": "Staging"},
             {"url": "http://localhost:8080", "description": "Development"},
         ]
-    
+
     if is_finding_active("internal_endpoints_documented"):
         openapi_schema["paths"]["/internal/admin"] = {
             "get": {
                 "summary": "Admin endpoint",
                 "description": "Internal admin access - requires VPN",
-                "responses": {"200": {"description": "Admin panel"}}
+                "responses": {"200": {"description": "Admin panel"}},
             }
         }
         openapi_schema["paths"]["/internal/metrics"] = {
             "get": {
                 "summary": "Metrics endpoint",
                 "description": "Prometheus metrics",
-                "responses": {"200": {"description": "Metrics"}}
+                "responses": {"200": {"description": "Metrics"}},
             }
         }
-    
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
@@ -65,19 +65,21 @@ app.openapi = custom_openapi
 
 # ─── Middleware ────────────────────────────────────────────────
 
+
 @app.middleware("http")
 async def add_headers(request: Request, call_next):
     response = await call_next(request)
-    
+
     response.headers["X-Docs-Version"] = "2.0.0"
-    
+
     if is_finding_active("auth_schemes_revealed"):
         response.headers["X-Auth-Schemes"] = "Bearer, API-Key, Internal-Token"
-    
+
     return response
 
 
 # ─── Endpoints ─────────────────────────────────────────────────
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -99,20 +101,20 @@ async def root():
     <div class="container">
         <h1>🏦 Fakobanko API Documentation</h1>
         <p>Welcome to the Fakobanko API documentation portal.</p>
-        
+
         <h2>Quick Links</h2>
         <ul>
             <li><a href="/docs">Interactive API Docs (Swagger UI)</a></li>
             <li><a href="/redoc">API Reference (ReDoc)</a></li>
             <li><a href="/openapi.json">OpenAPI Specification</a></li>
         </ul>
-        
+
         <h2>Available APIs</h2>
         <div class="endpoint"><span class="method">GET</span> /api/v1/accounts - List accounts</div>
         <div class="endpoint"><span class="method">GET</span> /api/v1/transactions - Get transactions</div>
         <div class="endpoint"><span class="method">POST</span> /api/v1/transfers - Initiate transfer</div>
         <div class="endpoint"><span class="method">GET</span> /api/v1/customers - Customer lookup</div>
-        
+
         <h2>Authentication</h2>
         <p>All API requests require authentication via Bearer token or API key.</p>
     </div>
@@ -124,11 +126,7 @@ async def root():
 @app.get("/health")
 async def health():
     session = get_or_create_session()
-    return {
-        "status": "healthy",
-        "service": "fakobanko-docs",
-        "session_id": session.session_id
-    }
+    return {"status": "healthy", "service": "fakobanko-docs", "session_id": session.session_id}
 
 
 # Fake API endpoints for documentation
