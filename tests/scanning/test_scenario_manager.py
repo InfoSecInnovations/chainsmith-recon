@@ -437,31 +437,33 @@ class TestGetScenarioManager:
         assert mgr1 is mgr2
 
     def test_auto_loads_from_env(self, clean_env, tmp_path: Path, monkeypatch):
-        """CHAINSMITH_SCENARIO env var auto-loads scenario."""
-        # Create a scenario
+        """CHAINSMITH_SCENARIO env var triggers auto-load in get_scenario_manager."""
+        from unittest.mock import patch
+
+        import app.scenarios
+
+        # Create a scenario bundle
         bundle = tmp_path / "auto-scenario"
         bundle.mkdir()
         (bundle / "scenario.json").write_text(json.dumps({"name": "auto-scenario"}))
 
-        # Set env and reset singleton.  Also patch _default_scenarios_dirs so
-        # that the ScenarioManager constructor sees tmp_path regardless of
-        # env-var propagation timing.
         monkeypatch.setenv("CHAINSMITH_SCENARIO", "auto-scenario")
-        monkeypatch.setenv("CHAINSMITH_SCENARIOS_DIR", str(tmp_path))
-
-        import app.scenarios
-
-        monkeypatch.setattr(
-            app.scenarios,
-            "_default_scenarios_dirs",
-            lambda: [tmp_path],
-        )
         app.scenarios._manager = None
 
-        mgr = get_scenario_manager()
+        # Use unittest.mock.patch (not monkeypatch) to guarantee the
+        # module-level function is replaced before ScenarioManager() runs.
+        with patch.object(
+            app.scenarios,
+            "_default_scenarios_dirs",
+            return_value=[tmp_path],
+        ):
+            mgr = get_scenario_manager()
 
-        assert mgr.is_active is True, "CHAINSMITH_SCENARIO env var should auto-load the scenario"
+        assert mgr.is_active is True, "CHAINSMITH_SCENARIO env var should auto-load"
         assert mgr.active.name == "auto-scenario"
+
+        # Clean up singleton so it doesn't leak into other tests
+        app.scenarios._manager = None
 
 
 class TestRealScenarios:
