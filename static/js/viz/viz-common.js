@@ -167,6 +167,56 @@ window.ChainsmithViz = window.ChainsmithViz || {};
         return counts;
     };
 
+    // ─── Timestamp formatting ─────────────────────────────────────
+    /**
+     * Format an ISO timestamp to a locale-appropriate absolute string.
+     * Returns empty string if the input is falsy or unparseable.
+     */
+    ns.formatTimestamp = function (isoString) {
+        if (!isoString) return '';
+        try {
+            var d = new Date(isoString);
+            if (isNaN(d.getTime())) return '';
+            return d.toLocaleString(undefined, {
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+            });
+        } catch (e) { return ''; }
+    };
+
+    /**
+     * Format an ISO timestamp as a short time string (HH:MM:SS).
+     */
+    ns.formatTimeShort = function (isoString) {
+        if (!isoString) return '';
+        try {
+            var d = new Date(isoString);
+            if (isNaN(d.getTime())) return '';
+            return d.toLocaleTimeString(undefined, {
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+            });
+        } catch (e) { return ''; }
+    };
+
+    /**
+     * Return a relative time string ("3 min ago", "2 h ago", etc.)
+     * relative to a reference Date (defaults to now).
+     */
+    ns.relativeTime = function (isoString, reference) {
+        if (!isoString) return '';
+        try {
+            var d = new Date(isoString);
+            if (isNaN(d.getTime())) return '';
+            var ref = reference || new Date();
+            var diffMs = ref.getTime() - d.getTime();
+            var absDiff = Math.abs(diffMs);
+            if (absDiff < 60000) return Math.round(absDiff / 1000) + 's ago';
+            if (absDiff < 3600000) return Math.round(absDiff / 60000) + ' min ago';
+            if (absDiff < 86400000) return Math.round(absDiff / 3600000) + 'h ago';
+            return Math.round(absDiff / 86400000) + 'd ago';
+        } catch (e) { return ''; }
+    };
+
     // ─── Tooltip factory ───────────────────────────────────────────
     /**
      * Create tooltip helpers bound to a specific tooltip element.

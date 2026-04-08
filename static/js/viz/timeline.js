@@ -33,6 +33,7 @@
                 severity: f.severity || 'info',
                 title: f.title || 'Untitled',
                 checkName: f.check_name || '',
+                createdAt: f.created_at || null,
             };
             points.push(point);
             lanes[lane].push(point);
@@ -87,9 +88,10 @@
             return;
         }
 
-        // Sizing
+        // Sizing — extra bottom margin when timestamps are available
+        var hasAnyTimestamp = points.some(function (p) { return !!p.createdAt; });
         var laneHeight = 48;
-        var margin     = { top: 40, right: 30, bottom: 30, left: 160 };
+        var margin     = { top: 40, right: 30, bottom: hasAnyTimestamp ? 48 : 30, left: 160 };
         var width      = Math.max(600, points.length * 24 + margin.left + margin.right);
         var height     = margin.top + laneKeys.length * laneHeight + margin.bottom;
 
@@ -154,13 +156,42 @@
         g.selectAll('.domain, .tick line')
             .attr('stroke', 'var(--border)');
 
+        // Check if timestamps are available for time-based axis labels
+        var hasTimestamps = points.some(function (p) { return !!p.createdAt; });
+
+        if (hasTimestamps) {
+            // Add short time labels below discovery-order ticks
+            var tickIndices = x.ticks(Math.min(points.length, 10)).map(Math.round);
+            g.selectAll('.timeline-time-label')
+                .data(tickIndices.filter(function (i) { return i >= 0 && i < points.length; }))
+                .join('text')
+                .attr('class', 'timeline-time-label')
+                .attr('x', function (i) { return x(i); })
+                .attr('y', innerHeight + 26)
+                .attr('text-anchor', 'middle')
+                .attr('fill', 'var(--text-muted)')
+                .attr('font-size', '9px')
+                .attr('opacity', 0.7)
+                .text(function (i) { return ns.formatTimeShort(points[i].createdAt); });
+        }
+
+        // X-axis label — show time range if timestamps available
+        var axisLabel = 'Discovery order';
+        if (hasTimestamps && points.length >= 2) {
+            var firstTs = ns.formatTimeShort(points[0].createdAt);
+            var lastTs = ns.formatTimeShort(points[points.length - 1].createdAt);
+            if (firstTs && lastTs) {
+                axisLabel = 'Discovery order (' + firstTs + ' \u2013 ' + lastTs + ')';
+            }
+        }
+
         g.append('text')
             .attr('x', innerWidth / 2)
-            .attr('y', innerHeight + 28)
+            .attr('y', innerHeight + (hasTimestamps ? 40 : 28))
             .attr('text-anchor', 'middle')
             .attr('fill', 'var(--text-muted)')
             .attr('font-size', '11px')
-            .text('Discovery order');
+            .text(axisLabel);
 
         // Observation dots
         g.selectAll('.timeline-dot')
@@ -176,13 +207,21 @@
             .attr('opacity', 0.9)
             .style('cursor', 'pointer')
             .on('mouseenter', function (event, d) {
+                var tsHtml = '';
+                if (d.createdAt) {
+                    var abs = ns.formatTimestamp(d.createdAt);
+                    var rel = ns.relativeTime(d.createdAt);
+                    tsHtml = '<div class="timeline-tip-detail">Time: ' + abs +
+                        (rel ? ' <span style="opacity:0.7">(' + rel + ')</span>' : '') + '</div>';
+                }
                 tip.show(
                     '<strong>' + d.title + '</strong>' +
                     '<div class="timeline-tip-detail">Severity: <span style="color:' + SEV_COLORS[d.severity] + '">' + d.severity + '</span></div>' +
                     '<div class="timeline-tip-detail">Host: ' + d.host + '</div>' +
                     '<div class="timeline-tip-detail">Suite: ' + d.suite + '</div>' +
                     (d.checkName ? '<div class="timeline-tip-detail">Check: ' + d.checkName + '</div>' : '') +
-                    '<div class="timeline-tip-detail">Order: #' + (d.index + 1) + '</div>',
+                    '<div class="timeline-tip-detail">Order: #' + (d.index + 1) + '</div>' +
+                    tsHtml,
                     event
                 );
             })

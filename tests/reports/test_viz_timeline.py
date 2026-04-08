@@ -110,6 +110,22 @@ class TestTimelineJavaScript:
         content = _all_viz_content()
         assert "d3.scaleBand()" in content, "Timeline should use d3.scaleBand for Y axis"
 
+    def test_format_timestamp_function(self):
+        content = _all_viz_content()
+        assert "formatTimestamp" in content, "Missing formatTimestamp function"
+
+    def test_format_time_short_function(self):
+        content = _all_viz_content()
+        assert "formatTimeShort" in content, "Missing formatTimeShort function"
+
+    def test_relative_time_function(self):
+        content = _all_viz_content()
+        assert "relativeTime" in content, "Missing relativeTime function"
+
+    def test_tooltip_shows_time_label(self):
+        content = _all_viz_content()
+        assert "Time: " in content, "Tooltip should display timestamp with 'Time:' label"
+
 
 class TestTimelineDataLogic:
     """Test the timeline data grouping logic (pure Python mirror of buildTimelineData)."""
@@ -183,6 +199,7 @@ class TestTimelineDataLogic:
                 "severity": f.get("severity", "info"),
                 "title": f.get("title", "Untitled"),
                 "checkName": f.get("check_name", ""),
+                "createdAt": f.get("created_at") or None,
             }
             points.append(point)
             lanes[lane].append(point)
@@ -298,6 +315,24 @@ class TestTimelineDataLogic:
         result = self.build_timeline_data(observations, "host")
         assert result["points"][0]["severity"] == "info"
 
+    def test_created_at_captured_on_point(self):
+        observations = [
+            {
+                "host": "h",
+                "suite": "web",
+                "severity": "info",
+                "title": "T",
+                "created_at": "2026-04-08T10:30:00Z",
+            },
+        ]
+        result = self.build_timeline_data(observations, "host")
+        assert result["points"][0]["createdAt"] == "2026-04-08T10:30:00Z"
+
+    def test_created_at_defaults_to_none(self):
+        observations = [{"host": "h", "suite": "web", "severity": "info", "title": "T"}]
+        result = self.build_timeline_data(observations, "host")
+        assert result["points"][0]["createdAt"] is None
+
     def test_lanes_contain_correct_points(self):
         observations = [
             {"host": "a.com", "suite": "web", "severity": "high", "title": "A"},
@@ -376,3 +411,9 @@ class TestTimelineCSS:
     def test_timeline_toggle_class(self):
         content = _all_viz_content()
         assert ".timeline-toggle" in content
+
+    def test_timeline_time_label_class(self):
+        content = _all_viz_content()
+        assert "timeline-time-label" in content, (
+            "Missing timeline-time-label class for axis timestamps"
+        )
