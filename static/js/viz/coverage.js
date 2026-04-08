@@ -6,9 +6,22 @@
     'use strict';
 
     var STATUS_COLORS = ns.COVERAGE_STATUS_COLORS;
+    var SKIP_LABELS   = ns.SKIP_STATUS_LABELS;
 
     // Expose for backward compat
     window.COVERAGE_STATUS_COLORS = STATUS_COLORS;
+
+    /**
+     * Classify a skip_reason string into a sub-status for color/label differentiation.
+     */
+    function classifySkipReason(skipReason) {
+        if (!skipReason) return 'skipped';
+        var lower = skipReason.toLowerCase();
+        if (lower.indexOf('not found on target') !== -1) return 'skipped-suite';
+        if (lower.indexOf('on_critical') !== -1) return 'skipped-critical';
+        if (lower.indexOf('precondition') !== -1) return 'skipped-precondition';
+        return 'skipped-precondition';
+    }
 
     /**
      * Build coverage matrix data.
@@ -16,12 +29,21 @@
     function buildCoverageData(observationsList, checkStatuses) {
         var checks = [];
         var checkStatusMap = {};
+        var skipReasonMap = {};
 
         (checkStatuses || []).forEach(function (cs) {
             var name = cs.name || cs.check_name;
             if (!name) return;
             if (!checkStatusMap[name]) {
-                checkStatusMap[name] = cs.status || 'completed';
+                var status = cs.status || 'completed';
+                // Refine 'skipped' status using skip_reason for sub-classification
+                if (status === 'skipped' && cs.skip_reason) {
+                    skipReasonMap[name] = cs.skip_reason;
+                    status = classifySkipReason(cs.skip_reason);
+                } else if (status === 'skipped') {
+                    skipReasonMap[name] = 'Skipped';
+                }
+                checkStatusMap[name] = status;
                 checks.push(name);
             }
         });
@@ -65,12 +87,13 @@
                 if (checkObservations.length > 0 && status === 'completed') status = 'found';
                 matrix[globalHost][check] = {
                     status: status,
+                    skipReason: skipReasonMap[check] || null,
                     observationCount: checkObservations.length,
                     observations: checkObservations,
                 };
             });
 
-            return { matrix: matrix, hosts: [globalHost], checks: checks, isGlobal: true };
+            return { matrix: matrix, hosts: [globalHost], checks: checks, isGlobal: true, skipReasonMap: skipReasonMap };
         }
 
         // Multi-host view
@@ -92,13 +115,14 @@
                 if (checkObservations.length > 0 && status === 'completed') status = 'found';
                 matrix[host][check] = {
                     status: status,
+                    skipReason: skipReasonMap[check] || null,
                     observationCount: checkObservations.length,
                     observations: checkObservations,
                 };
             });
         });
 
-        return { matrix: matrix, hosts: hosts, checks: checks, isGlobal: false };
+        return { matrix: matrix, hosts: hosts, checks: checks, isGlobal: false, skipReasonMap: skipReasonMap };
     }
 
     // Expose for tests
@@ -205,6 +229,7 @@
                     host: host,
                     check: check,
                     status: cell.status,
+                    skipReason: cell.skipReason || null,
                     observationCount: cell.observationCount,
                     observations: cell.observations,
                 });
@@ -226,11 +251,16 @@
             .attr('stroke-width', 1.5)
             .style('cursor', function (d) { return d.observationCount > 0 ? 'pointer' : 'default'; })
             .on('mouseenter', function (event, d) {
-                var statusLabel = d.status.charAt(0).toUpperCase() + d.status.slice(1).replace('-', ' ');
+                var statusLabel = SKIP_LABELS[d.status]
+                    || d.status.charAt(0).toUpperCase() + d.status.slice(1).replace('-', ' ');
+                var reasonHtml = d.skipReason
+                    ? '<div style="color:#9ca3af;font-size:11px;margin-top:2px">' + d.skipReason + '</div>'
+                    : '';
                 tip.show(
                     '<strong>' + d.check + '</strong>' +
                     '<div class="coverage-tip-status">Host: ' + d.host + '</div>' +
-                    '<div>Status: <span style="color:' + STATUS_COLORS[d.status] + '">' + statusLabel + '</span></div>' +
+                    '<div>Status: <span style="color:' + (STATUS_COLORS[d.status] || STATUS_COLORS['not-run']) + '">' + statusLabel + '</span></div>' +
+                    reasonHtml +
                     (d.observationCount > 0 ? '<div>' + d.observationCount + ' observation' + (d.observationCount !== 1 ? 's' : '') + '</div>' : ''),
                     event
                 );
@@ -290,6 +320,24 @@
                 .attr('font-size', '10px')
                 .text(pct + '%');
         });
+
+        // Skip-reason summary: group skipped checks by reason
+        var skipMap = data.skipReasonMap || {};
+        var reasonGroups = {};
+        Object.keys(skipMap).forEach(function (name) {
+            var reason = skipMap[name];
+            if (!reasonGroups[reason]) reasonGroups[reason] = [];
+            reasonGroups[reason].push(name);
+        });
+
+        var reasonKeys = Object.keys(reasonGroups);
+        if (reasonKeys.length > 0 && noteEl) {
+            var lines = reasonKeys.map(function (reason) {
+                var count = reasonGroups[reason].length;
+                return count + ' check' + (count !== 1 ? 's' : '') + ' skipped: ' + reason;
+            });
+            noteEl.textContent = lines.join(' · ');
+        }
     };
 
 })(window.ChainsmithViz);

@@ -2,7 +2,7 @@ Coverage Visualization — Precondition-Based Labels
 ===================================================
 Captured 2026-04-08.
 
-Status: Pending
+Status: Implemented
 
 Problem
 -------

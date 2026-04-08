@@ -49,6 +49,7 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     state.checks_completed = 0
     state.current_check = None
     state.check_statuses = {}
+    state.skip_reasons = {}
     state.engagement_id = body.engagement_id
 
     # Launch scan in background with optional filters
@@ -109,7 +110,11 @@ async def get_check_statuses():
             status = state.check_statuses.get(check.name, "pending")
             # Include suite info for UI grouping
             info["suite"] = getattr(check, "suite", None) or _infer_suite(check.name)
-            checks.append({**info, "status": status})
+            entry = {**info, "status": status}
+            skip_reason = state.skip_reasons.get(check.name)
+            if skip_reason:
+                entry["skip_reason"] = skip_reason
+            checks.append(entry)
     elif mgr.is_active:
         # No scan running, but scenario active - show what would run
         for check in mgr.get_simulations():
@@ -117,13 +122,21 @@ async def get_check_statuses():
             info["simulated"] = True
             info["suite"] = getattr(check, "suite", None) or _infer_suite(check.name)
             status = state.check_statuses.get(check.name, "pending")
-            checks.append({**info, "status": status})
+            entry = {**info, "status": status}
+            skip_reason = state.skip_reasons.get(check.name)
+            if skip_reason:
+                entry["skip_reason"] = skip_reason
+            checks.append(entry)
     else:
         # No scan, no scenario - show available checks
         for name, info in AVAILABLE_CHECKS.items():
             status = state.check_statuses.get(name, "pending")
             info_copy = {**info, "suite": _infer_suite(name)}
-            checks.append({**info_copy, "status": status})
+            entry = {**info_copy, "status": status}
+            skip_reason = state.skip_reasons.get(name)
+            if skip_reason:
+                entry["skip_reason"] = skip_reason
+            checks.append(entry)
 
     return {"checks": checks, "scenario": mgr.active.name if mgr.is_active else None}
 

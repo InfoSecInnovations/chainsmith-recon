@@ -74,6 +74,19 @@ class TestCoverageJavaScript:
         for color in ["#4ade80", "#f59e0b", "#6b7280", "#ef4444", "#1e293b"]:
             assert color in content, f"Missing coverage status color: {color}"
 
+    def test_skip_sub_status_colors_defined(self):
+        """Precondition-based skip sub-status colors are defined."""
+        content = _all_viz_content()
+        for key in ["skipped-precondition", "skipped-suite", "skipped-critical"]:
+            assert key in content, f"Missing skip sub-status color key: {key}"
+
+    def test_skip_status_labels_defined(self):
+        """SKIP_STATUS_LABELS object is defined in viz-common."""
+        content = _all_viz_content()
+        assert "SKIP_STATUS_LABELS" in content, "Missing SKIP_STATUS_LABELS constant"
+        assert "Preconditions not met" in content
+        assert "Suite not found on target" in content
+
     def test_coverage_called_in_load_data(self):
         content = _all_viz_content()
         assert "renderCoverage(" in content, "renderCoverage should be called in loadData"
@@ -126,18 +139,40 @@ class TestCoverageDataLogic:
                 pass
         return re.sub(r":\d+$", "", name)
 
+    SKIP_SUITE_KEYWORDS = ["not found on target"]
+    SKIP_CRITICAL_KEYWORDS = ["on_critical"]
+    SKIP_PRECONDITION_KEYWORDS = ["precondition"]
+
+    @classmethod
+    def classify_skip_reason(cls, skip_reason):
+        if not skip_reason:
+            return "skipped"
+        lower = skip_reason.lower()
+        if any(k in lower for k in cls.SKIP_SUITE_KEYWORDS):
+            return "skipped-suite"
+        if any(k in lower for k in cls.SKIP_CRITICAL_KEYWORDS):
+            return "skipped-critical"
+        return "skipped-precondition"
+
     @classmethod
     def build_coverage_data(cls, observations_list, check_statuses):
         """Python mirror of the JS buildCoverageData."""
         checks = []
         check_status_map = {}
+        skip_reason_map = {}
 
         for cs in check_statuses or []:
             name = cs.get("name") or cs.get("check_name")
             if not name:
                 continue
             if name not in check_status_map:
-                check_status_map[name] = cs.get("status", "completed")
+                status = cs.get("status", "completed")
+                if status == "skipped" and cs.get("skip_reason"):
+                    skip_reason_map[name] = cs["skip_reason"]
+                    status = cls.classify_skip_reason(cs["skip_reason"])
+                elif status == "skipped":
+                    skip_reason_map[name] = "Skipped"
+                check_status_map[name] = status
                 checks.append(name)
 
         for f in observations_list:
@@ -181,10 +216,17 @@ class TestCoverageDataLogic:
                     status = "found"
                 matrix[global_host][check] = {
                     "status": status,
+                    "skipReason": skip_reason_map.get(check),
                     "observationCount": len(check_observations),
                     "observations": check_observations,
                 }
-            return {"matrix": matrix, "hosts": [global_host], "checks": checks, "isGlobal": True}
+            return {
+                "matrix": matrix,
+                "hosts": [global_host],
+                "checks": checks,
+                "isGlobal": True,
+                "skipReasonMap": skip_reason_map,
+            }
 
         # Multi-host
         matrix = {}
@@ -207,11 +249,18 @@ class TestCoverageDataLogic:
                     status = "found"
                 matrix[host][check] = {
                     "status": status,
+                    "skipReason": skip_reason_map.get(check),
                     "observationCount": len(check_observations),
                     "observations": check_observations,
                 }
 
-        return {"matrix": matrix, "hosts": hosts, "checks": checks, "isGlobal": False}
+        return {
+            "matrix": matrix,
+            "hosts": hosts,
+            "checks": checks,
+            "isGlobal": False,
+            "skipReasonMap": skip_reason_map,
+        }
 
     def test_empty_inputs(self):
         result = self.build_coverage_data([], [])
@@ -293,6 +342,72 @@ class TestCoverageDataLogic:
         host = result["hosts"][0]
         assert result["matrix"][host]["skip_check"]["status"] == "skipped"
         assert result["matrix"][host]["err_check"]["status"] == "error"
+
+    def test_skip_reason_precondition_not_met(self):
+        """Skipped check with precondition reason gets sub-classified."""
+        checks = [
+            {"name": "dns_lookup", "status": "completed"},
+            {
+                "name": "mcp_auth_check",
+                "status": "skipped",
+                "skip_reason": "Precondition not met: mcp_servers is truthy",
+            },
+        ]
+        result = self.build_coverage_data([], checks)
+        host = result["hosts"][0]
+        assert result["matrix"][host]["mcp_auth_check"]["status"] == "skipped-precondition"
+        assert result["matrix"][host]["mcp_auth_check"]["skipReason"] == (
+            "Precondition not met: mcp_servers is truthy"
+        )
+
+    def test_skip_reason_suite_not_found(self):
+        """Suite-level skip reason is classified as skipped-suite."""
+        checks = [
+            {"name": "dns_lookup", "status": "completed"},
+            {
+                "name": "mcp_auth_check",
+                "status": "skipped",
+                "skip_reason": "MCP not found on target",
+            },
+        ]
+        result = self.build_coverage_data([], checks)
+        host = result["hosts"][0]
+        assert result["matrix"][host]["mcp_auth_check"]["status"] == "skipped-suite"
+
+    def test_skip_reason_critical_upstream(self):
+        """on_critical skip reason is classified as skipped-critical."""
+        checks = [
+            {
+                "name": "mcp_tool_enum",
+                "status": "skipped",
+                "skip_reason": "on_critical='skip_downstream' from network suite",
+            },
+        ]
+        result = self.build_coverage_data([], checks)
+        host = result["hosts"][0]
+        assert result["matrix"][host]["mcp_tool_enum"]["status"] == "skipped-critical"
+
+    def test_skip_reason_map_returned(self):
+        """skipReasonMap is included in the returned data."""
+        checks = [
+            {"name": "check_a", "status": "completed"},
+            {"name": "check_b", "status": "skipped", "skip_reason": "MCP not found on target"},
+            {"name": "check_c", "status": "skipped", "skip_reason": "Precondition not met: x"},
+        ]
+        result = self.build_coverage_data([], checks)
+        assert "skipReasonMap" in result
+        assert result["skipReasonMap"]["check_b"] == "MCP not found on target"
+        assert result["skipReasonMap"]["check_c"] == "Precondition not met: x"
+        assert "check_a" not in result["skipReasonMap"]
+
+    def test_skip_without_reason_stays_generic(self):
+        """Skipped status without skip_reason stays as generic 'skipped'."""
+        checks = [
+            {"name": "some_check", "status": "skipped"},
+        ]
+        result = self.build_coverage_data([], checks)
+        host = result["hosts"][0]
+        assert result["matrix"][host]["some_check"]["status"] == "skipped"
 
     def test_observations_without_check_statuses(self):
         """Observations with check_name but no checkStatuses still create coverage data."""

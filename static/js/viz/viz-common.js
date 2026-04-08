@@ -59,11 +59,22 @@ window.ChainsmithViz = window.ChainsmithViz || {};
 
     // ─── Coverage status colors ────────────────────────────────────
     ns.COVERAGE_STATUS_COLORS = {
-        completed: '#4ade80',
-        found:     '#f59e0b',
-        skipped:   '#6b7280',
-        error:     '#ef4444',
-        'not-run': '#1e293b',
+        completed:       '#4ade80',
+        found:           '#f59e0b',
+        skipped:         '#6b7280',
+        'skipped-precondition': '#4b5563',
+        'skipped-suite':        '#374151',
+        'skipped-critical':     '#7f1d1d',
+        error:           '#ef4444',
+        'not-run':       '#1e293b',
+    };
+
+    // Human-readable labels for skip sub-statuses
+    ns.SKIP_STATUS_LABELS = {
+        'skipped':              'Skipped',
+        'skipped-precondition': 'Preconditions not met',
+        'skipped-suite':        'Suite not found on target',
+        'skipped-critical':     'Skipped (critical finding upstream)',
     };
 
     // ─── Suite palette ─────────────────────────────────────────────

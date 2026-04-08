@@ -65,6 +65,7 @@ class CheckLauncher:
         self.failed: set[str] = set()
         self.skipped: set[str] = set()
         self.observations: list = []
+        self.skip_reasons: dict[str, str] = {}
         self.scan_stopped: bool = False
 
         # critical_hosts tracks hosts with critical observations, keyed by host.
@@ -116,6 +117,7 @@ class CheckLauncher:
                 if skip_reason:
                     logger.info(f"Skipping {check.name}: {skip_reason}")
                     self.skipped.add(check.name)
+                    self.skip_reasons[check.name] = skip_reason
                     self.completed.add(check.name)  # Mark done so we don't retry
                     if on_check_complete:
                         on_check_complete(check.name, True, 0)
@@ -128,6 +130,9 @@ class CheckLauncher:
 
                 if on_check_complete:
                     on_check_complete(check.name, success, count)
+
+        # Capture skip reasons for checks that never became runnable
+        self._capture_pending_skip_reasons()
 
         # Final flush of any remaining buffered observations
         if self.observation_writer:
@@ -276,6 +281,54 @@ class CheckLauncher:
             logger.error(f"  Failed: {name} — {e}")
             self.failed.add(name)
             return (False, 0)
+
+    # ── Skip-reason helpers ──────────────────────────────────────
+
+    def _capture_pending_skip_reasons(self) -> None:
+        """Determine and store why each pending check was never runnable."""
+        pending = set(self.checks.keys()) - self.completed - self.failed
+
+        for name in pending:
+            check = self.checks[name]
+            _, missing = self._check_conditions(check)
+            check_suite = self._infer_suite(name)
+
+            if missing:
+                # Classify: is this a suite-level precondition or a check-level one?
+                reason = self._classify_skip_reason(missing, check_suite)
+            else:
+                reason = "Scan stopped before check could run"
+
+            self.skip_reasons[name] = reason
+            self.skipped.add(name)
+
+    def _classify_skip_reason(self, missing: list[str], suite: str) -> str:
+        """
+        Turn a list of unmet conditions into a human-readable skip reason.
+
+        Heuristics:
+        - If the missing condition references a suite's discovery output
+          (e.g. 'mcp_servers is truthy'), it means the suite wasn't found.
+        - Otherwise it's a generic precondition failure.
+        """
+        # Map well-known context keys to suite-level "not found" messages
+        suite_discovery_keys = {
+            "mcp_servers": "MCP",
+            "chat_endpoints": "AI",
+            "agent_endpoints": "Agent",
+            "rag_endpoints": "RAG",
+            "cag_endpoints": "CAG",
+        }
+
+        for cond_desc in missing:
+            for key, suite_label in suite_discovery_keys.items():
+                if key in cond_desc:
+                    return f"{suite_label} not found on target"
+
+        # Generic precondition message with the actual missing conditions
+        if len(missing) == 1:
+            return f"Precondition not met: {missing[0]}"
+        return f"Preconditions not met: {', '.join(missing)}"
 
     # ── on_critical helpers ────────────────────────────────────────
 

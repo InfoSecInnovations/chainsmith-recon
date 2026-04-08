@@ -40,6 +40,7 @@ class AppState:
         self.checks_completed: int = 0
         self.current_check: str | None = None
         self.check_statuses: dict[str, str] = {}  # name -> status
+        self.skip_reasons: dict[str, str] = {}  # name -> why skipped
 
         # Chain / adjudication concurrency guards (result data is in DB)
         self.chain_status: str = "idle"  # idle, analyzing, complete, partial, error

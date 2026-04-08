@@ -181,6 +181,20 @@ async def run_scan(
                 on_check_complete=on_complete,
             )
 
+        # Propagate skip reasons from launcher to state
+        runner = state.runner
+        if hasattr(runner, "skip_reasons"):
+            state.skip_reasons = dict(runner.skip_reasons)
+            for name, reason in runner.skip_reasons.items():
+                if state.check_statuses.get(name) in ("pending", "completed", None):
+                    state.check_statuses[name] = "skipped"
+                if log_writer:
+                    import asyncio
+
+                    asyncio.ensure_future(
+                        log_writer.log_event({"check": name, "event": "skipped", "error": reason})
+                    )
+
         state.status = "complete"
         state.phase = "done"
         state.current_check = None
