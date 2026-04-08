@@ -443,12 +443,19 @@ class TestGetScenarioManager:
         bundle.mkdir()
         (bundle / "scenario.json").write_text(json.dumps({"name": "auto-scenario"}))
 
-        # Set env and reset singleton
+        # Set env and reset singleton.  Also patch _default_scenarios_dirs so
+        # that the ScenarioManager constructor sees tmp_path regardless of
+        # env-var propagation timing.
         monkeypatch.setenv("CHAINSMITH_SCENARIO", "auto-scenario")
         monkeypatch.setenv("CHAINSMITH_SCENARIOS_DIR", str(tmp_path))
 
         import app.scenarios
 
+        monkeypatch.setattr(
+            app.scenarios,
+            "_default_scenarios_dirs",
+            lambda: [tmp_path],
+        )
         app.scenarios._manager = None
 
         mgr = get_scenario_manager()
