@@ -5,6 +5,8 @@ All presentation logic extracted from cli.py.
 Functions accept plain dicts (from API JSON responses) rather than domain objects.
 """
 
+import csv
+import io
 import json
 from datetime import datetime
 
@@ -145,6 +147,38 @@ def observations_to_markdown(observations: list[dict], target: str) -> str:
             lines.append("")
 
     return "\n".join(lines)
+
+
+CSV_COLUMNS = [
+    "title",
+    "severity",
+    "check_name",
+    "suite",
+    "host",
+    "target_url",
+    "description",
+    "evidence",
+    "verification_status",
+    "confidence",
+    "references",
+    "created_at",
+]
+
+
+def observations_to_csv(observations: list[dict]) -> str:
+    """Convert observation dicts to CSV string."""
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=CSV_COLUMNS, extrasaction="ignore")
+    writer.writeheader()
+    for obs in observations:
+        row = {}
+        for col in CSV_COLUMNS:
+            val = obs.get(col)
+            if isinstance(val, list):
+                val = "; ".join(str(v) for v in val)
+            row[col] = val if val is not None else ""
+        writer.writerow(row)
+    return buf.getvalue()
 
 
 def observations_to_sarif(observations: list[dict], target: str) -> str:
@@ -401,6 +435,10 @@ def output_observations(
 
     elif fmt == "sarif":
         result = observations_to_sarif(observations, target)
+        _write_or_echo(result, output, quiet)
+
+    elif fmt == "csv":
+        result = observations_to_csv(observations)
         _write_or_echo(result, output, quiet)
 
 

@@ -26,6 +26,7 @@ import click
 from app.cli_client import ChainsmithAPIError, ChainsmithClient
 from app.cli_formatters import (
     SUITE_COLORS,
+    observations_to_csv,
     observations_to_json,
     observations_to_markdown,
     observations_to_sarif,
@@ -105,7 +106,7 @@ def _handle_api_error(e: ChainsmithAPIError):
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(["json", "yaml", "md", "sarif", "text"]),
+    type=click.Choice(["json", "yaml", "md", "sarif", "csv", "text"]),
     default="text",
     help="Output format",
 )
@@ -584,7 +585,7 @@ def scenarios_info(ctx, name: str):
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(["json", "md", "sarif"]),
+    type=click.Choice(["json", "md", "sarif", "csv"]),
     default="json",
     help="Output format",
 )
@@ -622,6 +623,8 @@ def export(fmt: str, output: str | None, input_file: str | None):
         result = observations_to_markdown(observations, target)
     elif fmt == "sarif":
         result = observations_to_sarif(observations, target)
+    elif fmt == "csv":
+        result = observations_to_csv(observations)
 
     # Write output
     if output:
@@ -1866,7 +1869,7 @@ def report_group():
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
+    type=click.Choice(["md", "json", "html", "pdf", "sarif", "csv"]),
     default="md",
     help="Output format",
 )
@@ -1901,7 +1904,7 @@ def report_technical(ctx, scan_id: str, fmt: str, output: str | None):
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
+    type=click.Choice(["md", "json", "html", "pdf", "sarif", "csv"]),
     default="md",
     help="Output format",
 )
@@ -1936,7 +1939,7 @@ def report_delta(ctx, scan_a: str, scan_b: str, fmt: str, output: str | None):
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
+    type=click.Choice(["md", "json", "html", "pdf", "sarif", "csv"]),
     default="md",
     help="Output format",
 )
@@ -1971,7 +1974,7 @@ def report_executive(ctx, scan_id: str, fmt: str, engagement_id: str | None, out
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
+    type=click.Choice(["md", "json", "html", "pdf", "sarif", "csv"]),
     default="md",
     help="Output format",
 )
@@ -2007,7 +2010,7 @@ def report_compliance(ctx, scan_id: str, fmt: str, engagement_id: str | None, ou
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(["md", "json", "html", "pdf", "sarif"]),
+    type=click.Choice(["md", "json", "html", "pdf", "sarif", "csv"]),
     default="md",
     help="Output format",
 )

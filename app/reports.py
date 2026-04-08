@@ -81,6 +81,13 @@ def _check_coverage(log_entries: list[dict]) -> dict:
     }
 
 
+def _observations_csv(observations: list[dict]) -> str:
+    """Render observations as CSV for any report type."""
+    from app.cli_formatters import observations_to_csv
+
+    return observations_to_csv(observations)
+
+
 # ─── Technical Report ────────────────────────────────────────────────────────
 
 
@@ -111,7 +118,9 @@ async def generate_technical_report(scan_id: str, fmt: str = "md") -> dict:
     risk = _risk_score(severity_counts)
     coverage = _check_coverage(log_entries)
 
-    if fmt == "json":
+    if fmt == "csv":
+        content = _observations_csv(observations)
+    elif fmt == "json":
         content = _technical_json(scan, observations, chains, severity_counts, risk, coverage)
     elif fmt == "sarif":
         content = _technical_sarif(scan, observations, chains, severity_counts, risk, coverage)
@@ -123,7 +132,9 @@ async def generate_technical_report(scan_id: str, fmt: str = "md") -> dict:
         content = _technical_markdown(scan, observations, chains, severity_counts, risk, coverage)
 
     target = scan.get("target_domain", "unknown")
-    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json"}.get(fmt, "md")
+    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
+        fmt, "md"
+    )
     filename = f"technical-{target}-{scan_id[:8]}.{ext}"
 
     return {"content": content, "filename": filename, "format": fmt}
@@ -290,7 +301,9 @@ async def generate_delta_report(scan_a_id: str, scan_b_id: str, fmt: str = "md")
     risk_a = _risk_score(sev_a)
     risk_b = _risk_score(sev_b)
 
-    if fmt == "json":
+    if fmt == "csv":
+        content = _observations_csv(observations_b)
+    elif fmt == "json":
         content = _delta_json(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b)
     elif fmt == "sarif":
         content = _delta_sarif(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b)
@@ -302,7 +315,9 @@ async def generate_delta_report(scan_a_id: str, scan_b_id: str, fmt: str = "md")
         content = _delta_markdown(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b)
 
     target = scan_b.get("target_domain", "unknown")
-    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json"}.get(fmt, "md")
+    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
+        fmt, "md"
+    )
     filename = f"delta-{target}-{scan_a_id[:8]}-vs-{scan_b_id[:8]}.{ext}"
 
     return {"content": content, "filename": filename, "format": fmt}
@@ -835,7 +850,9 @@ async def generate_executive_report(
         "total_active": len(active_observations),
     }
 
-    if fmt == "json":
+    if fmt == "csv":
+        content = _observations_csv(observations)
+    elif fmt == "json":
         content = _executive_json(data)
     elif fmt == "sarif":
         content = _executive_sarif(data)
@@ -846,7 +863,9 @@ async def generate_executive_report(
     else:
         content = _executive_markdown(data)
 
-    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json"}.get(fmt, "md")
+    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
+        fmt, "md"
+    )
     filename = f"executive-{target}-{scan_id[:8]}.{ext}"
     return {"content": content, "filename": filename, "format": fmt}
 
@@ -1072,7 +1091,9 @@ async def generate_compliance_report(
         "overridden_count": len(override_audit),
     }
 
-    if fmt == "json":
+    if fmt == "csv":
+        content = _observations_csv(observations)
+    elif fmt == "json":
         content = _compliance_json(data)
     elif fmt == "sarif":
         content = _compliance_sarif(data)
@@ -1083,7 +1104,9 @@ async def generate_compliance_report(
     else:
         content = _compliance_markdown(data)
 
-    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json"}.get(fmt, "md")
+    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
+        fmt, "md"
+    )
     target = data["target"]
     filename = f"compliance-{target}-{scan_id[:8]}.{ext}"
     return {"content": content, "filename": filename, "format": fmt}
@@ -1316,7 +1339,9 @@ async def generate_trend_report(
         "averages": averages,
     }
 
-    if fmt == "json":
+    if fmt == "csv":
+        content = _trend_csv(data_points)
+    elif fmt == "json":
         content = _trend_json(data)
     elif fmt == "sarif":
         content = _trend_sarif(data)
@@ -1327,7 +1352,9 @@ async def generate_trend_report(
     else:
         content = _trend_markdown(data)
 
-    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json"}.get(fmt, "md")
+    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
+        fmt, "md"
+    )
     filename = f"trend-{scope}.{ext}"
     return {"content": content, "filename": filename, "format": fmt}
 
@@ -1403,6 +1430,31 @@ def _trend_markdown(d: dict) -> str:
 
     lines.append("")
     return "\n".join(lines)
+
+
+def _trend_csv(data_points: list[dict]) -> str:
+    """Export trend data points as CSV (one row per scan)."""
+    import csv
+    import io
+
+    cols = [
+        "scan_id",
+        "started_at",
+        "target",
+        "total",
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "info",
+        "risk_score",
+    ]
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+    writer.writeheader()
+    for dp in data_points:
+        writer.writerow({c: dp.get(c, "") for c in cols})
+    return buf.getvalue()
 
 
 def _trend_json(d: dict) -> str:
@@ -1818,7 +1870,9 @@ async def generate_targeted_export(
     severity_counts = _count_by_severity(observations)
     risk = _risk_score(severity_counts)
 
-    if fmt == "json":
+    if fmt == "csv":
+        content = _observations_csv(observations)
+    elif fmt == "json":
         content = json.dumps(
             {
                 "report_type": "targeted",
@@ -1925,7 +1979,9 @@ async def generate_targeted_export(
             lines.append("")
         content = "\n".join(lines)
 
-    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json"}.get(fmt, "md")
+    ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
+        fmt, "md"
+    )
     filename = f"targeted-export-{len(observations)}observations.{ext}"
 
     return {"content": content, "filename": filename, "format": fmt}

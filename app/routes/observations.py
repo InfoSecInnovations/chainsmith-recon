@@ -13,6 +13,7 @@ active scan (state.active_scan_id) is used.
 import logging
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
 
 from app.db.repositories import ObservationRepository, ScanRepository
 from app.state import state
@@ -75,3 +76,29 @@ async def get_observation_detail(
     if not observation:
         raise HTTPException(404, f"Observation '{observation_id}' not found")
     return observation
+
+
+@router.get("/api/v1/observations/export/csv")
+async def export_observations_csv(
+    scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
+    severity: str | None = Query(None, description="Filter by severity"),
+    host: str | None = Query(None, description="Filter by host"),
+):
+    """Export observations as a downloadable CSV file."""
+    from app.cli_formatters import observations_to_csv
+
+    sid = _resolve_scan_id(scan_id)
+    if not sid:
+        return Response(
+            content="title,severity,check_name,suite,host,target_url,description,evidence,verification_status,confidence,references,created_at\r\n",
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=observations.csv"},
+        )
+
+    observations = await _observation_repo.get_observations(sid, severity=severity, host=host)
+    csv_content = observations_to_csv(observations)
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=observations-{sid[:8]}.csv"},
+    )

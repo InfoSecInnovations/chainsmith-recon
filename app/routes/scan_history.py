@@ -88,6 +88,28 @@ async def get_scan_observations(
     return {"total": len(observations), "observations": observations}
 
 
+@router.get("/api/v1/scans/{scan_id}/observations/export/csv")
+async def export_scan_observations_csv(
+    scan_id: str,
+    severity: str | None = Query(None, description="Filter by severity"),
+    host: str | None = Query(None, description="Filter by host"),
+):
+    """Export observations from a historical scan as CSV."""
+    from app.cli_formatters import observations_to_csv
+
+    scan = await _scan_repo.get_scan(scan_id)
+    if scan is None:
+        raise HTTPException(404, f"Scan '{scan_id}' not found")
+
+    observations = await _observation_repo.get_observations(scan_id, severity=severity, host=host)
+    csv_content = observations_to_csv(observations)
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=observations-{scan_id[:8]}.csv"},
+    )
+
+
 @router.get("/api/v1/scans/{scan_id}/observations/by-host")
 async def get_scan_observations_by_host(scan_id: str):
     """Get observations from a historical scan grouped by host."""
@@ -319,7 +341,7 @@ async def get_capabilities():
 # ─── Report Generation Endpoints ─────────────────────────────────────────────
 
 
-VALID_FORMATS = ("md", "json", "html", "pdf", "sarif")
+VALID_FORMATS = ("md", "json", "html", "pdf", "sarif", "csv")
 
 
 def _pdf_response(result: dict) -> Response:

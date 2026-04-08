@@ -74,6 +74,10 @@ const api = {
     async getChains() { return (await fetch('/api/v1/chains')).json(); },
     async getChainDetail(chainId) { return (await fetch(`/api/v1/chains/${chainId}`)).json(); },
     async exportReport() { return (await fetch('/api/v1/export', { method: 'POST' })).json(); },
+    async exportObservationsCsv(scanId) {
+        const params = scanId ? `?scan_id=${scanId}` : '';
+        return fetch(`/api/v1/observations/export/csv${params}`);
+    },
 
     // ─── Scan History & Trends ────────────────────────────────
     async listScans(target = null, limit = 50) {
@@ -446,6 +450,18 @@ function initSettingsDrawer() {
         const a = document.createElement('a');
         a.href = url;
         a.download = `recon-report-${report.session_id}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('btn-export-csv')?.addEventListener('click', async () => {
+        const resp = await api.exportObservationsCsv();
+        if (!resp.ok) { alert('CSV export failed'); return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'observations.csv';
         a.click();
         URL.revokeObjectURL(url);
     });

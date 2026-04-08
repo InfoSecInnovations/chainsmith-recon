@@ -551,6 +551,7 @@
                     <button class="format-btn" data-format="md">Markdown</button>
                     <button class="format-btn" data-format="json">JSON</button>
                     <button class="format-btn" data-format="sarif">SARIF</button>
+                    <button class="format-btn" data-format="csv">CSV</button>
                     <button class="format-btn" data-format="pdf" id="btn-format-pdf">PDF</button>
                 </div>
                 <button class="btn btn-primary btn-generate" id="btn-generate">Generate Report</button>
@@ -979,6 +980,7 @@
                 const mime = lastFormat === 'json' ? 'application/json'
                     : lastFormat === 'sarif' ? 'application/json'
                     : lastFormat === 'html' ? 'text/html'
+                    : lastFormat === 'csv' ? 'text/csv'
                     : 'text/markdown';
                 blob = new Blob([text], { type: mime });
             }
