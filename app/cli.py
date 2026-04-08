@@ -1842,25 +1842,84 @@ def observations_overrides(ctx, status: str, as_json: bool):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+def _get_reports_dir() -> Path:
+    """Return the reports directory, creating it if needed."""
+    reports_dir = Path.home() / ".chainsmith" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    return reports_dir
+
+
 def _write_report(result: dict, fmt: str, output: str | None):
-    """Write report output to file or terminal. Handles binary PDF content."""
+    """Write report output to file or terminal. Handles binary PDF content.
+
+    When no explicit ``-o`` path is given, the report is automatically saved
+    to ``~/.chainsmith/reports/`` with the timestamped filename produced by
+    the report generator.  Text formats are also printed to stdout.
+    """
     content = result.get("content", "")
-    if fmt == "pdf":
-        if not output:
-            output = result.get("filename", "report.pdf")
-        Path(output).write_bytes(content)
-        click.echo(click.style(f"PDF report written to {output}", fg="green"))
-    elif output:
-        Path(output).write_text(content)
-        click.echo(click.style(f"Report written to {output}", fg="green"))
+    filename = result.get("filename", f"report.{fmt}")
+
+    if output:
+        # Explicit path supplied by user — honour it.
+        dest = Path(output)
+        if fmt == "pdf":
+            dest.write_bytes(content)
+        else:
+            dest.write_text(content)
+        click.echo(click.style(f"Report written to {dest}", fg="green"))
     else:
-        click.echo(content)
+        # Auto-save to reports directory.
+        dest = _get_reports_dir() / filename
+        if fmt == "pdf":
+            dest.write_bytes(content)
+        else:
+            dest.write_text(content)
+            click.echo(content)  # also print text to stdout
+        click.echo(click.style(f"Report saved to {dest}", fg="green"))
 
 
 @cli.group("report")
 def report_group():
     """Generate reports from historical scan data."""
     pass
+
+
+@report_group.command("list")
+@click.option(
+    "--type",
+    "-t",
+    "report_type",
+    type=click.Choice(
+        ["technical", "delta", "executive", "compliance", "trend", "targeted-export"]
+    ),
+    default=None,
+    help="Filter by report type",
+)
+@click.option("--limit", "-n", default=20, show_default=True, help="Max reports to show")
+def report_list(report_type: str | None, limit: int):
+    """List saved reports in the reports directory.
+
+    Examples:
+
+        chainsmith report list
+
+        chainsmith report list -t technical -n 10
+    """
+    reports_dir = _get_reports_dir()
+    files = sorted(reports_dir.iterdir(), key=lambda f: f.stat().st_mtime, reverse=True)
+    if report_type:
+        files = [f for f in files if f.name.startswith(report_type)]
+    files = files[:limit]
+
+    if not files:
+        click.echo("No saved reports found.")
+        return
+
+    click.echo(click.style(f"Saved reports in {reports_dir}\n", fg="cyan"))
+    for f in files:
+        size_kb = f.stat().st_size / 1024
+        click.echo(f"  {f.name}  ({size_kb:.1f} KB)")
+    click.echo(f"\n{len(files)} report(s) shown.")
 
 
 @report_group.command("technical")

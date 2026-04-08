@@ -2,7 +2,7 @@ Reports Directory — Prevent Overwrite of Saved Reports
 =======================================================
 Captured 2026-04-08.
 
-Status: Pending
+Status: Implemented (2026-04-08)
 
 Problem
 -------

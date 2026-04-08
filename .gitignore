@@ -26,6 +26,9 @@ dist/
 *.db
 *.sqlite*
 
+# Reports output
+reports/
+
 # IDE / editor
 .vscode/
 .idea/

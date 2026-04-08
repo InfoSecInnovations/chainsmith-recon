@@ -135,7 +135,8 @@ async def generate_technical_report(scan_id: str, fmt: str = "md") -> dict:
     ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
         fmt, "md"
     )
-    filename = f"technical-{target}-{scan_id[:8]}.{ext}"
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    filename = f"technical-{target}-{scan_id[:8]}_{ts}.{ext}"
 
     return {"content": content, "filename": filename, "format": fmt}
 
@@ -318,7 +319,8 @@ async def generate_delta_report(scan_a_id: str, scan_b_id: str, fmt: str = "md")
     ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
         fmt, "md"
     )
-    filename = f"delta-{target}-{scan_a_id[:8]}-vs-{scan_b_id[:8]}.{ext}"
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    filename = f"delta-{target}-{scan_a_id[:8]}-vs-{scan_b_id[:8]}_{ts}.{ext}"
 
     return {"content": content, "filename": filename, "format": fmt}
 
@@ -866,7 +868,8 @@ async def generate_executive_report(
     ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
         fmt, "md"
     )
-    filename = f"executive-{target}-{scan_id[:8]}.{ext}"
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    filename = f"executive-{target}-{scan_id[:8]}_{ts}.{ext}"
     return {"content": content, "filename": filename, "format": fmt}
 
 
@@ -1108,7 +1111,8 @@ async def generate_compliance_report(
         fmt, "md"
     )
     target = data["target"]
-    filename = f"compliance-{target}-{scan_id[:8]}.{ext}"
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    filename = f"compliance-{target}-{scan_id[:8]}_{ts}.{ext}"
     return {"content": content, "filename": filename, "format": fmt}
 
 
@@ -1355,7 +1359,8 @@ async def generate_trend_report(
     ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
         fmt, "md"
     )
-    filename = f"trend-{scope}.{ext}"
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    filename = f"trend-{scope}_{ts}.{ext}"
     return {"content": content, "filename": filename, "format": fmt}
 
 
@@ -1982,6 +1987,7 @@ async def generate_targeted_export(
     ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
         fmt, "md"
     )
-    filename = f"targeted-export-{len(observations)}observations.{ext}"
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    filename = f"targeted-export-{len(observations)}observations_{ts}.{ext}"
 
     return {"content": content, "filename": filename, "format": fmt}
