@@ -83,6 +83,7 @@
                 <div class="tab" data-viz="radar">Radar</div>
                 <div class="tab" data-viz="coverage">Coverage</div>
                 <div class="tab" data-viz="timeline">Timeline</div>
+                <div class="tab" data-viz="benchmark">Benchmark</div>
                 <div class="flex-spacer"></div>
                 <div class="tab" data-viz="chains">Attack Chains</div>
             </div>
@@ -306,6 +307,48 @@
                     </div>
                     <div class="timeline-tooltip u-hidden" id="timeline-tooltip"></div>
                 </div>
+
+                <!-- Benchmark Panel -->
+                <div class="viz-panel" id="panel-benchmark">
+                    <div class="benchmark-container" id="benchmark-container">
+                        <div class="empty-state" id="benchmark-empty">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <rect x="3" y="10" width="4" height="11" rx="1"></rect>
+                                <rect x="10" y="6" width="4" height="15" rx="1"></rect>
+                                <rect x="17" y="3" width="4" height="18" rx="1"></rect>
+                            </svg>
+                            <h3>Benchmark Bar Chart</h3>
+                            <p>Run a scan to compare findings against a baseline</p>
+                        </div>
+                        <div id="benchmark-content" class="u-hidden">
+                            <div class="benchmark-controls">
+                                <label class="benchmark-control-label">Host:
+                                    <select class="form-input input-w-sm" id="benchmark-host-select"></select>
+                                </label>
+                                <label class="benchmark-control-label">Baseline:
+                                    <select class="form-input input-w-sm" id="benchmark-baseline-select">
+                                        <option value="all_hosts">All Hosts (this scan)</option>
+                                        <option value="target_history">Target History</option>
+                                    </select>
+                                </label>
+                                <label class="benchmark-control-label">
+                                    <select class="form-input input-w-xs" id="benchmark-depth-select" style="display:none">
+                                        <option value="5" selected>Last 5</option>
+                                        <option value="10">Last 10</option>
+                                        <option value="20">Last 20</option>
+                                        <option value="all">All</option>
+                                    </select>
+                                </label>
+                                <span class="benchmark-history-note" id="benchmark-history-note"></span>
+                            </div>
+                            <div class="benchmark-legend" id="benchmark-legend"></div>
+                            <div class="benchmark-chart-area" id="benchmark-chart-area">
+                                <svg id="benchmark-graph"></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="benchmark-tooltip u-hidden" id="benchmark-tooltip"></div>
+                </div>
             </div>
         </div>
     </main>
@@ -438,6 +481,7 @@
     <script src="/static/js/viz/treemap.js"></script>
     <script src="/static/js/viz/host-table.js"></script>
     <script src="/static/js/viz/chains-sankey.js"></script>
+    <script src="/static/js/viz/benchmark.js"></script>
     <script src="/static/js/viz/viz-fullscreen.js"></script>
     <script>
         let observations = [];
@@ -473,6 +517,7 @@
                     else if (id === 'panel-radar') Viz.renderRadar(observations, openModal);
                     else if (id === 'panel-timeline') Viz.renderTimeline(observations, openModal, timelineGroupBy);
                     else if (id === 'panel-coverage') Viz.renderCoverage(observations, openModal);
+                    else if (id === 'panel-benchmark') Viz.renderBenchmark(observations, openModal);
                 }, 150);
             });
         });
@@ -584,6 +629,14 @@
                 Viz.renderTimeline(observations, openModal, timelineGroupBy);
                 await Viz.renderCoverage(observations, openModal);
                 await Viz.renderHostTable(openModal);
+
+                // Benchmark: fetch scope for target domain
+                try {
+                    const scope = await api.getScope();
+                    Viz.renderBenchmark(observations, openModal, { targetDomain: scope.target });
+                } catch (e) {
+                    Viz.renderBenchmark(observations, openModal, {});
+                }
 
                 // Load existing chains
                 const chainsData = await api.getChains();
