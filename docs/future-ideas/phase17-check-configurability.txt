@@ -264,6 +264,100 @@ name, the bad value, and what was expected.
 
 
 ==========================================================================
+WAVE 6 — WEBUI CHECK DETAIL MODALS
+==========================================================================
+
+Add a modal to each check in the index.html grid that serves two
+purposes: (1) explain what the check does, and (2) allow per-check
+configuration changes before scan invocation.
+
+Interaction model:
+  - Checkbox click: toggles selection (unchanged from current behavior)
+  - Label / card click: opens the check detail modal
+  - An info icon on each check item hints that details are available
+  - Modal contains a toggle to enable/disable the check, so users can
+    also control selection from within the modal
+
+Modal content — info section:
+  - Check name (human-readable, underscores → spaces)
+  - Description (from check metadata)
+  - Why run this (reason field)
+  - References (OWASP, CWE, RFC links — rendered as clickable list)
+  - Techniques (MITRE ATT&CK / methodology tags — rendered as pills)
+  - Conditions (what context must exist for this check to run)
+  - Produces (what context data this check generates)
+  - Intrusive badge (if applicable)
+
+Modal content — configuration section (Wave 1 dependency):
+  - Enable/disable toggle (synced with the grid checkbox)
+  - Per-check parameter fields, dynamically rendered from the check's
+    configurable params. Each check declares its tunable parameters
+    (Wave 1); the modal renders appropriate form controls:
+      - Text input for strings (wordlist paths, endpoint paths)
+      - Number input for numeric values (timeout, rate limit, retry)
+      - Select/dropdown for enum values (on_critical, depth level)
+      - Toggle for booleans (enabled, intrusive override)
+      - Textarea for list values (comma-separated or one-per-line)
+  - on_critical override (per-check, overrides suite default)
+  - A "Reset to defaults" link that clears per-check overrides
+
+Locked intrusive checks:
+  - Modal still opens (users should be able to learn what a check does
+    even when it's locked)
+  - Enable toggle is disabled with explanatory text:
+    "This is an intrusive check. Enable Active Testing globally, then
+    unlock this suite's intrusive checks to configure it."
+  - Parameter fields are visible but disabled (read-only preview)
+  - Visual treatment: muted header bar or banner at top of modal
+    indicating locked state
+
+Data flow:
+  - Modal reads check metadata from the already-fetched /api/v1/checks
+    response (no additional API call for info)
+  - Parameter definitions need a new field in check metadata — either
+    a configurable_params list from the check class, or derived from
+    the YAML schema (Wave 1)
+  - On modal close, changed parameters are held in a client-side
+    config overlay object (not persisted until scan start)
+  - At scan submission, the overlay merges into the scope payload
+    alongside the existing scan_behavior and techniques fields
+  - API receives per-check overrides in a new check_config field:
+      {
+        "check_config": {
+          "dns_enumeration": {
+            "timeout_seconds": 60,
+            "wordlist_file": "./data/wordlists/subdomains_full.txt"
+          },
+          "port_scan": {
+            "on_critical": "skip_downstream"
+          }
+        }
+      }
+
+Implementation notes:
+  - Store full check metadata objects in CHECK_SUITES (not just names)
+    so the modal can render without re-fetching
+  - Reuse existing modal infrastructure from common.css (.modal,
+    .modal-overlay, .modal-header, .modal-body, .modal-section, etc.)
+  - Single shared modal element in the DOM, populated dynamically on
+    open (not one modal per check)
+  - Prevent label click from bubbling to checkbox (stopPropagation on
+    the label handler, or restructure the HTML so label and checkbox
+    are siblings rather than parent-child)
+  - CSS: info icon uses a subtle SVG or Unicode character (e.g., a
+    small circle-i) positioned at the right edge of the check item
+  - Transition: if Wave 1 is not yet implemented, the config section
+    shows only enable/disable and on_critical. Parameter fields appear
+    once checks declare their configurable params.
+
+Depends on:
+  - Wave 1 (per-check config in YAML) for parameter field rendering
+  - Wave 4 (per-check on_critical) for the on_critical dropdown
+  - Partial standalone value: info-only modals with enable/disable
+    can ship before Waves 1 and 4 land
+
+
+==========================================================================
 OPEN QUESTIONS
 ==========================================================================
 
@@ -294,7 +388,8 @@ OPEN QUESTIONS
    (~/.chainsmith/data/), or configurable via data_dir setting.
 
 7. Should enabled: false checks still appear in /api/checks output
-   (marked as disabled) or be hidden entirely?
+   (marked as disabled) or be hidden entirely? (Wave 6 assumes yes —
+   disabled checks are visible in the grid and openable in the modal.)
 
 8. "Profile" is already used by chainsmith.sh for AI provider
    selection. This doc uses "preset" to avoid collision.
@@ -356,13 +451,39 @@ D9. Strict vs lenient for unknown check names in WebUI context: If
 
 Cross-cutting — WebUI + CLI
 -------------------------------
-D10. How deep does the WebUI configuration go? Options:
-     (A) Preset picker + check enable/disable toggles only
-     (B) A + per-check parameter editing via form fields
-     (C) B + payload file management (upload/select/edit)
-     Each level is significantly more frontend work.
+D10. Resolved: option B — preset picker + check enable/disable + per-
+     check parameter editing via form fields in the check detail modal
+     (Wave 6). Payload file management (option C) deferred.
 
 D11. Config export / resolved view: Add a CLI command
      (chainsmith config resolve) and a WebUI panel that shows the
      fully merged config for a given preset? Useful for debugging
      "why did this check behave that way?"
+
+Wave 6 — Check detail modals
+--------------------------------
+D12. How should checks declare their configurable params for the modal
+     to render form fields? Options:
+     (A) A CONFIGURABLE_PARAMS class attribute on each check — list of
+         dicts with name, type, default, description, constraints
+     (B) Infer from the YAML schema (Wave 1) — any key under the
+         check's config section becomes a field
+     (C) Both: checks declare params explicitly, YAML schema validates
+     Option A gives better UI control (labels, help text, input types).
+     Option B is less work but produces generic forms.
+
+D13. Should per-check config changes made in the modal persist across
+     page reloads (localStorage / API save), or are they ephemeral
+     (lost on refresh, only submitted with the scan)? Persistent is
+     more useful but needs a save/discard model. Ephemeral is simpler
+     but frustrating if you configure 10 checks then accidentally
+     refresh.
+
+D14. Should the modal show the check's dependency graph? (i.e., which
+     checks must run before this one based on conditions/produces.)
+     Useful for understanding why a check is greyed out, but adds
+     frontend complexity.
+
+D15. Should there be a "Configure All" or bulk-edit mode for applying
+     the same parameter change (e.g., timeout) across multiple checks
+     at once? Or is that what presets (Wave 3) already solve?

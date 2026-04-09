@@ -95,8 +95,13 @@ This preserves the original assessment while adding the Adjudicator's opinion.
 ## Operator Context
 
 The Adjudicator consumes operator-provided asset context to inform its debate.
-It is **read-only** — it cannot alter scope, findings, or Guardian rules. It
-only produces `adjudicated_risk` annotations alongside the originals.
+It produces `adjudicated_risk` annotations alongside the originals and **can
+override any prior severity assignment**, including those constrained by
+Guardian rules. However, the Adjudicator's reasoning must be firmly grounded
+in best practices as defined by disinterested third-party authorities:
+**NIST**, **OWASP**, **SANS**, **IANS**, and **MITRE**. The Adjudicator is
+not a vehicle for operator preference — it is an independent assessor that
+applies established frameworks to produce defensible ratings.
 
 ### Context File
 
@@ -136,10 +141,18 @@ strategy to keep costs reasonable:
 |------------------|-------------------------------|
 | Critical / High  | Full adversarial debate       |
 | Medium           | Structured challenge (single) |
-| Low / Info       | Skip or rubric-only           |
+| Low / Info       | Skip (unless user-triggered)  |
 
 When a specific approach is selected via CLI/API/preferences, it overrides
 this tiering and applies uniformly to all findings.
+
+**Note on Low/Info findings:** The `auto` tier skips Low/Info findings because
+individually they rarely warrant adjudication cost. However, a series of Low
+findings that chain together may produce a High or Critical aggregate severity
+via chain multipliers. Since Phase 21a runs before chaining, it cannot predict
+which Lows will matter. Operators who suspect a cluster of Lows constitutes a
+meaningful attack path can explicitly trigger adjudication for those findings
+via CLI (`--adjudicate-finding F-xxx`) or API, bypassing the auto-tier skip.
 
 ## New Events
 
@@ -229,7 +242,7 @@ sealed_decision_record:
   # --- LLM Interactions (complete prompt/response capture) ---
   llm_interactions:
     - step: "prosecution"                 # or "challenge", "rubric", "defense", "judge"
-      model: "gpt-4o"
+      model: "llm-provider/model-name"  # Resolved via LiteLLM profile
       prompt_hash: "sha256:abcdef..."     # Hash of full prompt
       prompt_text: "..."                  # Full prompt sent to LLM
       response_text: "..."               # Full raw response from LLM
@@ -549,6 +562,30 @@ READJUDICATION_REQUESTED   — re-adjudication triggered (includes justification
   should be addressed at the storage layer (DB-level encryption) rather
   than application-level per-record encryption.
 
+## Retention Policy
+
+Default retention is **keep-forever**. Audit gaps are more costly than storage.
+
+- **Compression** — sealed decision records older than a configurable threshold
+  (default: 90 days) are gzip-compressed in place. Full prompt/response text
+  is the primary space consumer; compression typically achieves 80-90%
+  reduction on text-heavy JSON. Compressed records are transparently
+  decompressed on read via the audit API.
+- **Deletion** — an optional `delete_after_days` setting in
+  `~/.chainsmith/preferences.yaml` enables automatic purging of records older
+  than the configured interval. **Disabled by default.** When enabled, deletion
+  is logged as an `AUDIT_RECORDS_PURGED` event (forwarded to external
+  collectors before local deletion occurs) so 2nd line has a record of what
+  was removed and when.
+
+```yaml
+adjudicator:
+  audit:
+    retention:
+      compress_after_days: 90       # gzip records older than this (default: 90)
+      delete_after_days: null       # null = keep forever (default)
+```
+
 ## Future Features
 
 - **External threat intelligence** — EPSS scores, known-exploited-vulnerabilities
@@ -557,14 +594,17 @@ READJUDICATION_REQUESTED   — re-adjudication triggered (includes justification
   over time.
 - **RFC 3161 trusted timestamps** — cryptographic proof of record creation
   time for regulatory environments requiring independent timestamp authority.
+- **Webhook payload signing and mTLS** — HMAC-SHA256 payload signatures for
+  webhook forwarding and mutual TLS support for both webhook and syslog
+  targets. Currently, webhook forwarding relies on bearer tokens and syslog
+  uses server-side TLS only. A receiving SIEM cannot cryptographically verify
+  the sender without payload signing or mTLS. This is a separate phase due to
+  the certificate management and key distribution infrastructure required.
 
 ## Open Questions
 
 - Should adjudication results feed back into attack pattern weights over time
   (learning loop)?
-- What is the right retention policy for sealed decision records? They can
-  grow large with full prompt/response capture. Options: configurable TTL,
-  archive-after-export, or keep-forever (storage is cheap, audit gaps are not).
 - Should the anomaly flags in the review summary be configurable (custom
   thresholds, additional patterns) or is a fixed set sufficient?
 
@@ -580,3 +620,20 @@ All LLM calls are handled via the existing `get_llm_client()` path, resolved
 from `--profile` in `chainsmith.sh`. A `model_adjudicator` field will be added
 to `LiteLLMConfig` in `app/config.py` for per-agent model overrides, consistent
 with `model_verifier` and `model_chainsmith`.
+
+### Temperature and Determinism
+
+All adjudication LLM calls **must** use `temperature=0` to maximize
+reproducibility. This is critical for audit defensibility — a 2nd line
+reviewer who re-runs the same prompt should get a substantially similar
+result.
+
+**Important caveat:** `temperature=0` does **not** guarantee identical
+outputs across calls. LLM inference involves floating-point operations whose
+ordering can vary between hardware, driver versions, batch sizes, and even
+runs on the same GPU. Model providers may also update weights or
+infrastructure without notice. The sealed decision record captures the
+exact response that was produced, so the audit trail remains authoritative
+regardless of whether a re-run yields a slightly different result. Reviewers
+should treat the recorded output as the ground truth, not attempt exact
+reproduction as a verification method.
