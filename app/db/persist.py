@@ -18,6 +18,7 @@ from app.db.repositories import (
     AdjudicationRepository,
     ComparisonRepository,
     ScanRepository,
+    TriageRepository,
 )
 
 if TYPE_CHECKING:
@@ -153,5 +154,28 @@ async def on_adjudication_complete(
     except Exception:
         logger.warning(
             "Failed to persist adjudication results",
+            exc_info=True,
+        )
+
+
+async def on_triage_complete(
+    scan_id: str | None,
+    plan: dict,
+    db: Database | None = None,
+) -> None:
+    """
+    Called when triage completes. Persists the triage plan and actions
+    to the database. Fire-and-forget with graceful degradation.
+    """
+    if scan_id is None or not _is_enabled():
+        return
+
+    try:
+        triage_repo = TriageRepository(db)
+        plan_id = await triage_repo.create_plan(scan_id, plan)
+        logger.info(f"Persisted triage plan {plan_id} for scan {scan_id}")
+    except Exception:
+        logger.warning(
+            "Failed to persist triage plan",
             exc_info=True,
         )

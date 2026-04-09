@@ -1,0 +1,220 @@
+[
+  {
+    "check_id": "verbose_errors",
+    "observation_type": "verbose_errors",
+    "category": "information_disclosure",
+    "title": "Disable verbose error messages in production",
+    "steps": [
+      "Set application error handling to production mode (disable DEBUG/verbose flags).",
+      "Configure a generic error page or JSON error response for unhandled exceptions.",
+      "Ensure stack traces, internal paths, and framework versions are not exposed.",
+      "Verify by triggering an error and confirming only a generic message is returned."
+    ],
+    "effort_estimate": "low",
+    "requires_infra_access": false,
+    "requires_code_change": true,
+    "requires_deploy": true,
+    "references": ["OWASP API7:2023", "CWE-209"]
+  },
+  {
+    "check_id": "cors_misconfigured",
+    "observation_type": "cors_misconfigured",
+    "category": "header_hardening",
+    "title": "Restrict CORS to trusted origins",
+    "steps": [
+      "Identify all legitimate origins that need cross-origin access.",
+      "Replace wildcard (*) or overly permissive Access-Control-Allow-Origin with an explicit allowlist.",
+      "Ensure Access-Control-Allow-Credentials is only set when required and origins are explicit.",
+      "Test with a request from an unauthorized origin to confirm it is rejected."
+    ],
+    "effort_estimate": "low",
+    "requires_infra_access": true,
+    "requires_code_change": false,
+    "requires_deploy": true,
+    "references": ["OWASP API8:2023", "CWE-942"]
+  },
+  {
+    "check_id": "debug_mode_enabled",
+    "observation_type": "debug_mode_enabled",
+    "category": "configuration",
+    "title": "Disable debug mode in production",
+    "steps": [
+      "Set the application's debug/development flag to false in the production environment.",
+      "Remove or disable any debug endpoints (e.g., /debug, /__debug__, /phpinfo).",
+      "Verify that debug headers (X-Debug-Token, Server-Timing internals) are no longer returned."
+    ],
+    "effort_estimate": "low",
+    "requires_infra_access": false,
+    "requires_code_change": true,
+    "requires_deploy": true,
+    "references": ["OWASP API8:2023", "CWE-489"]
+  },
+  {
+    "check_id": "chatbot_tool_leak",
+    "observation_type": "chatbot_tool_leak",
+    "category": "llm_security",
+    "title": "Prevent chatbot tool schema disclosure",
+    "steps": [
+      "Add input guardrails to reject prompts that attempt to enumerate tools or functions.",
+      "Ensure error responses from tool calls do not reveal tool names, schemas, or parameters.",
+      "Implement output filtering to redact any tool metadata that leaks through responses.",
+      "Re-test with common tool enumeration prompts to confirm disclosure is blocked."
+    ],
+    "effort_estimate": "medium",
+    "requires_infra_access": false,
+    "requires_code_change": true,
+    "requires_deploy": true,
+    "references": ["OWASP LLM01", "OWASP LLM07"]
+  },
+  {
+    "check_id": "jwt_shared_secret",
+    "observation_type": "jwt_shared_secret",
+    "category": "credential_management",
+    "title": "Rotate shared JWT signing secrets",
+    "steps": [
+      "Generate a new, unique signing key for each service or trust boundary.",
+      "Update all services that validate tokens to use the new keys.",
+      "Invalidate existing tokens signed with the old shared secret.",
+      "Verify cross-service token reuse is no longer possible."
+    ],
+    "effort_estimate": "medium",
+    "requires_infra_access": true,
+    "requires_code_change": true,
+    "requires_deploy": true,
+    "references": ["OWASP API2:2023", "CWE-321"]
+  },
+  {
+    "check_id": "stack_trace_disclosure",
+    "observation_type": "stack_trace_disclosure",
+    "category": "information_disclosure",
+    "title": "Suppress stack traces in production responses",
+    "steps": [
+      "Configure a global exception handler that returns generic error messages.",
+      "Log full stack traces server-side only (not in HTTP responses).",
+      "Verify by triggering various error conditions and inspecting responses."
+    ],
+    "effort_estimate": "low",
+    "requires_infra_access": false,
+    "requires_code_change": true,
+    "requires_deploy": true,
+    "references": ["OWASP API7:2023", "CWE-209"]
+  },
+  {
+    "check_id": "rate_limit_bypass",
+    "observation_type": "rate_limit_bypass",
+    "category": "access_control",
+    "title": "Fix rate limiting bypass",
+    "steps": [
+      "Identify the bypass vector (header spoofing, endpoint aliasing, IP rotation, etc.).",
+      "Ensure rate limiting is applied at the application layer, not just reverse proxy.",
+      "Normalize request identifiers (strip X-Forwarded-For spoofing, canonicalize paths).",
+      "Add rate limiting to all equivalent endpoints (versioned, aliased).",
+      "Test the specific bypass technique to confirm it no longer works."
+    ],
+    "effort_estimate": "medium",
+    "requires_infra_access": true,
+    "requires_code_change": false,
+    "requires_deploy": true,
+    "references": ["OWASP API4:2023", "CWE-770"]
+  },
+  {
+    "check_id": "session_leak",
+    "observation_type": "session_leak",
+    "category": "credential_management",
+    "title": "Remediate session data leakage",
+    "steps": [
+      "Audit responses and logs for session tokens, user IDs, or auth material in unexpected locations.",
+      "Ensure session identifiers are only transmitted via secure, HttpOnly cookies.",
+      "Remove session data from URL parameters, response bodies, and verbose headers.",
+      "Rotate any session tokens that may have been exposed."
+    ],
+    "effort_estimate": "medium",
+    "requires_infra_access": false,
+    "requires_code_change": true,
+    "requires_deploy": true,
+    "references": ["OWASP API2:2023", "CWE-200"]
+  },
+  {
+    "check_id": "mcp_exposed_credentials",
+    "observation_type": "mcp_exposed_credentials",
+    "category": "credential_management",
+    "title": "Rotate exposed MCP server credentials",
+    "steps": [
+      "Regenerate the MCP server token via the admin console or secrets manager.",
+      "Update all client configurations referencing the old token.",
+      "Verify the old token returns 401 by re-running the check."
+    ],
+    "effort_estimate": "low",
+    "requires_infra_access": false,
+    "requires_code_change": false,
+    "requires_deploy": true,
+    "references": ["OWASP API3:2023", "CWE-798"]
+  },
+  {
+    "check_id": "robots_model_admin",
+    "observation_type": "robots_model_admin",
+    "category": "information_disclosure",
+    "title": "Remove sensitive paths from robots.txt",
+    "steps": [
+      "Review robots.txt for paths that reveal admin panels, internal tools, or model endpoints.",
+      "Remove or restrict those entries — robots.txt is public and informs attackers.",
+      "Add authentication or network-level access control to the exposed paths.",
+      "Verify the paths are no longer discoverable via robots.txt."
+    ],
+    "effort_estimate": "low",
+    "requires_infra_access": true,
+    "requires_code_change": false,
+    "requires_deploy": true,
+    "references": ["CWE-538"]
+  },
+  {
+    "check_id": "header_vllm_version",
+    "observation_type": "header_vllm_version",
+    "category": "information_disclosure",
+    "title": "Remove server version headers",
+    "steps": [
+      "Configure the reverse proxy or application server to suppress version-disclosing headers.",
+      "Remove or anonymize Server, X-Powered-By, and any framework-specific version headers.",
+      "Verify by inspecting response headers from multiple endpoints."
+    ],
+    "effort_estimate": "low",
+    "requires_infra_access": true,
+    "requires_code_change": false,
+    "requires_deploy": true,
+    "references": ["OWASP API8:2023", "CWE-200"]
+  },
+  {
+    "check_id": "tool_schema_disclosure",
+    "observation_type": "tool_schema_disclosure",
+    "category": "llm_security",
+    "title": "Prevent tool/function schema exposure",
+    "steps": [
+      "Review LLM system prompts to ensure tool definitions are not echoed to users.",
+      "Add output filtering to catch and redact tool schema fragments in responses.",
+      "Restrict /openapi.json or equivalent schema endpoints behind authentication.",
+      "Test with schema-probing prompts to confirm schemas are not returned."
+    ],
+    "effort_estimate": "medium",
+    "requires_infra_access": false,
+    "requires_code_change": true,
+    "requires_deploy": true,
+    "references": ["OWASP LLM01", "OWASP LLM07"]
+  },
+  {
+    "check_id": "default_credentials",
+    "observation_type": "default_credentials",
+    "category": "credential_management",
+    "title": "Replace default credentials",
+    "steps": [
+      "Identify all services using default or well-known credentials.",
+      "Generate strong, unique credentials for each service.",
+      "Update authentication configurations and verify login with new credentials.",
+      "Disable or remove any default accounts that are not needed."
+    ],
+    "effort_estimate": "low",
+    "requires_infra_access": true,
+    "requires_code_change": false,
+    "requires_deploy": false,
+    "references": ["OWASP API2:2023", "CWE-798"]
+  }
+]

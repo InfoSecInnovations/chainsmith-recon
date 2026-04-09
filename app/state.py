@@ -45,6 +45,7 @@ class AppState:
         # Chain / adjudication concurrency guards (result data is in DB)
         self.chain_status: str = "idle"  # idle, analyzing, complete, partial, error
         self.adjudication_status: str = "idle"  # idle, adjudicating, complete, error
+        self.triage_status: str = "idle"  # idle, triaging, complete, error
 
         # Settings
         self.settings = {

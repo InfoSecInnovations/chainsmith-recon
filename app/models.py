@@ -6,7 +6,7 @@ Data models for observations, chains, scope, and agent state.
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -17,6 +17,8 @@ class AgentType(StrEnum):
     CHAINSMITH = "chainsmith"
     GUARDIAN = "guardian"
     ADJUDICATOR = "adjudicator"
+    TRIAGE = "triage"
+    PROOF_ADVISOR = "proof_advisor"
 
 
 class ObservationSeverity(StrEnum):
@@ -51,6 +53,9 @@ class EventType(StrEnum):
     ADJUDICATION_COMPLETE = "adjudication_complete"
     SEVERITY_UPHELD = "severity_upheld"
     SEVERITY_ADJUSTED = "severity_adjusted"
+    TRIAGE_START = "triage_start"
+    TRIAGE_COMPLETE = "triage_complete"
+    TRIAGE_ACTION = "triage_action"
     ERROR = "error"
     INFO = "info"
 
@@ -247,6 +252,56 @@ class AttackChain(BaseModel):
     references: list[str] = Field(default_factory=list)
 
 
+# ─── Triage Models ─────────────────────────────────────────────
+
+
+class ActionFeasibility(StrEnum):
+    DIRECT = "direct"  # team can execute this action
+    ESCALATE = "escalate"  # requires capabilities team lacks
+    BLOCKED = "blocked"  # targets off-limits area
+
+
+class TeamContext(BaseModel):
+    """Team capabilities loaded from ~/.chainsmith/triage_context.yaml."""
+
+    deployment_velocity: str | None = None  # yes | with_approval | no
+    incident_response: str | None = None  # yes | partially | no
+    remediation_surface: str | None = None  # both | app_only | infra_only | neither
+    team_size: str | None = None  # solo | 2_to_3 | 4_plus
+    off_limits: str | None = None  # free-text or None
+    answered_at: datetime | None = None
+
+
+class TriageAction(BaseModel):
+    """A single prioritized remediation action."""
+
+    priority: int
+    action: str
+    targets: list[str] = Field(default_factory=list)  # observation IDs
+    chains_neutralized: list[str] = Field(default_factory=list)  # chain IDs
+    reasoning: str
+    effort_estimate: Literal["low", "medium", "high"]
+    impact_estimate: Literal["low", "medium", "high"]
+    feasibility: ActionFeasibility = ActionFeasibility.DIRECT
+    remediation_guidance: list[str] = Field(default_factory=list)
+    observations_resolved: list[str] = Field(default_factory=list)
+    category: str = ""
+
+
+class TriagePlan(BaseModel):
+    """Complete prioritized remediation plan."""
+
+    scan_id: str
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    actions: list[TriageAction] = Field(default_factory=list)
+    summary: str = ""
+    team_context_available: bool = False
+    caveat: str | None = None
+    quick_wins: int = 0
+    strategic_fixes: int = 0
+    workstreams: list[dict[str, Any]] | None = None
+
+
 # ─── Event Models ──────────────────────────────────────────────
 
 
@@ -303,6 +358,20 @@ class SessionState(BaseModel):
     # Active randomizations
     active_observations: list[str] = Field(default_factory=list)
     active_hallucinations: list[str] = Field(default_factory=list)
+
+
+# ─── Routing Models ───────────────────────────────────────────
+
+
+class RouteDecision(BaseModel):
+    """Result of prompt classification by the Prompt Router."""
+
+    target: AgentType | None
+    method: Literal["context", "keyword", "llm"]
+    confidence: float = 1.0
+    redirect_message: str | None = None
+    needs_clarification: bool = False
+    clarification_prompt: str | None = None
 
 
 # ─── API Request/Response Models ───────────────────────────────

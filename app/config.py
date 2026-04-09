@@ -81,6 +81,7 @@ class LiteLLMConfig:
     model_chainsmith: str = "nova-pro"
     model_chainsmith_fallback: str = "nova-mini"
     model_adjudicator: str = "nova-pro"
+    model_triage: str = "nova-pro"
 
 
 @dataclass
@@ -116,6 +117,13 @@ class AdjudicatorConfig:
 
 
 @dataclass
+class TriageConfig:
+    enabled: bool = True
+    context_file: str = "~/.chainsmith/triage_context.yaml"
+    kb_path: str = "app/data/remediation_guidance.json"
+
+
+@dataclass
 class PathsConfig:
     db_path: Path = Path("/data/recon.sqlite")  # Legacy - prefer storage.db_path
     attack_patterns: Path = Path("/app/data/attack_patterns.json")
@@ -142,6 +150,7 @@ class ChainsmithConfig:
     swarm: SwarmConfig = field(default_factory=SwarmConfig)
     scan_advisor: ScanAdvisorConfig = field(default_factory=ScanAdvisorConfig)
     adjudicator: AdjudicatorConfig = field(default_factory=AdjudicatorConfig)
+    triage: TriageConfig = field(default_factory=TriageConfig)
 
     # Raw seed URLs (optional - scanner can discover these itself)
     seed_urls: list[str] = field(default_factory=list)
@@ -210,6 +219,8 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
             llm.model_chainsmith_fallback = str(ll["model_chainsmith_fallback"])
         if "model_adjudicator" in ll:
             llm.model_adjudicator = str(ll["model_adjudicator"])
+        if "model_triage" in ll:
+            llm.model_triage = str(ll["model_triage"])
 
     if "paths" in data and isinstance(data["paths"], dict):
         p = data["paths"]
@@ -276,6 +287,16 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
         if "context_file" in adj:
             adjc.context_file = str(adj["context_file"])
 
+    if "triage" in data and isinstance(data["triage"], dict):
+        tr = data["triage"]
+        trc = cfg.triage
+        if "enabled" in tr:
+            trc.enabled = bool(tr["enabled"])
+        if "context_file" in tr:
+            trc.context_file = str(tr["context_file"])
+        if "kb_path" in tr:
+            trc.kb_path = str(tr["kb_path"])
+
 
 def _apply_env(cfg: ChainsmithConfig) -> None:
     """Apply CHAINSMITH_* environment variable overrides."""
@@ -314,6 +335,8 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
         cfg.litellm.model_chainsmith_fallback = v
     if v := env.get("LITELLM_MODEL_ADJUDICATOR") or env.get("CHAINSMITH_LITELLM_MODEL_ADJUDICATOR"):
         cfg.litellm.model_adjudicator = v
+    if v := env.get("LITELLM_MODEL_TRIAGE") or env.get("CHAINSMITH_LITELLM_MODEL_TRIAGE"):
+        cfg.litellm.model_triage = v
 
     # Paths overrides (backward-compatible names kept)
     if v := env.get("RECON_DB_PATH") or env.get("CHAINSMITH_DB_PATH"):
@@ -359,6 +382,10 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     # Adjudicator overrides
     if v := env.get("CHAINSMITH_ADJUDICATOR_ENABLED"):
         cfg.adjudicator.enabled = v.lower() in ("true", "1", "yes")
+
+    # Triage overrides
+    if v := env.get("CHAINSMITH_TRIAGE_ENABLED"):
+        cfg.triage.enabled = v.lower() in ("true", "1", "yes")
 
 
 def load_config(config_path: Path | None = None) -> ChainsmithConfig:
@@ -411,6 +438,7 @@ def __getattr__(name: str):
         "LITELLM_MODEL_CHAINSMITH": lambda c: c.litellm.model_chainsmith,
         "LITELLM_MODEL_CHAINSMITH_FALLBACK": lambda c: c.litellm.model_chainsmith_fallback,
         "LITELLM_MODEL_ADJUDICATOR": lambda c: c.litellm.model_adjudicator,
+        "LITELLM_MODEL_TRIAGE": lambda c: c.litellm.model_triage,
         "TARGET_DOMAIN": lambda c: c.target_domain,
         "DEFAULT_SCOPE": lambda c: {
             "in_scope_domains": c.scope.in_scope_domains,

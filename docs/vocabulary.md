@@ -26,8 +26,6 @@ A security-relevant issue discovered during a scan. This is the atomic unit of C
 
 Each observation has a **severity**, a **status**, a **confidence** score, and **evidence**.
 
-> Formerly called "Finding" — renamed in Phase 30.
-
 ### Severity
 
 How serious an observation is. Five levels:

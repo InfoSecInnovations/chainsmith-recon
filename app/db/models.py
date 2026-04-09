@@ -69,6 +69,10 @@ class Scan(Base):
     chain_error = Column(Text, nullable=True)
     chain_llm_analysis = Column(JSON, nullable=True)
 
+    # Phase 33: Triage Agent
+    triage_status = Column(String, nullable=True, default="idle")
+    triage_error = Column(Text, nullable=True)
+
 
 class ObservationRecord(Base):
     __tablename__ = "observations"
@@ -220,3 +224,39 @@ class AdvisorRecommendation(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
     __table_args__ = (Index("idx_advisor_rec_scan_id", "scan_id"),)
+
+
+class TriagePlanRecord(Base):
+    __tablename__ = "triage_plans"
+
+    id = Column(String, primary_key=True)
+    scan_id = Column(String, nullable=False)
+    generated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    summary = Column(Text, nullable=True)
+    team_context_available = Column(Integer, default=0)
+    caveat = Column(Text, nullable=True)
+    quick_wins = Column(Integer, default=0)
+    strategic_fixes = Column(Integer, default=0)
+    workstreams = Column(JSON, nullable=True)
+
+    __table_args__ = (Index("idx_triage_plans_scan_id", "scan_id"),)
+
+
+class TriageActionRecord(Base):
+    __tablename__ = "triage_actions"
+
+    id = Column(String, primary_key=True)
+    plan_id = Column(String, nullable=False)
+    priority = Column(Integer, nullable=False)
+    action = Column(String, nullable=False)
+    targets = Column(JSON, nullable=True)
+    chains_neutralized = Column(JSON, nullable=True)
+    reasoning = Column(Text, nullable=True)
+    effort_estimate = Column(String, nullable=True)
+    impact_estimate = Column(String, nullable=True)
+    feasibility = Column(String, nullable=True)
+    remediation_guidance = Column(JSON, nullable=True)
+    observations_resolved = Column(JSON, nullable=True)
+    category = Column(String, nullable=True)
+
+    __table_args__ = (Index("idx_triage_actions_plan_id", "plan_id"),)

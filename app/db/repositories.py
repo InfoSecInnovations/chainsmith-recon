@@ -27,6 +27,8 @@ from app.db.models import (
     ObservationStatusHistory,
     Scan,
     ScanComparison,
+    TriageActionRecord,
+    TriagePlanRecord,
 )
 
 logger = logging.getLogger(__name__)
@@ -1474,3 +1476,112 @@ def _advisor_rec_to_dict(r: AdvisorRecommendation) -> dict:
             "created_at": r.created_at.isoformat() if r.created_at else None,
         }
     )
+
+
+# ─── Triage Repository ────────────────────────────────────────────────
+
+
+class TriageRepository(_RepositoryBase):
+    """Persist and query triage plans and actions."""
+
+    async def create_plan(self, scan_id: str, plan: dict) -> str:
+        """Insert a triage plan and its actions. Returns the plan ID."""
+        plan_id = plan.get("id") or uuid.uuid4().hex[:12]
+
+        plan_row = TriagePlanRecord(
+            id=plan_id,
+            scan_id=scan_id,
+            summary=plan.get("summary"),
+            team_context_available=1 if plan.get("team_context_available") else 0,
+            caveat=plan.get("caveat"),
+            quick_wins=plan.get("quick_wins", 0),
+            strategic_fixes=plan.get("strategic_fixes", 0),
+            workstreams=plan.get("workstreams"),
+        )
+
+        action_rows = []
+        for action in plan.get("actions", []):
+            action_rows.append(
+                TriageActionRecord(
+                    id=action.get("id") or uuid.uuid4().hex[:12],
+                    plan_id=plan_id,
+                    priority=action.get("priority", 0),
+                    action=action.get("action", ""),
+                    targets=action.get("targets"),
+                    chains_neutralized=action.get("chains_neutralized"),
+                    reasoning=action.get("reasoning"),
+                    effort_estimate=action.get("effort_estimate"),
+                    impact_estimate=action.get("impact_estimate"),
+                    feasibility=action.get("feasibility"),
+                    remediation_guidance=action.get("remediation_guidance"),
+                    observations_resolved=action.get("observations_resolved"),
+                    category=action.get("category"),
+                )
+            )
+
+        async with self._session() as session:
+            session.add(plan_row)
+            if action_rows:
+                session.add_all(action_rows)
+            await session.commit()
+
+        logger.info(
+            "Persisted triage plan %s with %d actions for scan %s",
+            plan_id, len(action_rows), scan_id,
+        )
+        return plan_id
+
+    async def get_plan(self, scan_id: str) -> dict | None:
+        """Get the triage plan for a scan, including actions."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(TriagePlanRecord).where(TriagePlanRecord.scan_id == scan_id)
+            )
+            plan_row = result.scalar_one_or_none()
+            if not plan_row:
+                return None
+
+            actions_result = await session.execute(
+                select(TriageActionRecord)
+                .where(TriageActionRecord.plan_id == plan_row.id)
+                .order_by(TriageActionRecord.priority)
+            )
+            action_rows = actions_result.scalars().all()
+
+        plan_dict = _triage_plan_to_dict(plan_row)
+        plan_dict["actions"] = [_triage_action_to_dict(a) for a in action_rows]
+        return plan_dict
+
+
+def _triage_plan_to_dict(r: TriagePlanRecord) -> dict:
+    """Convert a TriagePlanRecord ORM object to a JSON-safe dict."""
+    return {
+        "id": r.id,
+        "scan_id": r.scan_id,
+        "generated_at": r.generated_at.isoformat() if r.generated_at else None,
+        "summary": r.summary,
+        "team_context_available": bool(r.team_context_available),
+        "caveat": r.caveat,
+        "quick_wins": r.quick_wins,
+        "strategic_fixes": r.strategic_fixes,
+        "workstreams": r.workstreams,
+    }
+
+
+def _triage_action_to_dict(r: TriageActionRecord) -> dict:
+    """Convert a TriageActionRecord ORM object to a JSON-safe dict."""
+    return {
+        "id": r.id,
+        "plan_id": r.plan_id,
+        "priority": r.priority,
+        "action": r.action,
+        "targets": r.targets,
+        "chains_neutralized": r.chains_neutralized,
+        "reasoning": r.reasoning,
+        "effort_estimate": r.effort_estimate,
+        "impact_estimate": r.impact_estimate,
+        "feasibility": r.feasibility,
+        "remediation_guidance": r.remediation_guidance,
+        "observations_resolved": r.observations_resolved,
+        "category": r.category,
+    }
