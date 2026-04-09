@@ -511,11 +511,120 @@ Potential use cases for when it's built:
 - Operator attaches a config file for the agent to analyze
 - Operator shares a network diagram for scoping context
 
+## Resolved Questions
+
+### SSE reconnection strategy
+
+On reconnect, the client re-fetches from `/api/v1/chat/history` to
+backfill any messages missed during the disconnect. No `Last-Event-ID`
+tracking — history endpoint is the single source of truth.
+
+### SSE stream scoping
+
+The SSE stream is **per-user**. Each authenticated user gets their own
+stream regardless of session or tab count. Multiple tabs from the same
+user share the same logical stream.
+
+### Agent concurrency on duplicate dispatch
+
+If the Prompt Router dispatches to an agent that is already processing
+a prior request, the second message **queues**. Agents process one
+message at a time. The `typing` event reflects this — an agent shows
+"thinking" until its current task completes, then picks up the next
+queued message. Queued messages show a "queued" status in the chat UI.
+
+### Long agent responses
+
+Agents **summarize** long output directly in the chat response. If the
+operator wants the full analysis, the agent offers to write a detailed
+report to the reports directory. This keeps the chat stream scannable
+and pushes detailed artifacts to where they belong.
+
+```
+[Triage] 12 quick wins identified across 3 target hosts. Top 3:
+         1. Rotate exposed MCP token (resolves 4 observations)
+         2. Disable TLS 1.0 on *.internal (resolves 3 observations)
+         3. Patch OpenSSH on jump host (resolves 2 observations)
+         [Write full analysis to reports]
+```
+
+### Error surfacing
+
+When the Prompt Router cannot classify a message, or a target agent
+errors during processing, the chat displays a plain-English error
+message as a system message:
+
+```
+[System] Could not determine which agent should handle your message.
+         Try rephrasing, or specify the agent: "triage: what should
+         I fix first?"
+
+[System] The Adjudicator encountered an error while re-scoring
+         observation obs-abc123: timeout waiting for LLM response.
+         Try again or check the observation directly.
+```
+
+Errors are never swallowed silently. The operator always sees what
+went wrong and gets a suggested next step.
+
+### SSE stream lifecycle
+
+The SSE connection opens when the operator sends their **first chat
+message**. It does not open on page load or panel expand. Once open,
+the connection persists for the duration of the session — it does not
+close when the panel is collapsed, allowing background message
+accumulation (for unread badges, etc.).
+
+A **Clear Chat** button in the panel header clears the visible chat
+history and closes the SSE connection. The next message re-opens it.
+Cleared messages remain in the database for audit purposes but are
+marked as cleared and excluded from `/chat/history` responses.
+
+```javascript
+async function clearChat(sessionId) {
+    await fetch(`/api/v1/chat/clear`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId })
+    });
+    sseConnection.close();
+    chatPanel.clearMessages();
+}
+```
+
+### Engagement chat history export
+
+Engagement-linked chat history is exportable as **JSON**. The export
+is triggered from the engagement detail page alongside existing report
+exports. Format:
+
+```json
+{
+    "engagement_id": "eng-001",
+    "exported_at": "2026-04-09T18:00:00Z",
+    "messages": [
+        {
+            "id": "msg-001",
+            "timestamp": "2026-04-09T14:30:00Z",
+            "direction": "operator",
+            "text": "what should I fix first?",
+            "agent_type": null
+        },
+        {
+            "id": "msg-002",
+            "timestamp": "2026-04-09T14:30:02Z",
+            "direction": "agent",
+            "text": "3 quick wins identified...",
+            "agent_type": "triage",
+            "references": ["obs-abc123"]
+        }
+    ]
+}
+```
+
 ## Open Questions
 
 1. Should Guided Mode have sub-toggles (e.g., "proactive messages yes,
    but terminology tooltips no"), or is it all-or-nothing?
-2. Should the engagement-linked chat history be exportable as part of
-   the engagement report?
-3. Should there be a "do not disturb" toggle that temporarily suppresses
+2. Should there be a "do not disturb" toggle that temporarily suppresses
    proactive messages without switching to Standard Mode entirely?
