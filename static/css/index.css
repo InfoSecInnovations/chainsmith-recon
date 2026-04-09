@@ -1,0 +1,247 @@
+.scope-container {
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+.scope-card {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 32px;
+    border: 1px solid var(--border);
+}
+
+.scope-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.scope-subtitle {
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+}
+
+.btn-start {
+    width: 100%;
+    padding: 14px;
+    font-size: 1rem;
+    margin-top: 24px;
+}
+
+.inline-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.inline-toggle label {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+/* Scan Behavior section */
+.behavior-section {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+.behavior-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+}
+.behavior-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.behavior-row + .behavior-row {
+    margin-top: 8px;
+}
+.behavior-label {
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+}
+.behavior-desc {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+.behavior-row select {
+    min-width: 160px;
+}
+
+/* Per-suite settings inside accordion */
+.suite-settings {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+.suite-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.75rem;
+}
+.suite-setting-row + .suite-setting-row {
+    margin-top: 6px;
+}
+.suite-setting-row label {
+    color: var(--text-secondary);
+}
+.suite-setting-row select {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    min-width: 140px;
+}
+
+/* Suite header badges */
+.suite-badges {
+    display: flex;
+    gap: 4px;
+    margin-left: 8px;
+}
+.suite-badge {
+    font-size: 0.625rem;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 500;
+}
+.suite-badge.critical-skip {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+.suite-badge.critical-stop {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+.suite-badge.intrusive-on {
+    background: rgba(139, 92, 246, 0.15);
+    color: var(--accent);
+}
+
+/* Intrusive check locking */
+.suite-check-item.intrusive-locked {
+    opacity: 0.35;
+    pointer-events: none;
+    position: relative;
+}
+.suite-check-item.intrusive-locked label::after {
+    content: '\1F512';
+    font-size: 0.6875rem;
+    margin-left: 6px;
+}
+.suite-check-item.intrusive-unlocked {
+    transition: opacity 0.3s ease;
+}
+
+/* Per-suite intrusive toggle locked when global is off */
+.suite-setting-row.intrusive-gate-locked {
+    opacity: 0.35;
+    pointer-events: none;
+}
+.suite-setting-row.intrusive-gate-locked .toggle-slider {
+    cursor: not-allowed;
+}
+
+/* Global intrusive hint states */
+.intrusive-hint-off {
+    color: var(--text-muted);
+}
+.intrusive-hint-on {
+    color: var(--accent);
+}
+
+/* Sticky start button */
+.btn-start-sticky {
+    position: sticky;
+    bottom: 20px;
+    z-index: 10;
+}
+
+/* Advanced options toggle trigger */
+.advanced-toggle-trigger {
+    cursor: pointer;
+    user-select: none;
+}
+
+.advanced-chevron-icon {
+    vertical-align: middle;
+    margin-right: 4px;
+    transition: transform 0.2s;
+}
+
+/* Engagement selector row */
+.engagement-selector-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.engagement-selector-controls select {
+    min-width: 200px;
+}
+
+/* Hint annotation (small muted text below behavior rows) */
+.behavior-hint {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+
+/* Critical override select width */
+.on-critical-select {
+    width: 220px;
+}
+
+/* Intrusive border row */
+.behavior-row-bordered {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+/* Intrusive suite toggle inline layout */
+.suite-intrusive-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.suite-intrusive-controls .toggle {
+    margin: 0;
+}
+
+.suite-intrusive-label {
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+}
+
+/* Profile key-settings badge row */
+.profile-key-settings-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+/* Engagement window date row */
+.engagement-window-row {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+}
+
+.engagement-window-col {
+    flex: 1;
+}

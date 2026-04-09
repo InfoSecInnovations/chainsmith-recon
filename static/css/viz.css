@@ -502,9 +502,7 @@
     margin-bottom: 16px;
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
+/* @keyframes spin now in common.css */
 
 #treemap-graph, #chains-graph {
     width: 100%;

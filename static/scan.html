@@ -5,238 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chainsmith Recon - Scan</title>
     <link rel="stylesheet" href="/static/css/common.css">
-    <style>
-        .scan-container {
-            display: flex;
-            gap: 20px;
-            padding: 20px;
-            height: calc(100vh - 100px);
-        }
-
-        .scan-panel {
-            flex: 1;
-            background: var(--bg-secondary);
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .panel-header {
-            padding: 16px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .panel-title {
-            font-size: 1rem;
-            font-weight: 600;
-        }
-
-        .panel-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
-        }
-
-        .progress-section {
-            margin-bottom: 16px;
-        }
-
-        .progress-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 8px;
-        }
-
-        .check-list {
-            margin-top: 16px;
-        }
-
-        .action-bar {
-            padding: 16px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-        }
-
-        /* Status badge container for throb animation */
-        .status-badge-container {
-            position: relative;
-        }
-
-        /* Phase indicators */
-        .progress-phases {
-            display: flex;
-            gap: 8px;
-            margin-top: 16px;
-        }
-
-        .progress-phase-wrapper {
-            flex: 1;
-            text-align: center;
-        }
-
-        .progress-phase {
-            height: 4px;
-            background: var(--bg-tertiary);
-            border-radius: 2px;
-            position: relative;
-            overflow: hidden;
-            transition: background 0.3s;
-        }
-
-        .progress-phase.active {
-            background: var(--accent-dim);
-        }
-
-        .progress-phase.active::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            height: 100%;
-            width: 40%;
-            background: var(--accent);
-            border-radius: 2px;
-            animation: phase-sweep 1.2s ease-in-out infinite;
-        }
-
-        .progress-phase.complete {
-            background: var(--accent);
-        }
-
-        .progress-phase.complete::after {
-            display: none;
-        }
-
-        @keyframes phase-sweep {
-            0% { 
-                transform: translateX(-100%);
-            }
-            100% { 
-                transform: translateX(350%);
-            }
-        }
-
-        .progress-phase-label {
-            font-size: 0.625rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            margin-top: 6px;
-        }
-
-        .progress-phase.active + .progress-phase-label,
-        .progress-phase-wrapper:has(.progress-phase.active) .progress-phase-label {
-            color: var(--accent);
-        }
-
-        .progress-phase.complete + .progress-phase-label,
-        .progress-phase-wrapper:has(.progress-phase.complete) .progress-phase-label {
-            color: var(--text-secondary);
-        }
-
-        /* Activity stream */
-        .activity-stream {
-            margin-top: 16px;
-            padding: 12px;
-            background: var(--bg-tertiary);
-            border-radius: 6px;
-            border: 1px solid var(--border);
-        }
-
-        .activity-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.8125rem;
-            color: var(--text-secondary);
-        }
-
-        .activity-dot {
-            width: 8px;
-            height: 8px;
-            background: var(--text-muted);
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-
-        .activity-item.active .activity-dot {
-            background: var(--accent);
-            animation: dot-pulse 1s ease-in-out infinite;
-        }
-
-        @keyframes dot-pulse {
-            0%, 100% { 
-                transform: scale(1);
-                opacity: 1;
-            }
-            50% { 
-                transform: scale(1.3);
-                opacity: 0.7;
-            }
-        }
-
-        .activity-text {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        /* Button variants */
-        .btn-secondary {
-            background: var(--bg-tertiary);
-            border-color: var(--border);
-            color: var(--text-primary);
-        }
-
-        .btn-secondary:hover {
-            background: var(--bg-secondary);
-            border-color: var(--accent);
-        }
-
-        .btn-danger {
-            background: rgba(239, 68, 68, 0.15);
-            border-color: rgba(239, 68, 68, 0.3);
-            color: #ef4444;
-        }
-
-        .btn-danger:hover {
-            background: rgba(239, 68, 68, 0.25);
-            border-color: #ef4444;
-        }
-
-        /* Scanning state for status badge */
-        .status-badge.status-running {
-            position: relative;
-        }
-
-        /* Dynamic progress bar when total is unknown */
-        .progress-bar.dynamic {
-            background: linear-gradient(
-                90deg,
-                var(--accent) 0%,
-                var(--accent-hover) 50%,
-                var(--accent) 100%
-            );
-            background-size: 200% 100%;
-            animation: shimmer 1.5s ease-in-out infinite;
-        }
-
-        @keyframes shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-
-        /* profile-setting styles now in common.css */
-    </style>
+    <link rel="stylesheet" href="/static/css/scan.css">
 </head>
 <body>
     <!-- Header -->
@@ -266,7 +35,7 @@
     </nav>
 
     <!-- Legacy Scenario Banner (hidden, badge now in header) -->
-    <div id="scenario-banner" class="scenario-banner" style="display:none"></div>
+    <div id="scenario-banner" class="scenario-banner u-hidden"></div>
 
     <!-- Main Content -->
     <main class="scan-container">
@@ -314,13 +83,13 @@
                     </div>
                 </div>
 
-                <div class="progress-section" id="verification-section" style="display: none;">
+                <div class="progress-section u-hidden" id="verification-section">
                     <div class="progress-header">
                         <span>Verification</span>
                         <span class="progress-text" id="verification-text">0 / 0</span>
                     </div>
                     <div class="progress-bar-container">
-                        <div class="progress-bar" id="verification-bar" style="width: 0%; background: var(--success);"></div>
+                        <div class="progress-bar progress-bar-success" id="verification-bar" style="width: 0%"></div>
                     </div>
                 </div>
 
@@ -335,7 +104,7 @@
                 </div>
             </div>
             <!-- Scan Control Buttons -->
-            <div class="action-bar" id="scan-controls" style="display: none;">
+            <div class="action-bar u-hidden" id="scan-controls">
                 <button class="btn btn-secondary" id="btn-pause" title="Pause scan">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <rect x="6" y="4" width="4" height="16" rx="1"></rect>
@@ -343,7 +112,7 @@
                     </svg>
                     Pause
                 </button>
-                <button class="btn btn-secondary" id="btn-resume" style="display: none;" title="Resume scan">
+                <button class="btn btn-secondary u-hidden" id="btn-resume" title="Resume scan">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <polygon points="5,3 19,12 5,21"></polygon>
                     </svg>
@@ -356,7 +125,7 @@
                     Stop
                 </button>
             </div>
-            <div class="action-bar" id="action-bar" style="display: none;">
+            <div class="action-bar u-hidden" id="action-bar">
                 <a href="observations.html" class="btn btn-primary" id="btn-view-observations">
                     View Observations
                 </a>
@@ -367,13 +136,13 @@
         <div class="scan-panel">
             <div class="panel-header">
                 <span class="panel-title">Observations</span>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <span id="observations-severity-summary" style="display:none;"></span>
+                <div class="observations-header-right">
+                    <span id="observations-severity-summary" class="u-hidden"></span>
                     <span class="progress-text" id="observations-count">0 found</span>
                 </div>
             </div>
             <div class="panel-content">
-                <table class="data-table" id="observations-table" style="display: none;">
+                <table class="data-table u-hidden" id="observations-table">
                     <thead>
                         <tr>
                             <th>Severity</th>
@@ -408,14 +177,14 @@
         </div>
         <div class="drawer-content">
             <!-- Profile Selector -->
-            <div class="setting-section" style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+            <div class="setting-section setting-section-divided">
                 <div class="setting-section-title">Scan Profile</div>
-                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-                    <select class="form-input" id="setting-profile" style="width:100%">
+                <div class="setting-row setting-row-stacked-lg">
+                    <select class="form-input u-full-width" id="setting-profile">
                         <option value="default">default</option>
                     </select>
-                    <div id="profile-description" style="color:var(--text-secondary);font-size:0.8125rem;"></div>
-                    <div id="profile-key-settings" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;"></div>
+                    <div id="profile-description" class="profile-description"></div>
+                    <div id="profile-key-settings" class="profile-key-settings"></div>
                 </div>
             </div>
 
@@ -434,14 +203,14 @@
                     <div class="setting-label">Rate Limit</div>
                     <div class="setting-desc">Requests per second</div>
                 </div>
-                <input type="number" class="form-input" id="setting-rate" value="10" min="1" max="100" style="width: 80px;">
+                <input type="number" class="form-input input-w-xs" id="setting-rate" value="10" min="1" max="100">
             </div>
             <div class="setting-row">
                 <div>
                     <div class="setting-label">Verification Level</div>
                     <div class="setting-desc">Re-verify observations</div>
                 </div>
-                <select class="form-input" id="setting-verification" style="width: 120px;">
+                <select class="form-input input-w-sm" id="setting-verification">
                     <option value="none">None</option>
                     <option value="sample">Sample (20%)</option>
                     <option value="half">Half (50%)</option>
@@ -481,9 +250,9 @@
 
             <div class="setting-section">
                 <div class="setting-section-title">Scenario</div>
-                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+                <div class="setting-row setting-row-stacked">
                     <div class="setting-desc">Simulate a target environment</div>
-                    <select class="form-input" id="setting-scenario" style="width:100%">
+                    <select class="form-input u-full-width" id="setting-scenario">
                         <option value="">— No scenario —</option>
                     </select>
                 </div>
@@ -491,13 +260,13 @@
 
             <div class="setting-section">
                 <div class="setting-section-title">Actions</div>
-                <button class="btn" id="btn-export" style="width: 100%; margin-bottom: 8px;">
+                <button class="btn btn-action-full" id="btn-export">
                     Export JSON
                 </button>
-                <button class="btn" id="btn-export-csv" style="width: 100%; margin-bottom: 8px;">
+                <button class="btn btn-action-full" id="btn-export-csv">
                     Export CSV
                 </button>
-                <button class="btn" id="btn-reset" style="width: 100%;">
+                <button class="btn u-full-width" id="btn-reset">
                     Reset All
                 </button>
             </div>

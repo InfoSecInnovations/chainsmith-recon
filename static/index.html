@@ -5,178 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chainsmith Recon - Scope</title>
     <link rel="stylesheet" href="/static/css/common.css">
-    <style>
-        .scope-container {
-            max-width: 800px;
-            margin: 40px auto;
-            padding: 0 20px;
-        }
-
-        .scope-card {
-            background: var(--bg-secondary);
-            border-radius: 12px;
-            padding: 32px;
-            border: 1px solid var(--border);
-        }
-
-        .scope-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 8px;
-        }
-
-        .scope-subtitle {
-            color: var(--text-secondary);
-            margin-bottom: 24px;
-        }
-
-        .btn-start {
-            width: 100%;
-            padding: 14px;
-            font-size: 1rem;
-            margin-top: 24px;
-        }
-
-        .inline-toggle {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 8px;
-        }
-
-        .inline-toggle label {
-            font-size: 0.8125rem;
-            color: var(--text-secondary);
-            cursor: pointer;
-        }
-
-        /* Scan Behavior section */
-        .behavior-section {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 16px;
-        }
-        .behavior-title {
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 12px;
-        }
-        .behavior-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-        }
-        .behavior-row + .behavior-row {
-            margin-top: 8px;
-        }
-        .behavior-label {
-            font-size: 0.8125rem;
-            color: var(--text-primary);
-        }
-        .behavior-desc {
-            font-size: 0.6875rem;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }
-        .behavior-row select {
-            min-width: 160px;
-        }
-
-        /* Per-suite settings inside accordion */
-        .suite-settings {
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 1px solid var(--border);
-        }
-        .suite-setting-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            font-size: 0.75rem;
-        }
-        .suite-setting-row + .suite-setting-row {
-            margin-top: 6px;
-        }
-        .suite-setting-row label {
-            color: var(--text-secondary);
-        }
-        .suite-setting-row select {
-            font-size: 0.75rem;
-            padding: 2px 6px;
-            min-width: 140px;
-        }
-
-        /* Suite header badges */
-        .suite-badges {
-            display: flex;
-            gap: 4px;
-            margin-left: 8px;
-        }
-        .suite-badge {
-            font-size: 0.625rem;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-weight: 500;
-        }
-        .suite-badge.critical-skip {
-            background: rgba(239, 68, 68, 0.15);
-            color: #ef4444;
-        }
-        .suite-badge.critical-stop {
-            background: rgba(245, 158, 11, 0.15);
-            color: #f59e0b;
-        }
-        .suite-badge.intrusive-on {
-            background: rgba(139, 92, 246, 0.15);
-            color: var(--accent);
-        }
-
-        /* Intrusive check locking */
-        .suite-check-item.intrusive-locked {
-            opacity: 0.35;
-            pointer-events: none;
-            position: relative;
-        }
-        .suite-check-item.intrusive-locked label::after {
-            content: '\1F512';
-            font-size: 0.6875rem;
-            margin-left: 6px;
-        }
-        .suite-check-item.intrusive-unlocked {
-            transition: opacity 0.3s ease;
-        }
-
-        /* Per-suite intrusive toggle locked when global is off */
-        .suite-setting-row.intrusive-gate-locked {
-            opacity: 0.35;
-            pointer-events: none;
-        }
-        .suite-setting-row.intrusive-gate-locked .toggle-slider {
-            cursor: not-allowed;
-        }
-
-        /* Global intrusive hint states */
-        .intrusive-hint-off {
-            color: var(--text-muted);
-        }
-        .intrusive-hint-on {
-            color: var(--accent);
-        }
-
-        /* Sticky start button */
-        .btn-start-sticky {
-            position: sticky;
-            bottom: 20px;
-            z-index: 10;
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/index.css">
 </head>
 <body>
     <!-- Header -->
@@ -208,7 +37,7 @@
     </nav>
 
     <!-- Legacy Scenario Banner (hidden, badge now in header) -->
-    <div id="scenario-banner" class="scenario-banner" style="display:none"></div>
+    <div id="scenario-banner" class="scenario-banner u-hidden"></div>
 
     <!-- Main Content -->
     <main class="scope-container">
@@ -233,20 +62,20 @@
             </div>
 
             <!-- Advanced Options (collapsible) -->
-            <div class="section-divider" style="cursor:pointer;user-select:none;" onclick="toggleAdvanced()">
-                <svg id="advanced-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;transition:transform 0.2s;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <div class="section-divider advanced-toggle-trigger" onclick="toggleAdvanced()">
+                <svg id="advanced-chevron" class="advanced-chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 Advanced Options
             </div>
-            <div id="advanced-section" style="display:none;">
+            <div id="advanced-section" class="u-hidden">
                 <!-- Engagement Selector -->
-                <div class="behavior-section" style="margin-bottom: 12px;">
+                <div class="behavior-section mb-3">
                     <div class="behavior-row">
-                        <div style="flex:1;">
+                        <div class="flex-1">
                             <div class="behavior-label">Engagement</div>
                             <div class="behavior-desc">Link this scan to a pentest engagement for tracking and reporting</div>
                         </div>
-                        <div style="display:flex;gap:6px;align-items:center;">
-                            <select class="form-input" id="scope-engagement" style="min-width:200px;">
+                        <div class="engagement-selector-controls">
+                            <select class="form-input" id="scope-engagement">
                                 <option value="">-- None --</option>
                             </select>
                             <button class="btn btn-small" type="button" onclick="quickCreateEngagement()" title="Create new engagement">+</button>
@@ -261,16 +90,16 @@
                             <div class="behavior-label">On Critical Observation</div>
                             <div class="behavior-desc">What happens when any suite discovers a critical vulnerability on a host</div>
                         </div>
-                        <select class="form-input" id="on-critical-default" style="width: 220px;">
+                        <select class="form-input on-critical-select" id="on-critical-default">
                             <option value="annotate">Continue & flag downstream</option>
                             <option value="skip_downstream">Skip later suites on host</option>
                             <option value="stop">Stop scan immediately</option>
                         </select>
                     </div>
-                    <div style="font-size: 0.6875rem; color: var(--text-muted); margin-top: 6px;">
+                    <div class="behavior-hint">
                         Suites can override this individually below.
                     </div>
-                    <div class="behavior-row" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+                    <div class="behavior-row behavior-row-bordered">
                         <div>
                             <div class="behavior-label">Allow Active Testing</div>
                             <div class="behavior-desc">Master gate for all intrusive checks (injection, credential testing, write probes)</div>
@@ -280,7 +109,7 @@
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
-                    <div id="global-intrusive-hint" class="intrusive-hint-off" style="font-size: 0.6875rem; margin-top: 6px;">
+                    <div id="global-intrusive-hint" class="intrusive-hint-off behavior-hint">
                         All intrusive checks are locked. Enable to unlock per-suite controls below.
                     </div>
                 </div>
@@ -312,14 +141,14 @@
         </div>
         <div class="drawer-content">
             <!-- Profile Selector -->
-            <div class="setting-section" style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+            <div class="setting-section setting-section-divided">
                 <div class="setting-section-title">Scan Profile</div>
-                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-                    <select class="form-input" id="setting-profile" style="width:100%">
+                <div class="setting-row setting-row-stacked-lg">
+                    <select class="form-input u-full-width" id="setting-profile">
                         <option value="default">default</option>
                     </select>
-                    <div id="profile-description" style="color:var(--text-secondary);font-size:0.8125rem;"></div>
-                    <div id="profile-key-settings" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;"></div>
+                    <div class="text-secondary" id="profile-description"></div>
+                    <div class="profile-key-settings-badges" id="profile-key-settings"></div>
                 </div>
             </div>
 
@@ -338,14 +167,14 @@
                     <div class="setting-label">Rate Limit</div>
                     <div class="setting-desc">Requests per second</div>
                 </div>
-                <input type="number" class="form-input" id="setting-rate" value="10" min="1" max="100" style="width: 80px;">
+                <input type="number" class="form-input input-w-xs" id="setting-rate" value="10" min="1" max="100">
             </div>
             <div class="setting-row">
                 <div>
                     <div class="setting-label">Verification Level</div>
                     <div class="setting-desc">Re-verify observations</div>
                 </div>
-                <select class="form-input" id="setting-verification" style="width: 120px;">
+                <select class="form-input input-w-sm" id="setting-verification">
                     <option value="none">None</option>
                     <option value="sample">Sample (20%)</option>
                     <option value="half">Half (50%)</option>
@@ -385,9 +214,9 @@
 
             <div class="setting-section">
                 <div class="setting-section-title">Scenario</div>
-                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+                <div class="setting-row setting-row-stacked">
                     <div class="setting-desc">Simulate a target environment</div>
-                    <select class="form-input" id="setting-scenario" style="width:100%">
+                    <select class="form-input u-full-width" id="setting-scenario">
                         <option value="">— No scenario —</option>
                     </select>
                 </div>
@@ -395,16 +224,16 @@
 
             <div class="setting-section">
                 <div class="setting-section-title">Engagement Window</div>
-                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+                <div class="setting-row setting-row-stacked-lg">
                     <div class="setting-desc">Optional. You'll be warned when scanning outside this window.</div>
-                    <div style="display:flex;gap:12px;width:100%">
-                        <div style="flex:1">
-                            <label class="setting-label" style="font-size:0.75rem;margin-bottom:4px;display:block">Start</label>
-                            <input type="datetime-local" class="form-input" id="window-start" style="width:100%">
+                    <div class="engagement-window-row">
+                        <div class="engagement-window-col">
+                            <label class="setting-label form-label-sm">Start</label>
+                            <input type="datetime-local" class="form-input u-full-width" id="window-start">
                         </div>
-                        <div style="flex:1">
-                            <label class="setting-label" style="font-size:0.75rem;margin-bottom:4px;display:block">End</label>
-                            <input type="datetime-local" class="form-input" id="window-end" style="width:100%">
+                        <div class="engagement-window-col">
+                            <label class="setting-label form-label-sm">End</label>
+                            <input type="datetime-local" class="form-input u-full-width" id="window-end">
                         </div>
                     </div>
                 </div>
@@ -446,13 +275,13 @@
 
             <div class="setting-section">
                 <div class="setting-section-title">Actions</div>
-                <button class="btn" id="btn-export" style="width: 100%; margin-bottom: 8px;">
+                <button class="btn btn-action-full" id="btn-export">
                     Export JSON
                 </button>
-                <button class="btn" id="btn-export-csv" style="width: 100%; margin-bottom: 8px;">
+                <button class="btn btn-action-full" id="btn-export-csv">
                     Export CSV
                 </button>
-                <button class="btn" id="btn-reset" style="width: 100%;">
+                <button class="btn u-full-width" id="btn-reset">
                     Reset All
                 </button>
             </div>
@@ -480,7 +309,7 @@
             </div>
             <div class="modal-body" id="modal-body">
                 <p>You are attempting to start a scan outside the configured engagement window.</p>
-                <p style="margin-top: 12px; color: var(--text-secondary);">This action will be logged. Do you want to proceed?</p>
+                <p class="mt-3 text-secondary">This action will be logged. Do you want to proceed?</p>
             </div>
             <div class="modal-footer">
                 <button class="btn" id="modal-cancel">Cancel</button>
@@ -502,12 +331,12 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <div style="font-size: 1.5rem; font-weight: 700; margin-bottom: 4px;">
-                        <span style="color: var(--accent);">Chainsmith</span> Recon
+                <div class="about-branding">
+                    <div class="about-title">
+                        <span class="text-accent">Chainsmith</span> Recon
                     </div>
-                    <div style="color: var(--text-muted); font-size: 0.875rem;">Recon for the AI Era</div>
-                    <div style="color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; font-style: italic;">They can slop, but they can't hide.</div>
+                    <div class="about-subtitle">Recon for the AI Era</div>
+                    <div class="about-tagline">They can slop, but they can't hide.</div>
                 </div>
                 <div class="modal-section">
                     <div class="modal-section-title">Version</div>
@@ -574,7 +403,7 @@
         function toggleAdvanced() {
             const section = document.getElementById('advanced-section');
             const chevron = document.getElementById('advanced-chevron');
-            const isHidden = section.style.display === 'none';
+            const isHidden = getComputedStyle(section).display === 'none';
             section.style.display = isHidden ? 'block' : 'none';
             chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
         }
@@ -668,12 +497,12 @@
                             ${suite.hasIntrusive ? `
                             <div class="suite-setting-row intrusive-gate${globalOn ? '' : ' intrusive-gate-locked'}" id="intrusive-row-${key}">
                                 <label>Allow intrusive checks</label>
-                                <div style="display:flex;align-items:center;gap:6px;">
-                                    <label class="toggle" style="margin:0">
+                                <div class="suite-intrusive-controls">
+                                    <label class="toggle">
                                         <input type="checkbox" id="intrusive-${key}" onchange="onSuiteIntrusiveToggle('${key}')" ${globalOn ? '' : 'disabled'}>
                                         <span class="toggle-slider"></span>
                                     </label>
-                                    <span style="color:var(--text-muted);font-size:0.6875rem">${suite.intrusiveLabel || 'Active probing checks'}</span>
+                                    <span class="suite-intrusive-label">${suite.intrusiveLabel || 'Active probing checks'}</span>
                                 </div>
                             </div>
                             ` : ''}

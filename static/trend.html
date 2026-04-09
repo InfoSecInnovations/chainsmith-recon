@@ -6,341 +6,8 @@
     <title>Chainsmith Recon - Trends</title>
     <link rel="stylesheet" href="/static/css/common.css">
     <link rel="stylesheet" href="/static/css/viz.css">
+    <link rel="stylesheet" href="/static/css/trend.css">
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <style>
-        .trend-container {
-            display: flex;
-            height: calc(100vh - 100px);
-        }
-
-        .trend-sidebar {
-            width: 320px;
-            min-width: 260px;
-            background: var(--bg-secondary);
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-        }
-
-        .trend-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        /* Selector bar */
-        .selector-bar {
-            display: flex;
-            gap: 8px;
-            padding: 12px 16px;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border);
-            align-items: center;
-        }
-
-        .selector-bar label {
-            font-size: 0.8125rem;
-            color: var(--text-secondary);
-            white-space: nowrap;
-        }
-
-        .selector-bar input,
-        .selector-bar select {
-            background: var(--bg-primary);
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-            padding: 6px 10px;
-            border-radius: 4px;
-            font-size: 0.8125rem;
-        }
-
-        .selector-bar input { flex: 1; min-width: 120px; }
-        .selector-bar select { min-width: 160px; }
-
-        .selector-bar .separator {
-            color: var(--text-muted);
-            font-size: 0.75rem;
-        }
-
-        /* Sidebar scan list */
-        .sidebar-header {
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-        }
-
-        .scan-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px;
-        }
-
-        .scan-item {
-            padding: 10px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            margin-bottom: 4px;
-            transition: background 0.15s;
-        }
-
-        .scan-item:hover { background: var(--bg-tertiary); }
-        .scan-item.active { background: var(--accent-dim); border: 1px solid var(--accent); }
-        .scan-item.delta-selected { background: rgba(250, 204, 21, 0.1); border: 1px solid #facc15; }
-
-        .scan-item-date {
-            font-size: 0.8125rem;
-            font-weight: 500;
-            color: var(--text-primary);
-        }
-
-        .scan-item-meta {
-            font-size: 0.6875rem;
-            color: var(--text-secondary);
-            margin-top: 2px;
-            display: flex;
-            gap: 12px;
-        }
-
-        .scan-item-risk {
-            font-weight: 600;
-        }
-
-        .risk-low { color: var(--success); }
-        .risk-med { color: var(--warning); }
-        .risk-high { color: var(--error); }
-
-        /* Averages bar */
-        .averages-bar {
-            padding: 12px 16px;
-            border-top: 1px solid var(--border);
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            background: var(--bg-tertiary);
-        }
-
-        .averages-bar .avg-title {
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 4px;
-        }
-
-        .averages-bar .avg-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 2px;
-        }
-
-        /* Metrics cards */
-        .metrics-bar {
-            display: flex;
-            gap: 12px;
-            padding: 12px 16px;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border);
-            flex-wrap: wrap;
-        }
-
-        .metric-card {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 10px 14px;
-            min-width: 140px;
-            flex: 1;
-        }
-
-        .metric-card .metric-label {
-            font-size: 0.6875rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 4px;
-        }
-
-        .metric-card .metric-value {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
-        .metric-card .metric-detail {
-            font-size: 0.6875rem;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }
-
-        /* Chart tabs */
-        .chart-tabs {
-            display: flex;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border);
-            padding: 0 16px;
-        }
-
-        .chart-panels {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .chart-panel {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            display: none;
-            padding: 16px;
-            overflow: auto;
-        }
-
-        .chart-panel.active { display: block; }
-
-        .chart-wrapper {
-            width: 100%;
-            height: 100%;
-            min-height: 300px;
-        }
-
-        /* Export panel (slides in from right) */
-        .export-panel {
-            position: fixed;
-            top: 0; right: -420px; bottom: 0;
-            width: 400px;
-            background: var(--bg-secondary);
-            border-left: 1px solid var(--border);
-            z-index: 200;
-            display: flex;
-            flex-direction: column;
-            transition: right 0.25s ease-in-out;
-            box-shadow: -4px 0 20px var(--shadow);
-        }
-
-        .export-panel.open { right: 0; }
-
-        .export-panel-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border);
-            flex-shrink: 0;
-        }
-
-        .export-panel-title {
-            font-size: 0.875rem;
-            font-weight: 600;
-        }
-
-        .export-panel-meta {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-        }
-
-        .export-panel-body {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px 0;
-        }
-
-        .export-observation {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            padding: 8px 16px;
-            cursor: pointer;
-            transition: background 0.15s;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .export-observation:hover { background: var(--bg-tertiary); }
-
-        .export-observation input[type="checkbox"] {
-            margin-top: 3px;
-            accent-color: var(--accent);
-            flex-shrink: 0;
-        }
-
-        .export-observation-info { flex: 1; min-width: 0; }
-
-        .export-observation-title {
-            font-size: 0.8125rem;
-            font-weight: 500;
-            color: var(--text-primary);
-        }
-
-        .export-observation-meta {
-            font-size: 0.6875rem;
-            color: var(--text-secondary);
-            margin-top: 2px;
-        }
-
-        .export-panel-footer {
-            padding: 12px 16px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            flex-shrink: 0;
-        }
-
-        .export-footer-row {
-            display: flex;
-            gap: 6px;
-            align-items: center;
-        }
-
-        .export-select-actions {
-            display: flex;
-            gap: 8px;
-            font-size: 0.75rem;
-        }
-
-        .export-select-actions a {
-            color: var(--accent);
-            cursor: pointer;
-            text-decoration: none;
-        }
-
-        .export-select-actions a:hover { text-decoration: underline; }
-
-        .export-format-btn {
-            flex: 1;
-            padding: 4px 6px;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            background: var(--bg-tertiary);
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 0.6875rem;
-            font-weight: 500;
-            text-align: center;
-            transition: all 0.15s;
-        }
-
-        .export-format-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
-
-        .export-format-btn.active {
-            border-color: var(--accent);
-            color: var(--accent);
-            background: var(--accent-dim);
-        }
-
-        .export-count {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-        }
-
-        .export-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.3);
-            z-index: 199;
-            display: none;
-        }
-
-        .export-overlay.open { display: block; }
-    </style>
 </head>
 <body>
     <header class="header">
@@ -367,39 +34,39 @@
         <a href="reports.html" class="nav-item">Reports</a>
     </nav>
 
-    <div id="scenario-banner" class="scenario-banner" style="display:none"></div>
+    <div id="scenario-banner" class="scenario-banner u-hidden"></div>
 
     <main class="trend-container">
         <!-- Sidebar -->
         <div class="trend-sidebar">
-            <div class="selector-bar" style="flex-direction: column; align-items: stretch;">
-                <div style="display:flex;gap:8px;align-items:center;">
+            <div class="selector-bar selector-bar-vertical">
+                <div class="selector-row">
                     <label>Target</label>
                     <input type="text" id="target-input" placeholder="example.com">
                     <button class="btn btn-small btn-primary" id="btn-load-target">Load</button>
                 </div>
-                <div style="font-size:0.6875rem;color:var(--text-muted);margin-top:6px;">
-                    For engagement-scoped trends, use the <a href="engagements.html" style="color:var(--accent);">Engagements</a> tab.
+                <div class="selector-hint">
+                    For engagement-scoped trends, use the <a href="engagements.html" class="text-accent">Engagements</a> tab.
                 </div>
             </div>
 
-            <div class="filter-bar" style="padding:8px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
-                <div style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);">Filter</div>
-                <div style="display:flex;gap:6px;align-items:center;">
-                    <input type="date" id="filter-since" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);padding:4px 6px;border-radius:4px;font-size:0.75rem;" title="From date">
-                    <span style="color:var(--text-muted);font-size:0.6875rem;">to</span>
-                    <input type="date" id="filter-until" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);padding:4px 6px;border-radius:4px;font-size:0.75rem;" title="To date">
+            <div class="filter-bar filter-section">
+                <div class="filter-title">Filter</div>
+                <div class="filter-row">
+                    <input type="date" id="filter-since" class="filter-input" title="From date">
+                    <span class="filter-separator">to</span>
+                    <input type="date" id="filter-until" class="filter-input" title="To date">
                 </div>
-                <div style="display:flex;gap:6px;align-items:center;">
-                    <select id="filter-last-n" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);color:var(--text-primary);padding:4px 6px;border-radius:4px;font-size:0.75rem;">
+                <div class="filter-row">
+                    <select id="filter-last-n" class="filter-input">
                         <option value="">All scans</option>
                         <option value="3">Last 3 scans</option>
                         <option value="5">Last 5 scans</option>
                         <option value="10">Last 10 scans</option>
                         <option value="20">Last 20 scans</option>
                     </select>
-                    <button class="btn btn-small" id="btn-apply-filter" style="font-size:0.6875rem;padding:4px 8px;">Apply</button>
-                    <button class="btn btn-small" id="btn-clear-filter" style="font-size:0.6875rem;padding:4px 8px;opacity:0.6;">Clear</button>
+                    <button class="btn btn-small btn-filter" id="btn-apply-filter">Apply</button>
+                    <button class="btn btn-small btn-filter btn-filter-muted" id="btn-clear-filter">Clear</button>
                 </div>
             </div>
 
@@ -414,7 +81,7 @@
                 </div>
             </div>
 
-            <div class="averages-bar" id="averages-bar" style="display:none;">
+            <div class="averages-bar u-hidden" id="averages-bar">
                 <div class="avg-title">Averages</div>
                 <div id="avg-content"></div>
             </div>
@@ -422,7 +89,7 @@
 
         <!-- Main charts area -->
         <div class="trend-main">
-            <div class="metrics-bar" id="metrics-bar" style="display:none;">
+            <div class="metrics-bar u-hidden" id="metrics-bar">
                 <div class="metric-card">
                     <div class="metric-label">Regression Rate</div>
                     <div class="metric-value" id="metric-regression">--</div>
@@ -512,7 +179,7 @@
         <div class="export-panel-body" id="export-observations-list">
         </div>
         <div class="export-panel-footer">
-            <div class="export-footer-row" style="justify-content:space-between">
+            <div class="export-footer-row export-footer-row-spread">
                 <span class="export-count" id="export-count">0 selected</span>
                 <div class="export-select-actions">
                     <a id="export-select-all">Select all</a>
@@ -526,7 +193,7 @@
                 <button class="export-format-btn" data-fmt="sarif">SARIF</button>
                 <button class="export-format-btn" data-fmt="csv">CSV</button>
             </div>
-            <button class="btn btn-primary" id="btn-export-selected" style="width:100%">
+            <button class="btn btn-primary u-full-width" id="btn-export-selected">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Export Selected
             </button>
@@ -658,8 +325,8 @@
                         <div class="scan-item-meta">
                             <span>${dp.total} observations</span>
                             <span class="scan-item-risk ${riskClass}">risk: ${dp.risk_score}</span>
-                            <span style="color:var(--success)">+${dp.new}</span>
-                            <span style="color:var(--error)">-${dp.resolved}</span>
+                            <span class="text-success">+${dp.new}</span>
+                            <span class="text-error">-${dp.resolved}</span>
                         </div>
                     </div>`;
             }).join('');
@@ -930,7 +597,7 @@
             const btn = document.getElementById('btn-export-selected');
             const origText = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;margin-right:6px;vertical-align:middle"></span>Exporting...';
+            btn.innerHTML = '<span class="btn-spinner-inline"></span>Exporting...';
 
             try {
                 const result = await api.generateTargetedExport(fingerprints, exportFormat);

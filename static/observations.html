@@ -6,63 +6,9 @@
     <title>Chainsmith Recon - Observations</title>
     <link rel="stylesheet" href="/static/css/common.css">
     <link rel="stylesheet" href="/static/css/viz.css">
+    <link rel="stylesheet" href="/static/css/observations.css">
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
-    <style>
-        .observations-container {
-            display: flex;
-            height: calc(100vh - 100px);
-        }
-
-        .observations-sidebar {
-            width: 400px;
-            min-width: 300px;
-            background: var(--bg-secondary);
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-        }
-
-        .observations-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .sidebar-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
-        }
-
-        .viz-tabs {
-            display: flex;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border);
-            padding: 0 16px;
-        }
-
-        .viz-content {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .viz-panel {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: none;
-        }
-
-        .viz-panel.active {
-            display: flex;
-            flex-direction: column;
-        }
-    </style>
 </head>
 <body>
     <!-- Header -->
@@ -92,7 +38,7 @@
     </nav>
 
     <!-- Legacy Scenario Banner (hidden, badge now in header) -->
-    <div id="scenario-banner" class="scenario-banner" style="display:none"></div>
+    <div id="scenario-banner" class="scenario-banner u-hidden"></div>
 
     <!-- Main Content -->
     <main class="observations-container">
@@ -102,7 +48,7 @@
                 <div class="tab active" data-tab="list">Observations</div>
             </div>
             <div class="sidebar-content">
-                <table class="data-table" id="observations-table" style="display: none;">
+                <table class="data-table u-hidden" id="observations-table">
                     <thead>
                         <tr>
                             <th>Sev</th>
@@ -120,10 +66,10 @@
                     <h3>No observations</h3>
                     <p>Run a scan to discover observations</p>
                 </div>
-                <div class="in-progress-message" id="scan-in-progress" style="display: none;">
+                <div class="in-progress-message u-hidden" id="scan-in-progress">
                     <div class="spinner"></div>
                     <p>Scan in progress...</p>
-                    <a href="scan.html" class="btn" style="margin-top: 12px;">View Progress</a>
+                    <a href="scan.html" class="btn mt-3">View Progress</a>
                 </div>
             </div>
         </div>
@@ -137,7 +83,7 @@
                 <div class="tab" data-viz="radar">Radar</div>
                 <div class="tab" data-viz="coverage">Coverage</div>
                 <div class="tab" data-viz="timeline">Timeline</div>
-                <div style="flex:1"></div>
+                <div class="flex-spacer"></div>
                 <div class="tab" data-viz="chains">Attack Chains</div>
             </div>
             <div class="viz-content">
@@ -153,7 +99,7 @@
                             <h3>No Observations Yet</h3>
                             <p>Run a scan to see observations grouped by host</p>
                         </div>
-                        <div id="hosts-content" style="display: none;">
+                        <div id="hosts-content" class="u-hidden">
                             <div class="summary-bar" id="summary-bar"></div>
                             <div class="table-controls">
                                 <div class="table-legend">
@@ -181,61 +127,61 @@
                             <h3>Observations Treemap</h3>
                             <p>Run a scan to see observations visualized by suite, host, and severity</p>
                         </div>
-                        <div class="treemap-controls" id="treemap-controls" style="display: none;">
+                        <div class="treemap-controls u-hidden" id="treemap-controls">
                             <div class="treemap-breadcrumb" id="treemap-breadcrumb"></div>
                             <div class="treemap-size-toggle" id="treemap-size-toggle">
                                 <button class="active" data-mode="count">Count</button>
                                 <button data-mode="risk">Risk-weighted</button>
                             </div>
                         </div>
-                        <div class="treemap-chart" id="treemap-chart" style="display: none;">
+                        <div class="treemap-chart u-hidden" id="treemap-chart">
                             <svg id="treemap-graph"></svg>
                             <div class="treemap-legend" id="treemap-legend"></div>
                         </div>
                     </div>
-                    <div class="treemap-tooltip" id="treemap-tooltip" style="display: none;"></div>
+                    <div class="treemap-tooltip u-hidden" id="treemap-tooltip"></div>
                 </div>
 
                 <!-- Chains Panel -->
                 <div class="viz-panel" id="panel-chains">
                     <div class="chains-header">
-                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div class="chains-header-row">
                             <div>
                                 <span class="status-badge status-idle" id="chain-status-badge">Idle</span>
-                                <span id="chain-count-text" style="margin-left: 12px; font-size: 0.8125rem; color: var(--text-secondary);">0 chains</span>
+                                <span class="chain-count-text" id="chain-count-text">0 chains</span>
                             </div>
-                            <div style="display: flex; gap: 8px;">
-                                <div class="view-toggle" id="chains-view-toggle" style="display: none;">
+                            <div class="chains-controls">
+                                <div class="view-toggle u-hidden" id="chains-view-toggle">
                                     <button class="btn btn-small active" id="btn-chain-list">List</button>
                                     <button class="btn btn-small" id="btn-chain-graph">Graph</button>
                                 </div>
                                 <button class="btn btn-primary" id="btn-analyze-chains">Analyze Chains</button>
                             </div>
                         </div>
-                        <div class="chain-legend" id="chain-legend" style="display: none;">
-                            <span><span class="chain-legend-dot" style="background: var(--accent);"></span>Rule-based</span>
-                            <span><span class="chain-legend-dot" style="background: var(--success);"></span>LLM</span>
-                            <span><span class="chain-legend-dot" style="background: var(--warning);"></span>Both</span>
+                        <div class="chain-legend u-hidden" id="chain-legend">
+                            <span><span class="chain-legend-dot source-rule"></span>Rule-based</span>
+                            <span><span class="chain-legend-dot source-llm"></span>LLM</span>
+                            <span><span class="chain-legend-dot source-both"></span>Both</span>
                         </div>
-                        <div id="chain-error-detail" style="display: none; margin-top: 8px; padding: 10px 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 6px; font-size: 0.8125rem;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                <span style="font-weight: 600; color: var(--text-primary);" id="chain-error-title">LLM Analysis Error</span>
-                                <button class="btn btn-small" id="btn-chain-error-toggle" style="font-size: 0.75rem; padding: 2px 8px;">Details</button>
+                        <div class="chain-error-panel" id="chain-error-detail">
+                            <div class="chain-error-header">
+                                <span class="chain-error-title" id="chain-error-title">LLM Analysis Error</span>
+                                <button class="btn btn-small" id="btn-chain-error-toggle">Details</button>
                             </div>
-                            <div id="chain-error-summary" style="color: var(--text-secondary);"></div>
-                            <div id="chain-error-details" style="display: none; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px;">
-                                <table style="width: 100%; font-size: 0.75rem; color: var(--text-secondary);">
-                                    <tr><td style="padding: 2px 8px 2px 0; white-space: nowrap;">Error type:</td><td id="chain-error-type"></td></tr>
-                                    <tr><td style="padding: 2px 8px 2px 0; white-space: nowrap;">Provider:</td><td id="chain-error-provider"></td></tr>
-                                    <tr><td style="padding: 2px 8px 2px 0; white-space: nowrap;">Model:</td><td id="chain-error-model"></td></tr>
-                                    <tr><td style="padding: 2px 8px 2px 0; white-space: nowrap;">Attempts:</td><td id="chain-error-attempts"></td></tr>
-                                    <tr><td style="padding: 2px 8px 2px 0; white-space: nowrap;">Message:</td><td id="chain-error-message" style="word-break: break-word;"></td></tr>
-                                    <tr id="chain-error-sanitized-row" style="display: none;"><td style="padding: 2px 8px 2px 0;">Note:</td><td>Sanitized prompt was used</td></tr>
+                            <div class="text-secondary" id="chain-error-summary"></div>
+                            <div class="chain-error-details-section" id="chain-error-details">
+                                <table class="chain-error-details-table">
+                                    <tr><td>Error type:</td><td id="chain-error-type"></td></tr>
+                                    <tr><td>Provider:</td><td id="chain-error-provider"></td></tr>
+                                    <tr><td>Model:</td><td id="chain-error-model"></td></tr>
+                                    <tr><td>Attempts:</td><td id="chain-error-attempts"></td></tr>
+                                    <tr><td>Message:</td><td id="chain-error-message"></td></tr>
+                                    <tr class="u-hidden" id="chain-error-sanitized-row"><td>Note:</td><td>Sanitized prompt was used</td></tr>
                                 </table>
                             </div>
-                            <div style="margin-top: 8px; display: flex; gap: 8px;">
-                                <button class="btn btn-primary btn-small" id="btn-retry-chains" style="display: none;">Retry</button>
-                                <span id="chain-rule-only-note" style="display: none; color: var(--warning); font-size: 0.75rem; align-self: center;">Showing rule-based chains only</span>
+                            <div class="chain-error-actions">
+                                <button class="btn btn-primary btn-small u-hidden" id="btn-retry-chains">Retry</button>
+                                <span class="chain-rule-note" id="chain-rule-only-note">Showing rule-based chains only</span>
                             </div>
                         </div>
                     </div>
@@ -248,8 +194,8 @@
                             <h3>No attack chains</h3>
                             <p>Click "Analyze Chains" to discover attack paths</p>
                         </div>
-                        <div id="chains-list" style="display: none;"></div>
-                        <svg id="chains-graph" style="display: none;"></svg>
+                        <div class="u-hidden" id="chains-list"></div>
+                        <svg class="u-hidden" id="chains-graph"></svg>
                     </div>
                 </div>
 
@@ -265,19 +211,19 @@
                             <h3>Severity Heatmap</h3>
                             <p>Run a scan to see observations mapped by host and suite</p>
                         </div>
-                        <div id="heatmap-content" style="display: none;">
+                        <div id="heatmap-content" class="u-hidden">
                             <div class="heatmap-legend" id="heatmap-legend">
-                                <span class="heatmap-legend-item"><span class="heatmap-swatch" style="background:#991b1b"></span>Critical</span>
-                                <span class="heatmap-legend-item"><span class="heatmap-swatch" style="background:#dc2626"></span>High</span>
-                                <span class="heatmap-legend-item"><span class="heatmap-swatch" style="background:#f59e0b"></span>Medium</span>
-                                <span class="heatmap-legend-item"><span class="heatmap-swatch" style="background:#4a9eff"></span>Low</span>
-                                <span class="heatmap-legend-item"><span class="heatmap-swatch" style="background:#6b7280"></span>Info</span>
-                                <span class="heatmap-legend-item"><span class="heatmap-swatch" style="background:#1e293b"></span>None</span>
+                                <span class="heatmap-legend-item"><span class="heatmap-swatch swatch-critical"></span>Critical</span>
+                                <span class="heatmap-legend-item"><span class="heatmap-swatch swatch-high"></span>High</span>
+                                <span class="heatmap-legend-item"><span class="heatmap-swatch swatch-medium"></span>Medium</span>
+                                <span class="heatmap-legend-item"><span class="heatmap-swatch swatch-low"></span>Low</span>
+                                <span class="heatmap-legend-item"><span class="heatmap-swatch swatch-info"></span>Info</span>
+                                <span class="heatmap-legend-item"><span class="heatmap-swatch swatch-none"></span>None</span>
                             </div>
                             <svg id="heatmap-graph"></svg>
                         </div>
                     </div>
-                    <div class="heatmap-tooltip" id="heatmap-tooltip" style="display: none;"></div>
+                    <div class="heatmap-tooltip u-hidden" id="heatmap-tooltip"></div>
                 </div>
 
                 <!-- Radar Panel -->
@@ -293,12 +239,12 @@
                             <h3>Attack Surface Radar</h3>
                             <p>Run a scan to see risk scores per suite category</p>
                         </div>
-                        <div id="radar-content" style="display: none;">
+                        <div id="radar-content" class="u-hidden">
                             <div class="radar-legend" id="radar-legend"></div>
                             <svg id="radar-graph"></svg>
                         </div>
                     </div>
-                    <div class="radar-tooltip" id="radar-tooltip" style="display: none;"></div>
+                    <div class="radar-tooltip u-hidden" id="radar-tooltip"></div>
                 </div>
 
                 <!-- Coverage Matrix Panel -->
@@ -315,19 +261,19 @@
                             <h3>Check Coverage Matrix</h3>
                             <p>Run a scan to see which checks ran against each host</p>
                         </div>
-                        <div id="coverage-content" style="display: none;">
+                        <div id="coverage-content" class="u-hidden">
                             <div class="coverage-legend" id="coverage-legend">
-                                <span class="coverage-legend-item"><span class="coverage-swatch" style="background:#4ade80"></span>Completed</span>
-                                <span class="coverage-legend-item"><span class="coverage-swatch" style="background:#f59e0b"></span>Found</span>
-                                <span class="coverage-legend-item"><span class="coverage-swatch" style="background:#6b7280"></span>Skipped</span>
-                                <span class="coverage-legend-item"><span class="coverage-swatch" style="background:#ef4444"></span>Error</span>
-                                <span class="coverage-legend-item"><span class="coverage-swatch" style="background:#1e293b"></span>Not run</span>
+                                <span class="coverage-legend-item"><span class="coverage-swatch swatch-completed"></span>Completed</span>
+                                <span class="coverage-legend-item"><span class="coverage-swatch swatch-found"></span>Found</span>
+                                <span class="coverage-legend-item"><span class="coverage-swatch swatch-skipped"></span>Skipped</span>
+                                <span class="coverage-legend-item"><span class="coverage-swatch swatch-error"></span>Error</span>
+                                <span class="coverage-legend-item"><span class="coverage-swatch swatch-notrun"></span>Not run</span>
                             </div>
                             <div class="coverage-note" id="coverage-note"></div>
                             <svg id="coverage-graph"></svg>
                         </div>
                     </div>
-                    <div class="coverage-tooltip" id="coverage-tooltip" style="display: none;"></div>
+                    <div class="coverage-tooltip u-hidden" id="coverage-tooltip"></div>
                 </div>
 
                 <!-- Timeline Panel -->
@@ -343,13 +289,13 @@
                             <h3>Observation Timeline</h3>
                             <p>Run a scan to see observations plotted by discovery order</p>
                         </div>
-                        <div id="timeline-content" style="display: none;">
+                        <div id="timeline-content" class="u-hidden">
                             <div class="timeline-legend" id="timeline-legend">
-                                <span class="timeline-legend-item"><span class="timeline-swatch" style="background:#991b1b"></span>Critical</span>
-                                <span class="timeline-legend-item"><span class="timeline-swatch" style="background:#dc2626"></span>High</span>
-                                <span class="timeline-legend-item"><span class="timeline-swatch" style="background:#f59e0b"></span>Medium</span>
-                                <span class="timeline-legend-item"><span class="timeline-swatch" style="background:#4a9eff"></span>Low</span>
-                                <span class="timeline-legend-item"><span class="timeline-swatch" style="background:#6b7280"></span>Info</span>
+                                <span class="timeline-legend-item"><span class="timeline-swatch swatch-critical"></span>Critical</span>
+                                <span class="timeline-legend-item"><span class="timeline-swatch swatch-high"></span>High</span>
+                                <span class="timeline-legend-item"><span class="timeline-swatch swatch-medium"></span>Medium</span>
+                                <span class="timeline-legend-item"><span class="timeline-swatch swatch-low"></span>Low</span>
+                                <span class="timeline-legend-item"><span class="timeline-swatch swatch-info"></span>Info</span>
                                 <span class="timeline-toggle" id="timeline-group-toggle">
                                     <button class="active" data-group="host">By Host</button>
                                     <button data-group="suite">By Suite</button>
@@ -358,7 +304,7 @@
                             <svg id="timeline-graph"></svg>
                         </div>
                     </div>
-                    <div class="timeline-tooltip" id="timeline-tooltip" style="display: none;"></div>
+                    <div class="timeline-tooltip u-hidden" id="timeline-tooltip"></div>
                 </div>
             </div>
         </div>
@@ -392,14 +338,14 @@
                     <div class="setting-label">Rate Limit</div>
                     <div class="setting-desc">Requests per second</div>
                 </div>
-                <input type="number" class="form-input" id="setting-rate" value="10" min="1" max="100" style="width: 80px;">
+                <input type="number" class="form-input input-w-xs" id="setting-rate" value="10" min="1" max="100">
             </div>
             <div class="setting-row">
                 <div>
                     <div class="setting-label">Verification Level</div>
                     <div class="setting-desc">Re-verify observations</div>
                 </div>
-                <select class="form-input" id="setting-verification" style="width: 120px;">
+                <select class="form-input input-w-sm" id="setting-verification">
                     <option value="none">None</option>
                     <option value="sample">Sample (20%)</option>
                     <option value="half">Half (50%)</option>
@@ -439,9 +385,9 @@
 
             <div class="setting-section">
                 <div class="setting-section-title">Scenario</div>
-                <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+                <div class="setting-row setting-row-stacked">
                     <div class="setting-desc">Simulate a target environment</div>
-                    <select class="form-input" id="setting-scenario" style="width:100%">
+                    <select class="form-input u-full-width" id="setting-scenario">
                         <option value="">— No scenario —</option>
                     </select>
                 </div>
@@ -449,13 +395,13 @@
 
             <div class="setting-section">
                 <div class="setting-section-title">Actions</div>
-                <button class="btn" id="btn-export" style="width: 100%; margin-bottom: 8px;">
+                <button class="btn btn-action-full" id="btn-export">
                     Export JSON
                 </button>
-                <button class="btn" id="btn-export-csv" style="width: 100%; margin-bottom: 8px;">
+                <button class="btn btn-action-full" id="btn-export-csv">
                     Export CSV
                 </button>
-                <button class="btn" id="btn-reset" style="width: 100%;">
+                <button class="btn u-full-width" id="btn-reset">
                     Reset All
                 </button>
             </div>
@@ -610,7 +556,7 @@
             document.getElementById('btn-chain-error-toggle').addEventListener('click', () => {
                 var details = document.getElementById('chain-error-details');
                 var btn = document.getElementById('btn-chain-error-toggle');
-                if (details.style.display === 'none') {
+                if (getComputedStyle(details).display === 'none') {
                     details.style.display = 'block';
                     btn.textContent = 'Hide';
                 } else {

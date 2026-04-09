@@ -1,0 +1,242 @@
+.scan-container {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    height: calc(100vh - 100px);
+}
+
+.scan-panel {
+    flex: 1;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.panel-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.panel-title {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.progress-section {
+    margin-bottom: 16px;
+}
+
+.progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.check-list {
+    margin-top: 16px;
+}
+
+.action-bar {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* Status badge container for throb animation */
+.status-badge-container {
+    position: relative;
+}
+
+/* Phase indicators */
+.progress-phases {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.progress-phase-wrapper {
+    flex: 1;
+    text-align: center;
+}
+
+.progress-phase {
+    height: 4px;
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.3s;
+}
+
+.progress-phase.active {
+    background: var(--accent-dim);
+}
+
+.progress-phase.active::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 40%;
+    background: var(--accent);
+    border-radius: 2px;
+    animation: phase-sweep 1.2s ease-in-out infinite;
+}
+
+.progress-phase.complete {
+    background: var(--accent);
+}
+
+.progress-phase.complete::after {
+    display: none;
+}
+
+@keyframes phase-sweep {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(350%);
+    }
+}
+
+.progress-phase-label {
+    font-size: 0.625rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-top: 6px;
+}
+
+.progress-phase.active + .progress-phase-label,
+.progress-phase-wrapper:has(.progress-phase.active) .progress-phase-label {
+    color: var(--accent);
+}
+
+.progress-phase.complete + .progress-phase-label,
+.progress-phase-wrapper:has(.progress-phase.complete) .progress-phase-label {
+    color: var(--text-secondary);
+}
+
+/* Activity stream */
+.activity-stream {
+    margin-top: 16px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+}
+
+.activity-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.activity-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.activity-item.active .activity-dot {
+    background: var(--accent);
+    animation: dot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.3);
+        opacity: 0.7;
+    }
+}
+
+.activity-text {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Button variants */
+.btn-secondary {
+    background: var(--bg-tertiary);
+    border-color: var(--border);
+    color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent);
+}
+
+.btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: #ef4444;
+}
+
+/* Scanning state for status badge */
+.status-badge.status-running {
+    position: relative;
+}
+
+/* Dynamic progress bar when total is unknown */
+.progress-bar.dynamic {
+    background: linear-gradient(
+        90deg,
+        var(--accent) 0%,
+        var(--accent-hover) 50%,
+        var(--accent) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Verification bar success color */
+.progress-bar-success {
+    background: var(--success);
+}
+
+/* Observations panel header flex container */
+.observations-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* profile-description, profile-key-settings, profile-setting styles now in common.css */

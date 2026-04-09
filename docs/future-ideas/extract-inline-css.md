@@ -2,7 +2,7 @@ Extract Inline CSS from Static Pages
 =====================================
 Captured 2026-04-08.
 
-Status: Pending
+Status: Done
 
 Problem
 -------

@@ -5,315 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chainsmith Recon - Profiles</title>
     <link rel="stylesheet" href="/static/css/common.css">
-    <style>
-        .profiles-container {
-            max-width: 1100px;
-            margin: 40px auto;
-            padding: 0 20px;
-        }
-
-        .profiles-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 24px;
-        }
-
-        .profiles-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-
-        .profiles-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 20px;
-        }
-
-        /* Profile Card */
-        .profile-card {
-            background: var(--bg-secondary);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            overflow: hidden;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-
-        .profile-card:hover {
-            border-color: var(--accent);
-        }
-
-        .profile-card.active {
-            border-color: var(--success);
-            box-shadow: 0 0 0 1px var(--success);
-        }
-
-        .profile-card-header {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .profile-name {
-            font-size: 1.125rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .profile-badge {
-            font-size: 0.6875rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-weight: 500;
-        }
-
-        .profile-badge.active {
-            background: rgba(74, 222, 128, 0.15);
-            color: var(--success);
-        }
-
-        .profile-badge.builtin {
-            background: var(--bg-tertiary);
-            color: var(--text-secondary);
-        }
-
-        .profile-card-body {
-            padding: 16px 20px;
-        }
-
-        .profile-desc {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            margin-bottom: 16px;
-            min-height: 40px;
-        }
-
-        .profile-settings {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-
-        .setting-badge {
-            font-size: 0.75rem;
-            padding: 4px 8px;
-            background: var(--bg-tertiary);
-            border-radius: 4px;
-            color: var(--text-secondary);
-        }
-
-        .setting-badge.highlight {
-            background: rgba(139, 92, 246, 0.15);
-            color: #a78bfa;
-        }
-
-        .profile-card-actions {
-            display: flex;
-            gap: 8px;
-            padding-top: 12px;
-            border-top: 1px solid var(--border);
-        }
-
-        .profile-card-actions .btn {
-            flex: 1;
-            padding: 8px;
-            font-size: 0.8125rem;
-        }
-
-        /* New Profile Card */
-        .profile-card.new-profile {
-            border-style: dashed;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 280px;
-            cursor: pointer;
-            transition: background 0.2s, border-color 0.2s;
-        }
-
-        .profile-card.new-profile:hover {
-            background: var(--bg-tertiary);
-            border-color: var(--accent);
-        }
-
-        .new-profile-icon {
-            width: 48px;
-            height: 48px;
-            color: var(--text-muted);
-            margin-bottom: 12px;
-        }
-
-        .new-profile-text {
-            color: var(--text-secondary);
-            font-size: 1rem;
-        }
-
-        /* Modal */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        .modal-overlay.open {
-            display: flex;
-        }
-
-        .modal {
-            background: var(--bg-secondary);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            width: 100%;
-            max-width: 500px;
-            max-height: 90vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .modal-header {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .modal-title {
-            font-size: 1.125rem;
-            font-weight: 600;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            padding: 4px;
-        }
-
-        .modal-close:hover {
-            color: var(--text-primary);
-        }
-
-        .modal-body {
-            padding: 20px;
-            overflow-y: auto;
-        }
-
-        .modal-footer {
-            padding: 16px 20px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-        }
-
-        /* Form elements */
-        .form-group {
-            margin-bottom: 16px;
-        }
-
-        .form-group:last-child {
-            margin-bottom: 0;
-        }
-
-        .form-label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 500;
-            font-size: 0.875rem;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 10px 12px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-
-        .form-hint {
-            margin-top: 4px;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-        }
-
-        /* Comparison view */
-        .comparison-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.8125rem;
-        }
-
-        .comparison-table th,
-        .comparison-table td {
-            padding: 8px 12px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .comparison-table th {
-            background: var(--bg-tertiary);
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-
-        .comparison-table td.diff {
-            color: var(--warning);
-        }
-
-        /* Override section in modal */
-        .overrides-section {
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid var(--border);
-        }
-
-        .overrides-title {
-            font-weight: 500;
-            font-size: 0.875rem;
-            margin-bottom: 12px;
-            color: var(--text-secondary);
-        }
-
-        .override-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 0;
-            font-size: 0.8125rem;
-        }
-
-        .override-key {
-            color: var(--text-secondary);
-        }
-
-        .override-value {
-            color: var(--accent);
-            font-family: monospace;
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/profiles.css">
 </head>
 <body>
     <!-- Header -->
@@ -325,7 +17,7 @@
             </a>
         </div>
         <div class="header-right">
-            <a href="settings.html" class="btn btn-secondary" style="padding: 8px 16px;">
+            <a href="settings.html" class="btn btn-secondary btn-back">
                 ← Back to Settings
             </a>
         </div>
@@ -344,7 +36,7 @@
 
     <!-- Create/Edit Modal -->
     <div class="modal-overlay" id="modal-overlay">
-        <div class="modal">
+        <div class="modal modal-md">
             <div class="modal-header">
                 <h3 class="modal-title" id="modal-title">Create Profile</h3>
                 <button class="modal-close" id="modal-close">
@@ -371,7 +63,7 @@
                     </select>
                     <div class="form-hint">Inherit settings from an existing profile</div>
                 </div>
-                <div class="overrides-section" id="overrides-section" style="display: none;">
+                <div class="overrides-section u-hidden" id="overrides-section">
                     <div class="overrides-title">Current Overrides</div>
                     <div id="overrides-list"></div>
                 </div>
@@ -385,7 +77,7 @@
 
     <!-- Delete Confirmation Modal -->
     <div class="modal-overlay" id="delete-modal">
-        <div class="modal" style="max-width: 400px;">
+        <div class="modal modal-sm">
             <div class="modal-header">
                 <h3 class="modal-title">Delete Profile</h3>
                 <button class="modal-close" id="delete-modal-close">
@@ -400,7 +92,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="btn-delete-cancel">Cancel</button>
-                <button class="btn btn-primary" style="background: var(--error); border-color: var(--error);" id="btn-delete-confirm">Delete</button>
+                <button class="btn btn-primary btn-delete" id="btn-delete-confirm">Delete</button>
             </div>
         </div>
     </div>
@@ -492,7 +184,7 @@
                             ${!isActive ? `<button class="btn btn-primary" onclick="activateProfile('${profile.name}')">Activate</button>` : '<button class="btn btn-secondary" disabled>Active</button>'}
                             <button class="btn btn-secondary" onclick="editProfile('${profile.name}')">Edit</button>
                             <button class="btn btn-secondary" onclick="copyProfile('${profile.name}')">Copy</button>
-                            ${!isActive ? `<button class="btn btn-secondary" onclick="deleteProfile('${profile.name}', ${isBuiltin})" style="color: var(--error);">
+                            ${!isActive ? `<button class="btn btn-secondary btn-delete-text" onclick="deleteProfile('${profile.name}', ${isBuiltin})">
                                 ${isBuiltin ? 'Reset' : 'Delete'}
                             </button>` : ''}
                         </div>

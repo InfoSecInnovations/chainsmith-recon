@@ -5,456 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chainsmith Recon - Reports</title>
     <link rel="stylesheet" href="/static/css/common.css">
-    <style>
-        .reports-container {
-            display: flex;
-            height: calc(100vh - 100px);
-        }
-
-        .reports-sidebar {
-            width: 340px;
-            min-width: 280px;
-            background: var(--bg-secondary);
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-        }
-
-        .reports-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        /* Sidebar sections */
-        .sidebar-section {
-            padding: 16px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .sidebar-section-title {
-            font-size: 0.6875rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--text-muted);
-            margin-bottom: 12px;
-        }
-
-        /* Report type selector */
-        .report-type-list {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .report-type-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background 0.15s;
-            border: 1px solid transparent;
-        }
-
-        .report-type-item:hover { background: var(--bg-tertiary); }
-
-        .report-type-item.active {
-            background: var(--accent-dim);
-            border-color: var(--accent);
-        }
-
-        .report-type-icon {
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.875rem;
-            flex-shrink: 0;
-        }
-
-        .report-type-icon.technical { background: rgba(74, 158, 255, 0.15); color: var(--accent); }
-        .report-type-icon.delta { background: rgba(251, 191, 36, 0.15); color: var(--warning); }
-        .report-type-icon.executive { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; }
-        .report-type-icon.compliance { background: rgba(74, 222, 128, 0.15); color: var(--success); }
-        .report-type-icon.trend { background: rgba(236, 72, 153, 0.15); color: #ec4899; }
-
-        .report-type-info { flex: 1; min-width: 0; }
-
-        .report-type-name {
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .report-type-desc {
-            font-size: 0.6875rem;
-            color: var(--text-secondary);
-            margin-top: 1px;
-        }
-
-        /* Form inputs */
-        .input-group {
-            margin-bottom: 12px;
-        }
-
-        .input-group:last-child { margin-bottom: 0; }
-
-        .input-label {
-            display: block;
-            font-size: 0.75rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-            margin-bottom: 4px;
-        }
-
-        .input-field {
-            width: 100%;
-            padding: 8px 10px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-            border-radius: 4px;
-            font-size: 0.8125rem;
-        }
-
-        .input-field:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-
-        .input-hint {
-            font-size: 0.6875rem;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }
-
-        .input-row {
-            display: flex;
-            gap: 8px;
-            align-items: flex-end;
-        }
-
-        .input-row .input-group { flex: 1; margin-bottom: 0; }
-
-        .vs-label {
-            padding: 8px 0;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            font-weight: 600;
-        }
-
-        /* Format selector */
-        .format-selector {
-            display: flex;
-            gap: 6px;
-        }
-
-        .format-btn {
-            flex: 1;
-            padding: 6px 8px;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            background: var(--bg-tertiary);
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 0.75rem;
-            font-weight: 500;
-            text-align: center;
-            transition: all 0.15s;
-        }
-
-        .format-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
-
-        .format-btn.active {
-            border-color: var(--accent);
-            color: var(--accent);
-            background: var(--accent-dim);
-        }
-
-        /* Generate button */
-        .btn-generate {
-            width: 100%;
-            padding: 10px;
-            margin-top: 16px;
-            font-size: 0.875rem;
-            font-weight: 600;
-        }
-
-        .btn-generate .spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: spin 0.6s linear infinite;
-            margin-right: 6px;
-            vertical-align: middle;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Main panel */
-        .report-toolbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 16px;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border);
-            min-height: 48px;
-        }
-
-        .report-toolbar-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .report-toolbar-title {
-            font-size: 0.875rem;
-            font-weight: 600;
-        }
-
-        .report-toolbar-meta {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-        }
-
-        .report-toolbar-right {
-            display: flex;
-            gap: 8px;
-        }
-
-        /* Preview area */
-        .report-preview {
-            flex: 1;
-            overflow: auto;
-            padding: 0;
-            position: relative;
-        }
-
-        .report-preview-content {
-            padding: 24px;
-            font-size: 0.875rem;
-            line-height: 1.7;
-        }
-
-        .report-preview-content pre {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 16px;
-            overflow-x: auto;
-            font-size: 0.8125rem;
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-
-        .report-preview-content code {
-            font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-        }
-
-        .report-preview-iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-            background: #fff;
-        }
-
-        /* Empty state */
-        .report-empty {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: var(--text-muted);
-            gap: 12px;
-        }
-
-        .report-empty svg {
-            width: 48px;
-            height: 48px;
-            opacity: 0.5;
-        }
-
-        .report-empty h3 {
-            margin: 0;
-            font-size: 1rem;
-            color: var(--text-secondary);
-        }
-
-        .report-empty p {
-            margin: 0;
-            font-size: 0.8125rem;
-        }
-
-        /* Report history */
-        .history-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 16px;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border);
-            border-top: 1px solid var(--border);
-        }
-
-        .history-header-title {
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-        }
-
-        .history-clear {
-            font-size: 0.6875rem;
-            color: var(--text-muted);
-            cursor: pointer;
-            background: none;
-            border: none;
-        }
-
-        .history-clear:hover { color: var(--error); }
-
-        .history-list {
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .history-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 16px;
-            cursor: pointer;
-            transition: background 0.15s;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .history-item:hover { background: var(--bg-tertiary); }
-
-        .history-item-type {
-            font-size: 0.625rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            padding: 2px 6px;
-            border-radius: 3px;
-            white-space: nowrap;
-        }
-
-        .history-item-type.technical { background: rgba(74, 158, 255, 0.15); color: var(--accent); }
-        .history-item-type.delta { background: rgba(251, 191, 36, 0.15); color: var(--warning); }
-        .history-item-type.executive { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; }
-        .history-item-type.compliance { background: rgba(74, 222, 128, 0.15); color: var(--success); }
-        .history-item-type.trend { background: rgba(236, 72, 153, 0.15); color: #ec4899; }
-
-        .history-item-info { flex: 1; min-width: 0; }
-
-        .history-item-name {
-            font-size: 0.75rem;
-            font-weight: 500;
-            color: var(--text-primary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .history-item-date {
-            font-size: 0.6875rem;
-            color: var(--text-muted);
-        }
-
-        .history-item-format {
-            font-size: 0.6875rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            font-weight: 500;
-        }
-
-        .history-item-actions {
-            display: flex;
-            gap: 4px;
-            opacity: 0;
-            transition: opacity 0.15s;
-        }
-
-        .history-item:hover .history-item-actions {
-            opacity: 1;
-        }
-
-        .history-action-btn {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            padding: 2px;
-            border-radius: 3px;
-            display: flex;
-            align-items: center;
-        }
-
-        .history-action-btn:hover {
-            color: var(--text-primary);
-            background: var(--bg-tertiary);
-        }
-
-        .history-action-btn.delete:hover {
-            color: var(--error);
-        }
-
-        .pdf-unavailable {
-            opacity: 0.4;
-            cursor: not-allowed !important;
-            position: relative;
-        }
-
-        .pdf-unavailable:hover::after {
-            content: 'xhtml2pdf not installed';
-            position: absolute;
-            bottom: calc(100% + 4px);
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.6875rem;
-            white-space: nowrap;
-            z-index: 10;
-        }
-
-        /* Error state */
-        .report-error {
-            background: rgba(248, 113, 113, 0.1);
-            border: 1px solid rgba(248, 113, 113, 0.3);
-            border-radius: 6px;
-            padding: 16px;
-            margin: 24px;
-            color: var(--error);
-        }
-
-        .report-error-title {
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .report-error-detail {
-            font-size: 0.8125rem;
-            color: var(--text-secondary);
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/reports.css">
 </head>
 <body>
     <header class="header">
@@ -481,7 +32,7 @@
         <a href="reports.html" class="nav-item active">Reports</a>
     </nav>
 
-    <div id="scenario-banner" class="scenario-banner" style="display:none"></div>
+    <div id="scenario-banner" class="scenario-banner u-hidden"></div>
 
     <main class="reports-container">
         <!-- Sidebar -->
@@ -558,7 +109,7 @@
             </div>
 
             <!-- History -->
-            <div class="history-header" id="history-header" style="display:none">
+            <div class="history-header u-hidden" id="history-header">
                 <span class="history-header-title">Recent Reports</span>
                 <button class="history-clear" id="btn-clear-history">Clear</button>
             </div>
@@ -567,17 +118,17 @@
 
         <!-- Main Panel -->
         <div class="reports-main">
-            <div class="report-toolbar" id="report-toolbar" style="display:none">
+            <div class="report-toolbar u-hidden" id="report-toolbar">
                 <div class="report-toolbar-left">
                     <span class="report-toolbar-title" id="toolbar-title"></span>
                     <span class="report-toolbar-meta" id="toolbar-meta"></span>
                 </div>
                 <div class="report-toolbar-right">
-                    <button class="btn btn-small" id="btn-copy" style="display:none" title="Copy to clipboard">
+                    <button class="btn btn-small u-hidden" id="btn-copy" title="Copy to clipboard">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                         Copy
                     </button>
-                    <button class="btn btn-small btn-primary" id="btn-download" style="display:none">
+                    <button class="btn btn-small btn-primary u-hidden" id="btn-download">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         Download
                     </button>
@@ -767,7 +318,7 @@
                     break;
             }
 
-            html += '<div class="input-hint" style="margin-top:8px;">For engagement-scoped reports, use the <a href="engagements.html" style="color:var(--accent);">Engagements</a> tab.</div>';
+            html += '<div class="input-hint mt-2">For engagement-scoped reports, use the <a href="engagements.html" class="text-accent">Engagements</a> tab.</div>';
 
             section.innerHTML = html;
 
@@ -925,7 +476,7 @@
                     </svg>
                     <h3>PDF Ready</h3>
                     <p>${lastFilename} (${size} KB)</p>
-                    <button class="btn btn-primary" onclick="downloadReport()" style="margin-top:8px">
+                    <button class="btn btn-primary mt-2" onclick="downloadReport()">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         Download PDF
                     </button>
