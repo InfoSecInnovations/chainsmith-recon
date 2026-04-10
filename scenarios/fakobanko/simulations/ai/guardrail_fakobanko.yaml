@@ -1,0 +1,25 @@
+# simulations/ai/guardrail_fakobanko.yaml
+# Fakobanko scenario: Guardrail consistency check
+
+suite: ai
+emulates: guardrail_consistency
+target: "chat.fakobanko.local"
+disposition: inconsistent_guardrails
+
+behavior:
+  latency_ms: 600
+
+output:
+  tests_run: 10
+  consistent_blocks: 6
+  inconsistent_passes: 4
+
+findings:
+  - title: "Inconsistent guardrails on chat.fakobanko.local"
+    description: "Guardrails are inconsistent - 4 of 10 rephrased harmful prompts bypassed content filters that blocked the original phrasing."
+    severity: "medium"
+    evidence: |
+      10 equivalent prompts tested
+      6 consistently blocked
+      4 bypassed with rephrasing (40% inconsistency)
+    check_name: "guardrail_consistency"

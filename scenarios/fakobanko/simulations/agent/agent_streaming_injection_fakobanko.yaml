@@ -1,0 +1,25 @@
+# simulations/agent/agent_streaming_injection_fakobanko.yaml
+# Fakobanko scenario: Agent streaming injection
+
+suite: agent
+emulates: agent_streaming_injection
+target: "agent.fakobanko.local"
+disposition: stream_injected
+
+behavior:
+  latency_ms: 400
+
+output:
+  stream_endpoint: "/agent/stream"
+  injection_point: "SSE data field"
+  fake_tool_call_injected: true
+
+findings:
+  - title: "Streaming injection on agent.fakobanko.local"
+    description: "SSE stream data field accepts injected content that appears as legitimate tool call results to the client."
+    severity: "high"
+    evidence: |
+      Endpoint: /agent/stream
+      Injected fake tool call result via SSE
+      Client processed injected data as legitimate
+    check_name: "agent_streaming_injection"

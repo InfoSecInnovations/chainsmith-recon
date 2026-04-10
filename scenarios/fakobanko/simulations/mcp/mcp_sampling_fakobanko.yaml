@@ -1,0 +1,25 @@
+# simulations/mcp/mcp_sampling_fakobanko.yaml
+# Fakobanko scenario: Sampling abuse
+
+suite: mcp
+emulates: sampling_abuse
+target: "mcp.fakobanko.local"
+disposition: sampling_abused
+
+behavior:
+  latency_ms: 400
+
+output:
+  sampling_enabled: true
+  human_in_loop: false
+  abused_for: "data exfiltration via sampling callback"
+
+findings:
+  - title: "MCP sampling abused for data exfiltration"
+    description: "Sampling capability has no human-in-the-loop, allowing server to exfiltrate data via crafted sampling requests."
+    severity: "high"
+    evidence: |
+      Sampling: enabled, no approval required
+      Server can craft sampling requests
+      Data exfiltration via sampling callback
+    check_name: "sampling_abuse"

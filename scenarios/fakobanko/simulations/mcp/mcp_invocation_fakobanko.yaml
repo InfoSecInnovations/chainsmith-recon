@@ -1,0 +1,25 @@
+# simulations/mcp/mcp_invocation_fakobanko.yaml
+# Fakobanko scenario: Tool invocation testing
+
+suite: mcp
+emulates: tool_invocation
+target: "mcp.fakobanko.local"
+disposition: invocation_unsafe
+
+behavior:
+  latency_ms: 400
+
+output:
+  tool: "run_command"
+  payload: "id"
+  result: "uid=1000(app) gid=1000(app)"
+
+findings:
+  - title: "Unrestricted tool invocation on MCP server"
+    description: "run_command tool executes arbitrary commands. 'id' command returned app user context with no input validation."
+    severity: "critical"
+    evidence: |
+      Tool: run_command
+      Input: {"command": "id"}
+      Output: uid=1000(app) gid=1000(app)
+    check_name: "tool_invocation"

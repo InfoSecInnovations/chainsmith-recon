@@ -1,0 +1,23 @@
+# CAG cache poisoning — cache poisonable
+suite: cag
+emulates: cag_cache_poisoning
+target: "localhost"
+disposition: cache_poisoned
+
+behavior:
+  latency_ms: 300
+
+output:
+  host: "localhost:8205"
+  poisoned: true
+  affected_queries: 12
+
+findings:
+  - title: "Semantic cache poisoning successful"
+    description: "The cache on port 8205 can be poisoned by injecting malicious responses that are served to subsequent users."
+    severity: "high"
+    evidence: |
+      Injected malicious response for common query pattern.
+      12 subsequent semantically similar queries returned the
+      poisoned response instead of legitimate answers.
+    check_name: "cag_cache_poisoning"

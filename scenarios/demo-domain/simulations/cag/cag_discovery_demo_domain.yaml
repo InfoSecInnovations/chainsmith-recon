@@ -1,0 +1,22 @@
+# CAG discovery — cache found on 8205
+suite: cag
+emulates: cag_discovery
+target: "localhost"
+disposition: cache_found
+
+behavior:
+  latency_ms: 150
+
+output:
+  host: "localhost:8205"
+  path: "/cache"
+  cache_type: "semantic"
+
+findings:
+  - title: "Semantic cache discovered"
+    description: "A semantic response cache is accessible on port 8205 without authentication."
+    severity: "medium"
+    evidence: |
+      GET localhost:8205/cache/stats => 200 OK
+      Cache type: semantic, entries: 247, hit_rate: 0.73
+    check_name: "cag_discovery"

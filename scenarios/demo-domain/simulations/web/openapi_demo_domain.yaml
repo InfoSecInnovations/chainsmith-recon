@@ -1,0 +1,31 @@
+# OpenAPI spec exposed on api and agent
+suite: web
+emulates: openapi_discovery
+target: "localhost"
+disposition: spec_exposed
+
+behavior:
+  latency_ms: 200
+
+output:
+  hosts:
+    - host: "localhost:8202"
+      path: "/openapi.json"
+      endpoints_count: 24
+    - host: "localhost:8203"
+      path: "/openapi.json"
+      endpoints_count: 12
+
+findings:
+  - title: "OpenAPI spec exposed on API (8202)"
+    description: "Full OpenAPI specification is publicly accessible on the REST API, revealing 24 endpoints."
+    severity: "low"
+    evidence: |
+      GET localhost:8202/openapi.json => 200 OK (24 endpoints)
+    check_name: "openapi_discovery"
+  - title: "OpenAPI spec exposed on agent (8203)"
+    description: "OpenAPI specification exposed on MCP agent server, revealing 12 endpoints."
+    severity: "low"
+    evidence: |
+      GET localhost:8203/openapi.json => 200 OK (12 endpoints)
+    check_name: "openapi_discovery"

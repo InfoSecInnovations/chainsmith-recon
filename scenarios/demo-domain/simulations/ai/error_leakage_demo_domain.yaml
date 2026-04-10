@@ -1,0 +1,23 @@
+# AI error leakage — internal URLs leaked
+suite: ai
+emulates: ai_error_leakage
+target: "localhost"
+disposition: internal_urls_leaked
+
+behavior:
+  latency_ms: 200
+
+output:
+  host: "localhost:8201"
+  leaked_urls:
+    - "http://localhost:8202/api/internal/users"
+    - "http://localhost:8204/rag/query"
+
+findings:
+  - title: "Internal URLs leaked via AI error messages"
+    description: "Error responses from the chat service on port 8201 reveal internal API and RAG URLs."
+    severity: "medium"
+    evidence: |
+      Error: "Failed to call http://localhost:8202/api/internal/users"
+      Error: "RAG backend unreachable at http://localhost:8204/rag/query"
+    check_name: "ai_error_leakage"

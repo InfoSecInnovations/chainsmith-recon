@@ -1,0 +1,27 @@
+# Robots.txt reveals sensitive paths
+suite: web
+emulates: robots_txt
+target: "localhost"
+disposition: sensitive_paths
+
+behavior:
+  latency_ms: 100
+
+output:
+  host: "localhost:8200"
+  disallowed_paths:
+    - /admin/
+    - /api/internal/
+    - /.env
+    - /debug/
+
+findings:
+  - title: "Robots.txt exposes sensitive paths"
+    description: "The robots.txt on port 8200 discloses internal paths including admin, internal API, and debug endpoints."
+    severity: "low"
+    evidence: |
+      Disallow: /admin/
+      Disallow: /api/internal/
+      Disallow: /.env
+      Disallow: /debug/
+    check_name: "robots_txt"

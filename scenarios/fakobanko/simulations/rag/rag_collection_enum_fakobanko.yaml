@@ -1,0 +1,28 @@
+# simulations/rag/rag_collection_enum_fakobanko.yaml
+# Fakobanko scenario: Collection enumeration
+
+suite: rag
+emulates: rag_collection_enum
+target: "vector.fakobanko.local"
+disposition: collections_listed
+
+behavior:
+  latency_ms: 250
+
+output:
+  collections:
+    - {name: "public_docs", documents: 3200}
+    - {name: "internal_policies", documents: 1450}
+    - {name: "customer_data", documents: 5800}
+    - {name: "compliance", documents: 1200}
+    - {name: "hr_documents", documents: 800}
+
+findings:
+  - title: "5 RAG collections enumerated on vector.fakobanko.local"
+    description: "Collection listing reveals 5 collections including customer_data and hr_documents containing sensitive information."
+    severity: "medium"
+    evidence: |
+      Collections: public_docs, internal_policies,
+      customer_data, compliance, hr_documents
+      Sensitive: customer_data (5800 docs), hr_documents (800 docs)
+    check_name: "rag_collection_enum"

@@ -1,0 +1,25 @@
+# simulations/cag/cag_semantic_threshold_fakobanko.yaml
+# Fakobanko scenario: Semantic threshold analysis
+
+suite: cag
+emulates: cag_semantic_threshold
+target: "cache.fakobanko.local"
+disposition: threshold_mapped
+
+behavior:
+  latency_ms: 400
+
+output:
+  similarity_threshold: 0.85
+  false_positive_rate: 0.12
+  exploitable: true
+
+findings:
+  - title: "Semantic threshold too permissive on cache.fakobanko.local"
+    description: "Cache similarity threshold of 0.85 produces 12% false positive rate. Semantically different queries return incorrect cached responses."
+    severity: "medium"
+    evidence: |
+      Similarity threshold: 0.85
+      False positive rate: 12%
+      Different queries match cached responses
+    check_name: "cag_semantic_threshold"

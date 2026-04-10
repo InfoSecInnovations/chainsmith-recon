@@ -1,0 +1,26 @@
+# simulations/rag/rag_vector_store_fakobanko.yaml
+# Fakobanko scenario: Vector store analysis
+
+suite: rag
+emulates: rag_vector_store
+target: "vector.fakobanko.local"
+disposition: store_exposed
+
+behavior:
+  latency_ms: 300
+
+output:
+  vector_db: "ChromaDB"
+  version: "0.4.22"
+  collections: 5
+  total_documents: 12450
+
+findings:
+  - title: "ChromaDB vector store exposed on vector.fakobanko.local"
+    description: "ChromaDB 0.4.22 with 5 collections and 12,450 documents. Direct API access to vector store without authentication."
+    severity: "medium"
+    evidence: |
+      ChromaDB 0.4.22
+      Collections: 5, Documents: 12,450
+      Direct API access enabled
+    check_name: "rag_vector_store"

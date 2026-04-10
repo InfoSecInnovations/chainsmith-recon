@@ -1,0 +1,28 @@
+# simulations/network/banner_grab_fakobanko.yaml
+# Fakobanko scenario: Banner grabbing reveals server versions
+
+suite: network
+emulates: banner_grab
+target: "fakobanko.local"
+disposition: banners_found
+
+behavior:
+  latency_ms: 400
+
+output:
+  banners:
+    - {host: "www.fakobanko.local", port: 443, banner: "nginx/1.25.3"}
+    - {host: "api.fakobanko.local", port: 8080, banner: "uvicorn/0.27.0 (Python/3.11.7)"}
+    - {host: "chat.fakobanko.local", port: 8081, banner: "uvicorn/0.27.0 LangChain/0.1.4"}
+    - {host: "admin.fakobanko.local", port: 443, banner: "nginx/1.25.3 PHP/8.2.0"}
+
+findings:
+  - title: "Server banners expose version information"
+    description: "Banner grabbing revealed detailed software versions including Python, LangChain, and PHP versions across multiple hosts."
+    severity: "low"
+    evidence: |
+      www.fakobanko.local:443 - nginx/1.25.3
+      api.fakobanko.local:8080 - uvicorn/0.27.0 (Python/3.11.7)
+      chat.fakobanko.local:8081 - uvicorn/0.27.0 LangChain/0.1.4
+      admin.fakobanko.local:443 - nginx/1.25.3 PHP/8.2.0
+    check_name: "banner_grab"

@@ -1,0 +1,23 @@
+# CAG cache probe — timing differences found
+suite: cag
+emulates: cag_cache_probe
+target: "localhost"
+disposition: timing_leak
+
+behavior:
+  latency_ms: 100
+
+output:
+  host: "localhost:8205"
+  cache_hit_ms: 12
+  cache_miss_ms: 850
+
+findings:
+  - title: "Cache timing side-channel detected"
+    description: "The semantic cache on port 8205 shows significant timing differences between hits (12ms) and misses (850ms)."
+    severity: "low"
+    evidence: |
+      Cache hit: ~12ms response time
+      Cache miss: ~850ms response time
+      Timing difference enables query existence inference.
+    check_name: "cag_cache_probe"

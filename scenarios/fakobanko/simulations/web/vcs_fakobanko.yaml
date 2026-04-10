@@ -1,0 +1,27 @@
+# simulations/web/vcs_fakobanko.yaml
+# Fakobanko scenario: .git directory exposed
+
+suite: web
+emulates: vcs_exposure
+target: "docs.fakobanko.local"
+disposition: vcs_found
+
+behavior:
+  latency_ms: 250
+
+output:
+  git_exposed: true
+  accessible_paths:
+    - "/.git/HEAD"
+    - "/.git/config"
+  head_content: "ref: refs/heads/main"
+
+findings:
+  - title: ".git directory exposed on docs.fakobanko.local"
+    description: "The .git directory is publicly accessible, allowing source code reconstruction and potential credential extraction from commit history."
+    severity: "high"
+    evidence: |
+      /.git/HEAD - 200 OK (ref: refs/heads/main)
+      /.git/config - 200 OK
+      Full repository reconstruction possible
+    check_name: "vcs_exposure"

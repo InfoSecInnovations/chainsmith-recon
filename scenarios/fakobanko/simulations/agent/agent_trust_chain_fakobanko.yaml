@@ -1,0 +1,24 @@
+# simulations/agent/agent_trust_chain_fakobanko.yaml
+# Fakobanko scenario: Agent trust chain analysis
+
+suite: agent
+emulates: agent_trust_chain
+target: "agent.fakobanko.local"
+disposition: trust_broken
+
+behavior:
+  latency_ms: 500
+
+output:
+  trust_chain: ["user", "router", "banking", "database"]
+  weakest_link: "router -> banking (no auth)"
+
+findings:
+  - title: "Broken trust chain in agent system"
+    description: "No authentication between router and banking agents. Any agent can invoke banking operations without identity verification."
+    severity: "high"
+    evidence: |
+      Chain: user -> router -> banking -> database
+      Weak link: router -> banking (no auth)
+      Banking agent trusts all callers
+    check_name: "agent_trust_chain"

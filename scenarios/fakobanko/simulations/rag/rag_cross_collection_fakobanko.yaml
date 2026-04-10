@@ -1,0 +1,25 @@
+# simulations/rag/rag_cross_collection_fakobanko.yaml
+# Fakobanko scenario: Cross-collection access
+
+suite: rag
+emulates: rag_cross_collection
+target: "vector.fakobanko.local"
+disposition: cross_access
+
+behavior:
+  latency_ms: 350
+
+output:
+  source_collection: "public_docs"
+  accessed_collection: "internal_policies"
+  isolation_broken: true
+
+findings:
+  - title: "Cross-collection access on vector.fakobanko.local"
+    description: "Queries against public_docs collection can retrieve results from internal_policies collection. No collection-level access control."
+    severity: "high"
+    evidence: |
+      Query to: public_docs
+      Results from: internal_policies
+      Collection isolation: not enforced
+    check_name: "rag_cross_collection"

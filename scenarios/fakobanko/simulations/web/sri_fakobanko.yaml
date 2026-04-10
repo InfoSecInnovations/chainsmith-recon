@@ -1,0 +1,27 @@
+# simulations/web/sri_fakobanko.yaml
+# Fakobanko scenario: Missing SRI on scripts
+
+suite: web
+emulates: sri_check
+target: "www.fakobanko.local"
+disposition: missing_sri
+
+behavior:
+  latency_ms: 200
+
+output:
+  scripts_without_sri:
+    - "https://cdn.jsdelivr.net/npm/vue@3.4.0/dist/vue.global.min.js"
+    - "https://unpkg.com/axios/dist/axios.min.js"
+  total_external_scripts: 4
+  scripts_with_sri: 2
+
+findings:
+  - title: "Missing SRI on external scripts at www.fakobanko.local"
+    description: "2 of 4 external scripts lack Subresource Integrity hashes, risking supply-chain attacks via CDN compromise."
+    severity: "medium"
+    evidence: |
+      Missing SRI:
+        - cdn.jsdelivr.net/npm/vue@3.4.0 (no integrity attr)
+        - unpkg.com/axios (no integrity attr)
+    check_name: "sri_check"

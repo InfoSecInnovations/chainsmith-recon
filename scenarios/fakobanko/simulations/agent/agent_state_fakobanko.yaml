@@ -1,0 +1,25 @@
+# simulations/agent/agent_state_fakobanko.yaml
+# Fakobanko scenario: Agent state manipulation
+
+suite: agent
+emulates: agent_state
+target: "agent.fakobanko.local"
+disposition: state_manipulated
+
+behavior:
+  latency_ms: 400
+
+output:
+  state_endpoint: "/agent/state"
+  writable: true
+  modified_field: "user_role"
+
+findings:
+  - title: "Agent state writable on agent.fakobanko.local"
+    description: "Agent state endpoint accepts modifications. User role field was changed from 'user' to 'admin' via direct state manipulation."
+    severity: "critical"
+    evidence: |
+      GET /agent/state - 200 OK (readable)
+      PUT /agent/state - 200 OK (writable)
+      Modified: user_role = "admin"
+    check_name: "agent_state"

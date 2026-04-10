@@ -1,0 +1,24 @@
+# simulations/web/redirect_fakobanko.yaml
+# Fakobanko scenario: Open redirect vulnerability
+
+suite: web
+emulates: redirect_chain
+target: "www.fakobanko.local"
+disposition: open_redirect
+
+behavior:
+  latency_ms: 250
+
+output:
+  vulnerable_param: "next"
+  vulnerable_url: "https://www.fakobanko.local/login?next=https://evil.com"
+  redirects_to: "https://evil.com"
+
+findings:
+  - title: "Open redirect on www.fakobanko.local"
+    description: "The login page accepts arbitrary URLs in the 'next' parameter, enabling phishing via trusted domain redirect."
+    severity: "medium"
+    evidence: |
+      /login?next=https://evil.com -> 302 -> https://evil.com
+      Parameter: next (no validation)
+    check_name: "redirect_chain"

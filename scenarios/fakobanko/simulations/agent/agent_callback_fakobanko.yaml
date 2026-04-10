@@ -1,0 +1,24 @@
+# simulations/agent/agent_callback_fakobanko.yaml
+# Fakobanko scenario: Agent callback injection
+
+suite: agent
+emulates: agent_callback
+target: "agent.fakobanko.local"
+disposition: callback_injected
+
+behavior:
+  latency_ms: 400
+
+output:
+  callback_url: "https://attacker.com/exfil"
+  data_sent: true
+  callback_type: "webhook"
+
+findings:
+  - title: "Agent callback injection on agent.fakobanko.local"
+    description: "Agent was tricked into sending data to an external webhook URL via prompt injection in the callback parameter."
+    severity: "high"
+    evidence: |
+      Injected callback: https://attacker.com/exfil
+      Agent sent conversation data to external URL
+    check_name: "agent_callback"

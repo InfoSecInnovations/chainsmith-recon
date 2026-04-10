@@ -1,0 +1,22 @@
+# Config exposure — .env accessible on www
+suite: web
+emulates: config_exposure
+target: "localhost"
+disposition: config_exposed
+
+behavior:
+  latency_ms: 100
+
+output:
+  host: "localhost:8200"
+  path: "/.env"
+  status_code: 200
+
+findings:
+  - title: "Environment file accessible on helpdesk portal"
+    description: "The .env file is publicly accessible on port 8200, potentially exposing secrets."
+    severity: "high"
+    evidence: |
+      GET localhost:8200/.env => 200 OK
+      Contents include: DATABASE_URL, SECRET_KEY, OPENAI_API_KEY
+    check_name: "config_exposure"

@@ -1,0 +1,25 @@
+# simulations/cag/cag_stale_context_fakobanko.yaml
+# Fakobanko scenario: Stale context exploitation
+
+suite: cag
+emulates: cag_stale_context
+target: "cache.fakobanko.local"
+disposition: stale_context
+
+behavior:
+  latency_ms: 300
+
+output:
+  stale_entries: 15
+  max_age_hours: 24
+  outdated_data_served: true
+
+findings:
+  - title: "Stale cached responses on cache.fakobanko.local"
+    description: "15 cached entries contain outdated information up to 24 hours old. Users receive stale account data and policy information."
+    severity: "medium"
+    evidence: |
+      Stale entries: 15
+      Maximum age: 24 hours
+      Outdated account data served to users
+    check_name: "cag_stale_context"

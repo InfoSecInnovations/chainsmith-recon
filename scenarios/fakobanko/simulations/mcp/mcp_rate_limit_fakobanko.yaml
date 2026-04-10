@@ -1,0 +1,25 @@
+# simulations/mcp/mcp_rate_limit_fakobanko.yaml
+# Fakobanko scenario: No tool rate limiting
+
+suite: mcp
+emulates: tool_rate_limit
+target: "mcp.fakobanko.local"
+disposition: no_rate_limit
+
+behavior:
+  latency_ms: 400
+
+output:
+  rate_limited: false
+  calls_sent: 50
+  calls_succeeded: 50
+
+findings:
+  - title: "No rate limiting on MCP tool calls"
+    description: "50 rapid tool invocations all succeeded. No per-tool or per-session rate limiting is enforced."
+    severity: "medium"
+    evidence: |
+      50/50 tool calls succeeded
+      No throttling or backoff
+      No per-session limits
+    check_name: "tool_rate_limit"

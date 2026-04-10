@@ -1,0 +1,26 @@
+# simulations/web/debug_endpoints_fakobanko.yaml
+# Fakobanko scenario: Debug endpoints accessible
+
+suite: web
+emulates: debug_endpoints
+target: "api.fakobanko.local"
+disposition: debug_found
+
+behavior:
+  latency_ms: 200
+
+output:
+  debug_paths:
+    - {path: "/debug", status: 200}
+    - {path: "/debug/vars", status: 200}
+    - {path: "/debug/pprof", status: 200}
+
+findings:
+  - title: "Debug endpoints accessible on api.fakobanko.local"
+    description: "Debug endpoints are publicly accessible, exposing internal variables, profiling data, and application state."
+    severity: "high"
+    evidence: |
+      /debug - 200 OK
+      /debug/vars - 200 OK (internal variables)
+      /debug/pprof - 200 OK (profiling)
+    check_name: "debug_endpoints"

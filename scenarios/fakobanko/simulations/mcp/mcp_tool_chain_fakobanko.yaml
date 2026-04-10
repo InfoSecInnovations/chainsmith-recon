@@ -1,0 +1,24 @@
+# simulations/mcp/mcp_tool_chain_fakobanko.yaml
+# Fakobanko scenario: Tool chain analysis
+
+suite: mcp
+emulates: tool_chain_analysis
+target: "mcp.fakobanko.local"
+disposition: chain_exploitable
+
+behavior:
+  latency_ms: 500
+
+output:
+  chain: ["query_accounts", "read_file", "run_command"]
+  escalation_possible: true
+
+findings:
+  - title: "Tool chain escalation possible on MCP server"
+    description: "Tools can be chained: query_accounts to find targets, read_file for data access, run_command for execution. No inter-tool authorization."
+    severity: "critical"
+    evidence: |
+      Chain: query_accounts -> read_file -> run_command
+      No authorization between tool calls
+      Full escalation from data query to shell
+    check_name: "tool_chain_analysis"

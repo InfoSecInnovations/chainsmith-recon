@@ -1,0 +1,29 @@
+# CORS check — wildcard CORS on api and chat
+suite: web
+emulates: cors_check
+target: "localhost"
+disposition: cors_wildcard
+
+behavior:
+  latency_ms: 150
+
+output:
+  hosts:
+    - host: "localhost:8202"
+      access_control_allow_origin: "*"
+    - host: "localhost:8201"
+      access_control_allow_origin: "*"
+
+findings:
+  - title: "Wildcard CORS on API (8202)"
+    description: "The REST API returns Access-Control-Allow-Origin: * allowing any origin."
+    severity: "medium"
+    evidence: |
+      GET localhost:8202 => Access-Control-Allow-Origin: *
+    check_name: "cors_check"
+  - title: "Wildcard CORS on chat (8201)"
+    description: "The AI chat service returns Access-Control-Allow-Origin: * allowing cross-origin requests."
+    severity: "medium"
+    evidence: |
+      GET localhost:8201 => Access-Control-Allow-Origin: *
+    check_name: "cors_check"

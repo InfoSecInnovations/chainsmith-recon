@@ -1,0 +1,25 @@
+# simulations/rag/rag_embedding_fingerprint_fakobanko.yaml
+# Fakobanko scenario: Embedding model fingerprint
+
+suite: rag
+emulates: rag_embedding_fingerprint
+target: "vector.fakobanko.local"
+disposition: model_identified
+
+behavior:
+  latency_ms: 400
+
+output:
+  embedding_model: "text-embedding-ada-002"
+  dimensions: 1536
+  provider: "openai"
+
+findings:
+  - title: "Embedding model fingerprinted on vector.fakobanko.local"
+    description: "Embedding model identified as text-embedding-ada-002 (1536 dimensions) via dimension analysis and response characteristics."
+    severity: "info"
+    evidence: |
+      Model: text-embedding-ada-002
+      Dimensions: 1536
+      Provider: OpenAI
+    check_name: "rag_embedding_fingerprint"

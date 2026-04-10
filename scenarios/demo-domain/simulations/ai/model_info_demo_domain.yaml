@@ -1,0 +1,23 @@
+# Model info check — model metadata exposed
+suite: ai
+emulates: model_info_check
+target: "localhost"
+disposition: model_exposed
+
+behavior:
+  latency_ms: 200
+
+output:
+  host: "localhost:8201"
+  model_name: "gpt-4o-mini"
+  temperature: 0.7
+  max_tokens: 4096
+
+findings:
+  - title: "Model metadata exposed on chat service"
+    description: "The chat service on port 8201 reveals model name, temperature, and token limits."
+    severity: "low"
+    evidence: |
+      Model: gpt-4o-mini, temperature: 0.7, max_tokens: 4096
+      Extracted via: error response / model info endpoint
+    check_name: "model_info_check"

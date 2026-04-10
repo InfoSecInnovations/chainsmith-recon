@@ -1,0 +1,25 @@
+# simulations/mcp/mcp_prompt_injection_fakobanko.yaml
+# Fakobanko scenario: MCP prompt injection
+
+suite: mcp
+emulates: prompt_injection
+target: "mcp.fakobanko.local"
+disposition: injection_success
+
+behavior:
+  latency_ms: 500
+
+output:
+  technique: "tool_description_injection"
+  injected_via: "tool description field"
+  obeyed: true
+
+findings:
+  - title: "Prompt injection via MCP tool descriptions"
+    description: "Malicious instructions embedded in tool description fields are executed by connected LLM clients."
+    severity: "critical"
+    evidence: |
+      Injection point: tool description field
+      Technique: tool_description_injection
+      LLM client obeyed injected instructions
+    check_name: "prompt_injection"

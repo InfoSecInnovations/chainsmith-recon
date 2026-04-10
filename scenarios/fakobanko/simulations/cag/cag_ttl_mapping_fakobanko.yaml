@@ -1,0 +1,26 @@
+# simulations/cag/cag_ttl_mapping_fakobanko.yaml
+# Fakobanko scenario: TTL mapping
+
+suite: cag
+emulates: cag_ttl_mapping
+target: "cache.fakobanko.local"
+disposition: ttl_mapped
+
+behavior:
+  latency_ms: 300
+
+output:
+  ttl_values:
+    - {category: "general", ttl_seconds: 3600}
+    - {category: "account", ttl_seconds: 300}
+    - {category: "auth", ttl_seconds: 60}
+
+findings:
+  - title: "Cache TTL values mapped on cache.fakobanko.local"
+    description: "TTL mapping reveals cache durations: general (1h), account (5min), auth (1min). Timing reveals query categorization logic."
+    severity: "low"
+    evidence: |
+      General queries: 3600s TTL
+      Account queries: 300s TTL
+      Auth queries: 60s TTL
+    check_name: "cag_ttl_mapping"

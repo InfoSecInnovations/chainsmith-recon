@@ -1,0 +1,22 @@
+# RAG source attribution — sources spoofable
+suite: rag
+emulates: rag_source_attribution
+target: "localhost"
+disposition: sources_spoofable
+
+behavior:
+  latency_ms: 300
+
+output:
+  host: "localhost:8204"
+  spoofable: true
+  fake_source: "Official IT Policy v3.2"
+
+findings:
+  - title: "RAG source attribution spoofable"
+    description: "The RAG on port 8204 does not validate document sources, allowing injected docs to impersonate official sources."
+    severity: "medium"
+    evidence: |
+      Uploaded document with metadata source: "Official IT Policy v3.2"
+      RAG cited the poisoned doc as an official policy in responses.
+    check_name: "rag_source_attribution"

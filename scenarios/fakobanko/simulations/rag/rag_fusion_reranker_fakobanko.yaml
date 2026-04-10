@@ -1,0 +1,25 @@
+# simulations/rag/rag_fusion_reranker_fakobanko.yaml
+# Fakobanko scenario: Fusion/reranker analysis
+
+suite: rag
+emulates: rag_fusion_reranker
+target: "vector.fakobanko.local"
+disposition: reranker_detected
+
+behavior:
+  latency_ms: 400
+
+output:
+  reranker: "cohere-rerank-v3"
+  fusion_strategy: "reciprocal_rank"
+  manipulable: true
+
+findings:
+  - title: "Reranker detected and manipulable on vector.fakobanko.local"
+    description: "Cohere reranker with reciprocal rank fusion detected. Ranking can be manipulated by crafting documents that score high on reranking criteria."
+    severity: "medium"
+    evidence: |
+      Reranker: cohere-rerank-v3
+      Fusion: reciprocal rank
+      Ranking manipulation possible
+    check_name: "rag_fusion_reranker"

@@ -1,0 +1,24 @@
+# simulations/ai/model_fingerprint_fakobanko.yaml
+# Fakobanko scenario: Model fingerprinting
+
+suite: ai
+emulates: model_fingerprint
+target: "chat.fakobanko.local"
+disposition: model_identified
+
+behavior:
+  latency_ms: 600
+
+output:
+  model: "gpt-4-turbo-2024-04-09"
+  confidence: 0.92
+  techniques: ["token_probability", "response_style"]
+
+findings:
+  - title: "Model fingerprinted as gpt-4-turbo on chat.fakobanko.local"
+    description: "Model fingerprinting via token probability analysis and response style matching identified gpt-4-turbo-2024-04-09 with 92% confidence."
+    severity: "low"
+    evidence: |
+      Model: gpt-4-turbo-2024-04-09 (92% confidence)
+      Techniques: token probability, response style
+    check_name: "model_fingerprint"

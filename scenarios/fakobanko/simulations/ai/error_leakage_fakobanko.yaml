@@ -1,0 +1,25 @@
+# simulations/ai/error_leakage_fakobanko.yaml
+# Fakobanko scenario: AI error messages leak internal info
+
+suite: ai
+emulates: ai_error_leakage
+target: "chat.fakobanko.local"
+disposition: error_leak
+
+behavior:
+  latency_ms: 300
+
+output:
+  errors:
+    - {trigger: "invalid JSON", reveals: "LangChain traceback with API key prefix"}
+    - {trigger: "token overflow", reveals: "model config and token limits"}
+
+findings:
+  - title: "AI error messages leak internal details on chat.fakobanko.local"
+    description: "Malformed requests produce LangChain tracebacks exposing API key prefixes and model configuration details."
+    severity: "medium"
+    evidence: |
+      Invalid JSON -> LangChain traceback
+      Reveals: sk-proj-abc... (API key prefix)
+      Token overflow -> model config exposed
+    check_name: "ai_error_leakage"

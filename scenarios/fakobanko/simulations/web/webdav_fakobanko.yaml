@@ -1,0 +1,28 @@
+# simulations/web/webdav_fakobanko.yaml
+# Fakobanko scenario: WebDAV methods available
+
+suite: web
+emulates: webdav
+target: "docs.fakobanko.local"
+disposition: webdav_found
+
+behavior:
+  latency_ms: 250
+
+output:
+  webdav_methods:
+    - "PROPFIND"
+    - "PROPPATCH"
+    - "MKCOL"
+    - "COPY"
+    - "MOVE"
+
+findings:
+  - title: "WebDAV methods enabled on docs.fakobanko.local"
+    description: "WebDAV methods (PROPFIND, MKCOL, COPY, MOVE) are enabled, potentially allowing file manipulation and directory creation."
+    severity: "medium"
+    evidence: |
+      PROPFIND / - 207 Multi-Status
+      MKCOL /test/ - 201 Created
+      WebDAV write access confirmed
+    check_name: "webdav"

@@ -1,0 +1,25 @@
+# simulations/mcp/mcp_notification_fakobanko.yaml
+# Fakobanko scenario: Notification injection
+
+suite: mcp
+emulates: notification_injection
+target: "mcp.fakobanko.local"
+disposition: injection_possible
+
+behavior:
+  latency_ms: 350
+
+output:
+  injected_notification: "tools/list_changed"
+  accepted: true
+  side_effect: "client re-fetched tool list"
+
+findings:
+  - title: "Notification injection on MCP server"
+    description: "Injected tools/list_changed notification accepted by server, causing connected clients to re-fetch potentially poisoned tool lists."
+    severity: "medium"
+    evidence: |
+      Injected: tools/list_changed notification
+      Server accepted forged notification
+      Clients re-fetched tool list
+    check_name: "notification_injection"

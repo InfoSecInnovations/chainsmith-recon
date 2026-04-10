@@ -1,0 +1,25 @@
+# simulations/cag/cag_serialization_fakobanko.yaml
+# Fakobanko scenario: Cache serialization attack
+
+suite: cag
+emulates: cag_serialization
+target: "cache.fakobanko.local"
+disposition: deserialization_vuln
+
+behavior:
+  latency_ms: 400
+
+output:
+  serialization: "pickle"
+  deserialization_attack: true
+  rce_possible: true
+
+findings:
+  - title: "Unsafe pickle deserialization in cache on cache.fakobanko.local"
+    description: "Cache uses Python pickle serialization. Crafted cache entries can achieve remote code execution via pickle deserialization."
+    severity: "critical"
+    evidence: |
+      Serialization: Python pickle
+      Deserialization attack: successful
+      RCE via crafted pickle payload
+    check_name: "cag_serialization"

@@ -1,0 +1,26 @@
+# simulations/agent/agent_reflection_fakobanko.yaml
+# Fakobanko scenario: Agent reflection/introspection
+
+suite: agent
+emulates: agent_reflection
+target: "agent.fakobanko.local"
+disposition: reflection_exposed
+
+behavior:
+  latency_ms: 400
+
+output:
+  reflection_enabled: true
+  exposed_info:
+    - "system prompt"
+    - "tool list"
+    - "agent graph structure"
+
+findings:
+  - title: "Agent reflection exposes internals on agent.fakobanko.local"
+    description: "Agent reflection capability reveals system prompt, full tool list, and LangGraph node/edge structure."
+    severity: "medium"
+    evidence: |
+      Reflection exposes: system prompt, tools, graph
+      Agent describes its own architecture on request
+    check_name: "agent_reflection"

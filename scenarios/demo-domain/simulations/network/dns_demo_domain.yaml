@@ -1,0 +1,34 @@
+# DNS enumeration discovers 7 services on localhost
+suite: network
+emulates: dns_enumeration
+target: "localhost"
+disposition: hosts_found
+
+behavior:
+  latency_ms: 200
+
+output:
+  base_domain: localhost
+  target_hosts:
+    - "localhost:8200"
+    - "localhost:8201"
+    - "localhost:8202"
+    - "localhost:8203"
+    - "localhost:8204"
+    - "localhost:8205"
+    - "localhost:8206"
+
+findings:
+  - title: "DNS enumeration: 7 services discovered"
+    description: "Port scan discovered 7 services on localhost (8200-8206) including helpdesk, AI chat, REST API, MCP agent, RAG, semantic cache, and docs portal."
+    severity: "info"
+    evidence: |
+      Discovered services:
+        - localhost:8200 (www - helpdesk portal)
+        - localhost:8201 (chat - AI assistant)
+        - localhost:8202 (api - REST API)
+        - localhost:8203 (agent - MCP server)
+        - localhost:8204 (rag - knowledge base)
+        - localhost:8205 (cache - semantic cache)
+        - localhost:8206 (docs - documentation portal)
+    check_name: "dns_enumeration"

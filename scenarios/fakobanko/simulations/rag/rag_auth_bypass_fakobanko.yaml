@@ -1,0 +1,25 @@
+# simulations/rag/rag_auth_bypass_fakobanko.yaml
+# Fakobanko scenario: RAG auth bypass
+
+suite: rag
+emulates: rag_auth_bypass
+target: "vector.fakobanko.local"
+disposition: auth_bypassed
+
+behavior:
+  latency_ms: 300
+
+output:
+  auth_required: false
+  direct_api_access: true
+  collections_accessible: 5
+
+findings:
+  - title: "No authentication on RAG API"
+    description: "Vector store API accepts unauthenticated requests. All 5 collections accessible without credentials."
+    severity: "critical"
+    evidence: |
+      /api/search - no auth required
+      /api/collections - no auth required
+      All 5 collections accessible
+    check_name: "rag_auth_bypass"

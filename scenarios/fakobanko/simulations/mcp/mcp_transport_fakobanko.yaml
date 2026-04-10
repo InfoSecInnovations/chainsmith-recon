@@ -1,0 +1,26 @@
+# simulations/mcp/mcp_transport_fakobanko.yaml
+# Fakobanko scenario: Transport security check
+
+suite: mcp
+emulates: transport_security
+target: "mcp.fakobanko.local"
+disposition: transport_weak
+
+behavior:
+  latency_ms: 250
+
+output:
+  tls_version: "TLSv1.2"
+  supports_stdio: true
+  supports_sse: true
+  plaintext_fallback: true
+
+findings:
+  - title: "MCP transport allows plaintext fallback"
+    description: "MCP server accepts both WSS and WS connections. Plaintext WebSocket fallback enables traffic interception."
+    severity: "high"
+    evidence: |
+      WSS: supported (TLSv1.2)
+      WS (plaintext): accepted as fallback
+      stdio transport: enabled
+    check_name: "transport_security"

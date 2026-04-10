@@ -1,0 +1,26 @@
+# simulations/web/cors_fakobanko.yaml
+# Fakobanko scenario: CORS reflects arbitrary origin
+
+suite: web
+emulates: cors_check
+target: "api.fakobanko.local"
+disposition: cors_misconfigured
+
+behavior:
+  latency_ms: 200
+
+output:
+  origin_sent: "https://evil.com"
+  acao_header: "https://evil.com"
+  acac_header: "true"
+  reflects_origin: true
+
+findings:
+  - title: "CORS reflects arbitrary origin on api.fakobanko.local"
+    description: "The API reflects any Origin header in Access-Control-Allow-Origin with credentials allowed, enabling cross-origin data theft."
+    severity: "high"
+    evidence: |
+      Request Origin: https://evil.com
+      ACAO: https://evil.com (reflected)
+      Access-Control-Allow-Credentials: true
+    check_name: "cors_check"

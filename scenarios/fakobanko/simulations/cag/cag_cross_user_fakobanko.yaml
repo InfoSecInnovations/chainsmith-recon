@@ -1,0 +1,25 @@
+# simulations/cag/cag_cross_user_fakobanko.yaml
+# Fakobanko scenario: Cross-user cache access
+
+suite: cag
+emulates: cag_cross_user
+target: "cache.fakobanko.local"
+disposition: cross_user_leak
+
+behavior:
+  latency_ms: 350
+
+output:
+  user_a_query: "my account balance"
+  user_b_received: "user_a account data"
+  isolation: false
+
+findings:
+  - title: "Cross-user cache leak on cache.fakobanko.local"
+    description: "Cache entries are shared across users. User B received User A's cached account balance response for semantically similar query."
+    severity: "critical"
+    evidence: |
+      User A query cached: "my account balance"
+      User B similar query: received User A's data
+      No per-user cache isolation
+    check_name: "cag_cross_user"

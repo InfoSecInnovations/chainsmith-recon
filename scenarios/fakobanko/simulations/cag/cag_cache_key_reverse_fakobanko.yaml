@@ -1,0 +1,25 @@
+# simulations/cag/cag_cache_key_reverse_fakobanko.yaml
+# Fakobanko scenario: Cache key reverse engineering
+
+suite: cag
+emulates: cag_cache_key_reverse
+target: "cache.fakobanko.local"
+disposition: keys_reversed
+
+behavior:
+  latency_ms: 400
+
+output:
+  key_format: "sha256(embedding_vector)"
+  predictable: true
+  keys_recovered: 25
+
+findings:
+  - title: "Cache keys reverse-engineered on cache.fakobanko.local"
+    description: "Cache keys use SHA256 of embedding vectors. With known embedding model, keys are predictable and 25 were recovered."
+    severity: "medium"
+    evidence: |
+      Key format: SHA256(embedding_vector)
+      Embedding model known: text-embedding-ada-002
+      25 cache keys recovered
+    check_name: "cag_cache_key_reverse"

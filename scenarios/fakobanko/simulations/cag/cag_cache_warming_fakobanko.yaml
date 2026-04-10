@@ -1,0 +1,25 @@
+# simulations/cag/cag_cache_warming_fakobanko.yaml
+# Fakobanko scenario: Cache warming attack
+
+suite: cag
+emulates: cag_cache_warming
+target: "cache.fakobanko.local"
+disposition: cache_warmed
+
+behavior:
+  latency_ms: 500
+
+output:
+  queries_submitted: 200
+  cache_filled_pct: 85
+  legitimate_entries_evicted: 120
+
+findings:
+  - title: "Cache warming attack on cache.fakobanko.local"
+    description: "200 attacker queries filled 85% of cache, evicting 120 legitimate entries. Attacker controls majority of cached responses."
+    severity: "high"
+    evidence: |
+      Attacker queries: 200
+      Cache filled: 85%
+      Legitimate entries evicted: 120
+    check_name: "cag_cache_warming"

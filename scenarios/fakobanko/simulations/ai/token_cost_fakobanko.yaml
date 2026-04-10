@@ -1,0 +1,25 @@
+# simulations/ai/token_cost_fakobanko.yaml
+# Fakobanko scenario: Token cost exhaustion possible
+
+suite: ai
+emulates: token_cost_exhaustion
+target: "chat.fakobanko.local"
+disposition: cost_vulnerable
+
+behavior:
+  latency_ms: 500
+
+output:
+  max_tokens_accepted: 128000
+  no_token_limit_enforcement: true
+  estimated_cost_per_request: "$0.12"
+
+findings:
+  - title: "Token cost exhaustion possible on chat.fakobanko.local"
+    description: "No token limit enforcement allows requests with 128K tokens, enabling denial-of-wallet attacks at ~$0.12 per request."
+    severity: "high"
+    evidence: |
+      Max tokens accepted: 128000 (no cap)
+      No per-user token budget
+      Estimated cost per max request: $0.12
+    check_name: "token_cost_exhaustion"

@@ -1,0 +1,27 @@
+# simulations/ai/tools_fakobanko.yaml
+# Fakobanko scenario: Tool/function calling capabilities discovered
+
+suite: ai
+emulates: tool_discovery
+target: "chat.fakobanko.local"
+disposition: tools_found
+
+behavior:
+  latency_ms: 400
+
+output:
+  tools:
+    - {name: "get_balance", description: "Get account balance"}
+    - {name: "transfer_funds", description: "Transfer money between accounts"}
+    - {name: "search_transactions", description: "Search transaction history"}
+    - {name: "execute_sql", description: "Run database query"}
+
+findings:
+  - title: "4 tools discovered on chat.fakobanko.local including execute_sql"
+    description: "Tool enumeration revealed 4 function-calling tools including a dangerous execute_sql tool allowing direct database queries."
+    severity: "high"
+    evidence: |
+      Tools: get_balance, transfer_funds,
+      search_transactions, execute_sql
+      execute_sql allows arbitrary database queries
+    check_name: "tool_discovery"

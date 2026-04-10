@@ -1,0 +1,28 @@
+# HTTP method enumeration — extra methods on API
+suite: network
+emulates: http_method_enum
+target: "localhost"
+disposition: extra_methods
+
+behavior:
+  latency_ms: 200
+
+output:
+  host: "localhost:8202"
+  allowed_methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - PATCH
+    - OPTIONS
+    - TRACE
+
+findings:
+  - title: "Dangerous HTTP methods enabled on API"
+    description: "The REST API on port 8202 accepts TRACE and other potentially dangerous HTTP methods."
+    severity: "low"
+    evidence: |
+      localhost:8202 allows: GET, POST, PUT, DELETE, PATCH, OPTIONS, TRACE
+      TRACE method can enable cross-site tracing (XST) attacks.
+    check_name: "http_method_enum"

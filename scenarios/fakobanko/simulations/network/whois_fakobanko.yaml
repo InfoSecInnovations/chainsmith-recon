@@ -1,0 +1,30 @@
+# simulations/network/whois_fakobanko.yaml
+# Fakobanko scenario: WHOIS lookup reveals registration info
+
+suite: network
+emulates: whois_lookup
+target: "fakobanko.local"
+disposition: registration_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  domain: "fakobanko.local"
+  registrar: "Internal DNS"
+  created: "2024-01-15"
+  updated: "2025-06-01"
+  nameservers:
+    - "ns1.fakobanko.local"
+    - "ns2.fakobanko.local"
+
+findings:
+  - title: "WHOIS data for fakobanko.local"
+    description: "Domain registered internally with two nameservers. Registration dates suggest recent deployment."
+    severity: "info"
+    evidence: |
+      Domain: fakobanko.local
+      Registrar: Internal DNS
+      Created: 2024-01-15
+      Nameservers: ns1.fakobanko.local, ns2.fakobanko.local
+    check_name: "whois_lookup"

@@ -1,0 +1,31 @@
+# simulations/web/headers_fakobanko.yaml
+# Fakobanko scenario: Missing security headers
+
+suite: web
+emulates: header_analysis
+target: "api.fakobanko.local"
+disposition: missing_headers
+
+behavior:
+  latency_ms: 200
+
+output:
+  present_headers:
+    - "Server: uvicorn"
+    - "Content-Type: application/json"
+  missing_headers:
+    - "X-Content-Type-Options"
+    - "X-Frame-Options"
+    - "Content-Security-Policy"
+    - "Strict-Transport-Security"
+    - "X-XSS-Protection"
+
+findings:
+  - title: "5 security headers missing on api.fakobanko.local"
+    description: "Critical security headers are absent including CSP, HSTS, and X-Frame-Options, leaving the application vulnerable to clickjacking and content injection."
+    severity: "medium"
+    evidence: |
+      Missing: X-Content-Type-Options, X-Frame-Options,
+      Content-Security-Policy, Strict-Transport-Security,
+      X-XSS-Protection
+    check_name: "header_analysis"

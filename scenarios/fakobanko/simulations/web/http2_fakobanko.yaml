@@ -1,0 +1,25 @@
+# simulations/web/http2_fakobanko.yaml
+# Fakobanko scenario: HTTP/2 enabled
+
+suite: web
+emulates: http2_detection
+target: "www.fakobanko.local"
+disposition: http2_enabled
+
+behavior:
+  latency_ms: 200
+
+output:
+  http2_supported: true
+  alpn: "h2"
+  http3_supported: false
+
+findings:
+  - title: "HTTP/2 enabled on www.fakobanko.local"
+    description: "HTTP/2 is enabled via ALPN negotiation. HTTP/3 (QUIC) is not supported."
+    severity: "info"
+    evidence: |
+      ALPN: h2
+      HTTP/2: supported
+      HTTP/3: not supported
+    check_name: "http2_detection"

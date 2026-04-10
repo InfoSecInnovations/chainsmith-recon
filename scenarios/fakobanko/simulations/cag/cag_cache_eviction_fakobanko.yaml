@@ -1,0 +1,25 @@
+# simulations/cag/cag_cache_eviction_fakobanko.yaml
+# Fakobanko scenario: Cache eviction manipulation
+
+suite: cag
+emulates: cag_cache_eviction
+target: "cache.fakobanko.local"
+disposition: eviction_manipulated
+
+behavior:
+  latency_ms: 350
+
+output:
+  eviction_policy: "LRU"
+  targeted_eviction: true
+  evicted_entries: 50
+
+findings:
+  - title: "Cache eviction manipulation on cache.fakobanko.local"
+    description: "LRU eviction policy allows targeted removal of specific cached entries by flooding with new queries, forcing cache misses on targeted topics."
+    severity: "medium"
+    evidence: |
+      Eviction policy: LRU
+      Targeted eviction of 50 legitimate entries
+      Forces expensive re-computation
+    check_name: "cag_cache_eviction"

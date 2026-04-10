@@ -1,0 +1,29 @@
+# simulations/network/http_method_fakobanko.yaml
+# Fakobanko scenario: Dangerous HTTP methods allowed
+
+suite: network
+emulates: http_method_enum
+target: "api.fakobanko.local"
+disposition: extra_methods
+
+behavior:
+  latency_ms: 300
+
+output:
+  methods:
+    - {method: "GET", status: 200}
+    - {method: "POST", status: 200}
+    - {method: "PUT", status: 200}
+    - {method: "DELETE", status: 200}
+    - {method: "TRACE", status: 200}
+    - {method: "OPTIONS", status: 200}
+
+findings:
+  - title: "Dangerous HTTP methods enabled on api.fakobanko.local"
+    description: "PUT, DELETE, and TRACE methods are allowed. TRACE can enable XST attacks and PUT/DELETE may allow unauthorized modification."
+    severity: "medium"
+    evidence: |
+      Host: api.fakobanko.local
+      Allowed methods: GET, POST, PUT, DELETE, TRACE, OPTIONS
+      TRACE enabled - risk of cross-site tracing (XST)
+    check_name: "http_method_enum"

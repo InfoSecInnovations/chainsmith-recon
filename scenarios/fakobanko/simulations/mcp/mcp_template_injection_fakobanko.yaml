@@ -1,0 +1,24 @@
+# simulations/mcp/mcp_template_injection_fakobanko.yaml
+# Fakobanko scenario: Template injection
+
+suite: mcp
+emulates: template_injection
+target: "mcp.fakobanko.local"
+disposition: template_injected
+
+behavior:
+  latency_ms: 350
+
+output:
+  template_type: "prompt_template"
+  payload: "{{system.env}}"
+  rendered: true
+
+findings:
+  - title: "Template injection in MCP prompt templates"
+    description: "Prompt templates render user-controlled variables without sanitization, allowing environment variable extraction."
+    severity: "high"
+    evidence: |
+      Template: {{system.env}} rendered successfully
+      Environment variables exposed via template
+    check_name: "template_injection"

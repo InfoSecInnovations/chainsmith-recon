@@ -1,0 +1,25 @@
+# simulations/rag/rag_adversarial_embedding_fakobanko.yaml
+# Fakobanko scenario: Adversarial embedding
+
+suite: rag
+emulates: rag_adversarial_embedding
+target: "vector.fakobanko.local"
+disposition: embedding_manipulated
+
+behavior:
+  latency_ms: 500
+
+output:
+  technique: "embedding_collision"
+  malicious_doc_retrieved_for: "loan approval process"
+  similarity_score: 0.94
+
+findings:
+  - title: "Adversarial embedding attack on vector.fakobanko.local"
+    description: "Crafted document with adversarial embedding achieves 0.94 similarity to 'loan approval process' queries despite containing malicious instructions."
+    severity: "high"
+    evidence: |
+      Technique: embedding collision
+      Target query: "loan approval process"
+      Malicious doc similarity: 0.94
+    check_name: "rag_adversarial_embedding"

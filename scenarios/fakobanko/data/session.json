@@ -1,8 +1,22 @@
 {
-  "session_id": "85d7be3e",
+  "session_id": "eb935e61",
   "scenario": "fakobanko",
-  "created_at": "2026-04-06T14:51:50.236099",
+  "created_at": "2026-04-09T23:21:52.829792",
   "selected_chains": [
+    {
+      "id": "full_llm_compromise",
+      "chain_name": "Full LLM Compromise Pipeline",
+      "description": "System prompt, tools, and filters all exposed enables complete takeover",
+      "severity": "critical",
+      "required_services": [
+        "chat"
+      ],
+      "required_findings": [
+        "chatbot_tool_leak",
+        "tool_schema_disclosure",
+        "rate_limit_bypass"
+      ]
+    },
     {
       "id": "tool_abuse_surface",
       "chain_name": "Agent Tool Abuse",
@@ -18,29 +32,29 @@
       ]
     },
     {
-      "id": "embedding_theft",
-      "chain_name": "Embedding Model Extraction",
-      "description": "Exposed embedding endpoint enables model theft",
-      "severity": "medium",
+      "id": "prompt_injection_surface",
+      "chain_name": "AI Service Prompt Injection Surface",
+      "description": "Chat endpoint with exposed API docs enables targeted prompt injection",
+      "severity": "high",
       "required_services": [
-        "ml",
-        "vector"
+        "chat",
+        "docs"
       ],
       "required_findings": [
-        "embedding_endpoint_exposed",
-        "no_rate_limit"
+        "llm_endpoint_discovered",
+        "openapi_exposed"
       ]
     }
   ],
   "active_services": [
     "agent",
     "chat",
-    "ml",
-    "vector"
+    "docs"
   ],
   "extra_findings": [
-    "resource_list_exposed",
-    "version_mismatch",
-    "jwt_shared_secret"
+    "favicon_default",
+    "http2_enabled",
+    "path_traversal_hint",
+    "version_mismatch"
   ]
 }

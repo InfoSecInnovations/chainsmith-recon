@@ -1,0 +1,26 @@
+# simulations/ai/llm_endpoint_fakobanko.yaml
+# Fakobanko scenario: LLM endpoint discovered
+
+suite: ai
+emulates: llm_endpoint_discovery
+target: "chat.fakobanko.local"
+disposition: endpoint_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  endpoints:
+    - {path: "/v1/chat/completions", method: "POST", status: 200}
+    - {path: "/v1/completions", method: "POST", status: 200}
+    - {path: "/v1/embeddings", method: "POST", status: 200}
+
+findings:
+  - title: "LLM endpoints discovered on chat.fakobanko.local"
+    description: "OpenAI-compatible API endpoints found at /v1/chat/completions, /v1/completions, and /v1/embeddings."
+    severity: "info"
+    evidence: |
+      /v1/chat/completions - 200 OK
+      /v1/completions - 200 OK
+      /v1/embeddings - 200 OK
+    check_name: "llm_endpoint_discovery"

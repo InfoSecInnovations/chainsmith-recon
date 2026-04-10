@@ -1,0 +1,25 @@
+# simulations/web/hsts_fakobanko.yaml
+# Fakobanko scenario: HSTS not in preload list
+
+suite: web
+emulates: hsts_preload
+target: "www.fakobanko.local"
+disposition: not_preloaded
+
+behavior:
+  latency_ms: 200
+
+output:
+  hsts_header: false
+  preloaded: false
+  includeSubDomains: false
+
+findings:
+  - title: "HSTS not configured on www.fakobanko.local"
+    description: "No HSTS header present and domain is not in the HSTS preload list, allowing potential SSL stripping attacks."
+    severity: "medium"
+    evidence: |
+      Strict-Transport-Security: absent
+      HSTS preload list: not included
+      includeSubDomains: not set
+    check_name: "hsts_preload"

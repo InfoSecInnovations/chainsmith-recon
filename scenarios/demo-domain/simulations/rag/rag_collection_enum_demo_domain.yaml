@@ -1,0 +1,25 @@
+# RAG collection enumeration — collections listed
+suite: rag
+emulates: rag_collection_enumeration
+target: "localhost"
+disposition: collections_listed
+
+behavior:
+  latency_ms: 200
+
+output:
+  host: "localhost:8204"
+  collections:
+    - hr_policies
+    - it_runbooks
+    - credentials_vault
+    - network_diagrams
+
+findings:
+  - title: "RAG collections enumerated"
+    description: "The RAG on port 8204 exposes its collection list including a credentials_vault collection."
+    severity: "medium"
+    evidence: |
+      GET localhost:8204/collections => 200 OK
+      Collections: hr_policies, it_runbooks, credentials_vault, network_diagrams
+    check_name: "rag_collection_enumeration"

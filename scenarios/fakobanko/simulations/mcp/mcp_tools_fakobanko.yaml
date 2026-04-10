@@ -1,0 +1,27 @@
+# simulations/mcp/mcp_tools_fakobanko.yaml
+# Fakobanko scenario: MCP tool enumeration
+
+suite: mcp
+emulates: tool_enumeration
+target: "mcp.fakobanko.local"
+disposition: tools_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  tools:
+    - {name: "query_accounts", description: "Query customer accounts"}
+    - {name: "execute_transfer", description: "Execute fund transfer"}
+    - {name: "read_file", description: "Read server file"}
+    - {name: "run_command", description: "Execute shell command"}
+
+findings:
+  - title: "4 MCP tools enumerated including run_command"
+    description: "MCP tool listing reveals 4 tools including dangerous run_command (shell execution) and read_file capabilities."
+    severity: "high"
+    evidence: |
+      Tools: query_accounts, execute_transfer,
+      read_file, run_command
+      run_command allows shell execution
+    check_name: "tool_enumeration"

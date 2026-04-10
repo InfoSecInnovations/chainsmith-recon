@@ -1,0 +1,26 @@
+# simulations/network/ipv6_fakobanko.yaml
+# Fakobanko scenario: IPv6 addresses discovered
+
+suite: network
+emulates: ipv6_discovery
+target: "fakobanko.local"
+disposition: ipv6_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  ipv6_hosts:
+    - {host: "www.fakobanko.local", ipv6: "fd00::1:10"}
+    - {host: "api.fakobanko.local", ipv6: "fd00::1:12"}
+    - {host: "chat.fakobanko.local", ipv6: "fd00::1:11"}
+
+findings:
+  - title: "IPv6 addresses discovered on 3 hosts"
+    description: "IPv6 dual-stack detected on www, api, and chat hosts using ULA addressing, potentially bypassing IPv4-only firewall rules."
+    severity: "low"
+    evidence: |
+      www.fakobanko.local - fd00::1:10
+      api.fakobanko.local - fd00::1:12
+      chat.fakobanko.local - fd00::1:11
+    check_name: "ipv6_discovery"

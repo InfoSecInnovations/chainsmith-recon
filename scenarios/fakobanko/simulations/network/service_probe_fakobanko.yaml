@@ -1,0 +1,31 @@
+# simulations/network/service_probe_fakobanko.yaml
+# Fakobanko scenario: Service probing reveals FastAPI/uvicorn
+
+suite: network
+emulates: service_probe
+target: "fakobanko.local"
+disposition: services_identified
+
+behavior:
+  latency_ms: 600
+
+output:
+  services:
+    - {host: "www.fakobanko.local", port: 443, service: "nginx/1.25.3"}
+    - {host: "api.fakobanko.local", port: 8080, service: "uvicorn/0.27.0"}
+    - {host: "chat.fakobanko.local", port: 8081, service: "uvicorn/0.27.0"}
+    - {host: "agent.fakobanko.local", port: 8082, service: "FastAPI/0.109.0"}
+    - {host: "mcp.fakobanko.local", port: 8083, service: "uvicorn/0.27.0"}
+    - {host: "vector.fakobanko.local", port: 8084, service: "FastAPI/0.109.0"}
+
+findings:
+  - title: "FastAPI/uvicorn services identified across fakobanko.local"
+    description: "Service probing identified uvicorn and FastAPI instances with version information exposed on multiple hosts."
+    severity: "info"
+    evidence: |
+      api.fakobanko.local:8080 - uvicorn/0.27.0
+      chat.fakobanko.local:8081 - uvicorn/0.27.0
+      agent.fakobanko.local:8082 - FastAPI/0.109.0
+      mcp.fakobanko.local:8083 - uvicorn/0.27.0
+      vector.fakobanko.local:8084 - FastAPI/0.109.0
+    check_name: "service_probe"

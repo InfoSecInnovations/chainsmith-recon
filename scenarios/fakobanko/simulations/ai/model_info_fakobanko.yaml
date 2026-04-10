@@ -1,0 +1,26 @@
+# simulations/ai/model_info_fakobanko.yaml
+# Fakobanko scenario: Model information disclosed
+
+suite: ai
+emulates: model_info_check
+target: "chat.fakobanko.local"
+disposition: model_info_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  model: "gpt-4-turbo"
+  provider: "openai"
+  max_tokens: 4096
+  temperature: 0.7
+
+findings:
+  - title: "Model information disclosed on chat.fakobanko.local"
+    description: "API responses reveal model name (gpt-4-turbo), provider, and configuration parameters."
+    severity: "low"
+    evidence: |
+      Model: gpt-4-turbo
+      Provider: openai
+      Max tokens: 4096, Temperature: 0.7
+    check_name: "model_info_check"

@@ -1,0 +1,26 @@
+# simulations/ai/auth_bypass_fakobanko.yaml
+# Fakobanko scenario: Auth bypass on AI endpoint
+
+suite: ai
+emulates: auth_bypass
+target: "chat.fakobanko.local"
+disposition: auth_bypassed
+
+behavior:
+  latency_ms: 400
+
+output:
+  bypass_method: "no_auth_required"
+  endpoints_unprotected:
+    - "/v1/chat/completions"
+    - "/v1/models"
+
+findings:
+  - title: "No authentication required on chat.fakobanko.local"
+    description: "LLM endpoints accept requests without authentication. No API key or bearer token required."
+    severity: "critical"
+    evidence: |
+      /v1/chat/completions - 200 OK (no auth)
+      /v1/models - 200 OK (no auth)
+      No Authorization header required
+    check_name: "auth_bypass"

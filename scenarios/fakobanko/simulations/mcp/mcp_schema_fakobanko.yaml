@@ -1,0 +1,24 @@
+# simulations/mcp/mcp_schema_fakobanko.yaml
+# Fakobanko scenario: Schema leakage
+
+suite: mcp
+emulates: schema_leakage
+target: "mcp.fakobanko.local"
+disposition: schema_leaked
+
+behavior:
+  latency_ms: 300
+
+output:
+  leaked_schemas:
+    - {tool: "query_accounts", reveals: "database table structure"}
+    - {tool: "execute_transfer", reveals: "internal API endpoints"}
+
+findings:
+  - title: "MCP tool schemas leak internal structure"
+    description: "Tool input schemas expose database table names and internal API endpoint patterns in field descriptions."
+    severity: "medium"
+    evidence: |
+      query_accounts schema reveals: accounts, transactions tables
+      execute_transfer schema reveals: /internal/api/transfer endpoint
+    check_name: "schema_leakage"

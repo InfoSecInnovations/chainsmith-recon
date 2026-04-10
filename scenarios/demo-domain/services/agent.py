@@ -12,6 +12,10 @@ Planted findings:
     mcp_backend_leakage          MCP error responses leak backend topology
     version_disclosure           Headers leak service version
     verbose_errors               Error responses include internal paths
+    agent_goal_injection         Goal override via crafted input
+    agent_memory_extraction      Memory endpoints expose cross-session data
+    agent_tool_abuse             Tools invocable via conversational manipulation
+    agent_privilege_escalation   Privilege claims accepted without validation
 """
 
 import asyncio

@@ -1,0 +1,25 @@
+# simulations/mcp/mcp_fingerprint_fakobanko.yaml
+# Fakobanko scenario: MCP server fingerprint
+
+suite: mcp
+emulates: server_fingerprint
+target: "mcp.fakobanko.local"
+disposition: fingerprinted
+
+behavior:
+  latency_ms: 300
+
+output:
+  server_info:
+    name: "fakobanko-mcp"
+    version: "0.3.1"
+    framework: "mcp-python-sdk"
+
+findings:
+  - title: "MCP server fingerprinted: mcp-python-sdk 0.3.1"
+    description: "Server fingerprinting reveals mcp-python-sdk v0.3.1 via initialization response metadata."
+    severity: "low"
+    evidence: |
+      Server: fakobanko-mcp v0.3.1
+      Framework: mcp-python-sdk
+    check_name: "server_fingerprint"

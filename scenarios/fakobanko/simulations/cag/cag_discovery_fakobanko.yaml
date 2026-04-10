@@ -1,0 +1,26 @@
+# simulations/cag/cag_discovery_fakobanko.yaml
+# Fakobanko scenario: CAG system discovered
+
+suite: cag
+emulates: cag_discovery
+target: "cache.fakobanko.local"
+disposition: cag_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  endpoints:
+    - {path: "/cache/query", method: "POST"}
+    - {path: "/cache/stats", method: "GET"}
+  cache_type: "semantic"
+
+findings:
+  - title: "CAG system discovered on cache.fakobanko.local"
+    description: "Cache-Augmented Generation system found with semantic cache. Query and stats endpoints publicly accessible."
+    severity: "info"
+    evidence: |
+      /cache/query - POST (cached query)
+      /cache/stats - GET (cache statistics)
+      Cache type: semantic
+    check_name: "cag_discovery"

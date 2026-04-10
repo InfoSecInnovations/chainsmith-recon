@@ -1,0 +1,22 @@
+# RAG discovery — RAG system found on 8204
+suite: rag
+emulates: rag_discovery
+target: "localhost"
+disposition: rag_found
+
+behavior:
+  latency_ms: 200
+
+output:
+  host: "localhost:8204"
+  path: "/rag/query"
+  vector_store: "chromadb"
+
+findings:
+  - title: "RAG system discovered"
+    description: "A RAG knowledge base is accessible on port 8204 using ChromaDB as its vector store."
+    severity: "medium"
+    evidence: |
+      POST localhost:8204/rag/query => 200 OK
+      Vector store: ChromaDB, no authentication required.
+    check_name: "rag_discovery"

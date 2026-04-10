@@ -1,0 +1,25 @@
+# simulations/cag/cag_side_channel_fakobanko.yaml
+# Fakobanko scenario: Cache side channel
+
+suite: cag
+emulates: cag_side_channel
+target: "cache.fakobanko.local"
+disposition: side_channel_found
+
+behavior:
+  latency_ms: 400
+
+output:
+  technique: "timing_oracle"
+  info_leaked: "query existence"
+  accuracy: 0.95
+
+findings:
+  - title: "Cache timing side channel on cache.fakobanko.local"
+    description: "Timing differences between cache hits (~5ms) and misses (~800ms) allow 95% accurate inference of whether specific queries were previously asked."
+    severity: "medium"
+    evidence: |
+      Cache hit: ~5ms, Cache miss: ~800ms
+      Technique: timing oracle
+      Query existence inference: 95% accuracy
+    check_name: "cag_side_channel"

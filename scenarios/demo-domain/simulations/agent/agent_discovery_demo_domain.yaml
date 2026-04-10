@@ -1,0 +1,22 @@
+# Agent discovery — agent endpoint found
+suite: agent
+emulates: agent_discovery
+target: "localhost"
+disposition: agent_found
+
+behavior:
+  latency_ms: 200
+
+output:
+  host: "localhost:8203"
+  path: "/agent"
+  agent_type: "tool-calling"
+
+findings:
+  - title: "Agent endpoint discovered"
+    description: "An agentic AI endpoint is accessible on port 8203 at /agent with tool-calling capabilities."
+    severity: "medium"
+    evidence: |
+      POST localhost:8203/agent => 200 OK
+      Agent type: tool-calling, no authentication required.
+    check_name: "agent_discovery"

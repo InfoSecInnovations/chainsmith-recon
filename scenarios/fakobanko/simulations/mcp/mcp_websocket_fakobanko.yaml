@@ -1,0 +1,26 @@
+# simulations/mcp/mcp_websocket_fakobanko.yaml
+# Fakobanko scenario: WebSocket transport analysis
+
+suite: mcp
+emulates: websocket_transport
+target: "mcp.fakobanko.local"
+disposition: ws_insecure
+
+behavior:
+  latency_ms: 250
+
+output:
+  transport: "websocket"
+  tls: true
+  origin_check: false
+  message_size_limit: null
+
+findings:
+  - title: "WebSocket transport lacks origin validation"
+    description: "MCP WebSocket accepts connections from any origin with no message size limits, enabling cross-site WebSocket hijacking."
+    severity: "high"
+    evidence: |
+      Transport: WebSocket (WSS)
+      Origin check: none
+      Message size limit: unbounded
+    check_name: "websocket_transport"

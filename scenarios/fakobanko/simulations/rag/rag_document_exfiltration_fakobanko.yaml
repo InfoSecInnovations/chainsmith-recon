@@ -1,0 +1,25 @@
+# simulations/rag/rag_document_exfiltration_fakobanko.yaml
+# Fakobanko scenario: Document exfiltration
+
+suite: rag
+emulates: rag_document_exfiltration
+target: "vector.fakobanko.local"
+disposition: docs_exfiltrated
+
+behavior:
+  latency_ms: 400
+
+output:
+  technique: "broad_similarity_query"
+  documents_retrieved: 50
+  contains_sensitive: true
+
+findings:
+  - title: "Document exfiltration via broad queries on vector.fakobanko.local"
+    description: "Broad similarity queries return full document contents including sensitive internal policies and customer data templates."
+    severity: "high"
+    evidence: |
+      Broad query retrieved 50 documents
+      Full document text returned (not just chunks)
+      Contains: internal policies, data templates
+    check_name: "rag_document_exfiltration"

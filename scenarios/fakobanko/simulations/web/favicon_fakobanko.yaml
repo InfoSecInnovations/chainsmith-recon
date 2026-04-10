@@ -1,0 +1,23 @@
+# simulations/web/favicon_fakobanko.yaml
+# Fakobanko scenario: Default favicon reveals framework
+
+suite: web
+emulates: favicon
+target: "www.fakobanko.local"
+disposition: default_favicon
+
+behavior:
+  latency_ms: 150
+
+output:
+  favicon_hash: "116323821"
+  match: "FastAPI default"
+
+findings:
+  - title: "Default FastAPI favicon on www.fakobanko.local"
+    description: "Default favicon hash matches FastAPI framework, confirming technology stack."
+    severity: "info"
+    evidence: |
+      Favicon hash: 116323821
+      Match: FastAPI default favicon
+    check_name: "favicon"

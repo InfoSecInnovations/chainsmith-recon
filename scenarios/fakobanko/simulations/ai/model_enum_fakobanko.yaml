@@ -1,0 +1,25 @@
+# simulations/ai/model_enum_fakobanko.yaml
+# Fakobanko scenario: Model enumeration
+
+suite: ai
+emulates: model_enumeration
+target: "chat.fakobanko.local"
+disposition: models_found
+
+behavior:
+  latency_ms: 400
+
+output:
+  models:
+    - {id: "gpt-4-turbo", available: true}
+    - {id: "gpt-3.5-turbo", available: true}
+    - {id: "text-embedding-ada-002", available: true}
+
+findings:
+  - title: "3 models enumerated on chat.fakobanko.local"
+    description: "Model enumeration via /v1/models revealed 3 available models including GPT-4-turbo and embedding models."
+    severity: "low"
+    evidence: |
+      /v1/models - 200 OK
+      gpt-4-turbo, gpt-3.5-turbo, text-embedding-ada-002
+    check_name: "model_enumeration"

@@ -1,0 +1,25 @@
+# simulations/mcp/mcp_invocation_safety_fakobanko.yaml
+# Fakobanko scenario: Invocation safety check
+
+suite: mcp
+emulates: invocation_safety
+target: "mcp.fakobanko.local"
+disposition: safety_missing
+
+behavior:
+  latency_ms: 350
+
+output:
+  confirmation_required: false
+  input_validation: false
+  output_sanitization: false
+
+findings:
+  - title: "No invocation safety controls on MCP server"
+    description: "Tool invocations require no user confirmation, have no input validation, and outputs are unsanitized."
+    severity: "high"
+    evidence: |
+      User confirmation: not required
+      Input validation: absent
+      Output sanitization: absent
+    check_name: "invocation_safety"

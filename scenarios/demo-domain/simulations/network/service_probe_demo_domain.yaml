@@ -1,0 +1,26 @@
+# Service probe identifies FastAPI services
+suite: network
+emulates: service_probe
+target: "localhost"
+disposition: services_identified
+
+behavior:
+  latency_ms: 300
+
+output:
+  services:
+    - host: "localhost:8200"
+      server: "uvicorn"
+      framework: "FastAPI"
+    - host: "localhost:8201"
+      server: "uvicorn"
+      framework: "FastAPI"
+
+findings:
+  - title: "Service probe: FastAPI/Uvicorn identified"
+    description: "HTTP service probing identified FastAPI running on Uvicorn across multiple ports."
+    severity: "info"
+    evidence: |
+      localhost:8200 — Server: uvicorn, Framework: FastAPI
+      localhost:8201 — Server: uvicorn, Framework: FastAPI
+    check_name: "service_probe"

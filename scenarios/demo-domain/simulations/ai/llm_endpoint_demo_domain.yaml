@@ -1,0 +1,22 @@
+# LLM endpoint discovery — chat endpoint found
+suite: ai
+emulates: llm_endpoint_discovery
+target: "localhost"
+disposition: endpoint_found
+
+behavior:
+  latency_ms: 250
+
+output:
+  host: "localhost:8201"
+  path: "/chat"
+  model_responsive: true
+
+findings:
+  - title: "LLM chat endpoint discovered"
+    description: "An LLM-powered chat endpoint is accessible on port 8201 at /chat without authentication."
+    severity: "info"
+    evidence: |
+      POST localhost:8201/chat => 200 OK
+      Response contains AI-generated text
+    check_name: "llm_endpoint_discovery"

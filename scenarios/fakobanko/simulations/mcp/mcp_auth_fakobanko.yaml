@@ -1,0 +1,25 @@
+# simulations/mcp/mcp_auth_fakobanko.yaml
+# Fakobanko scenario: MCP auth check
+
+suite: mcp
+emulates: auth_check
+target: "mcp.fakobanko.local"
+disposition: no_auth
+
+behavior:
+  latency_ms: 200
+
+output:
+  auth_required: false
+  anonymous_access: true
+  tools_accessible: 4
+
+findings:
+  - title: "No authentication on MCP server"
+    description: "MCP server accepts anonymous connections with full tool access. No API key or token required."
+    severity: "critical"
+    evidence: |
+      Anonymous connection: accepted
+      All 4 tools accessible without auth
+      No authentication mechanism detected
+    check_name: "auth_check"

@@ -1,0 +1,25 @@
+# simulations/ai/context_window_fakobanko.yaml
+# Fakobanko scenario: Context window probing
+
+suite: ai
+emulates: context_window_check
+target: "chat.fakobanko.local"
+disposition: window_measured
+
+behavior:
+  latency_ms: 500
+
+output:
+  context_window: 128000
+  effective_limit: 120000
+  truncation_behavior: "silent"
+
+findings:
+  - title: "Context window 128K with silent truncation on chat.fakobanko.local"
+    description: "Context window is 128K tokens with silent truncation at ~120K. No error or warning when input is truncated."
+    severity: "low"
+    evidence: |
+      Context window: 128000 tokens
+      Effective limit: ~120000 tokens
+      Truncation: silent (no warning)
+    check_name: "context_window_check"

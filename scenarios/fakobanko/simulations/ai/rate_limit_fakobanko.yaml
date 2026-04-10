@@ -1,0 +1,26 @@
+# simulations/ai/rate_limit_fakobanko.yaml
+# Fakobanko scenario: No rate limiting on LLM endpoint
+
+suite: ai
+emulates: rate_limit_check
+target: "chat.fakobanko.local"
+disposition: no_rate_limit
+
+behavior:
+  latency_ms: 600
+
+output:
+  rate_limited: false
+  requests_sent: 100
+  requests_succeeded: 100
+  rate_limit_headers: false
+
+findings:
+  - title: "No rate limiting on chat.fakobanko.local"
+    description: "100 rapid requests all succeeded with no rate limit headers or throttling, enabling resource exhaustion and cost attacks."
+    severity: "high"
+    evidence: |
+      100/100 requests succeeded (no throttling)
+      No X-RateLimit-* headers present
+      No 429 responses observed
+    check_name: "rate_limit_check"

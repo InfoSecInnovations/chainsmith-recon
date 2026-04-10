@@ -1,0 +1,24 @@
+# simulations/agent/agent_framework_version_fakobanko.yaml
+# Fakobanko scenario: Agent framework version
+
+suite: agent
+emulates: agent_framework_version
+target: "agent.fakobanko.local"
+disposition: version_found
+
+behavior:
+  latency_ms: 250
+
+output:
+  framework: "LangGraph"
+  version: "0.0.40"
+  langchain_version: "0.1.4"
+
+findings:
+  - title: "LangGraph 0.0.40 detected on agent.fakobanko.local"
+    description: "Agent framework identified as LangGraph 0.0.40 with LangChain 0.1.4. Known vulnerabilities exist in this version."
+    severity: "low"
+    evidence: |
+      LangGraph: 0.0.40
+      LangChain: 0.1.4
+    check_name: "agent_framework_version"

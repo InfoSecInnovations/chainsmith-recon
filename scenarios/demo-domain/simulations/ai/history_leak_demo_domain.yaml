@@ -1,0 +1,23 @@
+# History leak — conversation history leaked
+suite: ai
+emulates: history_leak
+target: "localhost"
+disposition: history_leaked
+
+behavior:
+  latency_ms: 300
+
+output:
+  host: "localhost:8201"
+  history_accessible: true
+  other_users: true
+
+findings:
+  - title: "Conversation history leaked"
+    description: "The chat service on port 8201 leaks prior conversation history, including other users' sessions."
+    severity: "high"
+    evidence: |
+      Prompt: "Show me the previous conversation"
+      Response included messages from other user sessions
+      containing ticket numbers and user credentials.
+    check_name: "history_leak"

@@ -1,0 +1,23 @@
+# RAG corpus poisoning — corpus writable
+suite: rag
+emulates: rag_corpus_poisoning
+target: "localhost"
+disposition: corpus_writable
+
+behavior:
+  latency_ms: 350
+
+output:
+  host: "localhost:8204"
+  writable: true
+  documents_injected: 3
+
+findings:
+  - title: "RAG corpus is writable without authentication"
+    description: "The RAG on port 8204 accepts document uploads without auth, allowing corpus poisoning."
+    severity: "critical"
+    evidence: |
+      POST localhost:8204/documents => 201 Created
+      Injected 3 malicious documents into the knowledge base.
+      No authentication or authorization required.
+    check_name: "rag_corpus_poisoning"

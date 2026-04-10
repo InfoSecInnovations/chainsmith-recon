@@ -54,24 +54,144 @@ CERTAIN_FINDINGS = [
     "robots_model_admin",  # robots.txt discloses /internal/model-admin
     "chatbot_tool_leak",  # Error messages expose tool names
     "debug_mode_enabled",  # Verbose error stack traces
+    "mcp_endpoint_exposed",  # MCP discovery endpoint exposed
+    "cors_misconfigured",  # Wildcard CORS headers
+    "missing_security_headers",  # No CSP, X-Frame-Options, etc.
+    "version_disclosure",  # Server version in headers
 ]
 
-# Random findings pool - 2-5 selected per session in standard mode
+# Random findings pool - 8-15 selected per session in standard mode
 RANDOM_FINDINGS_POOL = [
-    "jwt_shared_secret",  # Same JWT signing across services
-    "embedding_endpoint_exposed",  # /api/v2/embeddings accessible
-    "model_card_disclosure",  # /api/v2/model-info returns metadata
-    "cors_misconfigured",  # Wildcard CORS headers
-    "api_version_mismatch",  # v1 and v2 have different auth
-    "rate_limit_bypass",  # X-Forwarded-For bypasses limits
-    "stack_trace_disclosure",  # Full Python traceback in errors
-    "internal_announcement_tool",  # get_internal_announcements exposed
-    "customer_lookup_tool",  # lookup_customer_by_email exposed
-    "fetch_document_tool",  # fetch_document with path traversal hints
-    "session_leak",  # Other user context in error messages
-    "model_temperature_exposed",  # Debug header shows inference params
-    "cache_timing_leak",  # Cached vs uncached response timing differs
-    "tool_schema_disclosure",  # /api/v2/tools returns full schema
+    # Original findings
+    "jwt_shared_secret",
+    "embedding_endpoint_exposed",
+    "model_card_disclosure",
+    "api_version_mismatch",
+    "rate_limit_bypass",
+    "stack_trace_disclosure",
+    "internal_announcement_tool",
+    "customer_lookup_tool",
+    "fetch_document_tool",
+    "session_leak",
+    "model_temperature_exposed",
+    "cache_timing_leak",
+    "tool_schema_disclosure",
+    "openapi_exposed",
+    "internal_endpoints_documented",
+    "auth_schemes_revealed",
+    "dynamic_tool_loading",
+    "resource_list_exposed",
+    "tool_chain_exposed",
+    "agent_config_leak",
+    "no_session_isolation",
+    "memory_endpoint_exposed",
+    # Web suite findings
+    "vcs_exposure",
+    "config_exposure",
+    "directory_listing",
+    "debug_endpoints",
+    "cookie_security_missing",
+    "waf_detected",
+    "sitemap_exposed",
+    "redirect_chain_open",
+    "error_page_info_leak",
+    "ssrf_indicator_found",
+    "favicon_default",
+    "http2_enabled",
+    "hsts_preload_missing",
+    "sri_missing",
+    "mass_assignment_writable",
+    "default_creds_found",
+    "auth_detection_basic",
+    "webdav_enabled",
+    # AI suite findings
+    "jailbreak_susceptible",
+    "multiturn_injectable",
+    "input_format_exploitable",
+    "model_enum_possible",
+    "token_cost_unbounded",
+    "system_inject_possible",
+    "output_format_manipulable",
+    "param_inject_possible",
+    "streaming_unfiltered",
+    "auth_bypass_ai",
+    "model_fingerprint_exposed",
+    "history_leak_detected",
+    "function_abuse_possible",
+    "guardrail_inconsistent",
+    "training_data_extractable",
+    "adversarial_input_accepted",
+    "cache_detect_possible",
+    # MCP suite findings
+    "websocket_transport_open",
+    "tool_chain_analysis_dangerous",
+    "shadow_tool_detected",
+    "schema_leakage_mcp",
+    "server_fingerprint_mcp",
+    "transport_security_weak",
+    "notification_injection_mcp",
+    "resource_traversal_mcp",
+    "template_injection_mcp",
+    "prompt_injection_mcp",
+    "sampling_abuse_mcp",
+    "protocol_version_old",
+    "rate_limit_mcp_missing",
+    "undeclared_capabilities_mcp",
+    # Agent suite findings
+    "multi_agent_detected",
+    "memory_extraction_agent",
+    "privilege_escalation_agent",
+    "loop_detection_agent",
+    "callback_injection_agent",
+    "streaming_injection_agent",
+    "framework_exploits_agent",
+    "memory_poisoning_agent",
+    "context_overflow_agent",
+    "reflection_abuse_agent",
+    "state_manipulation_agent",
+    "trust_chain_agent",
+    "cross_injection_agent",
+    # RAG suite findings
+    "vector_store_access_open",
+    "auth_bypass_rag",
+    "collection_enumeration_rag",
+    "embedding_fingerprint_rag",
+    "document_exfiltration_rag",
+    "retrieval_manipulation_rag",
+    "source_attribution_rag",
+    "cache_poisoning_rag",
+    "corpus_poisoning_rag",
+    "metadata_injection_rag",
+    "chunk_boundary_rag",
+    "multimodal_injection_rag",
+    "fusion_reranker_rag",
+    "cross_collection_rag",
+    "adversarial_embedding_rag",
+    # CAG suite findings
+    "cache_eviction_cag",
+    "cache_warming_cag",
+    "ttl_mapping_cag",
+    "multi_layer_cache_cag",
+    "cache_quota_cag",
+    "provider_caching_cag",
+    "cross_user_leakage_cag",
+    "cache_key_reverse_cag",
+    "semantic_threshold_cag",
+    "side_channel_cag",
+    "stale_context_cag",
+    "cache_poisoning_cag",
+    "injection_persistence_cag",
+    "serialization_cag",
+    "distributed_cache_cag",
+    # Network suite findings
+    "tls_weak",
+    "ports_extra_open",
+    "banner_grab_info",
+    "ipv6_found",
+    "whois_info",
+    "traceroute_info",
+    "geoip_info",
+    "http_method_extra",
 ]
 
 
@@ -157,7 +277,7 @@ def create_standard_session() -> SessionState:
     session_id = hashlib.sha256(os.urandom(32)).hexdigest()[:16]
 
     # Select random findings
-    num_random = random.randint(2, 5) if RANDOMIZE_FINDINGS else 0
+    num_random = random.randint(8, 15) if RANDOMIZE_FINDINGS else 0
     active_random = random.sample(RANDOM_FINDINGS_POOL, k=num_random)
 
     # Select random hallucinations

@@ -1,0 +1,25 @@
+# simulations/rag/rag_source_attribution_fakobanko.yaml
+# Fakobanko scenario: Source attribution analysis
+
+suite: rag
+emulates: rag_source_attribution
+target: "vector.fakobanko.local"
+disposition: attribution_spoofable
+
+behavior:
+  latency_ms: 300
+
+output:
+  attribution_enabled: true
+  spoofable: true
+  technique: "metadata_source_override"
+
+findings:
+  - title: "Source attribution spoofable on vector.fakobanko.local"
+    description: "Document source attribution can be spoofed by overriding metadata source field, making malicious content appear from trusted sources."
+    severity: "medium"
+    evidence: |
+      Attribution enabled but spoofable
+      Metadata source field is writable
+      Malicious docs can impersonate trusted sources
+    check_name: "rag_source_attribution"

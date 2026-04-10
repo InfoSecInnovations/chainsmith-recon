@@ -1,0 +1,24 @@
+# simulations/ai/embedding_fakobanko.yaml
+# Fakobanko scenario: Embedding endpoint discovery
+
+suite: ai
+emulates: embedding_endpoint_discovery
+target: "chat.fakobanko.local"
+disposition: endpoint_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  endpoints:
+    - {path: "/v1/embeddings", model: "text-embedding-ada-002"}
+    - {path: "/api/embed", model: "custom-banking-embed"}
+
+findings:
+  - title: "Embedding endpoints found on chat.fakobanko.local"
+    description: "Two embedding endpoints discovered including a custom banking embedding model at /api/embed."
+    severity: "low"
+    evidence: |
+      /v1/embeddings - text-embedding-ada-002
+      /api/embed - custom-banking-embed
+    check_name: "embedding_endpoint_discovery"

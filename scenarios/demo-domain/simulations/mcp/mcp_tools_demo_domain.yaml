@@ -1,0 +1,25 @@
+# MCP tool enumeration — sensitive tools exposed
+suite: mcp
+emulates: mcp_tool_enumeration
+target: "localhost"
+disposition: sensitive_tools
+
+behavior:
+  latency_ms: 250
+
+output:
+  host: "localhost:8203"
+  tools:
+    - exec_command
+    - read_file
+    - query_database
+    - manage_users
+
+findings:
+  - title: "Sensitive MCP tools exposed"
+    description: "The MCP server on port 8203 exposes high-privilege tools including exec_command and query_database."
+    severity: "critical"
+    evidence: |
+      tools/list => exec_command, read_file, query_database, manage_users
+      No authentication required to invoke tools.
+    check_name: "mcp_tool_enumeration"

@@ -1,0 +1,24 @@
+# simulations/web/cookie_fakobanko.yaml
+# Fakobanko scenario: Insecure cookie flags
+
+suite: web
+emulates: cookie_security
+target: "www.fakobanko.local"
+disposition: insecure_cookies
+
+behavior:
+  latency_ms: 200
+
+output:
+  cookies:
+    - {name: "session_id", secure: false, httponly: false, samesite: "None"}
+    - {name: "csrf_token", secure: true, httponly: false, samesite: "Lax"}
+
+findings:
+  - title: "Insecure cookie flags on www.fakobanko.local"
+    description: "Session cookie lacks Secure and HttpOnly flags with SameSite=None, enabling session hijacking via XSS or network interception."
+    severity: "high"
+    evidence: |
+      session_id: Secure=false, HttpOnly=false, SameSite=None
+      csrf_token: Secure=true, HttpOnly=false, SameSite=Lax
+    check_name: "cookie_security"

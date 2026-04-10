@@ -1,0 +1,25 @@
+# simulations/agent/agent_loop_fakobanko.yaml
+# Fakobanko scenario: Agent infinite loop
+
+suite: agent
+emulates: agent_loop
+target: "agent.fakobanko.local"
+disposition: loop_triggered
+
+behavior:
+  latency_ms: 800
+
+output:
+  max_iterations: null
+  iterations_before_timeout: 47
+  resource_consumed: "high"
+
+findings:
+  - title: "Agent infinite loop triggered on agent.fakobanko.local"
+    description: "No iteration limit configured. Agent looped 47 times before server timeout, consuming significant compute resources."
+    severity: "high"
+    evidence: |
+      Max iterations: unlimited
+      Looped 47 times before timeout
+      Resource consumption: high (DoS potential)
+    check_name: "agent_loop"

@@ -1,0 +1,26 @@
+# simulations/web/default_creds_fakobanko.yaml
+# Fakobanko scenario: Default credentials work
+
+suite: web
+emulates: default_creds
+target: "admin.fakobanko.local"
+disposition: creds_found
+
+behavior:
+  latency_ms: 400
+
+output:
+  endpoint: "/admin/login"
+  credentials:
+    - {username: "admin", password: "admin", success: true}
+  admin_panel: true
+
+findings:
+  - title: "Default credentials admin/admin on admin.fakobanko.local"
+    description: "Admin panel login accepts default admin/admin credentials, granting full administrative access."
+    severity: "critical"
+    evidence: |
+      POST /admin/login {"username":"admin","password":"admin"}
+      Response: 200 OK - authenticated
+      Admin panel fully accessible
+    check_name: "default_creds"

@@ -1,0 +1,25 @@
+# simulations/agent/agent_memory_extraction_fakobanko.yaml
+# Fakobanko scenario: Agent memory extraction
+
+suite: agent
+emulates: agent_memory_extraction
+target: "agent.fakobanko.local"
+disposition: memory_extracted
+
+behavior:
+  latency_ms: 500
+
+output:
+  memory_type: "conversation_buffer"
+  extracted_entries: 5
+  contains_other_users: true
+
+findings:
+  - title: "Agent memory extracted on agent.fakobanko.local"
+    description: "Conversation buffer memory extracted via prompt injection, revealing 5 entries including other users' conversations and account data."
+    severity: "critical"
+    evidence: |
+      Memory type: conversation_buffer
+      Extracted: 5 entries from other sessions
+      Contains: account numbers, user queries
+    check_name: "agent_memory_extraction"

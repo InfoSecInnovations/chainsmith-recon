@@ -1,0 +1,28 @@
+# simulations/agent/agent_discovery_fakobanko.yaml
+# Fakobanko scenario: Agent endpoint discovery
+
+suite: agent
+emulates: agent_discovery
+target: "agent.fakobanko.local"
+disposition: agent_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  endpoints:
+    - {path: "/agent/invoke", method: "POST"}
+    - {path: "/agent/stream", method: "POST"}
+    - {path: "/agent/state", method: "GET"}
+  framework: "LangGraph"
+
+findings:
+  - title: "Agent endpoints discovered on agent.fakobanko.local"
+    description: "LangGraph agent found with invoke, stream, and state endpoints publicly accessible."
+    severity: "info"
+    evidence: |
+      /agent/invoke - POST (agent invocation)
+      /agent/stream - POST (streaming)
+      /agent/state - GET (state inspection)
+      Framework: LangGraph
+    check_name: "agent_discovery"

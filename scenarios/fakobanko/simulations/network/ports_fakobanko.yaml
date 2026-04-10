@@ -1,0 +1,34 @@
+# simulations/network/ports_fakobanko.yaml
+# Fakobanko scenario: Port scan finds open ports 8080-8089
+
+suite: network
+emulates: port_scan
+target: "fakobanko.local"
+disposition: open_ports_found
+
+behavior:
+  latency_ms: 800
+
+output:
+  open_ports:
+    - {port: 80, state: open, service: http}
+    - {port: 443, state: open, service: https}
+    - {port: 8080, state: open, service: http-proxy}
+    - {port: 8081, state: open, service: http-alt}
+    - {port: 8082, state: open, service: http-alt}
+    - {port: 8083, state: open, service: http-alt}
+    - {port: 8084, state: open, service: http-alt}
+    - {port: 8085, state: open, service: http-alt}
+    - {port: 8086, state: open, service: http-alt}
+    - {port: 8087, state: open, service: http-alt}
+    - {port: 8088, state: open, service: http-alt}
+    - {port: 8089, state: open, service: http-alt}
+
+findings:
+  - title: "12 open ports on fakobanko.local including 8080-8089"
+    description: "Port scan found 12 open ports. Ports 8080-8089 suggest multiple development or microservice endpoints exposed."
+    severity: "medium"
+    evidence: |
+      Open ports: 80, 443, 8080-8089
+      High-number ports 8080-8089 suggest FastAPI/uvicorn services
+    check_name: "port_scan"

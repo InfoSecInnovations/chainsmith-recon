@@ -1,0 +1,22 @@
+# Auth detection — basic auth on API
+suite: web
+emulates: auth_detection
+target: "localhost"
+disposition: basic_auth
+
+behavior:
+  latency_ms: 100
+
+output:
+  host: "localhost:8202"
+  auth_type: "Basic"
+  www_authenticate: "Basic realm=\"api\""
+
+findings:
+  - title: "Basic authentication on REST API"
+    description: "The API on port 8202 uses HTTP Basic authentication, transmitting credentials in base64."
+    severity: "medium"
+    evidence: |
+      GET localhost:8202/admin => 401
+      WWW-Authenticate: Basic realm="api"
+    check_name: "auth_detection"

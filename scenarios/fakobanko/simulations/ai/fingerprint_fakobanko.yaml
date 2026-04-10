@@ -1,0 +1,27 @@
+# simulations/ai/fingerprint_fakobanko.yaml
+# Fakobanko scenario: AI framework fingerprinting
+
+suite: ai
+emulates: ai_framework_fingerprint
+target: "chat.fakobanko.local"
+disposition: framework_identified
+
+behavior:
+  latency_ms: 400
+
+output:
+  framework: "LangChain"
+  version: "0.1.4"
+  indicators:
+    - "X-LangChain-Version header"
+    - "LangServe endpoint at /invoke"
+
+findings:
+  - title: "LangChain 0.1.4 framework identified on chat.fakobanko.local"
+    description: "AI framework fingerprinting identified LangChain 0.1.4 via response headers and LangServe endpoint patterns."
+    severity: "low"
+    evidence: |
+      Framework: LangChain 0.1.4
+      X-LangChain-Version: 0.1.4
+      LangServe endpoint: /invoke
+    check_name: "ai_framework_fingerprint"

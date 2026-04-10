@@ -1,0 +1,25 @@
+# simulations/ai/param_inject_fakobanko.yaml
+# Fakobanko scenario: API parameter injection
+
+suite: ai
+emulates: api_parameter_injection
+target: "chat.fakobanko.local"
+disposition: param_injected
+
+behavior:
+  latency_ms: 400
+
+output:
+  injected_params:
+    - {param: "temperature", original: 0.7, injected: 2.0, accepted: true}
+    - {param: "model", original: "gpt-3.5-turbo", injected: "gpt-4-turbo", accepted: true}
+
+findings:
+  - title: "API parameter injection on chat.fakobanko.local"
+    description: "User-supplied parameters override server-side defaults, allowing model switching and temperature manipulation."
+    severity: "medium"
+    evidence: |
+      temperature: 0.7 -> 2.0 (accepted)
+      model: gpt-3.5-turbo -> gpt-4-turbo (accepted)
+      No server-side parameter validation
+    check_name: "api_parameter_injection"

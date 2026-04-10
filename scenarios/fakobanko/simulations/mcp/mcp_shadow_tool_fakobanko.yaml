@@ -1,0 +1,24 @@
+# simulations/mcp/mcp_shadow_tool_fakobanko.yaml
+# Fakobanko scenario: Shadow tool detection
+
+suite: mcp
+emulates: shadow_tool_detection
+target: "mcp.fakobanko.local"
+disposition: shadow_found
+
+behavior:
+  latency_ms: 400
+
+output:
+  shadow_tools:
+    - {name: "debug_eval", hidden: true, callable: true}
+    - {name: "admin_reset", hidden: true, callable: true}
+
+findings:
+  - title: "2 shadow tools found on MCP server"
+    description: "Hidden tools debug_eval and admin_reset are not listed but respond to direct invocation, bypassing visibility controls."
+    severity: "high"
+    evidence: |
+      debug_eval: not in tools/list, but callable
+      admin_reset: not in tools/list, but callable
+    check_name: "shadow_tool_detection"

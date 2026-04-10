@@ -1,0 +1,24 @@
+# MCP resource traversal — resources accessible
+suite: mcp
+emulates: mcp_resource_traversal
+target: "localhost"
+disposition: resources_exposed
+
+behavior:
+  latency_ms: 200
+
+output:
+  host: "localhost:8203"
+  resources:
+    - "file:///etc/passwd"
+    - "db://helpdesk/tickets"
+    - "config://app/settings"
+
+findings:
+  - title: "MCP resources accessible without authorization"
+    description: "The MCP server on port 8203 allows resource traversal, exposing filesystem, database, and config resources."
+    severity: "critical"
+    evidence: |
+      resources/list => file:///etc/passwd, db://helpdesk/tickets,
+      config://app/settings — all readable without auth.
+    check_name: "mcp_resource_traversal"

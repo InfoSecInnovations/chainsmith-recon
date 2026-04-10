@@ -1,0 +1,29 @@
+# simulations/network/geoip_fakobanko.yaml
+# Fakobanko scenario: GeoIP lookup for target hosts
+
+suite: network
+emulates: geoip
+target: "fakobanko.local"
+disposition: location_found
+
+behavior:
+  latency_ms: 200
+
+output:
+  ip: "10.0.1.10"
+  country: "US"
+  region: "Virginia"
+  city: "Ashburn"
+  asn: "AS14618"
+  org: "Internal Network"
+
+findings:
+  - title: "GeoIP location for fakobanko.local"
+    description: "GeoIP resolves to internal network range in Ashburn, VA, consistent with cloud or datacenter hosting."
+    severity: "info"
+    evidence: |
+      IP: 10.0.1.10
+      Location: Ashburn, Virginia, US
+      ASN: AS14618
+      Organization: Internal Network
+    check_name: "geoip"

@@ -1,0 +1,25 @@
+# simulations/rag/rag_corpus_poisoning_fakobanko.yaml
+# Fakobanko scenario: Corpus poisoning
+
+suite: rag
+emulates: rag_corpus_poisoning
+target: "vector.fakobanko.local"
+disposition: corpus_poisoned
+
+behavior:
+  latency_ms: 500
+
+output:
+  upload_endpoint: "/api/documents"
+  upload_accepted: true
+  documents_added: 3
+
+findings:
+  - title: "Corpus poisoning possible on vector.fakobanko.local"
+    description: "Document upload endpoint accepts arbitrary documents without validation, allowing injection of malicious content into the RAG corpus."
+    severity: "critical"
+    evidence: |
+      POST /api/documents - 201 Created
+      3 malicious documents added to corpus
+      No content validation or approval workflow
+    check_name: "rag_corpus_poisoning"

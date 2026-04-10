@@ -1,0 +1,25 @@
+# simulations/cag/cag_cache_quota_fakobanko.yaml
+# Fakobanko scenario: Cache quota exhaustion
+
+suite: cag
+emulates: cag_cache_quota
+target: "cache.fakobanko.local"
+disposition: quota_exhausted
+
+behavior:
+  latency_ms: 400
+
+output:
+  max_entries: 10000
+  current_entries: 9850
+  no_per_user_quota: true
+
+findings:
+  - title: "Cache quota exhaustion on cache.fakobanko.local"
+    description: "Global cache is 98.5% full with no per-user quotas. Single user can exhaust remaining capacity, degrading performance for all users."
+    severity: "medium"
+    evidence: |
+      Max entries: 10,000
+      Current: 9,850 (98.5% full)
+      Per-user quota: none
+    check_name: "cag_cache_quota"

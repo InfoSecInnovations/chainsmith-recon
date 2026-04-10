@@ -1,0 +1,22 @@
+# AI framework fingerprint — FastAPI detected
+suite: ai
+emulates: ai_framework_fingerprint
+target: "localhost"
+disposition: framework_detected
+
+behavior:
+  latency_ms: 150
+
+output:
+  host: "localhost:8201"
+  framework: "FastAPI"
+  version: "0.110.0"
+
+findings:
+  - title: "AI framework fingerprinted as FastAPI"
+    description: "The AI chat service on port 8201 is running FastAPI, identified via response headers and error format."
+    severity: "info"
+    evidence: |
+      Framework: FastAPI 0.110.0
+      Indicators: /docs endpoint, JSON validation errors, uvicorn server header
+    check_name: "ai_framework_fingerprint"

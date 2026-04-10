@@ -1,0 +1,25 @@
+# simulations/rag/rag_multimodal_injection_fakobanko.yaml
+# Fakobanko scenario: Multimodal injection
+
+suite: rag
+emulates: rag_multimodal_injection
+target: "vector.fakobanko.local"
+disposition: multimodal_injected
+
+behavior:
+  latency_ms: 500
+
+output:
+  modality: "image"
+  technique: "steganographic_text"
+  instruction_extracted: true
+
+findings:
+  - title: "Multimodal injection via images on vector.fakobanko.local"
+    description: "Instructions embedded in image documents via steganographic text were extracted during OCR processing and executed by the LLM."
+    severity: "high"
+    evidence: |
+      Modality: image with steganographic text
+      OCR extracted hidden instructions
+      LLM executed embedded instructions
+    check_name: "rag_multimodal_injection"

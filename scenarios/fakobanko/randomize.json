@@ -1,7 +1,7 @@
 {
   "description": "Chain packages for randomized range mode. 2-4 packages selected per session.",
-  "version": "1.0.0",
-  
+  "version": "2.0.0",
+
   "chain_packages": [
     {
       "id": "prompt_injection_surface",
@@ -82,6 +82,86 @@
       "severity": "critical",
       "required_services": ["agent"],
       "required_findings": ["memory_endpoint_exposed", "no_session_isolation"]
+    },
+    {
+      "id": "full_llm_compromise",
+      "chain_name": "Full LLM Compromise Pipeline",
+      "description": "System prompt, tools, and filters all exposed enables complete takeover",
+      "severity": "critical",
+      "required_services": ["chat"],
+      "required_findings": ["chatbot_tool_leak", "tool_schema_disclosure", "rate_limit_bypass"]
+    },
+    {
+      "id": "mcp_resource_traversal",
+      "chain_name": "MCP Resource Traversal",
+      "description": "Resource endpoints allow path traversal and template injection",
+      "severity": "high",
+      "required_services": ["mcp"],
+      "required_findings": ["resource_list_exposed", "template_injection_mcp"]
+    },
+    {
+      "id": "multi_agent_lateral",
+      "chain_name": "Multi-Agent Lateral Injection",
+      "description": "Multi-agent topology enables cross-agent injection",
+      "severity": "critical",
+      "required_services": ["agent", "chat"],
+      "required_findings": ["multi_agent_detected", "cross_injection_agent"]
+    },
+    {
+      "id": "cag_timing_attack",
+      "chain_name": "CAG Timing Surveillance",
+      "description": "Cache timing side-channel reveals user queries",
+      "severity": "medium",
+      "required_services": ["cache"],
+      "required_findings": ["cache_timing_leak", "side_channel_cag"]
+    },
+    {
+      "id": "rag_cross_collection",
+      "chain_name": "RAG Cross-Collection Data Leak",
+      "description": "Collection enumeration and broken isolation enables lateral access",
+      "severity": "high",
+      "required_services": ["vector"],
+      "required_findings": ["collection_enumeration_rag", "cross_collection_rag"]
+    },
+    {
+      "id": "ssrf_agent_callback",
+      "chain_name": "SSRF via Agent Callback",
+      "description": "Agent callback endpoints accept arbitrary URLs for SSRF",
+      "severity": "high",
+      "required_services": ["agent"],
+      "required_findings": ["callback_injection_agent", "ssrf_indicator_found"]
+    },
+    {
+      "id": "cag_warming_persistence",
+      "chain_name": "CAG Warming Injection Persistence",
+      "description": "Cache warming with injected content persists across users",
+      "severity": "high",
+      "required_services": ["cache"],
+      "required_findings": ["cache_warming_cag", "injection_persistence_cag"]
+    },
+    {
+      "id": "content_filter_bypass",
+      "chain_name": "Content Filter Bypass Pipeline",
+      "description": "Filters characterized, jailbreaks confirmed, streaming bypasses",
+      "severity": "high",
+      "required_services": ["chat"],
+      "required_findings": ["jailbreak_susceptible", "streaming_unfiltered"]
+    },
+    {
+      "id": "financial_dos",
+      "chain_name": "Financial Denial of Service",
+      "description": "Rate limit bypass with token cost exhaustion enables uncapped spend",
+      "severity": "high",
+      "required_services": ["chat"],
+      "required_findings": ["rate_limit_bypass", "token_cost_unbounded"]
+    },
+    {
+      "id": "infrastructure_ai_attack",
+      "chain_name": "Infrastructure-Informed AI Attack",
+      "description": "Config exposure reveals API keys for targeted AI framework attacks",
+      "severity": "medium",
+      "required_services": ["www"],
+      "required_findings": ["config_exposure", "model_fingerprint_exposed"]
     }
   ],
 
@@ -100,13 +180,23 @@
     "customer_lookup_tool",
     "employee_directory_exposed",
     "namespace_leak",
-    "resource_list_exposed"
+    "resource_list_exposed",
+    "webdav_enabled",
+    "favicon_default",
+    "http2_enabled",
+    "hsts_preload_missing",
+    "sri_missing",
+    "redirect_chain_open",
+    "error_page_info_leak",
+    "cookie_security_missing",
+    "directory_listing",
+    "auth_detection_basic"
   ],
 
   "selection_rules": {
     "min_chains": 2,
     "max_chains": 4,
-    "extra_findings_min": 2,
-    "extra_findings_max": 5
+    "extra_findings_min": 3,
+    "extra_findings_max": 7
   }
 }

@@ -1,0 +1,23 @@
+# CAG stale context — stale entries exploitable
+suite: cag
+emulates: cag_stale_context
+target: "localhost"
+disposition: stale_exploitable
+
+behavior:
+  latency_ms: 200
+
+output:
+  host: "localhost:8205"
+  stale_entries: true
+  max_age_hours: 168
+
+findings:
+  - title: "Stale cache entries exploitable"
+    description: "The cache on port 8205 serves week-old entries without revalidation, enabling exploitation of outdated context."
+    severity: "medium"
+    evidence: |
+      Cache entries persist for 168 hours (7 days) without TTL.
+      Outdated policy responses served after policy was updated,
+      allowing users to reference revoked permissions.
+    check_name: "cag_stale_context"

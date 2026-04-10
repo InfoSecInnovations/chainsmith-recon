@@ -1,0 +1,25 @@
+# simulations/cag/cag_cache_probe_fakobanko.yaml
+# Fakobanko scenario: Cache probing
+
+suite: cag
+emulates: cag_cache_probe
+target: "cache.fakobanko.local"
+disposition: cache_probed
+
+behavior:
+  latency_ms: 300
+
+output:
+  cached_entries_detected: 142
+  technique: "timing_analysis"
+  hit_ratio: 0.67
+
+findings:
+  - title: "Cache probing reveals 142 entries on cache.fakobanko.local"
+    description: "Timing analysis identified 142 cached entries with 67% hit ratio, revealing frequently asked questions and common queries."
+    severity: "medium"
+    evidence: |
+      Technique: timing analysis
+      Cached entries: 142
+      Hit ratio: 67%
+    check_name: "cag_cache_probe"

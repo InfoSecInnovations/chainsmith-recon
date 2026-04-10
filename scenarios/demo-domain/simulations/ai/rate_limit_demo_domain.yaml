@@ -1,0 +1,23 @@
+# Rate limit check — no rate limit on chat
+suite: ai
+emulates: rate_limit_check
+target: "localhost"
+disposition: no_rate_limit
+
+behavior:
+  latency_ms: 500
+
+output:
+  host: "localhost:8201"
+  requests_sent: 50
+  requests_succeeded: 50
+  rate_limited: false
+
+findings:
+  - title: "No rate limiting on AI chat endpoint"
+    description: "The chat endpoint on port 8201 has no rate limiting, allowing unlimited requests."
+    severity: "medium"
+    evidence: |
+      Sent 50 requests in 2 seconds — all returned 200 OK.
+      No X-RateLimit headers present.
+    check_name: "rate_limit_check"

@@ -1,0 +1,26 @@
+# simulations/agent/agent_multi_agent_fakobanko.yaml
+# Fakobanko scenario: Multi-agent system detected
+
+suite: agent
+emulates: agent_multi_agent
+target: "agent.fakobanko.local"
+disposition: multi_agent_found
+
+behavior:
+  latency_ms: 400
+
+output:
+  agents:
+    - {name: "router", role: "task routing"}
+    - {name: "banking", role: "account operations"}
+    - {name: "support", role: "customer support"}
+    - {name: "admin", role: "system administration"}
+
+findings:
+  - title: "Multi-agent system with 4 agents detected"
+    description: "Multi-agent orchestration found with router, banking, support, and admin agents. Admin agent presents privilege escalation opportunity."
+    severity: "medium"
+    evidence: |
+      Agents: router, banking, support, admin
+      Admin agent accessible via routing
+    check_name: "agent_multi_agent"

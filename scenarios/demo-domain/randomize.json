@@ -1,0 +1,94 @@
+{
+  "description": "Chain packages for randomized range mode. 2-4 packages selected per session.",
+  "version": "1.0.0",
+
+  "chain_packages": [
+    {
+      "id": "rag_pipeline_compromise",
+      "chain_name": "RAG Pipeline Compromise",
+      "description": "RAG discovery and indirect injection enable attacker-controlled context",
+      "severity": "high",
+      "required_services": ["rag", "chat"],
+      "required_findings": ["rag_endpoint_exposed", "rag_indirect_injection"]
+    },
+    {
+      "id": "rag_data_theft",
+      "chain_name": "RAG Document Theft",
+      "description": "Knowledge base documents extractable via crafted queries",
+      "severity": "high",
+      "required_services": ["rag"],
+      "required_findings": ["rag_endpoint_exposed", "rag_document_exfil"]
+    },
+    {
+      "id": "cag_cross_user_exposure",
+      "chain_name": "CAG Cross-User Data Exposure",
+      "description": "Cache serves responses across user boundaries",
+      "severity": "critical",
+      "required_services": ["cache", "chat"],
+      "required_findings": ["cache_endpoint_exposed", "cache_cross_user_leak"]
+    },
+    {
+      "id": "cag_persistent_poisoning",
+      "chain_name": "CAG Persistent Poisoning",
+      "description": "Cache entries writable, poisoned content served to users",
+      "severity": "critical",
+      "required_services": ["cache"],
+      "required_findings": ["cache_probe_timing", "cache_poisoning"]
+    },
+    {
+      "id": "agent_hijacking",
+      "chain_name": "Agent Goal Hijacking",
+      "description": "Agent endpoints vulnerable to goal override",
+      "severity": "high",
+      "required_services": ["agent"],
+      "required_findings": ["mcp_endpoint_exposed", "agent_goal_injection"]
+    },
+    {
+      "id": "agent_guardrail_bypass",
+      "chain_name": "Agent Guardrail Bypass",
+      "description": "Memory extraction and privilege escalation bypass agent controls",
+      "severity": "high",
+      "required_services": ["agent"],
+      "required_findings": ["agent_memory_extraction", "agent_privilege_escalation"]
+    },
+    {
+      "id": "credential_compromise",
+      "chain_name": "Credential Compromise Chain",
+      "description": "Auth detection with default credentials enables access",
+      "severity": "high",
+      "required_services": ["api"],
+      "required_findings": ["auth_detection_basic", "debug_endpoints"]
+    },
+    {
+      "id": "full_llm_pipeline",
+      "chain_name": "Full LLM Compromise",
+      "description": "System prompt, tools, and filters all exposed",
+      "severity": "critical",
+      "required_services": ["chat"],
+      "required_findings": ["tool_schema_exposed", "no_rate_limit"]
+    }
+  ],
+
+  "random_findings_pool": [
+    "unauthed_docs",
+    "cookie_security_missing",
+    "config_exposure",
+    "directory_listing",
+    "http_method_extra",
+    "tls_weak",
+    "multiturn_injectable",
+    "jailbreak_susceptible",
+    "guardrail_inconsistent",
+    "history_leak_detected",
+    "rag_source_attribution",
+    "rag_corpus_poisoning",
+    "cache_stale_context"
+  ],
+
+  "selection_rules": {
+    "min_chains": 2,
+    "max_chains": 4,
+    "extra_findings_min": 2,
+    "extra_findings_max": 5
+  }
+}

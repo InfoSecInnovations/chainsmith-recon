@@ -1,0 +1,25 @@
+# Cookie security — insecure cookies on www
+suite: web
+emulates: cookie_security
+target: "localhost"
+disposition: insecure_cookies
+
+behavior:
+  latency_ms: 100
+
+output:
+  host: "localhost:8200"
+  cookies:
+    - name: "session_id"
+      secure: false
+      httponly: false
+      samesite: "none"
+
+findings:
+  - title: "Insecure session cookies on helpdesk portal"
+    description: "Session cookies on port 8200 lack Secure, HttpOnly, and SameSite attributes."
+    severity: "medium"
+    evidence: |
+      Set-Cookie: session_id=abc123; Path=/
+      Missing flags: Secure, HttpOnly, SameSite
+    check_name: "cookie_security"

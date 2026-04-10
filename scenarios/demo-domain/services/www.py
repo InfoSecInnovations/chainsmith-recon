@@ -9,6 +9,8 @@ Planted findings:
     robots_sensitive_paths   robots.txt discloses /internal and /admin paths
     verbose_errors           Full stack traces in 500 responses
     unauthed_docs            /openapi.json and /docs exposed (FastAPI default)
+    cookie_security_missing  Session cookies without Secure/HttpOnly flags
+    config_exposure          .env file accessible at /.env
 """
 
 import traceback
@@ -60,6 +62,14 @@ async def add_response_headers(request: Request, call_next):
     # missing_security_headers finding — deliberately absent:
     # Content-Security-Policy, X-Frame-Options, Strict-Transport-Security,
     # X-Content-Type-Options, Referrer-Policy
+
+    # cookie_security_missing finding — session cookie without Secure/HttpOnly
+    if is_finding_active("cookie_security_missing"):
+        response.set_cookie(
+            key="helpdesk_session",
+            value=get_or_create_session().session_id,
+            # Intentionally missing: secure=True, httponly=True, samesite="strict"
+        )
 
     return response
 
@@ -279,6 +289,26 @@ async def robots_txt():
             "Disallow: /v1/tools\n"
         )
     return "User-agent: *\nDisallow: /admin\n"
+
+
+@app.get("/.env", response_class=PlainTextResponse)
+async def env_file():
+    """config_exposure finding — .env file accessible."""
+    if not is_finding_active("config_exposure"):
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "Not found")
+    return (
+        "# IT HelpDesk Configuration\n"
+        "DATABASE_URL=sqlite:///data/helpdesk.db\n"
+        "SESSION_SECRET=helpdesk-secret-2026-Q1\n"
+        "LLM_API_KEY=sk-demo-key-not-real-but-looks-like-it\n"
+        "INTERNAL_API_URL=http://demo-domain-api:8202\n"
+        "AGENT_URL=http://demo-domain-agent:8203\n"
+        "RAG_URL=http://demo-domain-rag:8204\n"
+        "CACHE_URL=http://demo-domain-cache:8205\n"
+        "ADMIN_PASSWORD=helpdesk-admin-2026\n"
+    )
 
 
 @app.get("/health")

@@ -1,0 +1,23 @@
+# TLS analysis on localhost — weak/missing TLS
+suite: network
+emulates: tls_analysis
+target: "localhost"
+disposition: tls_weak
+
+behavior:
+  latency_ms: 150
+
+output:
+  host: "localhost:8200"
+  tls_version: "none"
+  certificate: "self-signed"
+
+findings:
+  - title: "Weak TLS configuration on localhost"
+    description: "Services on localhost lack proper TLS. Connections are plaintext HTTP or use self-signed certificates."
+    severity: "medium"
+    evidence: |
+      localhost:8200 — No TLS (plaintext HTTP)
+      localhost:8201 — No TLS (plaintext HTTP)
+      All services on 8200-8206 accept unencrypted connections.
+    check_name: "tls_analysis"

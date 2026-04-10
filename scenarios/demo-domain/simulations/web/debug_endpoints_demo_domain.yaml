@@ -1,0 +1,22 @@
+# Debug endpoints — /_debug on api
+suite: web
+emulates: debug_endpoints
+target: "localhost"
+disposition: debug_found
+
+behavior:
+  latency_ms: 100
+
+output:
+  host: "localhost:8202"
+  path: "/_debug"
+  status_code: 200
+
+findings:
+  - title: "Debug endpoint exposed on API"
+    description: "A debug endpoint at /_debug on port 8202 returns internal application state."
+    severity: "high"
+    evidence: |
+      GET localhost:8202/_debug => 200 OK
+      Response includes: stack traces, config values, loaded modules
+    check_name: "debug_endpoints"

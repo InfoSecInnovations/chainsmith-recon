@@ -1,0 +1,27 @@
+# simulations/web/waf_fakobanko.yaml
+# Fakobanko scenario: WAF detection
+
+suite: web
+emulates: waf_detection
+target: "www.fakobanko.local"
+disposition: waf_detected
+
+behavior:
+  latency_ms: 300
+
+output:
+  waf_detected: true
+  waf_type: "Cloudflare"
+  confidence: 0.85
+  indicators:
+    - "cf-ray header present"
+    - "403 on SQL injection probe"
+
+findings:
+  - title: "WAF detected on www.fakobanko.local"
+    description: "Cloudflare WAF detected with 85% confidence based on response headers and behavioral analysis."
+    severity: "info"
+    evidence: |
+      WAF: Cloudflare (confidence: 85%)
+      Indicators: cf-ray header, 403 on injection probes
+    check_name: "waf_detection"

@@ -8,6 +8,9 @@
 #   - localhost:8201 — LLM chatbot API (chat) [scenario-specific]
 #   - localhost:8202 — REST API backend (api) [scenario-specific]
 #   - localhost:8203 — MCP agent layer (agent)
+#   - localhost:8204 — RAG knowledge base (rag) [NEW]
+#   - localhost:8205 — Semantic response cache (cache) [NEW]
+#   - localhost:8206 — Internal documentation portal (docs) [NEW]
 #
 # Start via range:
 #   ./range/start-range.sh demo-domain
@@ -27,10 +30,10 @@ services:
     image: chainsmith/runtime:latest
     container_name: demo-domain-www
     command: >
-      uvicorn app.scenario_services.corporate.helpdesk:app
+      uvicorn services.www:app
       --host 0.0.0.0 --port 8200
     environment:
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app:/app/scenarios/demo-domain
       - SERVICE_NAME=www
       - SERVICE_PORT=8200
       # Shared config paths
@@ -58,9 +61,6 @@ services:
 
 
   # ─── LLM Chatbot API ───────────────────────────────────────────
-  # Note: Uses scenario-specific chat.py due to helpdesk-specific
-  # tools and system prompt. Could be migrated to shared template
-  # with additional configuration options.
   demo-domain-chat:
     build:
       context: ../..
@@ -68,10 +68,10 @@ services:
     image: chainsmith/runtime:latest
     container_name: demo-domain-chat
     command: >
-      uvicorn scenarios.demo-domain.services.chat:app
+      uvicorn services.chat:app
       --host 0.0.0.0 --port 8201
     environment:
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app:/app/scenarios/demo-domain
       - SERVICE_NAME=chat
       - SERVICE_PORT=8201
       # Shared config paths
@@ -103,9 +103,6 @@ services:
 
 
   # ─── REST API Backend ──────────────────────────────────────────
-  # Note: Uses scenario-specific api.py due to helpdesk-specific
-  # endpoints (tickets, knowledge base). Could be migrated to
-  # corporate/helpdesk_api template.
   demo-domain-api:
     build:
       context: ../..
@@ -113,10 +110,10 @@ services:
     image: chainsmith/runtime:latest
     container_name: demo-domain-api
     command: >
-      uvicorn scenarios.demo-domain.services.api:app
+      uvicorn services.api:app
       --host 0.0.0.0 --port 8202
     environment:
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app:/app/scenarios/demo-domain
       - SERVICE_NAME=api
       - SERVICE_PORT=8202
       # Shared config paths
@@ -147,10 +144,10 @@ services:
     image: chainsmith/runtime:latest
     container_name: demo-domain-agent
     command: >
-      uvicorn app.scenario_services.ai.mcp_server:app
+      uvicorn services.agent:app
       --host 0.0.0.0 --port 8203
     environment:
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app:/app/scenarios/demo-domain
       - SERVICE_NAME=agent
       - SERVICE_PORT=8203
       # Shared config paths
@@ -171,6 +168,8 @@ services:
       # Internal service URLs
       - CHAT_SERVICE_URL=http://demo-domain-chat:8201
       - API_SERVICE_URL=http://demo-domain-api:8202
+      - RAG_SERVICE_URL=http://demo-domain-rag:8204
+      - CACHE_SERVICE_URL=http://demo-domain-cache:8205
     volumes:
       - ../../app:/app/app:ro
       - ../:/app/scenarios:ro
@@ -182,6 +181,117 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8203/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── RAG Knowledge Base ────────────────────────────────────────
+  demo-domain-rag:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: demo-domain-rag
+    command: >
+      uvicorn services.rag:app
+      --host 0.0.0.0 --port 8204
+    environment:
+      - PYTHONPATH=/app:/app/scenarios/demo-domain
+      - SERVICE_NAME=rag
+      - SERVICE_PORT=8204
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/demo-domain/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=IT HelpDesk
+      - BRAND_DOMAIN=corp.internal
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8204:8204"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8204/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── Semantic Response Cache ───────────────────────────────────
+  demo-domain-cache:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: demo-domain-cache
+    command: >
+      uvicorn services.cache:app
+      --host 0.0.0.0 --port 8205
+    environment:
+      - PYTHONPATH=/app:/app/scenarios/demo-domain
+      - SERVICE_NAME=cache
+      - SERVICE_PORT=8205
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/demo-domain/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=IT HelpDesk
+      - BRAND_DOMAIN=corp.internal
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8205:8205"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8205/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # ─── Internal Documentation Portal ────────────────────────────
+  demo-domain-docs:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: chainsmith/runtime:latest
+    container_name: demo-domain-docs
+    command: >
+      uvicorn services.docs:app
+      --host 0.0.0.0 --port 8206
+    environment:
+      - PYTHONPATH=/app:/app/scenarios/demo-domain
+      - SERVICE_NAME=docs
+      - SERVICE_PORT=8206
+      # Shared config paths
+      - SCENARIO_CONFIG_PATH=/app/scenarios/demo-domain/scenario.json
+      - SESSION_STATE_PATH=/app/data/session.json
+      # Branding
+      - BRAND_NAME=IT HelpDesk
+      - BRAND_DOMAIN=corp.internal
+    volumes:
+      - ../../app:/app/app:ro
+      - ../:/app/scenarios:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8206:8206"
+    networks:
+      - chainsmith-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8206/health"]
       interval: 10s
       timeout: 5s
       retries: 3

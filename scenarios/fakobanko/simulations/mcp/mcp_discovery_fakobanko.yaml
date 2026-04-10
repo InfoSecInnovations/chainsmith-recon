@@ -1,0 +1,25 @@
+# simulations/mcp/mcp_discovery_fakobanko.yaml
+# Fakobanko scenario: MCP server discovered
+
+suite: mcp
+emulates: mcp_discovery
+target: "mcp.fakobanko.local"
+disposition: mcp_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  mcp_endpoint: "wss://mcp.fakobanko.local/mcp"
+  protocol_version: "2024-11-05"
+  server_name: "fakobanko-mcp"
+
+findings:
+  - title: "MCP server discovered on mcp.fakobanko.local"
+    description: "MCP server found at wss://mcp.fakobanko.local/mcp running protocol version 2024-11-05."
+    severity: "info"
+    evidence: |
+      Endpoint: wss://mcp.fakobanko.local/mcp
+      Protocol: 2024-11-05
+      Server: fakobanko-mcp
+    check_name: "mcp_discovery"

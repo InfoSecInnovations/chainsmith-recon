@@ -1,0 +1,25 @@
+# Tool discovery — tools found on chat service
+suite: ai
+emulates: tool_discovery
+target: "localhost"
+disposition: tools_discovered
+
+behavior:
+  latency_ms: 300
+
+output:
+  host: "localhost:8201"
+  tools:
+    - lookup_user
+    - search_kb
+    - create_ticket
+    - run_diagnostic
+
+findings:
+  - title: "AI tools discovered on chat service"
+    description: "The chat assistant on port 8201 exposes 4 callable tools via function-calling."
+    severity: "medium"
+    evidence: |
+      Discovered tools: lookup_user, search_kb, create_ticket, run_diagnostic
+      Tools are invocable through natural language prompts.
+    check_name: "tool_discovery"

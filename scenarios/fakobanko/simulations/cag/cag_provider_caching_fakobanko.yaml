@@ -1,0 +1,26 @@
+# simulations/cag/cag_provider_caching_fakobanko.yaml
+# Fakobanko scenario: Provider-level caching
+
+suite: cag
+emulates: cag_provider_caching
+target: "cache.fakobanko.local"
+disposition: provider_cache_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  provider_cache: true
+  provider: "OpenAI"
+  prompt_caching: true
+  cache_header: "x-request-id matches on repeated prompts"
+
+findings:
+  - title: "OpenAI provider caching detected"
+    description: "Provider-level prompt caching detected via response headers. Repeated system prompts are cached, reducing latency but potentially leaking prompt patterns."
+    severity: "low"
+    evidence: |
+      Provider: OpenAI
+      Prompt caching: enabled
+      Repeated prompts show cache indicators
+    check_name: "cag_provider_caching"

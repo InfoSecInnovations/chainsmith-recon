@@ -1,0 +1,28 @@
+# simulations/web/openapi_fakobanko.yaml
+# Fakobanko scenario: OpenAPI spec publicly exposed
+
+suite: web
+emulates: openapi_discovery
+target: "api.fakobanko.local"
+disposition: spec_found
+
+behavior:
+  latency_ms: 200
+
+output:
+  spec_url: "https://api.fakobanko.local/openapi.json"
+  docs_url: "https://api.fakobanko.local/docs"
+  endpoints_count: 47
+  auth_endpoints:
+    - "/api/v1/auth/token"
+    - "/api/v1/users/me"
+
+findings:
+  - title: "OpenAPI spec exposed on api.fakobanko.local"
+    description: "Full OpenAPI specification with 47 endpoints publicly accessible at /openapi.json and /docs, including auth endpoints."
+    severity: "medium"
+    evidence: |
+      /openapi.json - 200 OK (47 endpoints)
+      /docs - Swagger UI accessible
+      Auth endpoints disclosed: /api/v1/auth/token, /api/v1/users/me
+    check_name: "openapi_discovery"

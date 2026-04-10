@@ -1,0 +1,25 @@
+# simulations/rag/rag_chunk_boundary_fakobanko.yaml
+# Fakobanko scenario: Chunk boundary exploitation
+
+suite: rag
+emulates: rag_chunk_boundary
+target: "vector.fakobanko.local"
+disposition: boundary_exploited
+
+behavior:
+  latency_ms: 350
+
+output:
+  chunk_size: 512
+  overlap: 50
+  boundary_leak: true
+
+findings:
+  - title: "Chunk boundary exploitation on vector.fakobanko.local"
+    description: "Chunk overlap of 50 tokens leaks context across boundaries. Adjacent chunks reveal information that should be in separate access scopes."
+    severity: "medium"
+    evidence: |
+      Chunk size: 512 tokens, Overlap: 50 tokens
+      Overlap leaks cross-boundary context
+      Access scope boundaries not respected
+    check_name: "rag_chunk_boundary"

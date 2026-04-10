@@ -1,0 +1,26 @@
+# simulations/ai/content_filter_fakobanko.yaml
+# Fakobanko scenario: Content filter analysis
+
+suite: ai
+emulates: content_filter_check
+target: "chat.fakobanko.local"
+disposition: filter_weak
+
+behavior:
+  latency_ms: 500
+
+output:
+  filter_type: "keyword"
+  categories_tested: 5
+  categories_blocked: 2
+  bypass_rate: 0.6
+
+findings:
+  - title: "Weak content filters on chat.fakobanko.local"
+    description: "Keyword-based content filter blocks only 2 of 5 tested categories. 60% bypass rate with simple rephrasing."
+    severity: "medium"
+    evidence: |
+      Filter type: keyword-based
+      Categories blocked: 2/5
+      Bypass rate: 60% with rephrasing
+    check_name: "content_filter_check"

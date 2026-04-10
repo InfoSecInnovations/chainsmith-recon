@@ -1,0 +1,26 @@
+# simulations/web/directory_listing_fakobanko.yaml
+# Fakobanko scenario: Directory listing enabled on docs
+
+suite: web
+emulates: directory_listing
+target: "docs.fakobanko.local"
+disposition: listing_enabled
+
+behavior:
+  latency_ms: 200
+
+output:
+  listing_paths:
+    - {path: "/", has_listing: true}
+    - {path: "/internal/", has_listing: true}
+    - {path: "/api-docs/", has_listing: true}
+
+findings:
+  - title: "Directory listing enabled on docs.fakobanko.local"
+    description: "Directory listing is enabled on multiple paths, exposing file structure and potentially sensitive documents."
+    severity: "medium"
+    evidence: |
+      / - directory listing enabled
+      /internal/ - directory listing enabled
+      /api-docs/ - directory listing enabled
+    check_name: "directory_listing"

@@ -1,0 +1,22 @@
+# Directory listing on docs portal
+suite: web
+emulates: directory_listing
+target: "localhost"
+disposition: listing_enabled
+
+behavior:
+  latency_ms: 100
+
+output:
+  host: "localhost:8206"
+  path: "/"
+  listing_enabled: true
+
+findings:
+  - title: "Directory listing enabled on docs portal"
+    description: "The documentation portal on port 8206 has directory listing enabled, exposing file structure."
+    severity: "low"
+    evidence: |
+      GET localhost:8206/ => 200 OK
+      Index of / — lists internal documentation files
+    check_name: "directory_listing"

@@ -1,0 +1,25 @@
+# simulations/web/config_exposure_fakobanko.yaml
+# Fakobanko scenario: .env file accessible
+
+suite: web
+emulates: config_exposure
+target: "api.fakobanko.local"
+disposition: config_found
+
+behavior:
+  latency_ms: 200
+
+output:
+  exposed_files:
+    - {path: "/.env", status: 200, size_bytes: 412}
+    - {path: "/config.yaml", status: 200, size_bytes: 1024}
+
+findings:
+  - title: ".env file accessible on api.fakobanko.local"
+    description: "Environment configuration file is publicly accessible, potentially exposing API keys, database credentials, and secrets."
+    severity: "critical"
+    evidence: |
+      /.env - 200 OK (412 bytes)
+      /config.yaml - 200 OK (1024 bytes)
+      Environment variables and configuration exposed
+    check_name: "config_exposure"

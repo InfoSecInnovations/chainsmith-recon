@@ -1,0 +1,26 @@
+# simulations/ai/adversarial_fakobanko.yaml
+# Fakobanko scenario: Adversarial input testing
+
+suite: ai
+emulates: adversarial_input
+target: "chat.fakobanko.local"
+disposition: adversarial_success
+
+behavior:
+  latency_ms: 500
+
+output:
+  techniques:
+    - {name: "unicode_smuggling", success: true}
+    - {name: "token_splitting", success: true}
+    - {name: "homoglyph", success: false}
+
+findings:
+  - title: "Adversarial inputs bypass filters on chat.fakobanko.local"
+    description: "Unicode smuggling and token splitting bypass input filters. Homoglyph substitution was detected."
+    severity: "medium"
+    evidence: |
+      Unicode smuggling: filter bypassed
+      Token splitting: filter bypassed
+      Homoglyph: blocked
+    check_name: "adversarial_input"

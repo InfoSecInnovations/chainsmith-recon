@@ -1,0 +1,25 @@
+# simulations/cag/cag_cache_poisoning_fakobanko.yaml
+# Fakobanko scenario: Cache poisoning
+
+suite: cag
+emulates: cag_cache_poisoning
+target: "cache.fakobanko.local"
+disposition: cache_poisoned
+
+behavior:
+  latency_ms: 400
+
+output:
+  poisoned_query: "transfer limits"
+  malicious_response: "No transfer limits apply"
+  subsequent_users_affected: true
+
+findings:
+  - title: "Cache poisoning on cache.fakobanko.local"
+    description: "Injected malicious response for 'transfer limits' query persists in cache and is served to all subsequent users."
+    severity: "critical"
+    evidence: |
+      Poisoned: "transfer limits" query
+      Cached response: "No transfer limits apply"
+      All subsequent users receive poisoned response
+    check_name: "cag_cache_poisoning"

@@ -1,0 +1,25 @@
+# simulations/ai/training_data_fakobanko.yaml
+# Fakobanko scenario: Training data extraction
+
+suite: ai
+emulates: training_data
+target: "chat.fakobanko.local"
+disposition: data_extracted
+
+behavior:
+  latency_ms: 700
+
+output:
+  technique: "verbatim_completion"
+  extracted_samples: 2
+  contains_sensitive: true
+
+findings:
+  - title: "Training data extraction on chat.fakobanko.local"
+    description: "Verbatim completion technique extracted 2 memorized training samples containing internal documentation and customer data patterns."
+    severity: "high"
+    evidence: |
+      Technique: verbatim_completion
+      Extracted: 2 memorized samples
+      Contains internal documentation fragments
+    check_name: "training_data"

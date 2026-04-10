@@ -1,0 +1,24 @@
+# simulations/mcp/mcp_resource_traversal_fakobanko.yaml
+# Fakobanko scenario: Resource traversal
+
+suite: mcp
+emulates: resource_traversal
+target: "mcp.fakobanko.local"
+disposition: traversal_success
+
+behavior:
+  latency_ms: 400
+
+output:
+  traversal_payload: "../../etc/passwd"
+  resource_uri: "file:///etc/passwd"
+  accessible: true
+
+findings:
+  - title: "Resource path traversal on MCP server"
+    description: "Resource URI accepts path traversal sequences, allowing access to files outside the intended resource directory."
+    severity: "critical"
+    evidence: |
+      URI: file://../../etc/passwd - accessible
+      No path sanitization on resource URIs
+    check_name: "resource_traversal"

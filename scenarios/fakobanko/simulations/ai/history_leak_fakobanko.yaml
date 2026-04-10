@@ -1,0 +1,25 @@
+# simulations/ai/history_leak_fakobanko.yaml
+# Fakobanko scenario: Conversation history leaked
+
+suite: ai
+emulates: history_leak
+target: "chat.fakobanko.local"
+disposition: history_leaked
+
+behavior:
+  latency_ms: 400
+
+output:
+  technique: "continuation_prompt"
+  leaked_messages: 3
+  contains_pii: true
+
+findings:
+  - title: "Conversation history leak on chat.fakobanko.local"
+    description: "Continuation prompt technique leaked 3 messages from other users' sessions, including PII (names, account numbers)."
+    severity: "critical"
+    evidence: |
+      Technique: continuation_prompt
+      Leaked: 3 messages from other sessions
+      Contains PII: names, account numbers
+    check_name: "history_leak"

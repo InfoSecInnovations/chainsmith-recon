@@ -1,0 +1,22 @@
+# MCP surface discovery — MCP server found
+suite: mcp
+emulates: mcp_discovery
+target: "localhost"
+disposition: mcp_found
+
+behavior:
+  latency_ms: 200
+
+output:
+  host: "localhost:8203"
+  protocol: "MCP/1.0"
+  transport: "streamable-http"
+
+findings:
+  - title: "MCP server discovered"
+    description: "An MCP server is accessible on port 8203 using streamable-http transport without authentication."
+    severity: "medium"
+    evidence: |
+      POST localhost:8203/mcp => 200 OK
+      Protocol: MCP/1.0, Transport: streamable-http
+    check_name: "mcp_discovery"

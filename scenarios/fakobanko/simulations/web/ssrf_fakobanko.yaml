@@ -1,0 +1,26 @@
+# simulations/web/ssrf_fakobanko.yaml
+# Fakobanko scenario: SSRF indicators on agent host
+
+suite: web
+emulates: ssrf_indicator
+target: "agent.fakobanko.local"
+disposition: ssrf_potential
+
+behavior:
+  latency_ms: 300
+
+output:
+  url_params:
+    - {param: "url", endpoint: "/api/fetch"}
+    - {param: "callback", endpoint: "/api/webhook"}
+  internal_reachable: true
+
+findings:
+  - title: "SSRF indicators on agent.fakobanko.local"
+    description: "URL parameters accepting arbitrary URLs found on agent endpoints, with confirmed access to internal network resources."
+    severity: "high"
+    evidence: |
+      /api/fetch?url= - accepts arbitrary URLs
+      /api/webhook?callback= - accepts arbitrary URLs
+      Internal network (10.0.1.x) reachable via URL params
+    check_name: "ssrf_indicator"

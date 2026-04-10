@@ -1,0 +1,26 @@
+# simulations/cag/cag_multi_layer_fakobanko.yaml
+# Fakobanko scenario: Multi-layer cache analysis
+
+suite: cag
+emulates: cag_multi_layer
+target: "cache.fakobanko.local"
+disposition: layers_found
+
+behavior:
+  latency_ms: 350
+
+output:
+  layers:
+    - {layer: "L1", type: "in-memory", ttl: 60}
+    - {layer: "L2", type: "Redis", ttl: 3600}
+    - {layer: "L3", type: "disk", ttl: 86400}
+
+findings:
+  - title: "3-layer cache hierarchy on cache.fakobanko.local"
+    description: "Cache has 3 layers: L1 in-memory (60s), L2 Redis (1h), L3 disk (24h). Poisoning L3 persists for 24 hours."
+    severity: "low"
+    evidence: |
+      L1: in-memory (60s TTL)
+      L2: Redis (3600s TTL)
+      L3: disk (86400s TTL)
+    check_name: "cag_multi_layer"

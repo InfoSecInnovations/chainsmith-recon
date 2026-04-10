@@ -1,0 +1,34 @@
+# simulations/web/robots_fakobanko.yaml
+# Fakobanko scenario: robots.txt discloses sensitive paths
+
+suite: web
+emulates: robots_txt
+target: "www.fakobanko.local"
+disposition: sensitive_paths
+
+behavior:
+  latency_ms: 150
+
+output:
+  robots_txt: |
+    User-agent: *
+    Disallow: /admin/
+    Disallow: /internal/api/
+    Disallow: /debug/
+    Disallow: /.env
+  disallowed_paths:
+    - "/admin/"
+    - "/internal/api/"
+    - "/debug/"
+    - "/.env"
+
+findings:
+  - title: "robots.txt discloses sensitive paths on www.fakobanko.local"
+    description: "robots.txt reveals admin, internal API, debug, and .env paths that attackers can target directly."
+    severity: "low"
+    evidence: |
+      Disallow: /admin/
+      Disallow: /internal/api/
+      Disallow: /debug/
+      Disallow: /.env
+    check_name: "robots_txt"

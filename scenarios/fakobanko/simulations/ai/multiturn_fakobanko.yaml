@@ -1,0 +1,25 @@
+# simulations/ai/multiturn_fakobanko.yaml
+# Fakobanko scenario: Multi-turn prompt injection
+
+suite: ai
+emulates: multiturn_injection
+target: "chat.fakobanko.local"
+disposition: injection_success
+
+behavior:
+  latency_ms: 1000
+
+output:
+  turns: 4
+  technique: "gradual_context_shift"
+  system_prompt_overridden: true
+
+findings:
+  - title: "Multi-turn injection succeeded on chat.fakobanko.local"
+    description: "Gradual context shifting over 4 turns overrode system prompt constraints, allowing unauthorized data access."
+    severity: "high"
+    evidence: |
+      Technique: gradual_context_shift (4 turns)
+      Turn 4: system prompt constraints overridden
+      Model disclosed restricted information
+    check_name: "multiturn_injection"

@@ -1,0 +1,26 @@
+# simulations/rag/rag_discovery_fakobanko.yaml
+# Fakobanko scenario: RAG system discovered
+
+suite: rag
+emulates: rag_discovery
+target: "vector.fakobanko.local"
+disposition: rag_found
+
+behavior:
+  latency_ms: 300
+
+output:
+  endpoints:
+    - {path: "/api/search", method: "POST"}
+    - {path: "/api/collections", method: "GET"}
+  vector_db: "ChromaDB"
+
+findings:
+  - title: "RAG system discovered on vector.fakobanko.local"
+    description: "RAG system with ChromaDB backend found. Search and collection listing endpoints are publicly accessible."
+    severity: "info"
+    evidence: |
+      /api/search - POST (vector search)
+      /api/collections - GET (list collections)
+      Backend: ChromaDB
+    check_name: "rag_discovery"

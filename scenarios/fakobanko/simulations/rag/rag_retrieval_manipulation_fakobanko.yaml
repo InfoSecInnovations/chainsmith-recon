@@ -1,0 +1,25 @@
+# simulations/rag/rag_retrieval_manipulation_fakobanko.yaml
+# Fakobanko scenario: Retrieval manipulation
+
+suite: rag
+emulates: rag_retrieval_manipulation
+target: "vector.fakobanko.local"
+disposition: retrieval_manipulated
+
+behavior:
+  latency_ms: 400
+
+output:
+  technique: "query_expansion_abuse"
+  top_k: 10
+  malicious_in_top_k: 3
+
+findings:
+  - title: "Retrieval manipulation on vector.fakobanko.local"
+    description: "Query expansion abuse places 3 malicious documents in top-10 results by exploiting keyword matching alongside vector similarity."
+    severity: "high"
+    evidence: |
+      Technique: query_expansion_abuse
+      3/10 top results are attacker-controlled
+      Exploits hybrid search (keyword + vector)
+    check_name: "rag_retrieval_manipulation"

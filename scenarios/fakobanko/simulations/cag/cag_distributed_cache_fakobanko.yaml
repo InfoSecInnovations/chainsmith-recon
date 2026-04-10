@@ -1,0 +1,25 @@
+# simulations/cag/cag_distributed_cache_fakobanko.yaml
+# Fakobanko scenario: Distributed cache analysis
+
+suite: cag
+emulates: cag_distributed_cache
+target: "cache.fakobanko.local"
+disposition: distributed_found
+
+behavior:
+  latency_ms: 350
+
+output:
+  cache_nodes: 3
+  consistency: "eventual"
+  replication_lag_ms: 250
+
+findings:
+  - title: "Distributed cache with eventual consistency"
+    description: "3-node distributed cache with eventual consistency and 250ms replication lag. Race conditions possible during replication window."
+    severity: "medium"
+    evidence: |
+      Nodes: 3
+      Consistency: eventual (250ms lag)
+      Race condition window: 250ms
+    check_name: "cag_distributed_cache"

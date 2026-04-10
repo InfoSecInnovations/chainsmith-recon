@@ -1,0 +1,26 @@
+# simulations/ai/output_format_fakobanko.yaml
+# Fakobanko scenario: Output format manipulation
+
+suite: ai
+emulates: output_format
+target: "chat.fakobanko.local"
+disposition: format_manipulated
+
+behavior:
+  latency_ms: 300
+
+output:
+  formats_tested:
+    - {format: "json", controllable: true}
+    - {format: "xml", controllable: true}
+    - {format: "csv", controllable: true}
+
+findings:
+  - title: "Output format fully controllable on chat.fakobanko.local"
+    description: "Model output format is fully controllable via user input, enabling data exfiltration in structured formats."
+    severity: "medium"
+    evidence: |
+      JSON output: controllable
+      XML output: controllable
+      CSV output: controllable
+    check_name: "output_format"

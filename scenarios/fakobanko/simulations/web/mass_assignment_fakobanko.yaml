@@ -1,0 +1,26 @@
+# simulations/web/mass_assignment_fakobanko.yaml
+# Fakobanko scenario: Mass assignment on user profile
+
+suite: web
+emulates: mass_assignment
+target: "api.fakobanko.local"
+disposition: writable_field
+
+behavior:
+  latency_ms: 300
+
+output:
+  endpoint: "/api/v1/users/me"
+  writable_fields:
+    - {field: "role", original: "user", set_to: "admin", accepted: true}
+    - {field: "is_staff", original: false, set_to: true, accepted: true}
+
+findings:
+  - title: "Mass assignment: writable role field on api.fakobanko.local"
+    description: "User profile endpoint accepts role and is_staff fields in PUT request, allowing privilege escalation to admin."
+    severity: "critical"
+    evidence: |
+      PUT /api/v1/users/me {"role":"admin"} - 200 OK
+      PUT /api/v1/users/me {"is_staff":true} - 200 OK
+      Privilege escalation confirmed
+    check_name: "mass_assignment"

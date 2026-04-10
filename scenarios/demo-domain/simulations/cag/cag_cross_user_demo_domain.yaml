@@ -1,0 +1,23 @@
+# CAG cross-user leakage — cross-user data leak
+suite: cag
+emulates: cag_cross_user_leakage
+target: "localhost"
+disposition: cross_user_leak
+
+behavior:
+  latency_ms: 200
+
+output:
+  host: "localhost:8205"
+  isolated: false
+  leaked_sessions: 3
+
+findings:
+  - title: "Cross-user data leakage via semantic cache"
+    description: "The cache on port 8205 lacks session isolation, returning cached responses from other users' queries."
+    severity: "high"
+    evidence: |
+      Semantically similar query returned cached response from
+      another user's session containing their ticket details
+      and personal information.
+    check_name: "cag_cross_user_leakage"

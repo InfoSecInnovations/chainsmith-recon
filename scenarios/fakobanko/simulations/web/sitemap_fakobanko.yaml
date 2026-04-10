@@ -1,0 +1,26 @@
+# simulations/web/sitemap_fakobanko.yaml
+# Fakobanko scenario: Sitemap.xml found
+
+suite: web
+emulates: sitemap
+target: "www.fakobanko.local"
+disposition: sitemap_found
+
+behavior:
+  latency_ms: 150
+
+output:
+  sitemap_url: "https://www.fakobanko.local/sitemap.xml"
+  urls_count: 23
+  interesting_urls:
+    - "/admin/login"
+    - "/api/internal/health"
+
+findings:
+  - title: "Sitemap.xml found on www.fakobanko.local"
+    description: "Sitemap.xml with 23 URLs including admin and internal API paths disclosed."
+    severity: "info"
+    evidence: |
+      /sitemap.xml - 200 OK (23 URLs)
+      Notable: /admin/login, /api/internal/health
+    check_name: "sitemap"

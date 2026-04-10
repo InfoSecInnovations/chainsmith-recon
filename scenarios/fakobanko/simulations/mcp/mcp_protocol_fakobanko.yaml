@@ -1,0 +1,25 @@
+# simulations/mcp/mcp_protocol_fakobanko.yaml
+# Fakobanko scenario: Protocol version check
+
+suite: mcp
+emulates: protocol_version
+target: "mcp.fakobanko.local"
+disposition: version_found
+
+behavior:
+  latency_ms: 200
+
+output:
+  protocol_version: "2024-11-05"
+  supported_versions: ["2024-11-05", "2024-09-01"]
+  downgrade_possible: true
+
+findings:
+  - title: "MCP protocol downgrade possible"
+    description: "Server supports older protocol version 2024-09-01 alongside current. Protocol downgrade may bypass newer security features."
+    severity: "medium"
+    evidence: |
+      Current: 2024-11-05
+      Also supports: 2024-09-01
+      Downgrade accepted without warning
+    check_name: "protocol_version"

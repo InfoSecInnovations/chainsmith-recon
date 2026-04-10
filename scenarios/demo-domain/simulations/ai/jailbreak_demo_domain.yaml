@@ -1,0 +1,22 @@
+# Jailbreak testing — susceptible to jailbreak
+suite: ai
+emulates: jailbreak_testing
+target: "localhost"
+disposition: jailbreak_susceptible
+
+behavior:
+  latency_ms: 400
+
+output:
+  host: "localhost:8201"
+  technique: "DAN prompt"
+  bypassed: true
+
+findings:
+  - title: "AI chat susceptible to jailbreak"
+    description: "The chat assistant on port 8201 can be jailbroken using DAN-style prompts to bypass safety filters."
+    severity: "high"
+    evidence: |
+      Technique: DAN prompt injection
+      The model produced restricted content after jailbreak prompt.
+    check_name: "jailbreak_testing"

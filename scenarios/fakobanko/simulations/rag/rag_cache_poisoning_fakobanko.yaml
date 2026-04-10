@@ -1,0 +1,25 @@
+# simulations/rag/rag_cache_poisoning_fakobanko.yaml
+# Fakobanko scenario: RAG cache poisoning
+
+suite: rag
+emulates: rag_cache_poisoning
+target: "vector.fakobanko.local"
+disposition: cache_poisoned
+
+behavior:
+  latency_ms: 400
+
+output:
+  cache_type: "query_result_cache"
+  poisoned_query: "account balance"
+  cached_malicious_result: true
+
+findings:
+  - title: "RAG query cache poisoned on vector.fakobanko.local"
+    description: "Query result cache poisoned with malicious response for 'account balance' query. All subsequent users receive poisoned results."
+    severity: "high"
+    evidence: |
+      Cache type: query result cache
+      Poisoned query: "account balance"
+      Malicious cached result served to all users
+    check_name: "rag_cache_poisoning"

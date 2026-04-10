@@ -1,0 +1,25 @@
+# simulations/ai/streaming_fakobanko.yaml
+# Fakobanko scenario: Streaming analysis
+
+suite: ai
+emulates: streaming_analysis
+target: "chat.fakobanko.local"
+disposition: streaming_enabled
+
+behavior:
+  latency_ms: 300
+
+output:
+  streaming_enabled: true
+  protocol: "SSE"
+  filter_bypass: true
+
+findings:
+  - title: "Streaming bypasses output filtering on chat.fakobanko.local"
+    description: "Server-Sent Events streaming enabled. Content filters apply only to complete responses, allowing partial token-level bypass."
+    severity: "medium"
+    evidence: |
+      Streaming: SSE (Server-Sent Events)
+      Token-level output bypasses content filter
+      Filters only check complete responses
+    check_name: "streaming_analysis"

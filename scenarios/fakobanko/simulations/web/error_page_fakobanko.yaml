@@ -1,0 +1,25 @@
+# simulations/web/error_page_fakobanko.yaml
+# Fakobanko scenario: Information leakage in error pages
+
+suite: web
+emulates: error_page
+target: "api.fakobanko.local"
+disposition: info_leak
+
+behavior:
+  latency_ms: 200
+
+output:
+  error_pages:
+    - {status: 500, reveals_stack: true, framework: "FastAPI"}
+    - {status: 404, reveals_path: true}
+
+findings:
+  - title: "Error pages leak information on api.fakobanko.local"
+    description: "500 errors return full Python stack traces with file paths, revealing FastAPI framework and internal directory structure."
+    severity: "medium"
+    evidence: |
+      500 response includes Python traceback
+      Reveals: /app/src/api/routes.py line 142
+      Framework: FastAPI 0.109.0
+    check_name: "error_page"

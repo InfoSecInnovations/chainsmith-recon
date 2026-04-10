@@ -1,0 +1,22 @@
+# Guardrail consistency — inconsistent guardrails
+suite: ai
+emulates: guardrail_consistency
+target: "localhost"
+disposition: inconsistent_guardrails
+
+behavior:
+  latency_ms: 400
+
+output:
+  host: "localhost:8201"
+  consistent: false
+  bypass_rate: 0.35
+
+findings:
+  - title: "Inconsistent guardrails on AI chat"
+    description: "Guardrails on port 8201 are inconsistently enforced, with 35% of restricted queries bypassing filters."
+    severity: "medium"
+    evidence: |
+      20 restricted queries tested, 7 bypassed guardrails.
+      Rephrasing the same query often produces different outcomes.
+    check_name: "guardrail_consistency"

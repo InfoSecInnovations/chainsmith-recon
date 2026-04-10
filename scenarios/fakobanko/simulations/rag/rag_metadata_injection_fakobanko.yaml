@@ -1,0 +1,25 @@
+# simulations/rag/rag_metadata_injection_fakobanko.yaml
+# Fakobanko scenario: Metadata injection
+
+suite: rag
+emulates: rag_metadata_injection
+target: "vector.fakobanko.local"
+disposition: metadata_injected
+
+behavior:
+  latency_ms: 350
+
+output:
+  injected_metadata:
+    source: "admin_portal"
+    access_level: "internal"
+  filter_bypass: true
+
+findings:
+  - title: "Metadata injection on vector.fakobanko.local"
+    description: "Document metadata fields accept arbitrary values. Injected access_level=internal bypasses metadata-based access filtering."
+    severity: "high"
+    evidence: |
+      Injected: source=admin_portal, access_level=internal
+      Metadata filter bypass confirmed
+    check_name: "rag_metadata_injection"

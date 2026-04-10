@@ -1,0 +1,23 @@
+# simulations/mcp/mcp_undeclared_fakobanko.yaml
+# Fakobanko scenario: Undeclared capabilities
+
+suite: mcp
+emulates: undeclared_capabilities
+target: "mcp.fakobanko.local"
+disposition: undeclared_found
+
+behavior:
+  latency_ms: 350
+
+output:
+  declared_capabilities: ["tools", "resources"]
+  undeclared_active: ["prompts", "sampling", "logging"]
+
+findings:
+  - title: "Undeclared MCP capabilities active"
+    description: "Server declares only tools and resources but also responds to prompts, sampling, and logging requests."
+    severity: "medium"
+    evidence: |
+      Declared: tools, resources
+      Undeclared but active: prompts, sampling, logging
+    check_name: "undeclared_capabilities"

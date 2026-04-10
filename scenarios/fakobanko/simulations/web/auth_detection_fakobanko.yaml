@@ -1,0 +1,24 @@
+# simulations/web/auth_detection_fakobanko.yaml
+# Fakobanko scenario: Basic auth detected
+
+suite: web
+emulates: auth_detection
+target: "internal.fakobanko.local"
+disposition: auth_found
+
+behavior:
+  latency_ms: 200
+
+output:
+  auth_methods:
+    - {type: "Basic", endpoint: "/", header: "WWW-Authenticate: Basic realm=\"internal\""}
+    - {type: "Bearer", endpoint: "/api/", header: "WWW-Authenticate: Bearer"}
+
+findings:
+  - title: "Basic authentication on internal.fakobanko.local"
+    description: "HTTP Basic authentication detected on internal portal. Basic auth transmits credentials in base64 (not encrypted) and is vulnerable to brute force."
+    severity: "medium"
+    evidence: |
+      / - WWW-Authenticate: Basic realm="internal"
+      /api/ - WWW-Authenticate: Bearer
+    check_name: "auth_detection"

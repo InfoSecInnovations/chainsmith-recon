@@ -1,0 +1,28 @@
+# simulations/network/traceroute_fakobanko.yaml
+# Fakobanko scenario: Traceroute reveals network path
+
+suite: network
+emulates: traceroute
+target: "fakobanko.local"
+disposition: path_found
+
+behavior:
+  latency_ms: 700
+
+output:
+  hops:
+    - {hop: 1, ip: "10.0.0.1", rtt_ms: 1}
+    - {hop: 2, ip: "10.0.0.5", rtt_ms: 3}
+    - {hop: 3, ip: "10.0.1.1", rtt_ms: 5}
+    - {hop: 4, ip: "10.0.1.10", rtt_ms: 7}
+
+findings:
+  - title: "Network path to fakobanko.local: 4 hops"
+    description: "Traceroute shows 4 hops through internal network with no filtering devices detected between hops."
+    severity: "info"
+    evidence: |
+      1  10.0.0.1    1ms (gateway)
+      2  10.0.0.5    3ms (core switch)
+      3  10.0.1.1    5ms (segment gateway)
+      4  10.0.1.10   7ms (www.fakobanko.local)
+    check_name: "traceroute"

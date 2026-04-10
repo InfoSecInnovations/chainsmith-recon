@@ -10,6 +10,8 @@ Planted findings:
     api_key_in_error         Error responses include internal service URLs
     verbose_errors           Full tracebacks in 500 responses
     version_disclosure       Headers leak stack versions
+    debug_endpoints          /_debug endpoint exposes internal config
+    auth_detection_basic     Basic auth scheme detectable
 """
 
 import random
@@ -302,6 +304,30 @@ async def admin_config(request: Request, user: str | None = Depends(get_current_
         },
         "database": "sqlite:///data/helpdesk.db",
         "session_state": "/data/demo_session.json",
+    }
+
+
+# ── Debug endpoint — debug_endpoints finding ────────────────────────
+
+
+@app.get("/_debug")
+async def debug_info(request: Request):
+    """debug_endpoints finding — exposes internal configuration."""
+    if not is_finding_active("debug_endpoints"):
+        raise HTTPException(404, "Not found")
+    return {
+        "service": "demo-domain-api",
+        "version": "1.3.0",
+        "internal_endpoints": {
+            "chat": "http://demo-domain-chat:8201",
+            "agent": "http://demo-domain-agent:8203",
+            "rag": "http://demo-domain-rag:8204",
+            "cache": "http://demo-domain-cache:8205",
+            "docs": "http://demo-domain-docs:8206",
+        },
+        "database": "sqlite:///data/helpdesk.db",
+        "valid_tokens": list(VALID_TOKENS.keys()) if is_finding_active("verbose_errors") else "[redacted]",
+        "session_id": get_or_create_session().session_id,
     }
 
 

@@ -1,0 +1,26 @@
+# simulations/ai/input_format_fakobanko.yaml
+# Fakobanko scenario: Input format injection
+
+suite: ai
+emulates: input_format_injection
+target: "chat.fakobanko.local"
+disposition: format_bypass
+
+behavior:
+  latency_ms: 400
+
+output:
+  formats_tested:
+    - {format: "markdown", bypass: true}
+    - {format: "json_injection", bypass: true}
+    - {format: "xml_tags", bypass: false}
+
+findings:
+  - title: "Input format injection on chat.fakobanko.local"
+    description: "Markdown and JSON format injections bypass input sanitization, allowing prompt manipulation via structured input."
+    severity: "medium"
+    evidence: |
+      Markdown injection: bypass successful
+      JSON injection: bypass successful
+      XML tag injection: blocked
+    check_name: "input_format_injection"

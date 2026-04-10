@@ -1,0 +1,26 @@
+# simulations/ai/cache_detect_fakobanko.yaml
+# Fakobanko scenario: Semantic cache detected
+
+suite: ai
+emulates: cache_detect
+target: "chat.fakobanko.local"
+disposition: cache_detected
+
+behavior:
+  latency_ms: 300
+
+output:
+  cache_detected: true
+  cache_type: "semantic"
+  avg_cached_latency_ms: 15
+  avg_uncached_latency_ms: 850
+
+findings:
+  - title: "Semantic cache detected on chat.fakobanko.local"
+    description: "Response timing analysis reveals semantic caching. Cached responses return in ~15ms vs ~850ms uncached."
+    severity: "info"
+    evidence: |
+      Cached response: ~15ms
+      Uncached response: ~850ms
+      Cache type: semantic similarity
+    check_name: "cache_detect"
