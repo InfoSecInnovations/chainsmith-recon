@@ -50,11 +50,22 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], AgentType]] = [
     # Adjudicator
     (re.compile(r"\b(severity|risk|adjudicat\w*|score|re-?score)\b", re.I), AgentType.ADJUDICATOR),
     # Verifier
-    (re.compile(r"\b(verify|verif\w*|check if|is this real|hallucination)\b", re.I), AgentType.VERIFIER),
+    (
+        re.compile(r"\b(verify|verif\w*|check if|is this real|hallucination)\b", re.I),
+        AgentType.VERIFIER,
+    ),
     # Triage
-    (re.compile(r"\b(prioriti[zs]\w*|fix first|remediat\w*|action plan|quick win|triage)\b", re.I), AgentType.TRIAGE),
+    (
+        re.compile(
+            r"\b(prioriti[zs]\w*|fix first|remediat\w*|action plan|quick win|triage)\b", re.I
+        ),
+        AgentType.TRIAGE,
+    ),
     # Proof Advisor (future agent)
-    (re.compile(r"\b(proof|reproduce|reproduction|evidence|exploit)\b", re.I), AgentType.PROOF_ADVISOR),
+    (
+        re.compile(r"\b(proof|reproduce|reproduction|evidence|exploit)\b", re.I),
+        AgentType.PROOF_ADVISOR,
+    ),
 ]
 
 # ─── Layer 3: LLM classification prompt ─────────────────────────

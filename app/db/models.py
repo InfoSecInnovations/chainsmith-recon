@@ -242,6 +242,28 @@ class TriagePlanRecord(Base):
     __table_args__ = (Index("idx_triage_plans_scan_id", "scan_id"),)
 
 
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(String, primary_key=True)
+    session_id = Column(String, nullable=False)
+    engagement_id = Column(String, nullable=True)
+    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    direction = Column(String, nullable=False)  # 'operator' or 'agent'
+    agent_type = Column(String, nullable=True)  # null for operator messages
+    text = Column(Text, nullable=False)
+    route_method = Column(String, nullable=True)  # 'context', 'keyword', 'llm'
+    ui_context = Column(JSON, nullable=True)
+    references = Column(JSON, nullable=True)  # list of Reference objects
+    actions = Column(JSON, nullable=True)  # list of SuggestedAction objects
+    cleared = Column(Integer, default=0)  # 0=visible, 1=cleared by operator
+
+    __table_args__ = (
+        Index("idx_chat_session_id", "session_id"),
+        Index("idx_chat_engagement_id", "engagement_id"),
+    )
+
+
 class TriageActionRecord(Base):
     __tablename__ = "triage_actions"
 

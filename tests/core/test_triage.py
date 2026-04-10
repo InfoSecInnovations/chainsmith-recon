@@ -14,15 +14,12 @@ Covers:
 """
 
 import json
-import os
-import tempfile
 from datetime import datetime
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.agents.triage import TriageAgent, load_remediation_kb, _match_kb_entries, _clean_json
+from app.agents.triage import TriageAgent, _clean_json, _match_kb_entries, load_remediation_kb
 from app.engine.triage import load_team_context, save_team_context
 from app.lib.llm import LLMErrorType, LLMResponse
 from app.models import (
@@ -35,7 +32,6 @@ from app.models import (
     Observation,
     ObservationSeverity,
     ObservationStatus,
-    OperatorContext,
     TeamContext,
     TriageAction,
     TriagePlan,

@@ -26,9 +26,12 @@ _observation_repo = ObservationRepository()
 _scan_repo = ScanRepository()
 
 
-def _resolve_scan_id(scan_id: str | None) -> str | None:
-    """Resolve scan_id from parameter or active scan."""
-    return scan_id or state.active_scan_id
+async def _resolve_scan_id(scan_id: str | None) -> str | None:
+    """Resolve scan_id: explicit param > active scan > most recent completed scan in DB."""
+    sid = scan_id or state.active_scan_id or state._last_scan_id
+    if sid:
+        return sid
+    return await _scan_repo.get_most_recent_scan_id()
 
 
 @router.get("/api/v1/observations")
@@ -38,7 +41,7 @@ async def get_observations(
     host: str | None = Query(None, description="Filter by host"),
 ):
     """Get all observations for a scan."""
-    sid = _resolve_scan_id(scan_id)
+    sid = await _resolve_scan_id(scan_id)
     if not sid:
         return {"total": 0, "observations": []}
 
@@ -51,7 +54,7 @@ async def get_observations_by_host(
     scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
 ):
     """Get observations grouped by host."""
-    sid = _resolve_scan_id(scan_id)
+    sid = await _resolve_scan_id(scan_id)
     if not sid:
         return {"target": state.target or "unknown", "hosts": []}
 
@@ -67,7 +70,7 @@ async def get_observation_detail(
     scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
 ):
     """Get detailed info about a specific observation."""
-    sid = _resolve_scan_id(scan_id)
+    sid = await _resolve_scan_id(scan_id)
     if not sid:
         raise HTTPException(404, f"Observation '{observation_id}' not found")
 
@@ -87,7 +90,7 @@ async def export_observations_csv(
     """Export observations as a downloadable CSV file."""
     from app.cli_formatters import observations_to_csv
 
-    sid = _resolve_scan_id(scan_id)
+    sid = await _resolve_scan_id(scan_id)
     if not sid:
         return Response(
             content="title,severity,check_name,suite,host,target_url,description,evidence,verification_status,confidence,references,created_at\r\n",

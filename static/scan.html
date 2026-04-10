@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chainsmith Recon - Scan</title>
     <link rel="stylesheet" href="/static/css/common.css">
+    <link rel="stylesheet" href="/static/css/chat.css">
     <link rel="stylesheet" href="/static/css/scan.css">
 </head>
 <body>
@@ -295,6 +296,7 @@
     </div>
 
     <script src="/static/js/api.js"></script>
+    <script src="/static/js/chat.js"></script>
     <script>
         let pollInterval = null;
         let observations = [];
@@ -694,8 +696,9 @@
             `).join('');
 
             body.querySelectorAll('tr').forEach(row => {
+                row.style.cursor = 'pointer';
                 row.addEventListener('click', () => {
-                    const finding = observations.find(f => f.id === row.dataset.finding);
+                    const observation = observations.find(f => f.id === row.dataset.observation);
                     if (observation) {
                         openModal(observation.title, getObservationModalContent(observation));
                     }

@@ -12,7 +12,7 @@ import logging
 from fastapi import APIRouter, Query
 
 from app.config import get_config
-from app.db.repositories import AdvisorRepository
+from app.db.repositories import AdvisorRepository, ScanRepository
 from app.state import state
 
 logger = logging.getLogger(__name__)
@@ -20,11 +20,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _advisor_repo = AdvisorRepository()
+_scan_repo = ScanRepository()
 
 
-def _resolve_scan_id(scan_id: str | None) -> str | None:
-    """Resolve scan_id from parameter or active scan."""
-    return scan_id or state.active_scan_id
+async def _resolve_scan_id(scan_id: str | None) -> str | None:
+    """Resolve scan_id: explicit param > active scan > most recent completed scan in DB."""
+    sid = scan_id or state.active_scan_id or state._last_scan_id
+    if sid:
+        return sid
+    return await _scan_repo.get_most_recent_scan_id()
 
 
 @router.get("/api/v1/scan-advisor/recommendations")
@@ -37,7 +41,7 @@ async def get_recommendations(
     Returns empty list if advisor is disabled or no scan has completed.
     """
     cfg = get_config()
-    sid = _resolve_scan_id(scan_id)
+    sid = await _resolve_scan_id(scan_id)
 
     if not sid:
         return {

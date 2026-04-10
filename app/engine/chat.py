@@ -1,0 +1,475 @@
+"""
+app/engine/chat.py - Chat SSE Manager & Agent Event Bridge
+
+Manages per-user SSE connections, agent message queues, and the bridge
+that routes AgentEvent emissions into the chat stream.
+
+Phase 35a: Text chat with SSE (MVP).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import uuid
+from collections import defaultdict
+from datetime import UTC, datetime
+
+from app.db.repositories import ChatRepository
+from app.models import AgentEvent, AgentType, RouteDecision
+
+logger = logging.getLogger(__name__)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Chat response models
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def make_chat_response(
+    agent: AgentType,
+    text: str,
+    references: list[dict] | None = None,
+    actions: list[dict] | None = None,
+    route_method: str | None = None,
+    msg_id: str | None = None,
+) -> dict:
+    """Build a structured chat response dict."""
+    return {
+        "id": msg_id or f"msg-{uuid.uuid4().hex[:8]}",
+        "agent": str(agent),
+        "text": text,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "routed_via": route_method,
+        "references": references or [],
+        "actions": actions or [],
+    }
+
+
+def make_system_message(text: str, msg_id: str | None = None) -> dict:
+    """Build a system message (errors, redirects, info)."""
+    return {
+        "id": msg_id or f"sys-{uuid.uuid4().hex[:8]}",
+        "agent": None,
+        "text": text,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "routed_via": None,
+        "references": [],
+        "actions": [],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SSE Manager — per-user connection tracking and broadcast
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class SSEManager:
+    """Manages Server-Sent Event connections, one stream per user.
+
+    Each connected user has an asyncio.Queue. The SSE endpoint reads
+    from the queue and streams events to the browser.
+    """
+
+    def __init__(self) -> None:
+        # session_id -> list of queues (one per tab/connection)
+        self._connections: dict[str, list[asyncio.Queue]] = defaultdict(list)
+        # agent_type -> queue of pending messages (one-at-a-time processing)
+        self._agent_queues: dict[str, asyncio.Queue] = {}
+        self._agent_busy: dict[str, bool] = {}
+
+    def connect(self, session_id: str) -> asyncio.Queue:
+        """Register a new SSE connection. Returns the queue to read from."""
+        queue: asyncio.Queue = asyncio.Queue()
+        self._connections[session_id].append(queue)
+        logger.info(
+            "SSE connection opened for session %s (total: %d)",
+            session_id,
+            len(self._connections[session_id]),
+        )
+        return queue
+
+    def disconnect(self, session_id: str, queue: asyncio.Queue) -> None:
+        """Unregister an SSE connection."""
+        conns = self._connections.get(session_id, [])
+        if queue in conns:
+            conns.remove(queue)
+        if not conns:
+            self._connections.pop(session_id, None)
+        logger.info("SSE connection closed for session %s", session_id)
+
+    async def send(self, session_id: str, event_type: str, data: dict) -> None:
+        """Push an event to all connections for a session."""
+        conns = self._connections.get(session_id, [])
+        payload = {"event": event_type, "data": data}
+        for queue in conns:
+            await queue.put(payload)
+
+    async def broadcast_all(self, event_type: str, data: dict) -> None:
+        """Push an event to ALL connected sessions."""
+        payload = {"event": event_type, "data": data}
+        for conns in self._connections.values():
+            for queue in conns:
+                await queue.put(payload)
+
+    def has_connections(self, session_id: str) -> bool:
+        """Check if a session has active SSE connections."""
+        return bool(self._connections.get(session_id))
+
+    # ─── Agent queue management ────────────────────────────────────
+
+    def is_agent_busy(self, agent_type: str) -> bool:
+        """Check if an agent is currently processing a message."""
+        return self._agent_busy.get(agent_type, False)
+
+    def set_agent_busy(self, agent_type: str, busy: bool) -> None:
+        """Mark an agent as busy/idle."""
+        self._agent_busy[agent_type] = busy
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Event Bridge — connects agent callbacks to SSE stream
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def create_chat_event_bridge(
+    sse_manager: SSEManager,
+    session_id: str,
+):
+    """Create an event callback that bridges agent events to SSE.
+
+    Returns a callback function compatible with the agent event_callback
+    signature: async (AgentEvent) -> None.
+    """
+
+    async def bridge(event: AgentEvent) -> None:
+        await sse_manager.send(
+            session_id,
+            event_type="agent_event",
+            data={
+                "event_type": str(event.event_type),
+                "agent": str(event.agent),
+                "importance": str(event.importance),
+                "message": event.message,
+                "details": event.details,
+                "observation_id": event.observation_id,
+                "chain_id": event.chain_id,
+                "timestamp": event.timestamp.isoformat(),
+            },
+        )
+
+    return bridge
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Chat Dispatcher — routes messages through Prompt Router to agents
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class ChatDispatcher:
+    """Orchestrates chat message flow: route → agent → response → SSE.
+
+    Handles agent queuing (one message at a time per agent) and
+    persistence of both operator and agent messages.
+    """
+
+    def __init__(self, sse_manager: SSEManager, chat_repo: ChatRepository) -> None:
+        self.sse = sse_manager
+        self.repo = chat_repo
+        self._router = None  # lazy — set via set_router()
+
+    def set_router(self, router) -> None:
+        """Inject the PromptRouter (avoids circular import)."""
+        self._router = router
+
+    async def handle_operator_message(
+        self,
+        session_id: str,
+        text: str,
+        ui_context: dict[str, str] | None = None,
+        engagement_id: str | None = None,
+    ) -> dict:
+        """Process an operator chat message end-to-end.
+
+        1. Persist operator message
+        2. Route via PromptRouter
+        3. Dispatch to target agent (or return clarification)
+        4. Persist agent response
+        5. Push response to SSE stream
+        """
+        # 1. Persist operator message
+        op_msg_id = f"msg-{uuid.uuid4().hex[:8]}"
+        await self.repo.save_message(
+            msg_id=op_msg_id,
+            session_id=session_id,
+            direction="operator",
+            text=text,
+            engagement_id=engagement_id,
+            ui_context=ui_context,
+        )
+
+        # 2. Route
+        if self._router is None:
+            error_msg = make_system_message(
+                "Chat system is not fully initialized. The prompt router is unavailable."
+            )
+            await self.sse.send(session_id, "chat_response", error_msg)
+            return error_msg
+
+        try:
+            decision: RouteDecision = await self._router.route(text, ui_context)
+        except Exception as exc:
+            logger.exception("Prompt router error")
+            error_msg = make_system_message(f"Could not classify your message: {exc}")
+            await self._persist_and_send(session_id, engagement_id, error_msg, None)
+            return error_msg
+
+        # 3. Handle clarification needed
+        if decision.needs_clarification:
+            clarify_msg = make_system_message(
+                decision.clarification_prompt or "Could you clarify what you'd like to do?"
+            )
+            await self._persist_and_send(session_id, engagement_id, clarify_msg, decision.method)
+            return clarify_msg
+
+        # 4. Handle redirect notification
+        if decision.redirect_message:
+            await self.sse.send(
+                session_id,
+                "redirect",
+                {
+                    "from_agent": None,
+                    "to_agent": str(decision.target),
+                    "reason": decision.redirect_message,
+                },
+            )
+
+        # 5. Check agent busy → queue indicator
+        agent_name = str(decision.target)
+        if self.sse.is_agent_busy(agent_name):
+            await self.sse.send(
+                session_id,
+                "typing",
+                {"agent": agent_name, "status": "queued"},
+            )
+
+        # 6. Send typing indicator
+        await self.sse.send(
+            session_id,
+            "typing",
+            {"agent": agent_name, "status": "thinking"},
+        )
+
+        # 7. Dispatch to agent
+        response = await self._dispatch_to_agent(decision, text, session_id, ui_context)
+
+        # 8. Persist and push agent response
+        await self._persist_and_send(
+            session_id, engagement_id, response, decision.method, agent_name
+        )
+
+        return response
+
+    async def _dispatch_to_agent(
+        self,
+        decision: RouteDecision,
+        text: str,
+        session_id: str,
+        ui_context: dict[str, str] | None,
+    ) -> dict:
+        """Dispatch a message to the target agent and return the response.
+
+        This is the integration point where agents are called. For MVP,
+        agents that don't have a chat-compatible interface get a
+        placeholder response explaining what the agent does.
+        """
+
+        agent_type = decision.target
+        bridge = create_chat_event_bridge(self.sse, session_id)
+
+        self.sse.set_agent_busy(str(agent_type), True)
+        try:
+            if agent_type == AgentType.CHAINSMITH:
+                return await self._handle_chainsmith(text, bridge)
+            elif agent_type == AgentType.TRIAGE:
+                return await self._handle_triage(text, session_id, bridge)
+            elif agent_type == AgentType.ADJUDICATOR:
+                return await self._handle_adjudicator(text, session_id, bridge)
+            elif agent_type == AgentType.VERIFIER:
+                return await self._handle_verifier(text, session_id, bridge)
+            else:
+                return make_chat_response(
+                    agent=agent_type,
+                    text=f"The {agent_type} agent received your message but doesn't "
+                    f"have a chat interface yet. This will be available in a future update.",
+                    route_method=decision.method,
+                )
+        except Exception as exc:
+            logger.exception("Agent dispatch error for %s", agent_type)
+            return make_system_message(
+                f"The {agent_type} agent encountered an error: {exc}. "
+                "Try again or interact with it directly from its page."
+            )
+        finally:
+            self.sse.set_agent_busy(str(agent_type), False)
+
+    async def _handle_chainsmith(self, text: str, bridge) -> dict:
+        """Route to ChainsmithAgent scoping conversation."""
+        from app.agents.chainsmith import ChainsmithAgent
+
+        agent = ChainsmithAgent(event_callback=bridge)
+        response = await agent.continue_scoping(text)
+        return make_chat_response(
+            agent=AgentType.CHAINSMITH,
+            text=response if isinstance(response, str) else str(response),
+            route_method="keyword",
+        )
+
+    async def _handle_triage(self, text: str, session_id: str, bridge) -> dict:
+        """Summarize triage plan or answer triage questions."""
+        from app.db.repositories import TriageRepository
+        from app.state import state
+
+        scan_id = state.active_scan_id or state._last_scan_id
+        if not scan_id:
+            return make_chat_response(
+                agent=AgentType.TRIAGE,
+                text="No scan data available yet. Run a scan first, then I can "
+                "help prioritize remediation.",
+                route_method="keyword",
+            )
+
+        repo = TriageRepository()
+        plan = await repo.get_plan(scan_id)
+        if not plan:
+            return make_chat_response(
+                agent=AgentType.TRIAGE,
+                text="No triage plan has been generated for the current scan. "
+                "Trigger triage from the scan page first.",
+                route_method="keyword",
+            )
+
+        # Summarize the plan in chat
+        actions = await repo.get_actions(plan["id"])
+        quick = [a for a in actions if a.get("effort_estimate") == "low"]
+        summary_lines = [plan.get("summary", "Triage plan available.")]
+        if quick:
+            summary_lines.append(f"\n{len(quick)} quick win(s). Top: {quick[0]['action']}")
+        summary_lines.append(
+            "\nWould you like me to write a detailed analysis to the reports directory?"
+        )
+        return make_chat_response(
+            agent=AgentType.TRIAGE,
+            text="\n".join(summary_lines),
+            route_method="keyword",
+            actions=[
+                {
+                    "label": "Write full analysis to reports",
+                    "action": "triage_detailed_report",
+                    "params": {"scan_id": scan_id},
+                }
+            ],
+        )
+
+    async def _handle_adjudicator(self, text: str, session_id: str, bridge) -> dict:
+        """Summarize adjudication results or answer questions."""
+        from app.db.repositories import AdjudicationRepository
+        from app.state import state
+
+        scan_id = state.active_scan_id or state._last_scan_id
+        if not scan_id:
+            return make_chat_response(
+                agent=AgentType.ADJUDICATOR,
+                text="No scan data available yet. Run a scan first.",
+                route_method="keyword",
+            )
+
+        repo = AdjudicationRepository()
+        results = await repo.get_results(scan_id)
+        if not results:
+            return make_chat_response(
+                agent=AgentType.ADJUDICATOR,
+                text="No adjudication results for the current scan. "
+                "Trigger adjudication from the scan page.",
+                route_method="keyword",
+            )
+
+        adjusted = [r for r in results if r["original_severity"] != r["adjudicated_severity"]]
+        summary = (
+            f"Adjudication complete: {len(results)} observations reviewed, "
+            f"{len(adjusted)} severity adjustment(s)."
+        )
+        if adjusted:
+            top = adjusted[0]
+            summary += (
+                f" Example: {top['observation_id']} changed from "
+                f"{top['original_severity']} to {top['adjudicated_severity']}."
+            )
+        return make_chat_response(
+            agent=AgentType.ADJUDICATOR,
+            text=summary,
+            route_method="keyword",
+            references=[
+                {"type": "observation", "id": r["observation_id"], "label": r["observation_id"]}
+                for r in adjusted[:5]
+            ],
+        )
+
+    async def _handle_verifier(self, text: str, session_id: str, bridge) -> dict:
+        """Summarize verification status."""
+        from app.db.repositories import ObservationRepository
+        from app.state import state
+
+        scan_id = state.active_scan_id or state._last_scan_id
+        if not scan_id:
+            return make_chat_response(
+                agent=AgentType.VERIFIER,
+                text="No scan data available. Run a scan first.",
+                route_method="keyword",
+            )
+
+        repo = ObservationRepository()
+        obs = await repo.get_observations(scan_id)
+        verified = [o for o in obs if o.get("verification_status") == "verified"]
+        rejected = [o for o in obs if o.get("verification_status") == "rejected"]
+
+        return make_chat_response(
+            agent=AgentType.VERIFIER,
+            text=(
+                f"{len(obs)} observations total: {len(verified)} verified, "
+                f"{len(rejected)} rejected, "
+                f"{len(obs) - len(verified) - len(rejected)} pending."
+            ),
+            route_method="keyword",
+        )
+
+    async def _persist_and_send(
+        self,
+        session_id: str,
+        engagement_id: str | None,
+        msg: dict,
+        route_method: str | None,
+        agent_type: str | None = None,
+    ) -> None:
+        """Persist an agent/system message and push it to SSE."""
+        await self.repo.save_message(
+            msg_id=msg["id"],
+            session_id=session_id,
+            direction="agent",
+            text=msg["text"],
+            agent_type=agent_type or msg.get("agent"),
+            engagement_id=engagement_id,
+            route_method=route_method,
+            references=msg.get("references"),
+            actions=msg.get("actions"),
+        )
+        await self.sse.send(session_id, "chat_response", msg)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Module-level singleton
+# ═══════════════════════════════════════════════════════════════════════════════
+
+sse_manager = SSEManager()
+chat_repo = ChatRepository()
+chat_dispatcher = ChatDispatcher(sse_manager, chat_repo)

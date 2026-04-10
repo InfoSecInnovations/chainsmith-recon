@@ -230,8 +230,12 @@ class TriageAgent:
 
         # Build prompt
         prompt = self._build_prompt(
-            observations, chains, adjudications,
-            operator_context, team_context, kb_entries,
+            observations,
+            chains,
+            adjudications,
+            operator_context,
+            team_context,
+            kb_entries,
         )
 
         # Single LLM call
@@ -350,8 +354,7 @@ class TriageAgent:
             parts.append("\n=== OPERATOR CONTEXT ===\n")
             for asset in operator_context.assets:
                 parts.append(
-                    f"  {asset.domain}: exposure={asset.exposure}, "
-                    f"criticality={asset.criticality}"
+                    f"  {asset.domain}: exposure={asset.exposure}, criticality={asset.criticality}"
                 )
                 if asset.notes:
                     parts.append(f"    Notes: {asset.notes}")
@@ -466,12 +469,10 @@ class TriageAgent:
 
         # Count quick wins and strategic fixes
         quick_wins = sum(
-            1 for a in actions
-            if a.effort_estimate == "low" and a.impact_estimate == "high"
+            1 for a in actions if a.effort_estimate == "low" and a.impact_estimate == "high"
         )
         strategic_fixes = sum(
-            1 for a in actions
-            if a.effort_estimate == "high" and a.impact_estimate == "high"
+            1 for a in actions if a.effort_estimate == "high" and a.impact_estimate == "high"
         )
 
         # Parse workstreams

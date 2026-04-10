@@ -22,6 +22,7 @@ from app.routes import (
     adjudication_router,
     advisor_router,
     chains_router,
+    chat_router,
     checks_router,
     compliance_router,
     customizations_router,
@@ -60,6 +61,23 @@ async def lifespan(app: FastAPI):
             "Scans will still work but results will not be saved.",
             exc_info=True,
         )
+
+    # Initialize chat dispatcher with prompt router
+    try:
+        from app.engine.chat import chat_dispatcher
+        from app.engine.prompt_router import PromptRouter
+        from app.lib.llm import get_llm_client
+
+        client = get_llm_client()
+        router = PromptRouter(client)
+        chat_dispatcher.set_router(router)
+        logger.info("Chat dispatcher initialized with prompt router")
+    except Exception:
+        logger.warning(
+            "Chat dispatcher initialization failed — chat will be unavailable.",
+            exc_info=True,
+        )
+
     yield
     await close_db()
 
@@ -105,6 +123,7 @@ app.include_router(compliance_router)
 app.include_router(swarm_router)
 app.include_router(customizations_router)
 app.include_router(advisor_router)
+app.include_router(chat_router)
 
 
 # ─── Static Page Routes ───────────────────────────────────────

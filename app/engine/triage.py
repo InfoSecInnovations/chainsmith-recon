@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from app.agents.triage import TriageAgent, load_remediation_kb, _match_kb_entries
+from app.agents.triage import TriageAgent, _match_kb_entries, load_remediation_kb
 from app.config import get_config
 from app.lib.llm import get_llm_client
 from app.models import (
@@ -21,7 +21,6 @@ from app.models import (
     Observation,
     ObservationSeverity,
     ObservationStatus,
-    OperatorContext,
     TeamContext,
 )
 
@@ -298,9 +297,7 @@ async def run_triage(state: "AppState") -> None:
                         impact_statement=c.get("impact_statement", ""),
                         observation_ids=c.get("observation_ids", []),
                         individual_severities=[],
-                        combined_severity=ObservationSeverity(
-                            c.get("severity", "medium")
-                        ),
+                        combined_severity=ObservationSeverity(c.get("severity", "medium")),
                         severity_reasoning=c.get("severity_reasoning", ""),
                         attack_steps=c.get("attack_steps", []),
                     )
@@ -349,6 +346,4 @@ async def run_triage(state: "AppState") -> None:
     except Exception as e:
         logger.exception("Triage failed: %s", e)
         state.triage_status = "error"
-        await _update_triage_status_in_db(
-            scan_id, triage_status="error", triage_error=str(e)
-        )
+        await _update_triage_status_in_db(scan_id, triage_status="error", triage_error=str(e))

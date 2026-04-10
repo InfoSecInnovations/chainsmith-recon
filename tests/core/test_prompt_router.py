@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.engine.prompt_router import PromptRouter, LLM_CONFIDENCE_THRESHOLD
+from app.engine.prompt_router import LLM_CONFIDENCE_THRESHOLD, PromptRouter
 from app.lib.llm import LLMResponse
 from app.models import AgentType, RouteDecision
 

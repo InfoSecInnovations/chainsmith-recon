@@ -16,7 +16,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.db.repositories import ChainRepository, ObservationRepository
+from app.db.repositories import ChainRepository, ObservationRepository, ScanRepository
 from app.proof_of_scope import compliance_reporter, traffic_logger, violation_logger
 from app.state import state
 
@@ -26,11 +26,15 @@ router = APIRouter()
 
 _observation_repo = ObservationRepository()
 _chain_repo = ChainRepository()
+_scan_repo = ScanRepository()
 
 
-def _resolve_scan_id(scan_id: str | None) -> str | None:
-    """Resolve scan_id from parameter or active scan."""
-    return scan_id or state.active_scan_id
+async def _resolve_scan_id(scan_id: str | None) -> str | None:
+    """Resolve scan_id: explicit param > active scan > most recent completed scan in DB."""
+    sid = scan_id or state.active_scan_id or state._last_scan_id
+    if sid:
+        return sid
+    return await _scan_repo.get_most_recent_scan_id()
 
 
 # ─── Traffic Logging ──────────────────────────────────────────
@@ -103,7 +107,7 @@ async def export_report(
     if not state.target:
         raise HTTPException(400, "No scope defined")
 
-    sid = _resolve_scan_id(scan_id)
+    sid = await _resolve_scan_id(scan_id)
 
     # Get observations and chains from DB
     observations = await _observation_repo.get_observations(sid) if sid else []

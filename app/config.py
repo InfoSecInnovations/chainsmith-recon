@@ -341,6 +341,7 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     # Paths overrides (backward-compatible names kept)
     if v := env.get("RECON_DB_PATH") or env.get("CHAINSMITH_DB_PATH"):
         cfg.paths.db_path = Path(v)
+        cfg.storage.db_path = Path(v)  # Ensure init_db uses the same path
     if v := env.get("ATTACK_PATTERNS_PATH") or env.get("CHAINSMITH_ATTACK_PATTERNS_PATH"):
         cfg.paths.attack_patterns = Path(v)
     if v := env.get("HALLUCINATIONS_PATH") or env.get("CHAINSMITH_HALLUCINATIONS_PATH"):

@@ -20,6 +20,7 @@ from app.db.models import (
     AdjudicationResult,
     AdvisorRecommendation,
     Chain,
+    ChatMessage,
     CheckLog,
     Engagement,
     ObservationOverride,
@@ -151,6 +152,19 @@ class ScanRepository(_RepositoryBase):
                 setattr(scan, key, value)
             await session.commit()
         logger.info(f"Scan {scan_id} status updated: {list(updates.keys())}")
+
+    async def get_most_recent_scan_id(self) -> str | None:
+        """Get the ID of the most recent completed scan, or None."""
+        query = (
+            select(Scan.id)
+            .where(Scan.status == "complete")
+            .order_by(Scan.started_at.desc())
+            .limit(1)
+        )
+        async with self._session() as session:
+            result = await session.execute(query)
+            row = result.scalar_one_or_none()
+        return row
 
     async def get_scan(self, scan_id: str) -> dict | None:
         """Get a scan by ID. Returns dict or None."""
@@ -1527,7 +1541,9 @@ class TriageRepository(_RepositoryBase):
 
         logger.info(
             "Persisted triage plan %s with %d actions for scan %s",
-            plan_id, len(action_rows), scan_id,
+            plan_id,
+            len(action_rows),
+            scan_id,
         )
         return plan_id
 
@@ -1584,4 +1600,130 @@ def _triage_action_to_dict(r: TriageActionRecord) -> dict:
         "remediation_guidance": r.remediation_guidance,
         "observations_resolved": r.observations_resolved,
         "category": r.category,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Chat (Phase 35)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class ChatRepository(_RepositoryBase):
+    """Persist and query chat messages."""
+
+    async def save_message(
+        self,
+        msg_id: str,
+        session_id: str,
+        direction: str,
+        text: str,
+        agent_type: str | None = None,
+        engagement_id: str | None = None,
+        route_method: str | None = None,
+        ui_context: dict | None = None,
+        references: list[dict] | None = None,
+        actions: list[dict] | None = None,
+    ) -> str:
+        """Insert a chat message. Returns the message ID."""
+        msg = ChatMessage(
+            id=msg_id,
+            session_id=session_id,
+            engagement_id=engagement_id,
+            direction=direction,
+            agent_type=agent_type,
+            text=text,
+            route_method=route_method,
+            ui_context=ui_context,
+            references=references,
+            actions=actions,
+        )
+        async with self._session() as session:
+            session.add(msg)
+            await session.commit()
+        return msg_id
+
+    async def get_history(
+        self,
+        session_id: str,
+        engagement_id: str | None = None,
+        limit: int = 50,
+        before: str | None = None,
+    ) -> list[dict]:
+        """Get chat history, newest first.
+
+        If engagement_id is set, returns messages across all sessions
+        in that engagement. Otherwise scoped to session_id only.
+        Cleared messages are excluded.
+        """
+        if engagement_id:
+            query = select(ChatMessage).where(
+                ChatMessage.engagement_id == engagement_id,
+                ChatMessage.cleared == 0,
+            )
+        else:
+            query = select(ChatMessage).where(
+                ChatMessage.session_id == session_id,
+                ChatMessage.cleared == 0,
+            )
+
+        if before:
+            # Cursor-based: get timestamp of the cursor message
+            async with self._session() as session:
+                cursor_result = await session.execute(
+                    select(ChatMessage.timestamp).where(ChatMessage.id == before)
+                )
+                cursor_ts = cursor_result.scalar_one_or_none()
+            if cursor_ts:
+                query = query.where(ChatMessage.timestamp < cursor_ts)
+
+        query = query.order_by(ChatMessage.timestamp.desc()).limit(limit)
+
+        async with self._session() as session:
+            result = await session.execute(query)
+            rows = result.scalars().all()
+
+        return [_chat_message_to_dict(r) for r in rows]
+
+    async def clear_session(self, session_id: str) -> int:
+        """Mark all messages in a session as cleared. Returns count."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(ChatMessage).where(
+                    ChatMessage.session_id == session_id,
+                    ChatMessage.cleared == 0,
+                )
+            )
+            rows = result.scalars().all()
+            for row in rows:
+                row.cleared = 1
+            await session.commit()
+            return len(rows)
+
+    async def export_engagement_chat(self, engagement_id: str) -> list[dict]:
+        """Export all messages for an engagement (including cleared)."""
+        query = (
+            select(ChatMessage)
+            .where(ChatMessage.engagement_id == engagement_id)
+            .order_by(ChatMessage.timestamp.asc())
+        )
+        async with self._session() as session:
+            result = await session.execute(query)
+            rows = result.scalars().all()
+        return [_chat_message_to_dict(r) for r in rows]
+
+
+def _chat_message_to_dict(r: ChatMessage) -> dict:
+    """Convert a ChatMessage ORM object to a JSON-safe dict."""
+    return {
+        "id": r.id,
+        "session_id": r.session_id,
+        "engagement_id": r.engagement_id,
+        "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+        "direction": r.direction,
+        "agent_type": r.agent_type,
+        "text": r.text,
+        "route_method": r.route_method,
+        "ui_context": r.ui_context,
+        "references": r.references,
+        "actions": r.actions,
     }
