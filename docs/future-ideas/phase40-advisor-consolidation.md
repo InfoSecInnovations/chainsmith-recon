@@ -15,12 +15,26 @@ Both are deterministic, non-agentic components that produce structured output
 from scan data. They should follow the same patterns for location, type system
 registration, and chat accessibility.
 
+### Agent vs. Advisor boundary
+
+The dividing line is simple: **agents are LLM-backed** (they have agency),
+**advisors are deterministic** (rule-based, no LLM calls). Components like
+Coach and Researcher are LLM-backed and belong in `app/agents/`. This phase
+does not move or reclassify them.
+
+
+## Naming convention
+
+All files in `app/advisors/` use the `*_advisor.py` suffix to avoid ambiguity
+with other subsystems. For example, `scan_advisor.py` — not `scan.py`, which
+would easily be confused with `app/engine/scanner.py`.
+
 
 ## What to do
 
 ### 1. Move ScanAdvisor to `app/advisors/`
 
-Move `app/scan_advisor.py` to `app/advisors/scan.py`. Update all imports:
+Move `app/scan_advisor.py` to `app/advisors/scan_advisor.py`. Update all imports:
 
 - `app/routes/advisor.py` — imports ScanAdvisor
 - `app/engine/scanner.py` — imports ScanAdvisor (if applicable)
@@ -51,9 +65,10 @@ Add a `_handle_scan_advisor()` method in `app/engine/chat.py` that:
 The dedicated REST endpoint (`GET /api/v1/scan-advisor/recommendations`)
 remains for programmatic and post-scan use.
 
-### 4. Create `app/advisors/__init__.py` if it doesn't exist
+### 4. Update `app/advisors/__init__.py`
 
-Ensure the advisors directory is a proper Python package.
+The `__init__.py` already exists with lazy imports for `CheckProofAdvisor`.
+Add `ScanAdvisor` to `__all__` and the lazy `__getattr__` loader.
 
 
 ## Scope
@@ -62,6 +77,7 @@ This phase is limited to advisor placement and accessibility. It does not:
 
 - Change advisor logic or output formats
 - Add new advisors
+- Reclassify LLM-backed agents (Coach, Researcher) as advisors
 - Modify the prompt router architecture (only adds keyword entries)
 
 
@@ -75,12 +91,12 @@ This phase is limited to advisor placement and accessibility. It does not:
 ## Affected files
 
 **Must change:**
-- `app/scan_advisor.py` — move to `app/advisors/scan.py`
+- `app/scan_advisor.py` — move to `app/advisors/scan_advisor.py`
 - `app/routes/advisor.py` — update import path
+- `app/advisors/__init__.py` — add ScanAdvisor to `__all__` and lazy loader
 - `app/engine/prompt_router.py` — add ScanAdvisor keyword patterns
 - `app/engine/chat.py` — add `_handle_scan_advisor()` dispatch handler
 
 **Should review:**
-- `app/advisors/__init__.py` — may need creation
 - Tests referencing `app.scan_advisor` import path
 - `app/engine/scanner.py` — if it imports ScanAdvisor directly
