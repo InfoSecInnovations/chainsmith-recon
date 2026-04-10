@@ -16,7 +16,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 
 from app.db.repositories import ChatRepository
-from app.models import AgentEvent, AgentType, EventType, RouteDecision
+from app.models import AgentEvent, AgentType, RouteDecision
 
 logger = logging.getLogger(__name__)
 
@@ -353,14 +353,14 @@ class ChatDispatcher:
             self.sse.set_agent_busy(str(agent_type), False)
 
     async def _handle_chainsmith(self, text: str, bridge) -> dict:
-        """Route to ChainsmithAgent scoping conversation."""
+        """Route to ChainsmithAgent for check/chain stewardship."""
         from app.agents.chainsmith import ChainsmithAgent
 
         agent = ChainsmithAgent(event_callback=bridge)
-        response = await agent.continue_scoping(text)
+        response = await agent.handle_message(text)
         return make_chat_response(
             agent=AgentType.CHAINSMITH,
-            text=response if isinstance(response, str) else str(response),
+            text=response,
             route_method="keyword",
         )
 
@@ -499,7 +499,12 @@ class ChatDispatcher:
             obs_records = await obs_repo.get_observations(scan_id)
 
             # Convert DB records to lightweight Observation-like objects for context
-            from app.models import EvidenceQuality, Observation, ObservationSeverity, ObservationStatus
+            from app.models import (
+                EvidenceQuality,
+                Observation,
+                ObservationSeverity,
+                ObservationStatus,
+            )
 
             for rec in obs_records:
                 try:
@@ -527,7 +532,8 @@ class ChatDispatcher:
 
             chain_repo = ChainRepository()
             chain_records = await chain_repo.get_chains(scan_id)
-            from app.models import AttackChain, ObservationSeverity as _Sev
+            from app.models import AttackChain
+            from app.models import ObservationSeverity as _Sev
 
             for crec in chain_records:
                 try:
@@ -600,9 +606,7 @@ class ChatDispatcher:
                 )
         else:
             # No specific ID — generate for all verified
-            matching = [
-                o for o in obs_records if o.get("verification_status") == "verified"
-            ]
+            matching = [o for o in obs_records if o.get("verification_status") == "verified"]
             if not matching:
                 return make_chat_response(
                     agent=AgentType.CHECK_PROOF_ADVISOR,
@@ -639,8 +643,10 @@ class ChatDispatcher:
                 continue
 
         advisor = CheckProofAdvisor()
-        guidances = advisor.generate_batch(observations) if len(observations) > 1 else (
-            [advisor.generate_guidance(observations[0])] if observations else []
+        guidances = (
+            advisor.generate_batch(observations)
+            if len(observations) > 1
+            else ([advisor.generate_guidance(observations[0])] if observations else [])
         )
 
         if not guidances:
@@ -654,7 +660,9 @@ class ChatDispatcher:
         lines = []
         for g in guidances:
             lines.append(f"**[{g.finding_id}] {g.finding_title}**")
-            lines.append(f"Status: {g.verification_status} | Evidence: {g.evidence_quality or 'N/A'}")
+            lines.append(
+                f"Status: {g.verification_status} | Evidence: {g.evidence_quality or 'N/A'}"
+            )
             lines.append("")
             if g.proof_steps:
                 lines.append("Reproduction steps:")

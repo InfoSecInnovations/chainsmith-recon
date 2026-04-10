@@ -63,7 +63,9 @@ def _sync_add_missing_columns(connection) -> None:
             if col.default is not None and col.default.is_scalar:
                 default = f" DEFAULT {col.default.arg!r}"
 
-            stmt = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type} {nullable}{default}'
+            stmt = (
+                f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type} {nullable}{default}'
+            )
             logger.info("Auto-migrating: %s", stmt)
             connection.execute(text(stmt))
 

@@ -15,9 +15,9 @@ from app.config import LITELLM_BASE_URL, LITELLM_MODEL_VERIFIER
 from app.models import (
     AgentEvent,
     AgentType,
-    EvidenceQuality,
     EventImportance,
     EventType,
+    EvidenceQuality,
     Observation,
     ObservationStatus,
 )
@@ -117,7 +117,13 @@ VERIFIER_TOOLS = [
                     },
                     "reasoning": {"type": "string"},
                 },
-                "required": ["observation_id", "status", "confidence", "evidence_quality", "reasoning"],
+                "required": [
+                    "observation_id",
+                    "status",
+                    "confidence",
+                    "evidence_quality",
+                    "reasoning",
+                ],
             },
         },
     },

@@ -14,15 +14,10 @@ within the current session. Clears when chat is cleared.
 
 import logging
 from collections import deque
-from datetime import datetime
 
 from app.lib.llm import LLMClient
 from app.models import (
-    AgentEvent,
-    AgentType,
     AttackChain,
-    EventImportance,
-    EventType,
     Observation,
 )
 
@@ -58,6 +53,8 @@ When the operator's question is better handled by another component, tell them:
 - "To reproduce this finding, ask CheckProofAdvisor for proof guidance."
 - "To challenge the severity rating, trigger Adjudicator."
 - "For remediation priorities, ask Triage."
+- "To validate your check graph, manage custom checks, or check upstream \
+changes, ask the Steward (say 'validate checks' or 'check graph health')."
 - "To enrich this finding with CVE details, run Researcher."
 
 CONSTRAINTS:
@@ -110,9 +107,7 @@ class CoachAgent:
                 "configured (--provider openai/anthropic/litellm) to enable Coach."
             )
 
-        context_block = self._build_context(
-            observations, chains, recent_events, scope_summary
-        )
+        context_block = self._build_context(observations, chains, recent_events, scope_summary)
 
         # Build messages with memory
         messages = []
@@ -127,8 +122,7 @@ class CoachAgent:
         messages.append({"role": "user", "content": question})
 
         prompt = "\n".join(
-            f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
-            for m in messages
+            f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}" for m in messages
         )
 
         response = await self.client.chat(
@@ -172,10 +166,7 @@ class CoachAgent:
         if observations:
             obs_lines = []
             for o in observations:
-                line = (
-                    f"  [{o.id}] {o.title} | {o.severity.value} | "
-                    f"status={o.status.value}"
-                )
+                line = f"  [{o.id}] {o.title} | {o.severity.value} | status={o.status.value}"
                 if o.verification_notes:
                     line += f" | notes: {o.verification_notes[:100]}"
                 if o.evidence_quality:
@@ -196,9 +187,7 @@ class CoachAgent:
         if recent_events:
             event_lines = []
             for e in recent_events[-20:]:  # Last 20 events
-                event_lines.append(
-                    f"  [{e.get('event_type', '?')}] {e.get('message', '')[:80]}"
-                )
+                event_lines.append(f"  [{e.get('event_type', '?')}] {e.get('message', '')[:80]}")
             parts.append("RECENT EVENTS:\n" + "\n".join(event_lines))
 
         if not parts:

@@ -61,7 +61,7 @@ def _make_observation(
         severity=ObservationSeverity(severity),
         status=ObservationStatus(status),
         confidence=0.8,
-        discovered_by=AgentType.SCOUT,
+        discovered_by=AgentType.VERIFIER,
         discovered_at=datetime(2026, 1, 1),
         target_url=target_url,
         evidence_summary="Test evidence found",

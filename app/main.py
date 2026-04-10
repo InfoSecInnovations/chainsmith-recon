@@ -33,6 +33,7 @@ from app.routes import (
     scan_router,
     scenarios_router,
     scope_router,
+    steward_router,
     swarm_router,
 )
 from app.state import state
@@ -124,6 +125,7 @@ app.include_router(swarm_router)
 app.include_router(customizations_router)
 app.include_router(advisor_router)
 app.include_router(chat_router)
+app.include_router(steward_router)
 
 
 # ─── Static Page Routes ───────────────────────────────────────

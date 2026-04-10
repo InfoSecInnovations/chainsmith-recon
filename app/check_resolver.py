@@ -2,7 +2,7 @@
 app/check_resolver.py - Check List Builder
 
 Builds the list of checks to run, handling:
-- Real checks (default)
+- Real checks (default) — community + custom
 - Scenario simulations (override real checks)
 - Technique filtering (run only specific checks)
 
@@ -18,6 +18,7 @@ Usage:
     )
 """
 
+import importlib
 import logging
 
 logger = logging.getLogger(__name__)
@@ -367,7 +368,45 @@ def get_real_checks() -> list:
         DistributedCacheCheck(),
     ]
 
-    logger.info(f"Loaded {len(checks)} real checks")
+    logger.info(f"Loaded {len(checks)} community checks")
+
+    # Custom checks (dynamic discovery from custom/)
+    custom = _get_custom_checks()
+    if custom:
+        checks.extend(custom)
+        logger.info(f"Loaded {len(custom)} custom checks")
+
+    logger.info(f"Total checks available: {len(checks)}")
+    return checks
+
+
+def _get_custom_checks() -> list:
+    """Discover and load custom checks from app/checks/custom/.
+
+    Reads the CUSTOM_CHECK_REGISTRY from custom/__init__.py,
+    imports each module, instantiates each class, and validates
+    that it extends BaseCheck with well-formed metadata.
+
+    Returns only checks that instantiate successfully.
+    """
+    from app.checks.base import BaseCheck
+    from app.checks.custom import CUSTOM_CHECK_REGISTRY
+
+    checks = []
+    for module_name, class_name in CUSTOM_CHECK_REGISTRY:
+        try:
+            mod = importlib.import_module(f"app.checks.custom.{module_name}")
+            cls = getattr(mod, class_name)
+            if not issubclass(cls, BaseCheck):
+                logger.warning(
+                    f"Custom check {class_name} in {module_name} does not extend BaseCheck — skipped"
+                )
+                continue
+            instance = cls()
+            checks.append(instance)
+            logger.info(f"  Custom check loaded: {instance.name}")
+        except Exception as e:
+            logger.warning(f"Failed to load custom check {module_name}.{class_name}: {e}")
     return checks
 
 

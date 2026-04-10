@@ -90,7 +90,9 @@ class ObservationRecord(Base):
     raw_data = Column(JSON, nullable=True)
     references = Column(JSON, nullable=True)
     verification_status = Column(String, default="pending")
-    evidence_quality = Column(String, nullable=True)  # direct_observation, inferred, claimed_no_proof
+    evidence_quality = Column(
+        String, nullable=True
+    )  # direct_observation, inferred, claimed_no_proof
     confidence = Column(Float, nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     fingerprint = Column(String, nullable=True)

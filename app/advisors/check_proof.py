@@ -11,7 +11,6 @@ No LLM calls — output is entirely rule-based and deterministic.
 import logging
 import re
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -61,6 +60,7 @@ def _interpolate(template_str: str, context: dict[str, str]) -> str:
 
     Unknown placeholders are left as-is (e.g., {unknown_field}).
     """
+
     def replacer(match):
         key = match.group(1)
         return context.get(key, match.group(0))
@@ -68,7 +68,9 @@ def _interpolate(template_str: str, context: dict[str, str]) -> str:
     return re.sub(r"\{(\w+)\}", replacer, template_str)
 
 
-def _build_context(observation: Observation, enrichment: ResearchEnrichment | None) -> dict[str, str]:
+def _build_context(
+    observation: Observation, enrichment: ResearchEnrichment | None
+) -> dict[str, str]:
     """Build the interpolation context from an observation and optional enrichment."""
     ctx: dict[str, str] = {
         "target_url": observation.target_url or "",
@@ -96,7 +98,9 @@ def _build_context(observation: Observation, enrichment: ResearchEnrichment | No
         ctx["evidence"] = observation.evidence_summary
 
     # Extract version info from title/description
-    version_match = re.search(r"(\d+\.\d+(?:\.\d+)*)", observation.title + " " + observation.description)
+    version_match = re.search(
+        r"(\d+\.\d+(?:\.\d+)*)", observation.title + " " + observation.description
+    )
     if version_match:
         ctx["version"] = version_match.group(1)
 
@@ -129,9 +133,7 @@ def _build_context(observation: Observation, enrichment: ResearchEnrichment | No
     return ctx
 
 
-def _match_template(
-    observation: Observation, templates: dict[str, dict]
-) -> dict:
+def _match_template(observation: Observation, templates: dict[str, dict]) -> dict:
     """Find the best matching template for an observation.
 
     Matches on check_name first, then falls back to observation_type patterns,
@@ -245,7 +247,9 @@ class CheckProofAdvisor:
             finding_id=observation.id,
             finding_title=observation.title,
             verification_status=observation.status.value,
-            evidence_quality=observation.evidence_quality.value if observation.evidence_quality else None,
+            evidence_quality=observation.evidence_quality.value
+            if observation.evidence_quality
+            else None,
             proof_steps=proof_steps,
             evidence_checklist=evidence_checklist,
             severity_rationale=severity_rationale,
@@ -288,7 +292,9 @@ class CheckProofAdvisor:
                 EvidenceQuality.INFERRED: "inferred from available evidence (not directly confirmed)",
                 EvidenceQuality.CLAIMED_NO_PROOF: "claimed without verifiable proof",
             }
-            parts.append(f"Evidence was {quality_desc.get(observation.evidence_quality, 'unknown')}.")
+            parts.append(
+                f"Evidence was {quality_desc.get(observation.evidence_quality, 'unknown')}."
+            )
 
         if enrichment and enrichment.cve_details:
             cve = enrichment.cve_details[0]
@@ -302,32 +308,40 @@ class CheckProofAdvisor:
 
         return " ".join(parts)
 
-    def _build_fp_indicators(
-        self, observation: Observation, context: dict[str, str]
-    ) -> list[str]:
+    def _build_fp_indicators(self, observation: Observation, context: dict[str, str]) -> list[str]:
         """Build false positive indicators based on observation type."""
         indicators = []
         title_lower = observation.title.lower()
 
         if "header" in title_lower:
-            indicators.append("Header is present but not detected due to case sensitivity or encoding")
+            indicators.append(
+                "Header is present but not detected due to case sensitivity or encoding"
+            )
             indicators.append("CDN or WAF adds the header after the check captured the response")
 
         if "version" in title_lower:
             indicators.append("Reported version is a facade/decoy configured by the administrator")
-            indicators.append("Backported security patches fix the vulnerability without changing version number")
+            indicators.append(
+                "Backported security patches fix the vulnerability without changing version number"
+            )
 
         if "cve" in title_lower or context.get("cve_id"):
             indicators.append("CVE is disputed or rejected in NVD")
-            indicators.append("Vendor has applied a backported patch that doesn't change the version string")
+            indicators.append(
+                "Vendor has applied a backported patch that doesn't change the version string"
+            )
             indicators.append("Configuration or environment makes the vulnerability unexploitable")
 
         if "endpoint" in title_lower:
-            indicators.append("Endpoint returns a generic response regardless of path (catch-all handler)")
+            indicators.append(
+                "Endpoint returns a generic response regardless of path (catch-all handler)"
+            )
             indicators.append("Endpoint requires authentication that was not tested")
 
         if "prompt" in title_lower or "injection" in title_lower:
-            indicators.append("AI response is non-deterministic and the behavior doesn't reproduce consistently")
+            indicators.append(
+                "AI response is non-deterministic and the behavior doesn't reproduce consistently"
+            )
             indicators.append("Guardrails were temporarily disabled during testing")
 
         if not indicators:

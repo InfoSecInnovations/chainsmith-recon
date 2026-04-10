@@ -70,6 +70,7 @@ chainsmith scan example.com -o report.yaml -f yaml
 
 ## Documentation
 
+- [Pipeline & Component Reference](pipeline.md) — Agents, gates, advisors, event system, and configuration
 - [Installation Guide](getting-started/installation.md)
 - [CLI Reference](cli/overview.md)
 - [Check Reference](checks/overview.md)

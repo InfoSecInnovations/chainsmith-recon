@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 
 
 class AgentType(StrEnum):
-    SCOUT = "scout"
     VERIFIER = "verifier"
     CHAINSMITH = "chainsmith"
     GUARDIAN = "guardian"
@@ -72,6 +71,13 @@ class EventType(StrEnum):
     PROOF_GUIDANCE_GENERATED = "proof_guidance_generated"
     COACH_QUERY = "coach_query"
     COACH_RESPONSE = "coach_response"
+    STEWARD_VALIDATION_START = "steward_validation_start"
+    STEWARD_VALIDATION_COMPLETE = "steward_validation_complete"
+    STEWARD_ISSUE_FOUND = "steward_issue_found"
+    STEWARD_FIX_SUGGESTED = "steward_fix_suggested"
+    STEWARD_FIX_APPLIED = "steward_fix_applied"
+    STEWARD_CUSTOM_CHECK_CREATED = "steward_custom_check_created"
+    STEWARD_UPSTREAM_DIFF = "steward_upstream_diff"
     ERROR = "error"
     INFO = "info"
 

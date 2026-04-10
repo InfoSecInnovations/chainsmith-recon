@@ -56,7 +56,7 @@ def _make_observation(
         severity=ObservationSeverity(severity),
         status=ObservationStatus(status),
         confidence=0.8,
-        discovered_by=AgentType.SCOUT,
+        discovered_by=AgentType.VERIFIER,
         discovered_at=datetime(2026, 1, 1),
         target_url=target_url,
         evidence_summary="Header X-Debug-Mode: true found",
@@ -406,10 +406,10 @@ class TestAdjudicatedRiskModel:
             adjudicated_severity=ObservationSeverity.HIGH,
             confidence=0.9,
             approach_used=AdjudicationApproach.EVIDENCE_RUBRIC,
-            rationale="Overridden by scout",
-            adjudicated_by=AgentType.SCOUT,
+            rationale="Overridden by adjudicator",
+            adjudicated_by=AgentType.ADJUDICATOR,
         )
-        assert risk.adjudicated_by == AgentType.SCOUT
+        assert risk.adjudicated_by == AgentType.ADJUDICATOR
 
     def test_confidence_bounds(self):
         with pytest.raises(ValueError):

@@ -158,12 +158,12 @@ chainsmith_agent:
 
 ### Trigger Points
 
-- **On modification** — a check file in `custom/` is added, changed, or
-  removed
 - **Pre-scan** — quick validation before launch: "These 3 checks won't run
   given your current config"
 - **On upstream update** — community checks changed, diff against custom
 - **On demand** — operator explicitly asks Chainsmith to audit
+
+All triggers are user-invoked. No file watchers or automatic triggers.
 
 
 ## Interaction Model
@@ -269,26 +269,43 @@ CHAINSMITH_UPSTREAM_DIFF
 The existing `AgentType.CHAINSMITH` enum value stays — it just gets a real
 agent behind it again.
 
-## Open Questions
+## Resolved Design Decisions
 
-- **Version tracking:** How does Chainsmith know what "last sync" means for
-  upstream diffs? Git tags? A manifest file? A hash of the community check
-  directory?
-- **Check scaffolding depth:** When Chainsmith generates a custom check, how
-  complete is the scaffold? Stub with TODOs, or a working implementation
-  based on the operator's description? (LLM-generated check code is powerful
-  but needs human review.)
-- **Multi-instance coordination:** If an org runs multiple Chainsmith
-  instances (different teams, different scopes), should Chainsmith be aware
-  of sister instances and their custom checks? Probably not in v1.
-- **Check testing:** Should Chainsmith also validate that custom checks pass
-  basic smoke tests (instantiate without error, conditions are well-formed,
-  `run()` signature matches)? Overlaps with Phase 18 (test hardening).
+- **Circular dependency detection:** Chainsmith's responsibility, not
+  CheckRunner's. CheckRunner trusts the check set it receives; Chainsmith
+  validates the DAG before anything runs.
+- **Root vs. produced keys:** Hardcode the seed key list from `scanner.py`'s
+  `initial_context` (`base_domain`, `scope_domains`, `excluded_domains`,
+  `services`, `port_profile`). Any consumed key not produced by a check and
+  not in the seed list is flagged as a dead dependency.
+- **LLM configuration:** Inherited from `--profile` at invocation. No
+  per-component LLM config needed.
+- **Semantic overlap threshold:** 0.7 confidence float. Generous but not
+  overly sensitive.
+- **Custom check registration:** Operator can register manually; Chainsmith
+  validates after the fact. Not a gatekeeper.
+- **Discovery timing:** At scan launch, before WebUI renders in index.html.
+- **Trigger model:** User-invoked only. No file watchers, no automatic
+  "on modification" triggers.
+- **Version tracking:** Git (tags/hashes on the community check directory).
+- **Advise vs. block:** Chainsmith advises and helps fix. Does not block
+  scans. If an operator wants to run checks without addressing all issues,
+  that's on them. Check developers will rely heavily on this behavior.
+- **Check scaffolding depth:** Chainsmith generates a working implementation
+  when LLM is available, falls back to stub with TODOs otherwise. All
+  generated code requires human review before going live.
+- **Multi-instance coordination:** Not in v1.
+- **Basic instantiation checks:** Belongs in Chainsmith (can the check be
+  instantiated? are conditions well-formed? does `run()` signature match?).
+  Not required to pass before running a scan — advisory only. Deeper smoke
+  tests remain in Phase 18.
+- **Steward persistence:** JSON manifest in `custom/`, separate from all
+  other data flows (no DB tables, no event store).
 
 ## Dependencies
 
-- Phases 1-3 persistence (complete) — Chainsmith needs to store validation
-  state and track upstream versions
+- Phases 1-3 persistence (complete) — Chainsmith stores validation state in
+  `custom/steward_manifest.json`, separate from DB persistence
 - `check_resolver.py` — needs the dual-path discovery (community + custom)
 - `app/checks/base.py` — custom checks extend `BaseCheck`, no changes needed
-- Phase 18 test hardening (optional) — smoke tests for custom checks
+- Phase 18 test hardening (optional) — deeper smoke tests for custom checks

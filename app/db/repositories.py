@@ -1772,9 +1772,7 @@ class ResearchRepository(_RepositoryBase):
 
         async with self._session() as session:
             result = await session.execute(
-                select(ResearchEnrichmentRecord).where(
-                    ResearchEnrichmentRecord.scan_id == scan_id
-                )
+                select(ResearchEnrichmentRecord).where(ResearchEnrichmentRecord.scan_id == scan_id)
             )
             return [
                 {

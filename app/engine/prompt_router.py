@@ -47,6 +47,14 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], AgentType]] = [
     (re.compile(r"\b(scope|target|exclude|exclusion|timeframe)\b", re.I), AgentType.CHAINSMITH),
     # Chainsmith — chain building
     (re.compile(r"\b(chain|attack path|attack chain|link)\b", re.I), AgentType.CHAINSMITH),
+    # Chainsmith — steward (check ecosystem management)
+    (
+        re.compile(
+            r"\b(steward|validate checks|check graph|custom check|scaffold|disable check|upstream diff|check health)\b",
+            re.I,
+        ),
+        AgentType.CHAINSMITH,
+    ),
     # Adjudicator
     (re.compile(r"\b(severity|risk|adjudicat\w*|score|re-?score)\b", re.I), AgentType.ADJUDICATOR),
     # Verifier
@@ -68,7 +76,9 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], AgentType]] = [
     ),
     # Coach — explanations and learning
     (
-        re.compile(r"\b(explain|what is|what does|why did|how does|teach|help me understand)\b", re.I),
+        re.compile(
+            r"\b(explain|what is|what does|why did|how does|teach|help me understand)\b", re.I
+        ),
         AgentType.COACH,
     ),
     # Researcher — enrichment and lookups
@@ -85,7 +95,7 @@ You are a message classifier for a security reconnaissance platform.
 Classify the operator's message to determine which agent should handle it.
 
 Available agents:
-- chainsmith: Custom check validation, attack chain building, check ecosystem guidance
+- chainsmith: Scoping, attack chain building, check ecosystem stewardship (validate graph, custom checks, upstream diffs, disable impact)
 - verifier: Fact-checking observations, re-verification requests
 - adjudicator: Risk severity scoring, re-scoring, risk acceptance
 - triage: Remediation prioritization, action planning, fix ordering

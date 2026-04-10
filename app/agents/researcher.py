@@ -12,7 +12,6 @@ return cached/bundled data or graceful "not available" responses.
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 
 from app.lib.llm import LLMClient
 from app.models import (
@@ -489,7 +488,7 @@ class ResearcherAgent:
         # Look for function call patterns in text
         import re
 
-        pattern = r'(\w+)\s*\(\s*(\{[^}]*\})\s*\)'
+        pattern = r"(\w+)\s*\(\s*(\{[^}]*\})\s*\)"
         for match in re.finditer(pattern, content):
             name = match.group(1)
             try:
@@ -549,15 +548,11 @@ class ResearcherAgent:
 
         enrichment = ResearchEnrichment(
             observation_id=observation_id,
-            cve_details=[
-                CVEDetail(**cve) for cve in args.get("cve_details", [])
-            ],
+            cve_details=[CVEDetail(**cve) for cve in args.get("cve_details", [])],
             exploit_availability=[
                 ExploitInfo(**exp) for exp in args.get("exploit_availability", [])
             ],
-            vendor_advisories=[
-                AdvisoryInfo(**adv) for adv in args.get("vendor_advisories", [])
-            ],
+            vendor_advisories=[AdvisoryInfo(**adv) for adv in args.get("vendor_advisories", [])],
             version_vulnerabilities=args.get("version_vulnerabilities", []),
             data_sources=args.get("data_sources", []),
             offline_mode=self.offline_mode,

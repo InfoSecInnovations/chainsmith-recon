@@ -22,7 +22,6 @@ Config file (chainsmith.yaml) example:
       in_scope_ports: [80, 443, 8080, 8443]
     litellm:
       base_url: http://localhost:4000/v1
-      model_scout: nova-mini
       model_verifier: nova-mini
       model_chainsmith: nova-pro
 """
@@ -76,7 +75,6 @@ class ScopeConfig:
 @dataclass
 class LiteLLMConfig:
     base_url: str = "http://localhost:4000/v1"
-    model_scout: str = "nova-mini"
     model_verifier: str = "nova-mini"
     model_chainsmith: str = "nova-pro"
     model_chainsmith_fallback: str = "nova-mini"
@@ -127,7 +125,9 @@ class TriageConfig:
 class ResearcherConfig:
     enabled: bool = True
     offline_mode: bool = False
-    data_sources: list[str] = field(default_factory=lambda: ["nvd", "exploitdb", "vendor_advisories"])
+    data_sources: list[str] = field(
+        default_factory=lambda: ["nvd", "exploitdb", "vendor_advisories"]
+    )
 
 
 @dataclass
@@ -236,8 +236,6 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
         llm = cfg.litellm
         if "base_url" in ll:
             llm.base_url = str(ll["base_url"])
-        if "model_scout" in ll:
-            llm.model_scout = str(ll["model_scout"])
         if "model_verifier" in ll:
             llm.model_verifier = str(ll["model_verifier"])
         if "model_chainsmith" in ll:
@@ -386,8 +384,6 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     # LiteLLM overrides (backward-compatible env names kept)
     if v := env.get("LITELLM_BASE_URL") or env.get("CHAINSMITH_LITELLM_BASE_URL"):
         cfg.litellm.base_url = v
-    if v := env.get("LITELLM_MODEL_SCOUT") or env.get("CHAINSMITH_LITELLM_MODEL_SCOUT"):
-        cfg.litellm.model_scout = v
     if v := env.get("LITELLM_MODEL_VERIFIER") or env.get("CHAINSMITH_LITELLM_MODEL_VERIFIER"):
         cfg.litellm.model_verifier = v
     if v := env.get("LITELLM_MODEL_CHAINSMITH") or env.get("CHAINSMITH_LITELLM_MODEL_CHAINSMITH"):
@@ -514,7 +510,6 @@ def __getattr__(name: str):
     _compat = {
         "RECON_DB_PATH": lambda c: c.paths.db_path,
         "LITELLM_BASE_URL": lambda c: c.litellm.base_url,
-        "LITELLM_MODEL_SCOUT": lambda c: c.litellm.model_scout,
         "LITELLM_MODEL_VERIFIER": lambda c: c.litellm.model_verifier,
         "LITELLM_MODEL_CHAINSMITH": lambda c: c.litellm.model_chainsmith,
         "LITELLM_MODEL_CHAINSMITH_FALLBACK": lambda c: c.litellm.model_chainsmith_fallback,
