@@ -1,131 +1,102 @@
 # Phase 26 — Model Review
 
-The data models in `app/models.py` were written when Chainsmith had four
-components: Scout, Verifier, Chainsmith, and Guardian. Scout is gone
-(replaced by deterministic checks + ScanAdvisor). Adjudicator has since
-been added, and more components are planned. The models need a review pass
-to keep up.
+The data models in `app/models.py` have drifted as components were added and
+removed. `AgentType` is misleading (it covers agents, gates, and advisors),
+dead references to "scout" persist as type violations, `EventType` has 9
+unused members, and `Observation.discovered_by` is vestigial now that checks
+are the sole discovery mechanism. This phase cleans up the type system so
+new components land on honest foundations.
 
 
-## Current state (as of code scan)
+## Current state (as of code audit 2026-04-10)
 
-### AgentType enum (5 entries)
+### AgentType enum (8 entries)
 
 ```python
 class AgentType(StrEnum):
-    SCOUT = "scout"        # dead — no Scout class exists
-    VERIFIER = "verifier"  # AI agent (app/agents/verifier.py)
-    CHAINSMITH = "chainsmith"  # AI agent (app/agents/chainsmith.py)
-    GUARDIAN = "guardian"   # deterministic (app/guardian.py)
-    ADJUDICATOR = "adjudicator"  # AI agent (app/agents/adjudicator.py)
+    VERIFIER = "verifier"              # Agent (app/agents/verifier.py)
+    CHAINSMITH = "chainsmith"          # Agent (app/agents/chainsmith.py)
+    GUARDIAN = "guardian"              # Gate  (app/guardian.py)
+    ADJUDICATOR = "adjudicator"        # Agent (app/agents/adjudicator.py)
+    TRIAGE = "triage"                  # Agent (app/agents/triage.py)
+    CHECK_PROOF_ADVISOR = "check_proof_advisor"  # Advisor (app/advisors/check_proof.py)
+    RESEARCHER = "researcher"          # Agent (app/agents/researcher.py)
+    COACH = "coach"                    # Agent (app/agents/coach.py)
 ```
 
-### EventType enum (16 entries)
+Previously included `SCOUT` — already removed. `model_scout` config slot —
+already removed.
 
-```python
-class EventType(StrEnum):
-    AGENT_START, AGENT_COMPLETE       # generic agent lifecycle
-    TOOL_CALL, TOOL_RESULT            # LLM tool use
-    OBSERVATION_DISCOVERED/VERIFIED/REJECTED  # observation flow
-    HALLUCINATION_CAUGHT              # verifier-specific
-    CHAIN_IDENTIFIED                  # chainsmith-specific
-    SCOPE_VIOLATION/APPROVED/DENIED   # guardian-specific
-    ADJUDICATION_START/COMPLETE       # adjudicator-specific
-    SEVERITY_UPHELD/ADJUSTED          # adjudicator-specific
-    ERROR, INFO                       # generic
-```
+### EventType enum (34 entries)
+
+16 generic + component lifecycle events, 7 steward events, 11 others.
+**9 are never emitted:**
+
+| Dead event | Reason |
+|-----------|--------|
+| `OBSERVATION_DISCOVERED` | Checks are deterministic; no "discovery" event to emit |
+| `CHAIN_IDENTIFIED` | Chainsmith uses STEWARD_* events instead |
+| `SCOPE_APPROVED` | Guardian only emits SCOPE_VIOLATION; approved is implicit |
+| `SCOPE_DENIED` | Same — violations are the only interesting signal |
+| `PROOF_GUIDANCE_REQUESTED` | CheckProofAdvisor is deterministic, never emits events |
+| `PROOF_GUIDANCE_GENERATED` | Same |
+| `COACH_QUERY` | Coach is conversational; events not useful |
+| `COACH_RESPONSE` | Same |
+| `STEWARD_FIX_SUGGESTED` | Steward emits FIX_APPLIED but not FIX_SUGGESTED |
 
 ### Key model fields that reference AgentType
 
 | Model | Field | Default | Location |
 |-------|-------|---------|----------|
-| `Observation` (Pydantic) | `discovered_by: AgentType` | (required) | `app/models.py:137` |
-| `Observation` (Pydantic) | `verified_by: AgentType \| None` | `None` | `app/models.py:147` |
-| `AdjudicatedRisk` | `adjudicated_by: AgentType` | `AgentType.ADJUDICATOR` | `app/models.py:196` |
-| `AttackChain` | `identified_by: AgentType` | `AgentType.CHAINSMITH` | `app/models.py:241` |
-| `AgentEvent` | `agent: AgentType` | (required) | `app/models.py:257` |
+| `Observation` | `discovered_by: AgentType` | (required) | `app/models.py:164` |
+| `Observation` | `verified_by: AgentType \| None` | `None` | `app/models.py:174` |
+| `AdjudicatedRisk` | `adjudicated_by: AgentType` | `AgentType.ADJUDICATOR` | `app/models.py:227` |
+| `AttackChain` | `identified_by: AgentType` | `AgentType.CHAINSMITH` | `app/models.py:272` |
+| `AgentEvent` | `agent: AgentType` | (required) | `app/models.py:418` |
+| `RouteDecision` | `target: AgentType \| None` | `None` | `app/models.py:475` |
+| `DirectiveRequest` | `agent: AgentType` | (required) | `app/models.py:517` |
 
 ### Components that exist today
 
-Per the [component taxonomy](component-taxonomy.md):
-
-| Component | Taxonomy type | File | In AgentType? | Emits events? |
-|-----------|--------------|------|---------------|---------------|
-| Verifier | **Agent** | `app/agents/verifier.py` | Yes | Yes (extensive) |
-| Chainsmith | **Agent** | `app/agents/chainsmith.py` | Yes | Yes |
-| Adjudicator | **Agent** | `app/agents/adjudicator.py` | Yes | Yes |
-| Triage | **Agent** | `app/agents/triage.py` | Yes | Yes |
-| Guardian | **Gate** | `app/guardian.py` | Yes | Yes (scope violations) |
-| ScanAdvisor | **Advisor** | `app/scan_advisor.py` | **No** | No |
-| Checks (130+) | — | `app/checks/` | **No** | No (produce Observations) |
+| Component | Type | File | In AgentType? | Emits events? |
+|-----------|------|------|---------------|---------------|
+| Verifier | Agent | `app/agents/verifier.py` | Yes | Yes (16 sites) |
+| Chainsmith | Agent | `app/agents/chainsmith.py` | Yes | Yes (10 sites) |
+| Adjudicator | Agent | `app/agents/adjudicator.py` | Yes | Yes (4 sites) |
+| Triage | Agent | `app/agents/triage.py` | Yes | Yes |
+| Researcher | Agent | `app/agents/researcher.py` | Yes | Yes (5 sites) |
+| Coach | Agent | `app/agents/coach.py` | Yes | **No** (should emit AGENT_START/COMPLETE) |
+| Guardian | Gate | `app/guardian.py` | Yes | Yes (SCOPE_VIOLATION only) |
+| CheckProofAdvisor | Advisor | `app/advisors/check_proof.py` | Yes | No |
+| ScanAdvisor | Advisor | `app/scan_advisor.py` | **No** | No |
+| Checks (139+) | — | `app/checks/` | No | No (produce Observations) |
 
 ### Two Observation types
 
-There are two separate `Observation` classes:
-- **`app/checks/base.Observation`** — dataclass used by checks, has `check_name` traceability but no `discovered_by`
-- **`app/models.Observation`** — Pydantic model for DB/API, has `discovered_by: AgentType` but no `check_name`
+- **`app/checks/base.Observation`** — dataclass used by checks, has `check_name`
+- **`app/models.Observation`** — Pydantic model for DB/API, has `discovered_by: AgentType`
 
-The checks-layer Observation gets converted to dicts by `ObservationWriter` and stored
-in the DB. When read back (e.g., in `engine/adjudication.py:142`), `discovered_by`
-defaults to `"scout"` — a hardcoded fallback to a dead component.
+The checks-layer `Observation.check_name` is preserved to the database
+(`observations.check_name` column) but repurposed as `observation_type` when
+reading back into the Pydantic model. Meanwhile `discovered_by` defaults to
+the string `"scout"` in 4 locations — a type violation since SCOUT is no
+longer in the enum.
 
-### Config ghost: `model_scout`
+### Hardcoded "scout" references (4 sites)
 
-`app/config.py` still has `model_scout` as a LiteLLM model setting (line 79), env var
-mapping (`LITELLM_MODEL_SCOUT`, line 305/409), and YAML key (line 25). Nothing uses
-this model slot — it's leftover from when Scout was an AI agent.
-
-
-## Problems
-
-### 1. AgentType is stale
-
-- `SCOUT` exists but no Scout class or usage remains (only the dead default in
-  `engine/adjudication.py:142` and test fixtures in `test_adjudicator.py`).
-- ScanAdvisor has its own config, class, and route (`app/routes/advisor.py`) but
-  no entry in AgentType — it's invisible to the type system.
-- No entries planned for Coach or Proof Advisor (both still proposals).
-- No distinction between agents (Verifier, Chainsmith, Adjudicator, Triage),
-  gates (Guardian), and advisors (ScanAdvisor). The [component taxonomy](component-taxonomy.md)
-  now defines this classification. This matters for model selection, cost
-  tracking, and understanding what's LLM-driven vs rule-based.
-
-### 2. EventType is growing but manageable
-
-Currently 16 entries. The adjudicator events (ADJUDICATION_START/COMPLETE,
-SEVERITY_UPHELD/ADJUSTED) were added cleanly. The enum is still navigable, but
-adding events for ScanAdvisor, Coach, and Proof Advisor would push it past 20.
-No naming convention separates component-specific events from generic ones.
-
-### 3. Observation.discovered_by assumes an AI agent
-
-`discovered_by: AgentType` was written when Scout produced observations. Now
-deterministic checks produce them. The checks-layer `Observation` dataclass
-tracks provenance via `check_name`, but this field is lost during the conversion
-to the Pydantic model. Meanwhile `discovered_by` gets hardcoded to `"scout"` in
-the DB fallback path (`engine/adjudication.py:142`).
-
-### 4. No shared model for "component" identity
-
-Agents, the guardian, the scan advisor, and checkers all participate in the
-pipeline. `AgentType` is the only identity enum, but it doesn't cover ScanAdvisor
-or individual checks. `AgentEvent.agent` uses it, `Observation.discovered_by`
-uses it, but neither can express "check_http_headers found this."
+- `app/engine/adjudication.py:142` — `discovered_by=f.get("discovered_by", "scout")`
+- `app/engine/chat.py:520` — `discovered_by="scout"`
+- `app/engine/chat.py:633` — `discovered_by="scout"`
+- `app/engine/triage.py:249` — `discovered_by=f.get("discovered_by", "scout")`
 
 
-## Decisions to make
+## Decisions
 
-### A. Rename or split AgentType?
+### A. Rename AgentType to ComponentType — RESOLVED
 
-**Resolved.** The [component taxonomy](component-taxonomy.md) establishes
-three component types: **Agents** (LLM-powered), **Gates** (deterministic
-policy enforcement), and **Advisors** (deterministic post-hoc analysis).
-
-The recommended approach is **option 1: rename to `ComponentType`** with
-all components registered in a single enum, documented with their true
-classification. This is the least churn option that also makes the name
-honest. Fields like `Observation.discovered_by` and `AgentEvent.agent`
-become `ComponentType` references.
+Rename `AgentType` → `ComponentType`. Single flat enum covering agents, gates,
+and advisors. The component taxonomy doc defines the classification; the enum
+just identifies components.
 
 Target enum:
 
@@ -136,104 +107,137 @@ class ComponentType(StrEnum):
     ADJUDICATOR = "adjudicator"
     TRIAGE = "triage"
     CHAINSMITH = "chainsmith"
+    RESEARCHER = "researcher"
+    COACH = "coach"
 
     # Gates (deterministic enforcement)
     GUARDIAN = "guardian"
 
     # Advisors (deterministic analysis)
-    SCAN_ADVISOR = "scan_advisor"
+    CHECK_PROOF_ADVISOR = "check_proof_advisor"
 ```
 
-Previous options for reference:
+Note: `SCAN_ADVISOR` is deferred to Phase 40 (advisor consolidation), which
+moves ScanAdvisor into `app/advisors/` and adds it to the enum + chat routing.
 
-1. ~~**Rename to `ComponentType`**~~ — **selected**
-2. **Split into `AgentType` + `ScriptType`** — rejected; union types add
-   complexity without proportional benefit.
-3. **Keep `AgentType`, just add entries** — rejected; the name is
-   increasingly misleading.
+### B. EventType cleanup — RESOLVED
 
-### B. How to handle EventType growth?
+Per-event audit. Remove the 9 dead events. Leave the 7 steward events as-is
+(they are actively emitted by ChainsmithAgent; cleanup is Phase 39's scope).
 
-Options:
+Events to remove:
+- `OBSERVATION_DISCOVERED`
+- `CHAIN_IDENTIFIED`
+- `SCOPE_APPROVED`
+- `SCOPE_DENIED`
+- `PROOF_GUIDANCE_REQUESTED`
+- `PROOF_GUIDANCE_GENERATED`
+- `COACH_QUERY`
+- `COACH_RESPONSE`
+- `STEWARD_FIX_SUGGESTED`
 
-1. **Keep adding to the flat enum** — simple, 16 entries is still workable.
-2. **Namespace by component** — e.g., `ADJUDICATOR_DECISION`,
-   `PROOF_GUIDANCE_REQUESTED`, `COACH_QUERY`. Still flat, but naming convention
-   groups them. (The adjudicator events already follow this pattern.)
-3. **Structured event type** — e.g., `(component, action)` tuple instead of
-   a single string. More flexible, but breaks the current StrEnum pattern.
+### C. Drop Observation.discovered_by — RESOLVED
 
-### C. Should models enforce component capabilities?
+Checks are stimulus-response. `discovered_by` is vestigial from the Scout era.
+The real provenance is `check_name`, which is already persisted in the DB.
 
-**Resolved by taxonomy.** The component taxonomy defines capabilities by
-type: agents use LLMs and may use tools; gates and advisors are deterministic.
-This distinction lives in the taxonomy documentation and component
-implementations, not in the enum itself. The enum identifies components;
-the taxonomy classifies them.
+Action:
+- Remove `discovered_by: AgentType` from the Pydantic `Observation` model
+- Remove the 4 hardcoded `"scout"` fallbacks
+- `check_name` continues to serve as observation provenance
+- Fix the `check_name` → `observation_type` mapping so these are not conflated
+  (see Decision F)
+- `verified_by: ComponentType | None` stays — agents still verify observations
 
-### D. Observation provenance
+### D. Component capabilities — RESOLVED BY TAXONOMY
 
-Now that observations come from deterministic checks, the checks-layer
-`Observation` already tracks `check_name` but this is lost when writing to
-the DB. Two concrete sub-decisions:
+The component taxonomy defines capabilities by type. The enum identifies
+components; the taxonomy classifies them. No enforcement in the enum.
 
-1. Should `check_name` be preserved through to the Pydantic `Observation`
-   model? (Likely yes — it's already available, just dropped.)
-2. Should `discovered_by` change type? Options:
-   - Keep as `AgentType` but set to a new `SCANNER` or `CHECK` value
-   - Change to `str` for free-form provenance (e.g., `"check_http_headers"`)
-   - Change to `ComponentType` if Decision A goes with option 1
+### E. Config ghost cleanup — ALREADY DONE
 
-### E. Clean up config ghost?
+`model_scout` was removed from `app/config.py` in a prior phase.
 
-`model_scout` in config serves no purpose. Remove it, or repurpose it for
-something else (e.g., a model slot for ScanAdvisor if it ever becomes
-LLM-backed)?
+### F. Fix check_name / observation_type conflation — NEW
+
+When observations are read from the DB back into the Pydantic model,
+`check_name` is being mapped to `observation_type`. These are different
+concepts:
+
+- `check_name` = which check produced this observation (e.g., `"port_scan"`)
+- `observation_type` = category/kind of observation
+
+The Pydantic `Observation` model should carry `check_name` as its own field,
+not have it silently repurposed. Add `check_name: str | None = None` to the
+Pydantic model and populate it from the DB record. Review whether
+`observation_type` has a distinct purpose or can be removed.
+
+### G. Add AGENT_START/COMPLETE to Coach — NEW
+
+Coach is the only agent that emits zero events. Add `AGENT_START` and
+`AGENT_COMPLETE` emissions to `CoachAgent` for lifecycle observability
+(usage frequency, error tracking, response latency). No coach-specific
+events needed.
 
 
 ## Scope
 
-This phase is a review and refactor of `app/models.py` and any files that
-reference the changed types. It should be done in a single pass so that
-downstream code doesn't have to deal with partial migrations.
+Single-pass refactor of `app/models.py` and all referencing files.
 
-Affected files (confirmed by code scan):
+### Affected files (verified by code scan)
 
 **Must change:**
-- `app/models.py` — enum and model changes
-- `app/guardian.py` — references `AgentType.GUARDIAN`
-- `app/agents/verifier.py` — references `AgentType.VERIFIER` (~16 sites)
-- `app/agents/chainsmith.py` — references `AgentType.CHAINSMITH` (~4 sites)
-- `app/agents/adjudicator.py` — references `AgentType.ADJUDICATOR` (~6 sites)
-- `app/engine/adjudication.py` — hardcoded `"scout"` default on line 142
-- `tests/core/test_adjudicator.py` — uses `AgentType.SCOUT` in fixtures
+- `app/models.py` — enum rename, field changes, dead event removal
+- `app/agents/verifier.py` — 16 `AgentType` → `ComponentType` sites
+- `app/agents/chainsmith.py` — 10 sites
+- `app/agents/adjudicator.py` — 4 sites
+- `app/agents/triage.py` — 3 sites
+- `app/agents/researcher.py` — 5 sites
+- `app/agents/coach.py` — AgentType refs + add AGENT_START/COMPLETE events
+- `app/guardian.py` — 1 site
+- `app/engine/adjudication.py` — remove `discovered_by` / `"scout"` default (line 142)
+- `app/engine/chat.py` — remove `discovered_by="scout"` (lines 520, 633) + AgentType refs
+- `app/engine/triage.py` — remove `discovered_by` / `"scout"` default (line 249)
+- `app/engine/prompt_router.py` — 23 AgentType refs, rename agent_map → component_map
+
+**Must change (tests):**
+- `tests/core/test_adjudicator.py` — AgentType refs
+- `tests/core/test_triage.py` — AgentType refs
+- `tests/core/test_prompt_router.py` — AgentType refs
+- `tests/core/conftest.py` — `discovered_by: "test"` in metadata (line 17)
 
 **Should review:**
-- `app/config.py` — `model_scout` config slot (lines 25, 79, 203-204, 305-306, 409)
-- `app/scan_advisor.py` — should gain a type system entry
-- `app/checks/base.py` — `Observation.check_name` should propagate to Pydantic model
-- `app/db/writers.py` — `ObservationWriter` is where check_name could be preserved
-- `tests/core/conftest.py` — test metadata uses `discovered_by: "test"`
+- `app/checks/base.py` — verify `check_name` propagation is intact
+- `app/db/writers.py` — verify `ObservationWriter` passes `check_name` through
+- `app/db/repositories.py` — verify `check_name` is returned in observation dicts
 
 **Not affected (confirmed):**
-- `app/routes/*` — no direct references to `AgentType` or `EventType`
-- `app/engine/scanner.py` — uses `ObservationWriter` but doesn't set `discovered_by`
-- `app/engine/chains.py` — no direct enum references
+- `app/routes/*` — no direct AgentType or EventType references
+- `app/engine/scanner.py` — uses ObservationWriter, no enum refs
+- `app/engine/chains.py` — no enum references
+- `app/scan_advisor.py` — deferred to Phase 40
+
+
+## Migration order
+
+1. Add `ComponentType` enum alongside `AgentType` (temporary alias)
+2. Add `check_name: str | None` to Pydantic `Observation`, remove `discovered_by`
+3. Update all engine files (adjudication, chat, triage) to stop setting `discovered_by`
+4. Rename all `AgentType` → `ComponentType` references across agents and tests
+5. Remove dead EventType members
+6. Add AGENT_START/COMPLETE to Coach
+7. Remove the old `AgentType` alias
+8. Run full test suite, fix any breakage
 
 
 ## Dependencies
 
-- None hard — this can be done at any time.
-- Best done *before* implementing Coach (Phase 22) or Proof Advisor so new
-  components land on a clean type system.
-- Adjudicator is already implemented — its references need migration, not design.
+- None hard — can be done at any time.
+- Best done *before* Phase 39 (steward cleanup) and Phase 40 (advisor
+  consolidation) so those phases land on a clean type system.
+- Database can be deleted and rebuilt; no migration needed for persisted data.
 
 
 ## Open questions
 
-- Should we version the models for backward compatibility with existing
-  persisted sessions, or is a clean break acceptable?
-- Is there a case for a component registry (runtime registration of
-  capabilities) rather than a static enum?
-- Should the two `Observation` classes (dataclass in `checks/base.py` vs
-  Pydantic in `models.py`) be unified, or is the separation intentional?
+None — all decisions resolved.
