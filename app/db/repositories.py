@@ -286,10 +286,10 @@ class ObservationRepository(_RepositoryBase):
 
         rows = []
         for f in observations:
-            # Always generate a fresh DB-row ID to avoid UNIQUE collisions
-            # across scans (simulated checks use deterministic IDs like
-            # "dns_enumeration-hostname" that repeat every run).
-            observation_id = uuid.uuid4().hex[:12]
+            # Use caller-supplied ID when present; otherwise generate a
+            # fresh one to avoid UNIQUE collisions across scans (simulated
+            # checks use deterministic IDs that repeat every run).
+            observation_id = f.get("id") or uuid.uuid4().hex[:12]
             host = f.get("host") or f.get("target_url", "")
             fingerprint = _generate_fingerprint(
                 check_name=f.get("check_name", f.get("check", "")),
