@@ -20,7 +20,7 @@ import pytest
 
 from app.engine.prompt_router import LLM_CONFIDENCE_THRESHOLD, PromptRouter
 from app.lib.llm import LLMResponse
-from app.models import AgentType, RouteDecision
+from app.models import ComponentType, RouteDecision
 
 pytestmark = pytest.mark.unit
 
@@ -52,32 +52,32 @@ class TestContextRouting:
     @pytest.mark.asyncio
     async def test_scope_panel_routes_to_chainsmith(self, router):
         decision = await router.route("anything", ui_context={"active_panel": "scope"})
-        assert decision.target == AgentType.CHAINSMITH
+        assert decision.target == ComponentType.CHAINSMITH
         assert decision.method == "context"
         assert decision.confidence == 1.0
 
     @pytest.mark.asyncio
     async def test_triage_panel_routes_to_triage(self, router):
         decision = await router.route("anything", ui_context={"active_panel": "triage"})
-        assert decision.target == AgentType.TRIAGE
+        assert decision.target == ComponentType.TRIAGE
         assert decision.method == "context"
 
     @pytest.mark.asyncio
     async def test_adjudication_panel_routes_to_adjudicator(self, router):
         decision = await router.route("anything", ui_context={"active_panel": "adjudication"})
-        assert decision.target == AgentType.ADJUDICATOR
+        assert decision.target == ComponentType.ADJUDICATOR
         assert decision.method == "context"
 
     @pytest.mark.asyncio
     async def test_observation_detail_routes_to_verifier(self, router):
         decision = await router.route("anything", ui_context={"active_panel": "observation_detail"})
-        assert decision.target == AgentType.VERIFIER
+        assert decision.target == ComponentType.VERIFIER
         assert decision.method == "context"
 
     @pytest.mark.asyncio
     async def test_page_fallback_when_no_panel(self, router):
         decision = await router.route("anything", ui_context={"page": "triage"})
-        assert decision.target == AgentType.TRIAGE
+        assert decision.target == ComponentType.TRIAGE
         assert decision.method == "context"
 
     @pytest.mark.asyncio
@@ -86,7 +86,7 @@ class TestContextRouting:
             "anything",
             ui_context={"active_panel": "scope", "page": "triage"},
         )
-        assert decision.target == AgentType.CHAINSMITH
+        assert decision.target == ComponentType.CHAINSMITH
 
     @pytest.mark.asyncio
     async def test_unknown_context_falls_through(self, router, mock_client):
@@ -102,7 +102,7 @@ class TestContextRouting:
             ui_context={"active_panel": "dashboard"},
         )
         # Should have fallen through context → matched keyword
-        assert decision.target == AgentType.TRIAGE
+        assert decision.target == ComponentType.TRIAGE
         assert decision.method == "keyword"
 
 
@@ -116,42 +116,42 @@ class TestKeywordRouting:
     async def test_scope_keywords(self, router):
         for word in ["scope", "target", "exclude", "exclusion", "timeframe"]:
             decision = await router.route(f"can you {word} this?")
-            assert decision.target == AgentType.CHAINSMITH, f"Failed for '{word}'"
+            assert decision.target == ComponentType.CHAINSMITH, f"Failed for '{word}'"
             assert decision.method == "keyword"
 
     @pytest.mark.asyncio
     async def test_chain_keywords(self, router):
         for phrase in ["attack chain", "attack path", "chain", "link"]:
             decision = await router.route(f"show me the {phrase}")
-            assert decision.target == AgentType.CHAINSMITH, f"Failed for '{phrase}'"
+            assert decision.target == ComponentType.CHAINSMITH, f"Failed for '{phrase}'"
             assert decision.method == "keyword"
 
     @pytest.mark.asyncio
     async def test_adjudicator_keywords(self, router):
         for word in ["severity", "risk", "adjudicate", "score", "re-score", "rescore"]:
             decision = await router.route(f"what is the {word}?")
-            assert decision.target == AgentType.ADJUDICATOR, f"Failed for '{word}'"
+            assert decision.target == ComponentType.ADJUDICATOR, f"Failed for '{word}'"
             assert decision.method == "keyword"
 
     @pytest.mark.asyncio
     async def test_verifier_keywords(self, router):
         for phrase in ["verify", "check if", "is this real", "hallucination"]:
             decision = await router.route(f"can you {phrase} this observation")
-            assert decision.target == AgentType.VERIFIER, f"Failed for '{phrase}'"
+            assert decision.target == ComponentType.VERIFIER, f"Failed for '{phrase}'"
             assert decision.method == "keyword"
 
     @pytest.mark.asyncio
     async def test_triage_keywords(self, router):
         for phrase in ["prioritize", "fix first", "remediate", "action plan", "quick win"]:
             decision = await router.route(f"I want to {phrase}")
-            assert decision.target == AgentType.TRIAGE, f"Failed for '{phrase}'"
+            assert decision.target == ComponentType.TRIAGE, f"Failed for '{phrase}'"
             assert decision.method == "keyword"
 
     @pytest.mark.asyncio
     async def test_proof_advisor_keywords(self, router):
         for word in ["proof", "reproduce", "reproduction", "evidence"]:
             decision = await router.route(f"show me the {word}")
-            assert decision.target == AgentType.CHECK_PROOF_ADVISOR, f"Failed for '{word}'"
+            assert decision.target == ComponentType.CHECK_PROOF_ADVISOR, f"Failed for '{word}'"
             assert decision.method == "keyword"
 
     @pytest.mark.asyncio
@@ -171,13 +171,13 @@ class TestKeywordRouting:
         """Message with keywords matching multiple agents picks the one with most hits."""
         # "verify" → verifier, "risk" → adjudicator, "score" → adjudicator
         decision = await router.route("verify the risk score")
-        assert decision.target == AgentType.ADJUDICATOR
+        assert decision.target == ComponentType.ADJUDICATOR
         assert decision.confidence == 0.7  # reduced for ambiguous match
 
     @pytest.mark.asyncio
     async def test_case_insensitive(self, router):
         decision = await router.route("PRIORITIZE the REMEDIATION")
-        assert decision.target == AgentType.TRIAGE
+        assert decision.target == ComponentType.TRIAGE
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -195,7 +195,7 @@ class TestLLMRouting:
             success=True,
         )
         decision = await router.route("how bad is this finding?")
-        assert decision.target == AgentType.ADJUDICATOR
+        assert decision.target == ComponentType.ADJUDICATOR
         assert decision.method == "llm"
         assert decision.confidence == 0.92
         assert not decision.needs_clarification
@@ -222,7 +222,7 @@ class TestLLMRouting:
             success=True,
         )
         decision = await router.route("what do you think?")
-        assert decision.target == AgentType.TRIAGE
+        assert decision.target == ComponentType.TRIAGE
         assert not decision.needs_clarification
 
     @pytest.mark.asyncio
@@ -282,7 +282,7 @@ class TestLLMRouting:
             success=True,
         )
         decision = await router.route("is this observation real?")
-        assert decision.target == AgentType.VERIFIER
+        assert decision.target == ComponentType.VERIFIER
         assert not decision.needs_clarification
 
     @pytest.mark.asyncio
@@ -328,14 +328,14 @@ class TestLayerFallthrough:
             "prioritize fixes",  # keyword would match triage
             ui_context={"active_panel": "scope"},  # context matches chainsmith
         )
-        assert decision.target == AgentType.CHAINSMITH
+        assert decision.target == ComponentType.CHAINSMITH
         assert decision.method == "context"
         mock_client.chat.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_keyword_match_skips_llm(self, router, mock_client):
         decision = await router.route("what is the severity?")
-        assert decision.target == AgentType.ADJUDICATOR
+        assert decision.target == ComponentType.ADJUDICATOR
         assert decision.method == "keyword"
         mock_client.chat.assert_not_awaited()
 
@@ -372,10 +372,10 @@ class TestLayerFallthrough:
 class TestRouteDecisionModel:
     def test_basic_construction(self):
         rd = RouteDecision(
-            target=AgentType.TRIAGE,
+            target=ComponentType.TRIAGE,
             method="keyword",
         )
-        assert rd.target == AgentType.TRIAGE
+        assert rd.target == ComponentType.TRIAGE
         assert rd.confidence == 1.0
         assert rd.needs_clarification is False
         assert rd.redirect_message is None
@@ -394,7 +394,7 @@ class TestRouteDecisionModel:
 
     def test_serialization(self):
         rd = RouteDecision(
-            target=AgentType.CHAINSMITH,
+            target=ComponentType.CHAINSMITH,
             method="context",
             redirect_message="Passing to scope manager.",
         )

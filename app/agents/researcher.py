@@ -17,7 +17,7 @@ from app.lib.llm import LLMClient
 from app.models import (
     AdvisoryInfo,
     AgentEvent,
-    AgentType,
+    ComponentType,
     CVEDetail,
     EventImportance,
     EventType,
@@ -358,7 +358,7 @@ class ResearcherAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.RESEARCH_REQUESTED,
-                agent=AgentType.RESEARCHER,
+                agent=ComponentType.RESEARCHER,
                 importance=EventImportance.MEDIUM,
                 message=f"Researcher starting enrichment of {len(observations)} observations"
                 + (" (offline mode)" if self.offline_mode else ""),
@@ -370,7 +370,7 @@ class ResearcherAgent:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.RESEARCH_COMPLETE,
-                    agent=AgentType.RESEARCHER,
+                    agent=ComponentType.RESEARCHER,
                     importance=EventImportance.LOW,
                     message="No observations to enrich",
                 )
@@ -446,7 +446,7 @@ class ResearcherAgent:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.RESEARCH_COMPLETE,
-                    agent=AgentType.RESEARCHER,
+                    agent=ComponentType.RESEARCHER,
                     importance=EventImportance.MEDIUM,
                     message=f"Research complete: {len(self.enrichments)} observations enriched",
                     details={"enriched": len(self.enrichments), "total": len(observations)},
@@ -458,7 +458,7 @@ class ResearcherAgent:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.ERROR,
-                    agent=AgentType.RESEARCHER,
+                    agent=ComponentType.RESEARCHER,
                     importance=EventImportance.HIGH,
                     message=f"Researcher error: {str(e)[:100]}",
                 )
@@ -511,7 +511,7 @@ class ResearcherAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.TOOL_CALL,
-                agent=AgentType.RESEARCHER,
+                agent=ComponentType.RESEARCHER,
                 importance=EventImportance.LOW,
                 message=f"Researcher executing: {name}",
                 details={"tool": name},

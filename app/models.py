@@ -11,15 +11,24 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-class AgentType(StrEnum):
+class ComponentType(StrEnum):
+    # Agents (LLM-powered)
     VERIFIER = "verifier"
-    CHAINSMITH = "chainsmith"
-    GUARDIAN = "guardian"
     ADJUDICATOR = "adjudicator"
     TRIAGE = "triage"
-    CHECK_PROOF_ADVISOR = "check_proof_advisor"
+    CHAINSMITH = "chainsmith"
     RESEARCHER = "researcher"
     COACH = "coach"
+
+    # Gates (deterministic enforcement)
+    GUARDIAN = "guardian"
+
+    # Advisors (deterministic analysis)
+    CHECK_PROOF_ADVISOR = "check_proof_advisor"
+
+
+# Temporary alias for migration — remove after all references updated
+AgentType = ComponentType
 
 
 class ObservationSeverity(StrEnum):
@@ -50,14 +59,10 @@ class EventType(StrEnum):
     AGENT_COMPLETE = "agent_complete"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
-    OBSERVATION_DISCOVERED = "observation_discovered"
     OBSERVATION_VERIFIED = "observation_verified"
     OBSERVATION_REJECTED = "observation_rejected"
     HALLUCINATION_CAUGHT = "hallucination_caught"
-    CHAIN_IDENTIFIED = "chain_identified"
     SCOPE_VIOLATION = "scope_violation"
-    SCOPE_APPROVED = "scope_approved"
-    SCOPE_DENIED = "scope_denied"
     ADJUDICATION_START = "adjudication_start"
     ADJUDICATION_COMPLETE = "adjudication_complete"
     SEVERITY_UPHELD = "severity_upheld"
@@ -67,14 +72,9 @@ class EventType(StrEnum):
     TRIAGE_ACTION = "triage_action"
     RESEARCH_REQUESTED = "research_requested"
     RESEARCH_COMPLETE = "research_complete"
-    PROOF_GUIDANCE_REQUESTED = "proof_guidance_requested"
-    PROOF_GUIDANCE_GENERATED = "proof_guidance_generated"
-    COACH_QUERY = "coach_query"
-    COACH_RESPONSE = "coach_response"
     STEWARD_VALIDATION_START = "steward_validation_start"
     STEWARD_VALIDATION_COMPLETE = "steward_validation_complete"
     STEWARD_ISSUE_FOUND = "steward_issue_found"
-    STEWARD_FIX_SUGGESTED = "steward_fix_suggested"
     STEWARD_FIX_APPLIED = "steward_fix_applied"
     STEWARD_CUSTOM_CHECK_CREATED = "steward_custom_check_created"
     STEWARD_UPSTREAM_DIFF = "steward_upstream_diff"
@@ -161,7 +161,7 @@ class Observation(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
 
     # Source information
-    discovered_by: AgentType
+    check_name: str | None = None
     discovered_at: datetime
     target_url: str | None = None
     target_service: str | None = None
@@ -171,7 +171,7 @@ class Observation(BaseModel):
     evidence_summary: str | None = None
 
     # Verification
-    verified_by: AgentType | None = None
+    verified_by: ComponentType | None = None
     verified_at: datetime | None = None
     verification_notes: str | None = None
     evidence_quality: EvidenceQuality | None = None
@@ -224,7 +224,7 @@ class AdjudicatedRisk(BaseModel):
     rationale: str
     factors: dict[str, Any] = Field(default_factory=dict)
     adjudicated_at: datetime = Field(default_factory=datetime.utcnow)
-    adjudicated_by: AgentType = AgentType.ADJUDICATOR
+    adjudicated_by: ComponentType = ComponentType.ADJUDICATOR
 
 
 class OperatorAssetContext(BaseModel):
@@ -269,7 +269,7 @@ class AttackChain(BaseModel):
     prerequisites: list[str] = Field(default_factory=list)
 
     # Metadata
-    identified_by: AgentType = AgentType.CHAINSMITH
+    identified_by: ComponentType = ComponentType.CHAINSMITH
     identified_at: datetime = Field(default_factory=datetime.utcnow)
     confidence: float = Field(ge=0.0, le=1.0, default=0.7)
 
@@ -415,7 +415,7 @@ class AgentEvent(BaseModel):
     """Event emitted by agents for the live feed."""
 
     event_type: EventType
-    agent: AgentType
+    agent: ComponentType
     importance: EventImportance = EventImportance.LOW
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -472,8 +472,8 @@ class SessionState(BaseModel):
 class RouteDecision(BaseModel):
     """Result of prompt classification by the Prompt Router."""
 
-    target: AgentType | None
-    method: Literal["context", "keyword", "llm"]
+    target: ComponentType | None
+    method: Literal["context", "keyword", "llm", "direct"]
     confidence: float = 1.0
     redirect_message: str | None = None
     needs_clarification: bool = False
@@ -514,7 +514,7 @@ class LaunchResponse(BaseModel):
 class DirectiveRequest(BaseModel):
     """Request to direct an agent."""
 
-    agent: AgentType
+    agent: ComponentType
     directive: str
 
 

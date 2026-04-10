@@ -19,7 +19,7 @@ from app.models import (
     AdjudicatedRisk,
     AdjudicationApproach,
     AgentEvent,
-    AgentType,
+    ComponentType,
     EventImportance,
     EventType,
     Observation,
@@ -119,7 +119,7 @@ class AdjudicatorAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.ADJUDICATION_START,
-                agent=AgentType.ADJUDICATOR,
+                agent=ComponentType.ADJUDICATOR,
                 importance=EventImportance.MEDIUM,
                 message=f"Adjudicator starting severity review of {len(verified)} verified observations...",
                 details={
@@ -157,7 +157,7 @@ class AdjudicatorAgent:
                 await self.emit(
                     AgentEvent(
                         event_type=event_type,
-                        agent=AgentType.ADJUDICATOR,
+                        agent=ComponentType.ADJUDICATOR,
                         importance=importance,
                         message=msg,
                         observation_id=observation.id,
@@ -174,7 +174,7 @@ class AdjudicatorAgent:
                 await self.emit(
                     AgentEvent(
                         event_type=EventType.ERROR,
-                        agent=AgentType.ADJUDICATOR,
+                        agent=ComponentType.ADJUDICATOR,
                         importance=EventImportance.MEDIUM,
                         message=f"Adjudication failed for {observation.id}: {e}",
                         observation_id=observation.id,
@@ -184,7 +184,7 @@ class AdjudicatorAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.ADJUDICATION_COMPLETE,
-                agent=AgentType.ADJUDICATOR,
+                agent=ComponentType.ADJUDICATOR,
                 importance=EventImportance.MEDIUM,
                 message=(
                     f"Adjudication complete: {upheld} upheld, {adjusted} adjusted "

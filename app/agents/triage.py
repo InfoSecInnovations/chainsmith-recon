@@ -21,8 +21,8 @@ from app.models import (
     ActionFeasibility,
     AdjudicatedRisk,
     AgentEvent,
-    AgentType,
     AttackChain,
+    ComponentType,
     EventImportance,
     EventType,
     Observation,
@@ -214,7 +214,7 @@ class TriageAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.TRIAGE_START,
-                agent=AgentType.TRIAGE,
+                agent=ComponentType.TRIAGE,
                 importance=EventImportance.MEDIUM,
                 message=(
                     f"Triage Agent starting prioritization of "
@@ -254,7 +254,7 @@ class TriageAgent:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.TRIAGE_ACTION,
-                    agent=AgentType.TRIAGE,
+                    agent=ComponentType.TRIAGE,
                     importance=EventImportance.MEDIUM
                     if action.impact_estimate == "high"
                     else EventImportance.LOW,
@@ -274,7 +274,7 @@ class TriageAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.TRIAGE_COMPLETE,
-                agent=AgentType.TRIAGE,
+                agent=ComponentType.TRIAGE,
                 importance=EventImportance.MEDIUM,
                 message=(
                     f"Triage complete: {len(plan.actions)} actions, "

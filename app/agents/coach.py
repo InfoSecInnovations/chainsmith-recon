@@ -14,10 +14,15 @@ within the current session. Clears when chat is cleared.
 
 import logging
 from collections import deque
+from collections.abc import Awaitable, Callable
 
 from app.lib.llm import LLMClient
 from app.models import (
+    AgentEvent,
     AttackChain,
+    ComponentType,
+    EventImportance,
+    EventType,
     Observation,
 )
 
@@ -75,11 +80,18 @@ class CoachAgent:
         self,
         client: LLMClient,
         memory_cap: int = 10,
+        event_callback: Callable[[AgentEvent], Awaitable[None]] | None = None,
     ):
         self.client = client
         self.memory_cap = memory_cap
+        self.event_callback = event_callback
         # Session-scoped conversation memory (capped)
         self._memory: deque[dict[str, str]] = deque(maxlen=memory_cap)
+
+    async def emit(self, event: AgentEvent):
+        """Emit event to callback."""
+        if self.event_callback:
+            await self.event_callback(event)
 
     async def ask(
         self,
@@ -101,7 +113,24 @@ class CoachAgent:
         Returns:
             The Coach's response text.
         """
+        await self.emit(
+            AgentEvent(
+                event_type=EventType.AGENT_START,
+                agent=ComponentType.COACH,
+                importance=EventImportance.LOW,
+                message="Coach processing question...",
+            )
+        )
+
         if not self.client.is_available():
+            await self.emit(
+                AgentEvent(
+                    event_type=EventType.AGENT_COMPLETE,
+                    agent=ComponentType.COACH,
+                    importance=EventImportance.LOW,
+                    message="Coach unavailable — no LLM provider configured",
+                )
+            )
             return (
                 "Coach requires an LLM provider. Start Chainsmith with a provider "
                 "configured (--provider openai/anthropic/litellm) to enable Coach."
@@ -134,12 +163,29 @@ class CoachAgent:
 
         if not response.success:
             logger.warning("Coach LLM call failed: %s", response.error)
+            await self.emit(
+                AgentEvent(
+                    event_type=EventType.AGENT_COMPLETE,
+                    agent=ComponentType.COACH,
+                    importance=EventImportance.LOW,
+                    message="Coach LLM call failed",
+                )
+            )
             return "I'm having trouble responding right now. Please try again."
 
         answer = response.content.strip()
 
         # Store in memory
         self._memory.append({"question": question, "answer": answer})
+
+        await self.emit(
+            AgentEvent(
+                event_type=EventType.AGENT_COMPLETE,
+                agent=ComponentType.COACH,
+                importance=EventImportance.LOW,
+                message="Coach response complete",
+            )
+        )
 
         return answer
 

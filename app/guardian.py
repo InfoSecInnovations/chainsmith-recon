@@ -8,7 +8,7 @@ against the defined scope before execution.
 import asyncio
 from urllib.parse import urlparse
 
-from app.models import AgentEvent, AgentType, EventImportance, EventType, ScopeDefinition
+from app.models import AgentEvent, ComponentType, EventImportance, EventType, ScopeDefinition
 
 
 class ScopeViolation(Exception):
@@ -106,7 +106,7 @@ class Guardian:
         """Create event for scope violation."""
         return AgentEvent(
             event_type=EventType.SCOPE_VIOLATION,
-            agent=AgentType.GUARDIAN,
+            agent=ComponentType.GUARDIAN,
             importance=EventImportance.HIGH,
             message=f"⚠️ Scope violation: {reason}",
             details={"url": url, "reason": reason},

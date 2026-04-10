@@ -26,8 +26,8 @@ from app.models import (
     ActionFeasibility,
     AdjudicatedRisk,
     AdjudicationApproach,
-    AgentType,
     AttackChain,
+    ComponentType,
     EventType,
     Observation,
     ObservationSeverity,
@@ -61,7 +61,7 @@ def _make_observation(
         severity=ObservationSeverity(severity),
         status=ObservationStatus(status),
         confidence=0.8,
-        discovered_by=AgentType.VERIFIER,
+        check_name=observation_type,
         discovered_at=datetime(2026, 1, 1),
         target_url=target_url,
         evidence_summary="Test evidence found",
@@ -467,7 +467,7 @@ class TestTriageAgent:
 
         # All events from TRIAGE agent
         for e in events:
-            assert e.agent == AgentType.TRIAGE
+            assert e.agent == ComponentType.TRIAGE
 
     @pytest.mark.asyncio
     async def test_stop(self):

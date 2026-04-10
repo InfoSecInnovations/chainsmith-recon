@@ -246,7 +246,7 @@ async def run_triage(state: "AppState") -> None:
                     severity=f.get("severity", "info"),
                     status=f.get("verification_status", f.get("status", "pending")),
                     confidence=f.get("confidence", 0.5),
-                    discovered_by=f.get("discovered_by", "scout"),
+                    check_name=f.get("check_name"),
                     discovered_at=f.get(
                         "discovered_at", f.get("created_at", "2000-01-01T00:00:00")
                     ),

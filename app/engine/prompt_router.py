@@ -7,8 +7,8 @@ a three-layer strategy:
   2. Keyword routing  — pattern matching (zero cost)
   3. LLM fallback     — small/fast model classification
 
-The Prompt Router is invisible infrastructure. It is NOT an agent —
-it does not appear in AgentType, emit events, or generate substantive
+The Prompt Router is invisible infrastructure. It is NOT a component —
+it does not appear in ComponentType, emit events, or generate substantive
 responses. It classifies and dispatches.
 """
 
@@ -18,7 +18,7 @@ import logging
 import re
 
 from app.lib.llm import LLMClient
-from app.models import AgentType, RouteDecision
+from app.models import ComponentType, RouteDecision
 
 logger = logging.getLogger(__name__)
 
@@ -28,63 +28,66 @@ LLM_CONFIDENCE_THRESHOLD = 0.6
 
 # ─── Layer 1: Context routing table ─────────────────────────────
 
-_CONTEXT_ROUTES: dict[str, AgentType] = {
-    "scope": AgentType.CHAINSMITH,
-    "scoping": AgentType.CHAINSMITH,
-    "triage": AgentType.TRIAGE,
-    "adjudication": AgentType.ADJUDICATOR,
-    "observation_detail": AgentType.VERIFIER,
-    "observations": AgentType.VERIFIER,
-    "chains": AgentType.CHAINSMITH,
+_CONTEXT_ROUTES: dict[str, ComponentType] = {
+    "scope": ComponentType.CHAINSMITH,
+    "scoping": ComponentType.CHAINSMITH,
+    "triage": ComponentType.TRIAGE,
+    "adjudication": ComponentType.ADJUDICATOR,
+    "observation_detail": ComponentType.VERIFIER,
+    "observations": ComponentType.VERIFIER,
+    "chains": ComponentType.CHAINSMITH,
 }
 
 # ─── Layer 2: Keyword routing table ─────────────────────────────
 # Each entry: (compiled regex pattern, target agent)
 # Patterns are checked in order; first match wins.
 
-_KEYWORD_RULES: list[tuple[re.Pattern[str], AgentType]] = [
+_KEYWORD_RULES: list[tuple[re.Pattern[str], ComponentType]] = [
     # Chainsmith — scoping
-    (re.compile(r"\b(scope|target|exclude|exclusion|timeframe)\b", re.I), AgentType.CHAINSMITH),
+    (re.compile(r"\b(scope|target|exclude|exclusion|timeframe)\b", re.I), ComponentType.CHAINSMITH),
     # Chainsmith — chain building
-    (re.compile(r"\b(chain|attack path|attack chain|link)\b", re.I), AgentType.CHAINSMITH),
+    (re.compile(r"\b(chain|attack path|attack chain|link)\b", re.I), ComponentType.CHAINSMITH),
     # Chainsmith — steward (check ecosystem management)
     (
         re.compile(
             r"\b(steward|validate checks|check graph|custom check|scaffold|disable check|upstream diff|check health)\b",
             re.I,
         ),
-        AgentType.CHAINSMITH,
+        ComponentType.CHAINSMITH,
     ),
     # Adjudicator
-    (re.compile(r"\b(severity|risk|adjudicat\w*|score|re-?score)\b", re.I), AgentType.ADJUDICATOR),
+    (
+        re.compile(r"\b(severity|risk|adjudicat\w*|score|re-?score)\b", re.I),
+        ComponentType.ADJUDICATOR,
+    ),
     # Verifier
     (
         re.compile(r"\b(verify|verif\w*|check if|is this real|hallucination)\b", re.I),
-        AgentType.VERIFIER,
+        ComponentType.VERIFIER,
     ),
     # Triage
     (
         re.compile(
             r"\b(prioriti[zs]\w*|fix first|remediat\w*|action plan|quick win|triage)\b", re.I
         ),
-        AgentType.TRIAGE,
+        ComponentType.TRIAGE,
     ),
     # CheckProofAdvisor
     (
         re.compile(r"\b(proof|reproduce|reproduction|evidence|exploit)\b", re.I),
-        AgentType.CHECK_PROOF_ADVISOR,
+        ComponentType.CHECK_PROOF_ADVISOR,
     ),
     # Coach — explanations and learning
     (
         re.compile(
             r"\b(explain|what is|what does|why did|how does|teach|help me understand)\b", re.I
         ),
-        AgentType.COACH,
+        ComponentType.COACH,
     ),
     # Researcher — enrichment and lookups
     (
         re.compile(r"\b(research|enrich|look ?up|cve detail|exploit db|advisory)\b", re.I),
-        AgentType.RESEARCHER,
+        ComponentType.RESEARCHER,
     ),
 ]
 
@@ -166,7 +169,7 @@ class PromptRouter:
 
     def _keyword_route(self, message: str) -> RouteDecision | None:
         """Route based on keyword pattern matching. Returns None if no match."""
-        matches: dict[AgentType, int] = {}
+        matches: dict[ComponentType, int] = {}
         for pattern, agent in _KEYWORD_RULES:
             if pattern.search(message):
                 matches[agent] = matches.get(agent, 0) + 1
@@ -256,18 +259,18 @@ class PromptRouter:
         agent_name = data.get("agent", "").lower().strip()
         confidence = float(data.get("confidence", 0.0))
 
-        # Map agent name to AgentType
-        agent_map: dict[str, AgentType] = {
-            "chainsmith": AgentType.CHAINSMITH,
-            "verifier": AgentType.VERIFIER,
-            "adjudicator": AgentType.ADJUDICATOR,
-            "triage": AgentType.TRIAGE,
-            "check_proof_advisor": AgentType.CHECK_PROOF_ADVISOR,
-            "researcher": AgentType.RESEARCHER,
-            "coach": AgentType.COACH,
+        # Map agent name to ComponentType
+        component_map: dict[str, ComponentType] = {
+            "chainsmith": ComponentType.CHAINSMITH,
+            "verifier": ComponentType.VERIFIER,
+            "adjudicator": ComponentType.ADJUDICATOR,
+            "triage": ComponentType.TRIAGE,
+            "check_proof_advisor": ComponentType.CHECK_PROOF_ADVISOR,
+            "researcher": ComponentType.RESEARCHER,
+            "coach": ComponentType.COACH,
         }
 
-        agent = agent_map.get(agent_name)
+        agent = component_map.get(agent_name)
 
         if agent is None or confidence < LLM_CONFIDENCE_THRESHOLD:
             return RouteDecision(

@@ -16,7 +16,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 
 from app.db.repositories import ChatRepository
-from app.models import AgentEvent, AgentType, RouteDecision
+from app.models import AgentEvent, ComponentType, RouteDecision
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 def make_chat_response(
-    agent: AgentType,
+    agent: ComponentType,
     text: str,
     references: list[dict] | None = None,
     actions: list[dict] | None = None,
@@ -232,11 +232,11 @@ class ChatDispatcher:
         # 2. Route — direct agent or PromptRouter
         if target_agent:
             # Direct agent targeting — bypass PromptRouter
-            agent_map = {a.value: a for a in AgentType}
-            agent = agent_map.get(target_agent)
+            component_map = {a.value: a for a in ComponentType}
+            agent = component_map.get(target_agent)
             if agent is None:
                 error_msg = make_system_message(
-                    f"Unknown agent '{target_agent}'. Available: {', '.join(agent_map.keys())}"
+                    f"Unknown agent '{target_agent}'. Available: {', '.join(component_map.keys())}"
                 )
                 await self._persist_and_send(session_id, engagement_id, error_msg, None)
                 return error_msg
@@ -322,19 +322,19 @@ class ChatDispatcher:
 
         self.sse.set_agent_busy(str(agent_type), True)
         try:
-            if agent_type == AgentType.CHAINSMITH:
+            if agent_type == ComponentType.CHAINSMITH:
                 return await self._handle_chainsmith(text, bridge)
-            elif agent_type == AgentType.TRIAGE:
+            elif agent_type == ComponentType.TRIAGE:
                 return await self._handle_triage(text, session_id, bridge)
-            elif agent_type == AgentType.ADJUDICATOR:
+            elif agent_type == ComponentType.ADJUDICATOR:
                 return await self._handle_adjudicator(text, session_id, bridge)
-            elif agent_type == AgentType.VERIFIER:
+            elif agent_type == ComponentType.VERIFIER:
                 return await self._handle_verifier(text, session_id, bridge)
-            elif agent_type == AgentType.COACH:
+            elif agent_type == ComponentType.COACH:
                 return await self._handle_coach(text, session_id, bridge)
-            elif agent_type == AgentType.CHECK_PROOF_ADVISOR:
+            elif agent_type == ComponentType.CHECK_PROOF_ADVISOR:
                 return await self._handle_check_proof_advisor(text, session_id, bridge)
-            elif agent_type == AgentType.RESEARCHER:
+            elif agent_type == ComponentType.RESEARCHER:
                 return await self._handle_researcher(text, session_id, bridge)
             else:
                 return make_chat_response(
@@ -359,7 +359,7 @@ class ChatDispatcher:
         agent = ChainsmithAgent(event_callback=bridge)
         response = await agent.handle_message(text)
         return make_chat_response(
-            agent=AgentType.CHAINSMITH,
+            agent=ComponentType.CHAINSMITH,
             text=response,
             route_method="keyword",
         )
@@ -372,7 +372,7 @@ class ChatDispatcher:
         scan_id = state.active_scan_id or state._last_scan_id
         if not scan_id:
             return make_chat_response(
-                agent=AgentType.TRIAGE,
+                agent=ComponentType.TRIAGE,
                 text="No scan data available yet. Run a scan first, then I can "
                 "help prioritize remediation.",
                 route_method="keyword",
@@ -382,7 +382,7 @@ class ChatDispatcher:
         plan = await repo.get_plan(scan_id)
         if not plan:
             return make_chat_response(
-                agent=AgentType.TRIAGE,
+                agent=ComponentType.TRIAGE,
                 text="No triage plan has been generated for the current scan. "
                 "Trigger triage from the scan page first.",
                 route_method="keyword",
@@ -398,7 +398,7 @@ class ChatDispatcher:
             "\nWould you like me to write a detailed analysis to the reports directory?"
         )
         return make_chat_response(
-            agent=AgentType.TRIAGE,
+            agent=ComponentType.TRIAGE,
             text="\n".join(summary_lines),
             route_method="keyword",
             actions=[
@@ -418,7 +418,7 @@ class ChatDispatcher:
         scan_id = state.active_scan_id or state._last_scan_id
         if not scan_id:
             return make_chat_response(
-                agent=AgentType.ADJUDICATOR,
+                agent=ComponentType.ADJUDICATOR,
                 text="No scan data available yet. Run a scan first.",
                 route_method="keyword",
             )
@@ -427,7 +427,7 @@ class ChatDispatcher:
         results = await repo.get_results(scan_id)
         if not results:
             return make_chat_response(
-                agent=AgentType.ADJUDICATOR,
+                agent=ComponentType.ADJUDICATOR,
                 text="No adjudication results for the current scan. "
                 "Trigger adjudication from the scan page.",
                 route_method="keyword",
@@ -445,7 +445,7 @@ class ChatDispatcher:
                 f"{top['original_severity']} to {top['adjudicated_severity']}."
             )
         return make_chat_response(
-            agent=AgentType.ADJUDICATOR,
+            agent=ComponentType.ADJUDICATOR,
             text=summary,
             route_method="keyword",
             references=[
@@ -462,7 +462,7 @@ class ChatDispatcher:
         scan_id = state.active_scan_id or state._last_scan_id
         if not scan_id:
             return make_chat_response(
-                agent=AgentType.VERIFIER,
+                agent=ComponentType.VERIFIER,
                 text="No scan data available. Run a scan first.",
                 route_method="keyword",
             )
@@ -473,7 +473,7 @@ class ChatDispatcher:
         rejected = [o for o in obs if o.get("verification_status") == "rejected"]
 
         return make_chat_response(
-            agent=AgentType.VERIFIER,
+            agent=ComponentType.VERIFIER,
             text=(
                 f"{len(obs)} observations total: {len(verified)} verified, "
                 f"{len(rejected)} rejected, "
@@ -517,7 +517,7 @@ class ChatDispatcher:
                             severity=ObservationSeverity(rec.get("severity", "info")),
                             status=ObservationStatus(rec.get("verification_status", "pending")),
                             confidence=rec.get("confidence", 0.5) or 0.5,
-                            discovered_by="scout",
+                            check_name=rec.get("check_name"),
                             discovered_at=rec.get("created_at", datetime.now(UTC)),
                             verification_notes=rec.get("description", ""),
                             evidence_quality=(
@@ -567,7 +567,7 @@ class ChatDispatcher:
         )
 
         return make_chat_response(
-            agent=AgentType.COACH,
+            agent=ComponentType.COACH,
             text=answer,
             route_method="direct",
         )
@@ -583,7 +583,7 @@ class ChatDispatcher:
         scan_id = state.active_scan_id or state._last_scan_id
         if not scan_id:
             return make_chat_response(
-                agent=AgentType.CHECK_PROOF_ADVISOR,
+                agent=ComponentType.CHECK_PROOF_ADVISOR,
                 text="No scan data available. Run a scan first, then I can "
                 "generate proof guidance for verified findings.",
                 route_method="direct",
@@ -600,7 +600,7 @@ class ChatDispatcher:
             matching = [o for o in obs_records if o["id"] == target_id]
             if not matching:
                 return make_chat_response(
-                    agent=AgentType.CHECK_PROOF_ADVISOR,
+                    agent=ComponentType.CHECK_PROOF_ADVISOR,
                     text=f"Observation {target_id} not found in the current scan.",
                     route_method="direct",
                 )
@@ -609,7 +609,7 @@ class ChatDispatcher:
             matching = [o for o in obs_records if o.get("verification_status") == "verified"]
             if not matching:
                 return make_chat_response(
-                    agent=AgentType.CHECK_PROOF_ADVISOR,
+                    agent=ComponentType.CHECK_PROOF_ADVISOR,
                     text="No verified observations found. Verify findings first, "
                     "then I can generate proof guidance.",
                     route_method="direct",
@@ -630,7 +630,7 @@ class ChatDispatcher:
                         severity=ObservationSeverity(rec.get("severity", "info")),
                         status=ObservationStatus(rec.get("verification_status", "pending")),
                         confidence=rec.get("confidence", 0.5) or 0.5,
-                        discovered_by="scout",
+                        check_name=rec.get("check_name"),
                         discovered_at=rec.get("created_at", datetime.now(UTC)),
                         evidence_quality=(
                             EvidenceQuality(rec["evidence_quality"])
@@ -651,7 +651,7 @@ class ChatDispatcher:
 
         if not guidances:
             return make_chat_response(
-                agent=AgentType.CHECK_PROOF_ADVISOR,
+                agent=ComponentType.CHECK_PROOF_ADVISOR,
                 text="No proof guidance could be generated for the selected observations.",
                 route_method="direct",
             )
@@ -681,7 +681,7 @@ class ChatDispatcher:
             lines.append("---")
 
         return make_chat_response(
-            agent=AgentType.CHECK_PROOF_ADVISOR,
+            agent=ComponentType.CHECK_PROOF_ADVISOR,
             text="\n".join(lines),
             route_method="direct",
         )
@@ -693,14 +693,14 @@ class ChatDispatcher:
         scan_id = state.active_scan_id or state._last_scan_id
         if not scan_id:
             return make_chat_response(
-                agent=AgentType.RESEARCHER,
+                agent=ComponentType.RESEARCHER,
                 text="No scan data available. Run a scan first, then I can "
                 "enrich findings with CVE details and exploit information.",
                 route_method="direct",
             )
 
         return make_chat_response(
-            agent=AgentType.RESEARCHER,
+            agent=ComponentType.RESEARCHER,
             text="Researcher enrichment is available via the scan pipeline. "
             "Trigger it from the scan page or API to enrich findings with "
             "CVE details, exploit availability, and vendor advisories. "

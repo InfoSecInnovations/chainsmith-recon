@@ -33,8 +33,8 @@ from app.config import ATTACK_PATTERNS_PATH
 from app.lib.llm import get_llm_client
 from app.models import (
     AgentEvent,
-    AgentType,
     AttackChain,
+    ComponentType,
     EventImportance,
     EventType,
     Observation,
@@ -194,7 +194,7 @@ class ChainsmithAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.STEWARD_VALIDATION_START,
-                agent=AgentType.CHAINSMITH,
+                agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
                 message="Starting check ecosystem validation...",
             )
@@ -216,7 +216,7 @@ class ChainsmithAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.STEWARD_VALIDATION_COMPLETE,
-                agent=AgentType.CHAINSMITH,
+                agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
                 message=result.summary(),
                 details=result.to_dict(),
@@ -227,7 +227,7 @@ class ChainsmithAgent:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.STEWARD_ISSUE_FOUND,
-                    agent=AgentType.CHAINSMITH,
+                    agent=ComponentType.CHAINSMITH,
                     importance=(
                         EventImportance.HIGH
                         if issue.severity == "error"
@@ -367,7 +367,7 @@ class ChainsmithAgent:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.STEWARD_UPSTREAM_DIFF,
-                    agent=AgentType.CHAINSMITH,
+                    agent=ComponentType.CHAINSMITH,
                     importance=EventImportance.LOW,
                     message="First sync — community check baseline recorded.",
                 )
@@ -384,7 +384,7 @@ class ChainsmithAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.STEWARD_UPSTREAM_DIFF,
-                agent=AgentType.CHAINSMITH,
+                agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.HIGH,
                 message=f"Community checks changed (hash {old_hash[:8]}→{current_hash[:8]}). Run validation to check for conflicts.",
             )
@@ -490,7 +490,7 @@ class {class_name}(BaseCheck):
         await self.emit(
             AgentEvent(
                 event_type=EventType.STEWARD_CUSTOM_CHECK_CREATED,
-                agent=AgentType.CHAINSMITH,
+                agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
                 message=f"Scaffolded custom check: {check_name} ({class_name})",
                 details={"path": file_path, "class": class_name, "suite": suite},
@@ -560,7 +560,7 @@ class {class_name}(BaseCheck):
         await self.emit(
             AgentEvent(
                 event_type=EventType.STEWARD_FIX_APPLIED,
-                agent=AgentType.CHAINSMITH,
+                agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
                 message=f"Created and registered custom check: {result['class_name']}",
             )
@@ -581,7 +581,7 @@ class {class_name}(BaseCheck):
         await self.emit(
             AgentEvent(
                 event_type=EventType.AGENT_START,
-                agent=AgentType.CHAINSMITH,
+                agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
                 message=f"Analyzing {len(verified)} verified observations for attack chains...",
             )
@@ -591,7 +591,7 @@ class {class_name}(BaseCheck):
             await self.emit(
                 AgentEvent(
                     event_type=EventType.AGENT_COMPLETE,
-                    agent=AgentType.CHAINSMITH,
+                    agent=ComponentType.CHAINSMITH,
                     importance=EventImportance.LOW,
                     message="Not enough observations for chain analysis (need 2+)",
                 )
@@ -603,7 +603,7 @@ class {class_name}(BaseCheck):
         await self.emit(
             AgentEvent(
                 event_type=EventType.AGENT_COMPLETE,
-                agent=AgentType.CHAINSMITH,
+                agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
                 message=f"Found {len(self.chains)} attack chain(s)",
             )

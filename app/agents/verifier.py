@@ -14,7 +14,7 @@ from openai import AsyncOpenAI
 from app.config import LITELLM_BASE_URL, LITELLM_MODEL_VERIFIER
 from app.models import (
     AgentEvent,
-    AgentType,
+    ComponentType,
     EventImportance,
     EventType,
     EvidenceQuality,
@@ -160,7 +160,7 @@ class VerifierAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.AGENT_START,
-                agent=AgentType.VERIFIER,
+                agent=ComponentType.VERIFIER,
                 importance=EventImportance.MEDIUM,
                 message=f"Verifier starting validation of {self.total_observations} observations...",
                 details={"total_observations": self.total_observations, "phase": "verification"},
@@ -171,7 +171,7 @@ class VerifierAgent:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.AGENT_COMPLETE,
-                    agent=AgentType.VERIFIER,
+                    agent=ComponentType.VERIFIER,
                     importance=EventImportance.LOW,
                     message="No observations to verify",
                 )
@@ -205,7 +205,7 @@ class VerifierAgent:
                 await self.emit(
                     AgentEvent(
                         event_type=EventType.INFO,
-                        agent=AgentType.VERIFIER,
+                        agent=ComponentType.VERIFIER,
                         importance=EventImportance.LOW,
                         message=f"Verifier iteration {iteration}, {self.observations_processed}/{self.total_observations} processed",
                         details={
@@ -243,7 +243,7 @@ class VerifierAgent:
                         await self.emit(
                             AgentEvent(
                                 event_type=EventType.INFO,
-                                agent=AgentType.VERIFIER,
+                                agent=ComponentType.VERIFIER,
                                 importance=EventImportance.LOW,
                                 message=f"Verifier note: {msg.content[:100]}...",
                             )
@@ -264,7 +264,7 @@ class VerifierAgent:
                     f.confidence = v["confidence"]
                     f.verification_notes = v["reasoning"]
                     f.evidence_quality = EvidenceQuality(v["evidence_quality"])
-                    f.verified_by = AgentType.VERIFIER
+                    f.verified_by = ComponentType.VERIFIER
                     f.verified_at = datetime.utcnow()
 
                     if f.status == ObservationStatus.VERIFIED:
@@ -277,7 +277,7 @@ class VerifierAgent:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.AGENT_COMPLETE,
-                    agent=AgentType.VERIFIER,
+                    agent=ComponentType.VERIFIER,
                     importance=EventImportance.MEDIUM,
                     message=f"Verification complete: {verified_count} verified, {rejected_count} rejected, {hallucination_count} hallucinations caught",
                     details={
@@ -293,7 +293,7 @@ class VerifierAgent:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.ERROR,
-                    agent=AgentType.VERIFIER,
+                    agent=ComponentType.VERIFIER,
                     importance=EventImportance.HIGH,
                     message=f"Verifier error: {str(e)}",
                 )
@@ -310,7 +310,7 @@ class VerifierAgent:
         await self.emit(
             AgentEvent(
                 event_type=EventType.TOOL_CALL,
-                agent=AgentType.VERIFIER,
+                agent=ComponentType.VERIFIER,
                 importance=EventImportance.LOW,
                 message=f"Verifier executing: {name}",
                 details={"tool": name},
@@ -325,7 +325,7 @@ class VerifierAgent:
                 await self.emit(
                     AgentEvent(
                         event_type=EventType.TOOL_RESULT,
-                        agent=AgentType.VERIFIER,
+                        agent=ComponentType.VERIFIER,
                         importance=EventImportance.LOW,
                         message=f"CVE check: {cve_id} - {'exists' if result.get('exists') else 'NOT FOUND'}",
                         details=result,
@@ -336,7 +336,7 @@ class VerifierAgent:
                     await self.emit(
                         AgentEvent(
                             event_type=EventType.HALLUCINATION_CAUGHT,
-                            agent=AgentType.VERIFIER,
+                            agent=ComponentType.VERIFIER,
                             importance=EventImportance.HIGH,
                             message=f"HALLUCINATION: {cve_id} does not exist in NVD",
                             details=result,
@@ -353,7 +353,7 @@ class VerifierAgent:
                 await self.emit(
                     AgentEvent(
                         event_type=EventType.TOOL_RESULT,
-                        agent=AgentType.VERIFIER,
+                        agent=ComponentType.VERIFIER,
                         importance=EventImportance.LOW,
                         message=f"Version check: {args['software']} {args['claimed_version']} - {'confirmed' if result.get('confirmed') else 'unconfirmed'}",
                         details=result,
@@ -369,7 +369,7 @@ class VerifierAgent:
                 await self.emit(
                     AgentEvent(
                         event_type=EventType.TOOL_RESULT,
-                        agent=AgentType.VERIFIER,
+                        agent=ComponentType.VERIFIER,
                         importance=EventImportance.LOW,
                         message=f"Endpoint check: {args['endpoint']} - status {status}",
                         details=result,
@@ -402,7 +402,7 @@ class VerifierAgent:
                     await self.emit(
                         AgentEvent(
                             event_type=EventType.HALLUCINATION_CAUGHT,
-                            agent=AgentType.VERIFIER,
+                            agent=ComponentType.VERIFIER,
                             importance=EventImportance.HIGH,
                             message=f"HALLUCINATION CAUGHT [{observation_id}]: {reasoning[:80]}",
                             observation_id=observation_id,
@@ -416,7 +416,7 @@ class VerifierAgent:
                     await self.emit(
                         AgentEvent(
                             event_type=EventType.OBSERVATION_VERIFIED,
-                            agent=AgentType.VERIFIER,
+                            agent=ComponentType.VERIFIER,
                             importance=EventImportance.MEDIUM,
                             message=f"VERIFIED [{observation_id}]: {observation_title}",
                             observation_id=observation_id,
@@ -427,7 +427,7 @@ class VerifierAgent:
                     await self.emit(
                         AgentEvent(
                             event_type=EventType.OBSERVATION_REJECTED,
-                            agent=AgentType.VERIFIER,
+                            agent=ComponentType.VERIFIER,
                             importance=EventImportance.LOW,
                             message=f"REJECTED [{observation_id}]: {reasoning[:80]}",
                             observation_id=observation_id,
@@ -447,7 +447,7 @@ class VerifierAgent:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.ERROR,
-                    agent=AgentType.VERIFIER,
+                    agent=ComponentType.VERIFIER,
                     importance=EventImportance.LOW,
                     message=f"Tool {name} failed: {str(e)[:50]}",
                 )

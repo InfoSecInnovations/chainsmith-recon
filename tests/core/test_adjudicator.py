@@ -24,7 +24,7 @@ from app.lib.llm import LLMErrorType, LLMResponse
 from app.models import (
     AdjudicatedRisk,
     AdjudicationApproach,
-    AgentType,
+    ComponentType,
     EventType,
     Observation,
     ObservationSeverity,
@@ -56,7 +56,7 @@ def _make_observation(
         severity=ObservationSeverity(severity),
         status=ObservationStatus(status),
         confidence=0.8,
-        discovered_by=AgentType.VERIFIER,
+        check_name="test_check",
         discovered_at=datetime(2026, 1, 1),
         target_url=target_url,
         evidence_summary="Header X-Debug-Mode: true found",
@@ -407,9 +407,9 @@ class TestAdjudicatedRiskModel:
             confidence=0.9,
             approach_used=AdjudicationApproach.EVIDENCE_RUBRIC,
             rationale="Overridden by adjudicator",
-            adjudicated_by=AgentType.ADJUDICATOR,
+            adjudicated_by=ComponentType.ADJUDICATOR,
         )
-        assert risk.adjudicated_by == AgentType.ADJUDICATOR
+        assert risk.adjudicated_by == ComponentType.ADJUDICATOR
 
     def test_confidence_bounds(self):
         with pytest.raises(ValueError):
