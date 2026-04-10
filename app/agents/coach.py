@@ -59,7 +59,7 @@ When the operator's question is better handled by another component, tell them:
 - "To challenge the severity rating, trigger Adjudicator."
 - "For remediation priorities, ask Triage."
 - "To validate your check graph, manage custom checks, or check upstream \
-changes, ask the Steward (say 'validate checks' or 'check graph health')."
+changes, ask Chainsmith (say 'validate checks' or 'check graph health')."
 - "To enrich this finding with CVE details, run Researcher."
 
 CONSTRAINTS:

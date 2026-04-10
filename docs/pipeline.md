@@ -76,8 +76,8 @@ Two components sit outside the linear pipeline:
 
 - **Coach** — always-available conversational explainer, accessible at any
   point during a session.
-- **Steward** (Chainsmith) — check ecosystem validation and custom check
-  management, invoked on demand.
+- **Chainsmith** — check ecosystem validation and custom check
+  management, invoked on demand (in addition to its chain-building role).
 
 ---
 
@@ -287,11 +287,11 @@ critical >= 0.8, high >= 0.6, medium >= 0.4, low >= 0.2, info < 0.2.
 
 ---
 
-### Chainsmith (Chain Builder + Steward)
+### Chainsmith
 
 `app/agents/chainsmith.py`
 
-This agent has two roles that share a codebase:
+Chainsmith handles both chain building and check ecosystem management.
 
 #### Chain Builder
 
@@ -310,15 +310,16 @@ This agent has two roles that share a codebase:
 | `_match_patterns(observations)` | Pattern-based chain detection |
 | `_llm_discover_chains(observations)` | LLM reasoning for novel chains |
 
-#### Steward
+#### Check Ecosystem Manager
 
 - **Role:** Validates and curates the check ecosystem — graph validation,
   custom check scaffolding, upstream diff detection, and content analysis.
-- **Consumes:** Check registry, custom check manifest, community check
-  hashes.
+- **Consumes:** Check registry, community check hashes.
 - **Produces:** `ValidationResult` with issues, health status, and
   summary.
-- **When it runs:** On demand (via `/api/v1/steward/` or operator request).
+- **When it runs:** On demand (via `/api/v1/chainsmith/` or operator request).
+- **Orchestration:** `app/engine/chainsmith.py` manages agent lifecycle,
+  state guards, and persistence via `ChainsmithRepository`.
 
 **Validation issue categories:**
 
@@ -337,7 +338,7 @@ This agent has two roles that share a codebase:
 |--------|---------|
 | `validate(checks)` | Full graph + pattern validation |
 | `scaffold_check(...)` | Generate custom check boilerplate |
-| `write_and_register_check(...)` | Write to disk + update manifest |
+| `write_and_register_check(...)` | Write to disk + register |
 | `suggest_disable_impact(check_names)` | Impact analysis for disabling checks |
 | `diff_upstream()` | Detect community check changes since last sync |
 | `content_analysis(checks)` | LLM-powered semantic overlap + gap analysis |
@@ -347,11 +348,11 @@ This agent has two roles that share a codebase:
 | Event | Importance |
 |-------|------------|
 | `CHAIN_IDENTIFIED` | MEDIUM |
-| `STEWARD_VALIDATION_START` | LOW |
-| `STEWARD_ISSUE_FOUND` | MEDIUM |
-| `STEWARD_VALIDATION_COMPLETE` | LOW |
-| `STEWARD_UPSTREAM_DIFF` | Varies |
-| `STEWARD_CUSTOM_CHECK_CREATED` | MEDIUM |
+| `CHAINSMITH_VALIDATION_START` | LOW |
+| `CHAINSMITH_ISSUE_FOUND` | MEDIUM |
+| `CHAINSMITH_VALIDATION_COMPLETE` | LOW |
+| `CHAINSMITH_UPSTREAM_DIFF` | Varies |
+| `CHAINSMITH_CUSTOM_CHECK_CREATED` | MEDIUM |
 
 **Configuration:**
 
@@ -360,7 +361,6 @@ This agent has two roles that share a codebase:
 | `LITELLM_MODEL_CHAINSMITH` | `nova-pro` |
 | `LITELLM_MODEL_CHAINSMITH_FALLBACK` | `nova-mini` |
 | Custom checks directory | `app/checks/custom/` |
-| Manifest | `app/checks/custom/steward_manifest.json` |
 
 ---
 
@@ -425,7 +425,7 @@ Coach does not take actions. It directs operators to the right component:
 
 > "For scan suggestions, ask ScanAdvisor. To reproduce, ask CheckProof.
 > To challenge severity, trigger Adjudicator. For remediation priorities,
-> ask Triage. To validate checks, ask Steward."
+> ask Triage. To validate checks, ask Chainsmith."
 
 **Memory:** Session-scoped deque (default max 10 exchanges). Clears when
 the operator clears chat. No persistence across sessions.
@@ -540,7 +540,7 @@ gate, or advisor — it is plumbing.
 |---------|-----------|
 | scope, scoping | Chainsmith |
 | chain, attack path | Chainsmith |
-| steward, validate checks, check graph | Chainsmith (Steward) |
+| validate checks, check graph | Chainsmith |
 | severity, risk, adjudicate | Adjudicator |
 | verify, verification | Verifier |
 | prioritize, remediate | Triage |
@@ -589,7 +589,7 @@ All agents emit `AgentEvent` objects that power the live operator feed.
 | Verifier | `AGENT_START`, `TOOL_CALL`, `TOOL_RESULT`, `OBSERVATION_VERIFIED`, `OBSERVATION_REJECTED`, `HALLUCINATION_CAUGHT`, `AGENT_COMPLETE`, `ERROR` |
 | Adjudicator | `ADJUDICATION_START`, `SEVERITY_UPHELD`, `SEVERITY_ADJUSTED`, `ADJUDICATION_COMPLETE`, `ERROR` |
 | Triage | `TRIAGE_START`, `TRIAGE_ACTION`, `TRIAGE_COMPLETE` |
-| Chainsmith | `CHAIN_IDENTIFIED`, `STEWARD_VALIDATION_START`, `STEWARD_ISSUE_FOUND`, `STEWARD_VALIDATION_COMPLETE`, `STEWARD_UPSTREAM_DIFF`, `STEWARD_CUSTOM_CHECK_CREATED`, `STEWARD_FIX_SUGGESTED`, `STEWARD_FIX_APPLIED` |
+| Chainsmith | `CHAIN_IDENTIFIED`, `CHAINSMITH_VALIDATION_START`, `CHAINSMITH_ISSUE_FOUND`, `CHAINSMITH_VALIDATION_COMPLETE`, `CHAINSMITH_UPSTREAM_DIFF`, `CHAINSMITH_CUSTOM_CHECK_CREATED`, `CHAINSMITH_FIX_APPLIED` |
 | Researcher | `RESEARCH_REQUESTED`, `TOOL_CALL`, `TOOL_RESULT`, `RESEARCH_COMPLETE`, `ERROR` |
 | Coach | `COACH_QUERY`, `COACH_RESPONSE` |
 | CheckProof | `PROOF_GUIDANCE_REQUESTED`, `PROOF_GUIDANCE_GENERATED` |
@@ -673,7 +673,7 @@ check_proof:
 | `~/.chainsmith/triage_context.yaml` | Team context (litmus answers) | Triage |
 | `app/data/remediation_guidance.json` | Remediation knowledge base | Triage |
 | `app/data/proof_templates/*.yaml` | Proof command templates | CheckProof |
-| `app/checks/custom/steward_manifest.json` | Custom check registry | Chainsmith (Steward) |
+| Database (`chainsmith_validations`, `chainsmith_custom_checks`) | Validation results and custom check registry | Chainsmith |
 
 ---
 

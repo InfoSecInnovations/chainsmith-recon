@@ -46,6 +46,7 @@ class AppState:
         self.chain_status: str = "idle"  # idle, analyzing, complete, partial, error
         self.adjudication_status: str = "idle"  # idle, adjudicating, complete, error
         self.triage_status: str = "idle"  # idle, triaging, complete, error
+        self.chainsmith_status: str = "idle"  # idle, validating, complete, error
 
         # Settings
         self.settings = {

@@ -29,20 +29,20 @@ already removed.
 
 ### EventType enum (34 entries)
 
-16 generic + component lifecycle events, 7 steward events, 11 others.
+16 generic + component lifecycle events, 7 chainsmith events, 11 others.
 **9 are never emitted:**
 
 | Dead event | Reason |
 |-----------|--------|
 | `OBSERVATION_DISCOVERED` | Checks are deterministic; no "discovery" event to emit |
-| `CHAIN_IDENTIFIED` | Chainsmith uses STEWARD_* events instead |
+| `CHAIN_IDENTIFIED` | Chainsmith uses CHAINSMITH_* events instead |
 | `SCOPE_APPROVED` | Guardian only emits SCOPE_VIOLATION; approved is implicit |
 | `SCOPE_DENIED` | Same — violations are the only interesting signal |
 | `PROOF_GUIDANCE_REQUESTED` | CheckProofAdvisor is deterministic, never emits events |
 | `PROOF_GUIDANCE_GENERATED` | Same |
 | `COACH_QUERY` | Coach is conversational; events not useful |
 | `COACH_RESPONSE` | Same |
-| `STEWARD_FIX_SUGGESTED` | Steward emits FIX_APPLIED but not FIX_SUGGESTED |
+| `CHAINSMITH_FIX_SUGGESTED` | Chainsmith emits FIX_APPLIED but not FIX_SUGGESTED |
 
 ### Key model fields that reference AgentType
 
@@ -122,8 +122,9 @@ moves ScanAdvisor into `app/advisors/` and adds it to the enum + chat routing.
 
 ### B. EventType cleanup — RESOLVED
 
-Per-event audit. Remove the 9 dead events. Leave the 7 steward events as-is
-(they are actively emitted by ChainsmithAgent; cleanup is Phase 39's scope).
+Per-event audit. Remove the 9 dead events. Leave the 7 chainsmith events as-is
+(they are actively emitted by ChainsmithAgent; renamed from STEWARD_* to
+CHAINSMITH_* in Phase 39).
 
 Events to remove:
 - `OBSERVATION_DISCOVERED`
@@ -134,7 +135,7 @@ Events to remove:
 - `PROOF_GUIDANCE_GENERATED`
 - `COACH_QUERY`
 - `COACH_RESPONSE`
-- `STEWARD_FIX_SUGGESTED`
+- `CHAINSMITH_FIX_SUGGESTED`
 
 ### C. Drop Observation.discovered_by — RESOLVED
 
@@ -233,8 +234,8 @@ Single-pass refactor of `app/models.py` and all referencing files.
 ## Dependencies
 
 - None hard — can be done at any time.
-- Best done *before* Phase 39 (steward cleanup) and Phase 40 (advisor
-  consolidation) so those phases land on a clean type system.
+- Best done *before* Phase 39 (chainsmith consolidation) and Phase 40
+  (advisor consolidation) so those phases land on a clean type system.
 - Database can be deleted and rebuilt; no migration needed for persisted data.
 
 

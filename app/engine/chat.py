@@ -353,7 +353,7 @@ class ChatDispatcher:
             self.sse.set_agent_busy(str(agent_type), False)
 
     async def _handle_chainsmith(self, text: str, bridge) -> dict:
-        """Route to ChainsmithAgent for check/chain stewardship."""
+        """Route to ChainsmithAgent for check/chain management."""
         from app.agents.chainsmith import ChainsmithAgent
 
         agent = ChainsmithAgent(event_callback=bridge)

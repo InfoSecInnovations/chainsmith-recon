@@ -17,6 +17,7 @@ Organized by functional area:
 from app.routes.adjudication import router as adjudication_router
 from app.routes.advisor import router as advisor_router
 from app.routes.chains import router as chains_router
+from app.routes.chainsmith import router as chainsmith_router
 from app.routes.chat import router as chat_router
 from app.routes.checks import router as checks_router
 from app.routes.compliance import router as compliance_router
@@ -28,7 +29,6 @@ from app.routes.scan import router as scan_router
 from app.routes.scan_history import router as scan_history_router
 from app.routes.scenarios import router as scenarios_router
 from app.routes.scope import router as scope_router
-from app.routes.steward import router as steward_router
 from app.routes.swarm import router as swarm_router
 
 __all__ = [
@@ -47,5 +47,5 @@ __all__ = [
     "customizations_router",
     "advisor_router",
     "chat_router",
-    "steward_router",
+    "chainsmith_router",
 ]

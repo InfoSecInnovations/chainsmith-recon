@@ -1878,3 +1878,95 @@ class ProofGuidanceRepository(_RepositoryBase):
                 }
                 for r in result.scalars().all()
             ]
+
+
+class ChainsmithRepository(_RepositoryBase):
+    """Persist chainsmith validation results and custom check metadata."""
+
+    async def save_validation(
+        self,
+        scan_id: str | None,
+        validation_type: str,
+        status: str,
+        result: dict,
+        issues_count: int = 0,
+    ) -> str:
+        """Store a validation result. Returns the record ID."""
+        from app.db.models import ChainsmithValidation
+
+        record_id = uuid.uuid4().hex[:12]
+        row = ChainsmithValidation(
+            id=record_id,
+            scan_id=scan_id,
+            validation_type=validation_type,
+            status=status,
+            result=result,
+            issues_count=issues_count,
+            created_at=datetime.now(UTC),
+        )
+        async with self._session() as session:
+            session.add(row)
+            await session.commit()
+        return record_id
+
+    async def get_validation(self, scan_id: str | None = None) -> dict | None:
+        """Retrieve the most recent validation, optionally filtered by scan_id."""
+        from app.db.models import ChainsmithValidation
+
+        async with self._session() as session:
+            query = select(ChainsmithValidation).order_by(ChainsmithValidation.created_at.desc())
+            if scan_id:
+                query = query.where(ChainsmithValidation.scan_id == scan_id)
+            result = await session.execute(query.limit(1))
+            row = result.scalar_one_or_none()
+            if not row:
+                return None
+            return {
+                "id": row.id,
+                "scan_id": row.scan_id,
+                "validation_type": row.validation_type,
+                "status": row.status,
+                "result": row.result,
+                "issues_count": row.issues_count,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+
+    async def save_custom_check(self, metadata: dict) -> str:
+        """Register a custom check. Returns the record ID."""
+        from app.db.models import ChainsmithCustomCheck
+
+        record_id = uuid.uuid4().hex[:12]
+        row = ChainsmithCustomCheck(
+            id=record_id,
+            name=metadata["name"],
+            description=metadata.get("description"),
+            suite=metadata.get("suite"),
+            file_path=metadata.get("file_path"),
+            metadata_=metadata,
+            created_at=datetime.now(UTC),
+        )
+        async with self._session() as session:
+            session.add(row)
+            await session.commit()
+        return record_id
+
+    async def get_custom_checks(self) -> list[dict]:
+        """List all registered custom checks."""
+        from app.db.models import ChainsmithCustomCheck
+
+        async with self._session() as session:
+            result = await session.execute(
+                select(ChainsmithCustomCheck).order_by(ChainsmithCustomCheck.created_at)
+            )
+            return [
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "description": r.description,
+                    "suite": r.suite,
+                    "file_path": r.file_path,
+                    "metadata": r.metadata_,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in result.scalars().all()
+            ]

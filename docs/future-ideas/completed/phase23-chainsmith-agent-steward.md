@@ -1,5 +1,9 @@
 # Phase 23 — Chainsmith Agent: Check & Chain Steward
 
+> **Note (Phase 39):** The "steward" identity was removed in Phase 39.
+> All steward capabilities now live under the Chainsmith name with proper
+> engine/repository wiring. This document is kept as historical record.
+
 Repurpose the unused `ChainsmithAgent` as a steward that maintains, curates,
 and validates an organization's check ecosystem. Chainsmith is not in the
 scan pipeline — it manages the pipeline itself.

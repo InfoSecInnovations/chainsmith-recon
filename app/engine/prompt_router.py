@@ -47,10 +47,10 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], ComponentType]] = [
     (re.compile(r"\b(scope|target|exclude|exclusion|timeframe)\b", re.I), ComponentType.CHAINSMITH),
     # Chainsmith — chain building
     (re.compile(r"\b(chain|attack path|attack chain|link)\b", re.I), ComponentType.CHAINSMITH),
-    # Chainsmith — steward (check ecosystem management)
+    # Chainsmith — check ecosystem management
     (
         re.compile(
-            r"\b(steward|validate checks|check graph|custom check|scaffold|disable check|upstream diff|check health)\b",
+            r"\b(validate checks|check graph|custom check|scaffold|disable check|upstream diff|check health)\b",
             re.I,
         ),
         ComponentType.CHAINSMITH,
@@ -98,7 +98,7 @@ You are a message classifier for a security reconnaissance platform.
 Classify the operator's message to determine which agent should handle it.
 
 Available agents:
-- chainsmith: Scoping, attack chain building, check ecosystem stewardship (validate graph, custom checks, upstream diffs, disable impact)
+- chainsmith: Scoping, attack chain building, check ecosystem management (validate graph, custom checks, upstream diffs, disable impact)
 - verifier: Fact-checking observations, re-verification requests
 - adjudicator: Risk severity scoring, re-scoring, risk acceptance
 - triage: Remediation prioritization, action planning, fix ordering

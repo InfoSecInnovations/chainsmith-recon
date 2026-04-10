@@ -309,6 +309,34 @@ class ChatMessage(Base):
     )
 
 
+class ChainsmithValidation(Base):
+    __tablename__ = "chainsmith_validations"
+
+    id = Column(String, primary_key=True)
+    scan_id = Column(String, nullable=True)
+    validation_type = Column(String, nullable=False)  # 'full', 'upstream_diff'
+    status = Column(String, nullable=False)  # 'complete', 'error'
+    result = Column(JSON, nullable=True)
+    issues_count = Column(Integer, default=0)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (Index("idx_chainsmith_scan_id", "scan_id"),)
+
+
+class ChainsmithCustomCheck(Base):
+    __tablename__ = "chainsmith_custom_checks"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    suite = Column(String, nullable=True)
+    file_path = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    metadata_ = Column("metadata", JSON, nullable=True)
+
+    __table_args__ = (Index("idx_chainsmith_check_name", "name"),)
+
+
 class TriageActionRecord(Base):
     __tablename__ = "triage_actions"
 

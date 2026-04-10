@@ -1,5 +1,5 @@
 """
-Chainsmith Agent — Check & Chain Steward (Phase 23)
+Chainsmith Agent (Phase 23, consolidated Phase 39)
 
 Maintains, curates, and validates an organization's check ecosystem.
 Guides operators on crafting custom checks and attack chain patterns.
@@ -15,7 +15,7 @@ Capabilities:
 - Guided customization (scaffold new checks, impact analysis for disabling)
 
 All operations are advisory. Chainsmith never blocks scans.
-Persistence: JSON manifest in app/checks/custom/steward_manifest.json.
+Persistence: database via ChainsmithRepository.
 """
 
 import hashlib
@@ -55,7 +55,6 @@ SEED_CONTEXT_KEYS = frozenset(
 )
 
 CUSTOM_DIR = os.path.join(os.path.dirname(__file__), "..", "checks", "custom")
-MANIFEST_PATH = os.path.join(CUSTOM_DIR, "steward_manifest.json")
 COMMUNITY_DIRS = ["network", "web", "ai", "mcp", "agent", "rag", "cag"]
 
 
@@ -151,7 +150,7 @@ class ValidationResult:
 
 
 class ChainsmithAgent:
-    """Chainsmith — check & chain steward.
+    """Chainsmith — check ecosystem manager and chain builder.
 
     Validates and curates the check ecosystem, guides custom check and
     chain pattern creation, and builds attack chains from observations.
@@ -183,7 +182,7 @@ class ChainsmithAgent:
             await self.event_callback(event)
 
     # ═══════════════════════════════════════════════════════════════
-    # Steward: Validation
+    # Validation
     # ═══════════════════════════════════════════════════════════════
 
     async def validate(self, checks: list[BaseCheck] | None = None) -> ValidationResult:
@@ -193,7 +192,7 @@ class ChainsmithAgent:
         """
         await self.emit(
             AgentEvent(
-                event_type=EventType.STEWARD_VALIDATION_START,
+                event_type=EventType.CHAINSMITH_VALIDATION_START,
                 agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
                 message="Starting check ecosystem validation...",
@@ -211,11 +210,10 @@ class ChainsmithAgent:
         self._validate_graph(checks, result)
         self._validate_chain_patterns(checks, result)
         self._validate_custom_check_health(result)
-        self._save_validation(result)
 
         await self.emit(
             AgentEvent(
-                event_type=EventType.STEWARD_VALIDATION_COMPLETE,
+                event_type=EventType.CHAINSMITH_VALIDATION_COMPLETE,
                 agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
                 message=result.summary(),
@@ -226,7 +224,7 @@ class ChainsmithAgent:
         for issue in result.issues:
             await self.emit(
                 AgentEvent(
-                    event_type=EventType.STEWARD_ISSUE_FOUND,
+                    event_type=EventType.CHAINSMITH_ISSUE_FOUND,
                     agent=ComponentType.CHAINSMITH,
                     importance=(
                         EventImportance.HIGH
@@ -356,17 +354,28 @@ class ChainsmithAgent:
         return "\n".join(lines)
 
     async def diff_upstream(self) -> str:
-        """Diff community checks against the last known state."""
-        manifest = self._load_manifest()
+        """Diff community checks against the last known state.
+
+        Retrieves the last upstream_diff result from the DB to compare
+        hashes. If no prior result exists, records the current baseline.
+        """
         current_hash = self._hash_community_checks()
 
-        if manifest.get("last_community_hash") is None:
-            manifest["last_community_hash"] = current_hash
-            self._save_manifest(manifest)
+        # Try to load last known hash from DB
+        last_hash = None
+        try:
+            from app.db.repositories import ChainsmithRepository
 
+            last_result = await ChainsmithRepository().get_validation()
+            if last_result and last_result.get("result"):
+                last_hash = last_result["result"].get("community_hash")
+        except Exception:
+            pass
+
+        if last_hash is None:
             await self.emit(
                 AgentEvent(
-                    event_type=EventType.STEWARD_UPSTREAM_DIFF,
+                    event_type=EventType.CHAINSMITH_UPSTREAM_DIFF,
                     agent=ComponentType.CHAINSMITH,
                     importance=EventImportance.LOW,
                     message="First sync — community check baseline recorded.",
@@ -374,30 +383,26 @@ class ChainsmithAgent:
             )
             return "First sync — community check hash recorded as baseline. Run again after pulling upstream changes."
 
-        if current_hash == manifest["last_community_hash"]:
+        if current_hash == last_hash:
             return "Community checks unchanged since last sync."
-
-        old_hash = manifest["last_community_hash"]
-        manifest["last_community_hash"] = current_hash
-        self._save_manifest(manifest)
 
         await self.emit(
             AgentEvent(
-                event_type=EventType.STEWARD_UPSTREAM_DIFF,
+                event_type=EventType.CHAINSMITH_UPSTREAM_DIFF,
                 agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.HIGH,
-                message=f"Community checks changed (hash {old_hash[:8]}→{current_hash[:8]}). Run validation to check for conflicts.",
+                message=f"Community checks changed (hash {last_hash[:8]}→{current_hash[:8]}). Run validation to check for conflicts.",
             )
         )
 
         return (
             f"Community checks have changed since last sync "
-            f"(hash {old_hash[:8]}→{current_hash[:8]}). "
+            f"(hash {last_hash[:8]}→{current_hash[:8]}). "
             "Run `validate` to check for conflicts with custom checks."
         )
 
     # ═══════════════════════════════════════════════════════════════
-    # Steward: Custom Check Scaffolding
+    # Custom Check Scaffolding
     # ═══════════════════════════════════════════════════════════════
 
     async def scaffold_check(
@@ -489,7 +494,7 @@ class {class_name}(BaseCheck):
 
         await self.emit(
             AgentEvent(
-                event_type=EventType.STEWARD_CUSTOM_CHECK_CREATED,
+                event_type=EventType.CHAINSMITH_CUSTOM_CHECK_CREATED,
                 agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
                 message=f"Scaffolded custom check: {check_name} ({class_name})",
@@ -545,21 +550,9 @@ class {class_name}(BaseCheck):
             f"and registered in CUSTOM_CHECK_REGISTRY."
         )
 
-        manifest = self._load_manifest()
-        manifest["custom_checks"].append(
-            {
-                "name": name,
-                "class": result["class_name"],
-                "module": result["module_name"],
-                "suite": suite,
-                "created": datetime.now(UTC).isoformat(),
-            }
-        )
-        self._save_manifest(manifest)
-
         await self.emit(
             AgentEvent(
-                event_type=EventType.STEWARD_FIX_APPLIED,
+                event_type=EventType.CHAINSMITH_FIX_APPLIED,
                 agent=ComponentType.CHAINSMITH,
                 importance=EventImportance.MEDIUM,
                 message=f"Created and registered custom check: {result['class_name']}",
@@ -1000,32 +993,8 @@ class {class_name}(BaseCheck):
         )
 
     # ═══════════════════════════════════════════════════════════════
-    # Manifest / Persistence
+    # Community Check Hashing
     # ═══════════════════════════════════════════════════════════════
-
-    def _load_manifest(self) -> dict:
-        try:
-            with open(MANIFEST_PATH) as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {
-                "version": 1,
-                "last_community_hash": None,
-                "last_validation": None,
-                "validation_issues": [],
-                "custom_checks": [],
-            }
-
-    def _save_manifest(self, manifest: dict):
-        os.makedirs(os.path.dirname(MANIFEST_PATH), exist_ok=True)
-        with open(MANIFEST_PATH, "w") as f:
-            json.dump(manifest, f, indent=2)
-
-    def _save_validation(self, result: ValidationResult):
-        manifest = self._load_manifest()
-        manifest["last_validation"] = result.timestamp
-        manifest["validation_issues"] = [i.to_dict() for i in result.issues]
-        self._save_manifest(manifest)
 
     def _hash_community_checks(self) -> str:
         """Compute a hash of all community check files for diff detection."""
@@ -1124,7 +1093,7 @@ class {class_name}(BaseCheck):
 
         # Default
         return (
-            "I'm Chainsmith — your check & chain steward. I can help with:\n\n"
+            "I'm Chainsmith — your check ecosystem manager. I can help with:\n\n"
             '- **"Validate"** — Check dependency graph and chain patterns for issues\n'
             '- **"Disable [checks/suite]"** — Show what breaks if you disable checks\n'
             '- **"Upstream diff"** — Check if community checks changed since last sync\n'

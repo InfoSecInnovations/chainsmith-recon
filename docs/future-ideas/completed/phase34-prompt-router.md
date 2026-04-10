@@ -11,7 +11,7 @@ user-facing feature.
 ## Motivation
 
 - As the agent roster grows (Verifier, Adjudicator, Chainsmith, Triage,
-  Proof Advisor, Steward), operators face a cognitive burden: "Which
+  Proof Advisor), operators face a cognitive burden: "Which
   agent do I talk to for this?"
 - Less experienced operators may ask the Chainsmith scoping flow about
   risk severity, or ask the Triage Agent to re-run a scan.
