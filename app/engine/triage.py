@@ -343,7 +343,40 @@ async def run_triage(state: "AppState") -> None:
         await on_triage_complete(scan_id, plan_dict)
         await _update_triage_status_in_db(scan_id, triage_status="complete")
 
+        # Guided Mode: proactive triage_plan_ready message
+        await _emit_triage_plan_proactive(state, plan)
+
     except Exception as e:
         logger.exception("Triage failed: %s", e)
         state.triage_status = "error"
         await _update_triage_status_in_db(scan_id, triage_status="error", triage_error=str(e))
+
+
+async def _emit_triage_plan_proactive(state, plan) -> None:
+    """Push a proactive triage_plan_ready message if Guided Mode is active."""
+    try:
+        from app.engine.chat import sse_manager
+        from app.engine.guided import maybe_emit_proactive
+        from app.models import ComponentType
+
+        top_action = plan.actions[0].action if plan.actions else "review findings"
+        text = (
+            f"Action plan ready. {len(plan.actions)} actions "
+            f"({plan.quick_wins} quick wins). Top priority: {top_action}"
+        )
+
+        await maybe_emit_proactive(
+            sse_manager=sse_manager,
+            session_id=state.session_id,
+            agent=ComponentType.TRIAGE,
+            trigger="triage_plan_ready",
+            text=text,
+            actions=[
+                {
+                    "label": "Show plan",
+                    "injected_message": "Show the triage plan details",
+                }
+            ],
+        )
+    except Exception:
+        logger.debug("Guided mode proactive triage_plan_ready failed (non-fatal)", exc_info=True)

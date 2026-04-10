@@ -1,0 +1,160 @@
+/* ─── Phase 36: Guided Mode ─────────────────────────────────── */
+
+/* ─── Guided Badge (header pill) ───────────────────────────── */
+.guided-badge {
+    display: none;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: var(--accent);
+    background: rgba(74, 158, 255, 0.12);
+    border: 1px solid rgba(74, 158, 255, 0.25);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+.guided-badge:hover {
+    background: rgba(74, 158, 255, 0.2);
+    border-color: rgba(74, 158, 255, 0.4);
+}
+
+body.guided-mode .guided-badge {
+    display: inline-flex;
+}
+
+/* ─── Guided Toast ─────────────────────────────────────────── */
+.guided-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    z-index: 10000;
+    pointer-events: none;
+}
+
+.guided-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* ─── Proactive Messages ───────────────────────────────────── */
+.chat-msg.proactive {
+    position: relative;
+    background: rgba(74, 158, 255, 0.06);
+    border-left: 2px solid var(--accent);
+    padding: 8px 28px 8px 10px;
+    margin: 6px 0;
+    border-radius: 4px;
+}
+
+.proactive-text {
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+    margin-top: 4px;
+}
+
+.proactive-dismiss {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    border-radius: 3px;
+    padding: 0;
+}
+
+.proactive-dismiss:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+/* Notification dot on chat toggle for proactive messages */
+.chat-toggle.has-proactive::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--brand-red, #e74c3c);
+}
+
+/* ─── Terminology Tooltips ─────────────────────────────────── */
+body.guided-mode [data-term].has-tooltip {
+    border-bottom: 1px dotted var(--accent);
+    cursor: help;
+}
+
+/* ─── Settings Page: Guided Mode Toggle ────────────────────── */
+.guided-mode-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.toggle-row input[type="checkbox"] {
+    margin-top: 3px;
+    accent-color: var(--accent);
+    width: 16px;
+    height: 16px;
+}
+
+.toggle-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.toggle-label strong {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.toggle-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.guided-quickstart-link {
+    font-size: 0.75rem;
+    color: var(--accent);
+    text-decoration: none;
+    margin-left: 26px;
+}
+
+.guided-quickstart-link:hover {
+    text-decoration: underline;
+}

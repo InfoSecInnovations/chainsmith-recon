@@ -1,9 +1,12 @@
 """
-app/advisors/scan_advisor.py - Post-Scan Advisor (Phase 20)
+app/advisors/scan_analysis_advisor.py - Post-Scan Analysis Advisor (Phase 20, renamed Phase 41)
 
 Optional, rule-based advisor that analyzes completed scan results and
 recommends follow-up actions. Disabled by default. Never runs checks —
 only recommends.
+
+Renamed from ScanAdvisor → ScanAnalysisAdvisor in Phase 41 to clarify
+its post-scan role and make room for ScanPlannerAdvisor (pre-scan).
 
 Phase 1: Post-scan analysis only.
 - Gap analysis: checks that could have run with better inputs
@@ -12,9 +15,9 @@ Phase 1: Post-scan analysis only.
 - Coverage cross-reference: suites with zero or low coverage
 
 Usage:
-    from app.advisors.scan_advisor import ScanAdvisor
+    from app.advisors.scan_analysis_advisor import ScanAnalysisAdvisor
 
-    advisor = ScanAdvisor(launcher, all_checks)
+    advisor = ScanAnalysisAdvisor(launcher, all_checks)
     recommendations = advisor.analyze()
 """
 
@@ -29,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ScanAdvisorRecommendation:
+class ScanAnalysisRecommendation:
     """A single recommendation from the advisor."""
 
     check_name: str
@@ -52,7 +55,7 @@ class ScanAdvisorRecommendation:
 
 
 @dataclass
-class ScanAdvisorConfig:
+class ScanAnalysisAdvisorConfig:
     """Advisor configuration. Disabled by default."""
 
     enabled: bool = False
@@ -155,7 +158,7 @@ SUITE_COVERAGE_THRESHOLDS: dict[str, int] = {
 # ── Advisor Engine ───────────────────────────────────────────────
 
 
-class ScanAdvisor:
+class ScanAnalysisAdvisor:
     """
     Rule-based post-scan advisor.
 
@@ -172,7 +175,7 @@ class ScanAdvisor:
         context: dict[str, Any],
         observations: list[dict],
         check_metadata: dict[str, dict],
-        config: ScanAdvisorConfig | None = None,
+        config: ScanAnalysisAdvisorConfig | None = None,
     ):
         """
         Args:
@@ -192,16 +195,16 @@ class ScanAdvisor:
         self.context = context
         self.observations = observations
         self.check_metadata = check_metadata
-        self.config = config or ScanAdvisorConfig()
+        self.config = config or ScanAnalysisAdvisorConfig()
 
-    def analyze(self) -> list[ScanAdvisorRecommendation]:
+    def analyze(self) -> list[ScanAnalysisRecommendation]:
         """Run all post-scan analysis rules. Returns recommendations."""
         if not self.config.enabled:
             logger.debug("Scan advisor is disabled — skipping analysis")
             return []
 
         logger.info("Scan advisor: running post-scan analysis")
-        recommendations: list[ScanAdvisorRecommendation] = []
+        recommendations: list[ScanAnalysisRecommendation] = []
 
         recommendations.extend(self._analyze_gaps())
         recommendations.extend(self._analyze_partial_results())
@@ -221,7 +224,7 @@ class ScanAdvisor:
 
     # ── Gap Analysis ─────────────────────────────────────────────
 
-    def _analyze_gaps(self) -> list[ScanAdvisorRecommendation]:
+    def _analyze_gaps(self) -> list[ScanAnalysisRecommendation]:
         """
         Identify checks that didn't run because conditions weren't met,
         but COULD run if the operator provided missing context data.
@@ -251,7 +254,7 @@ class ScanAdvisor:
 
             if missing_keys:
                 recs.append(
-                    ScanAdvisorRecommendation(
+                    ScanAnalysisRecommendation(
                         check_name=name,
                         reason=(
                             f"Check '{name}' could not run — missing context: "
@@ -268,13 +271,13 @@ class ScanAdvisor:
 
     # ── Partial Results ──────────────────────────────────────────
 
-    def _analyze_partial_results(self) -> list[ScanAdvisorRecommendation]:
+    def _analyze_partial_results(self) -> list[ScanAnalysisRecommendation]:
         """Flag checks that failed or were skipped."""
         recs = []
 
         for name in sorted(self.failed):
             recs.append(
-                ScanAdvisorRecommendation(
+                ScanAnalysisRecommendation(
                     check_name=name,
                     reason=(
                         f"Check '{name}' failed during execution. "
@@ -287,7 +290,7 @@ class ScanAdvisor:
 
         for name in sorted(self.skipped):
             recs.append(
-                ScanAdvisorRecommendation(
+                ScanAnalysisRecommendation(
                     check_name=name,
                     reason=(
                         f"Check '{name}' was skipped due to on_critical policy. "
@@ -302,7 +305,7 @@ class ScanAdvisor:
 
     # ── Follow-Up Suggestions ────────────────────────────────────
 
-    def _analyze_follow_ups(self) -> list[ScanAdvisorRecommendation]:
+    def _analyze_follow_ups(self) -> list[ScanAnalysisRecommendation]:
         """
         If certain checks produced observations, suggest deeper follow-up
         checks that weren't already run.
@@ -332,7 +335,7 @@ class ScanAdvisor:
                 continue
 
             recs.append(
-                ScanAdvisorRecommendation(
+                ScanAnalysisRecommendation(
                     check_name=suggest,
                     reason=rule["reason"],
                     confidence=rule["confidence"],
@@ -344,7 +347,7 @@ class ScanAdvisor:
 
     # ── Coverage Cross-Reference ─────────────────────────────────
 
-    def _analyze_coverage(self) -> list[ScanAdvisorRecommendation]:
+    def _analyze_coverage(self) -> list[ScanAnalysisRecommendation]:
         """
         Check if any suite has zero or very low coverage relative to
         the number of checks available for that suite.
@@ -374,7 +377,7 @@ class ScanAdvisor:
 
             if ran == 0:
                 recs.append(
-                    ScanAdvisorRecommendation(
+                    ScanAnalysisRecommendation(
                         check_name=f"{suite}_suite",
                         reason=(
                             f"No checks ran from the '{suite}' suite "
@@ -387,7 +390,7 @@ class ScanAdvisor:
                 )
             elif ran < threshold and ran < total:
                 recs.append(
-                    ScanAdvisorRecommendation(
+                    ScanAnalysisRecommendation(
                         check_name=f"{suite}_suite",
                         reason=(
                             f"Only {ran}/{total} checks ran from the '{suite}' suite "
@@ -404,13 +407,13 @@ class ScanAdvisor:
 # ── Factory helper ───────────────────────────────────────────────
 
 
-def build_advisor_from_launcher(
+def build_analysis_advisor_from_launcher(
     launcher,
     all_checks: list,
-    config: ScanAdvisorConfig | None = None,
-) -> ScanAdvisor:
+    config: ScanAnalysisAdvisorConfig | None = None,
+) -> ScanAnalysisAdvisor:
     """
-    Build a ScanAdvisor from a completed CheckLauncher and the full
+    Build a ScanAnalysisAdvisor from a completed CheckLauncher and the full
     check registry.
 
     Args:
@@ -423,7 +426,7 @@ def build_advisor_from_launcher(
     all_check_names = {c.name for c in all_checks}
     check_metadata = {c.name: get_check_info(c) for c in all_checks}
 
-    return ScanAdvisor(
+    return ScanAnalysisAdvisor(
         completed=set(launcher.completed),
         failed=set(launcher.failed),
         skipped=set(launcher.skipped),

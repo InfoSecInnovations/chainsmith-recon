@@ -1,9 +1,9 @@
 """
-Tests for app/advisors/scan_advisor.py
+Tests for app/advisors/scan_analysis_advisor.py
 
 Covers:
-- ScanAdvisorRecommendation dataclass
-- ScanAdvisorConfig defaults (disabled by default)
+- ScanAnalysisRecommendation dataclass
+- ScanAnalysisAdvisorConfig defaults (disabled by default)
 - Gap analysis: detects checks blocked by missing context
 - Partial results: flags failed and skipped checks
 - Follow-up suggestions: triggers based on observations
@@ -14,10 +14,10 @@ Covers:
 
 import pytest
 
-from app.advisors.scan_advisor import (
-    ScanAdvisor,
-    ScanAdvisorConfig,
-    ScanAdvisorRecommendation,
+from app.advisors.scan_analysis_advisor import (
+    ScanAnalysisAdvisor,
+    ScanAnalysisAdvisorConfig,
+    ScanAnalysisRecommendation,
 )
 
 pytestmark = pytest.mark.unit
@@ -34,9 +34,9 @@ def _make_advisor(
     observations=None,
     check_metadata=None,
     enabled=True,
-) -> ScanAdvisor:
-    """Build a ScanAdvisor with sensible defaults for testing."""
-    return ScanAdvisor(
+) -> ScanAnalysisAdvisor:
+    """Build a ScanAnalysisAdvisor with sensible defaults for testing."""
+    return ScanAnalysisAdvisor(
         completed=completed or set(),
         failed=failed or set(),
         skipped=skipped or set(),
@@ -44,7 +44,7 @@ def _make_advisor(
         context=context or {},
         observations=observations or [],
         check_metadata=check_metadata or {},
-        config=ScanAdvisorConfig(enabled=enabled),
+        config=ScanAnalysisAdvisorConfig(enabled=enabled),
     )
 
 
@@ -53,15 +53,15 @@ def _make_advisor(
 # ═══════════════════════════════════════════════════════════════════
 
 
-class TestScanAdvisorRecommendation:
+class TestScanAnalysisRecommendation:
     def test_defaults(self):
-        rec = ScanAdvisorRecommendation(check_name="foo", reason="bar")
+        rec = ScanAnalysisRecommendation(check_name="foo", reason="bar")
         assert rec.confidence == "medium"
         assert rec.category == "gap_analysis"
         assert rec.context_injection == {}
 
     def test_to_dict(self):
-        rec = ScanAdvisorRecommendation(
+        rec = ScanAnalysisRecommendation(
             check_name="test_check",
             reason="test reason",
             confidence="high",

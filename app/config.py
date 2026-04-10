@@ -92,7 +92,7 @@ class StorageConfig:
 
 
 @dataclass
-class ScanAdvisorConfig:
+class ScanAnalysisAdvisorConfig:
     enabled: bool = False
     mode: str = "post_scan"  # post_scan (phase 1) or between_iterations (phase 2)
     auto_seed_urls: bool = False  # allow advisor to suggest context injection
@@ -172,7 +172,9 @@ class ChainsmithConfig:
     paths: PathsConfig = field(default_factory=PathsConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     swarm: SwarmConfig = field(default_factory=SwarmConfig)
-    scan_advisor: ScanAdvisorConfig = field(default_factory=ScanAdvisorConfig)
+    scan_analysis_advisor: ScanAnalysisAdvisorConfig = field(
+        default_factory=ScanAnalysisAdvisorConfig
+    )
     adjudicator: AdjudicatorConfig = field(default_factory=AdjudicatorConfig)
     triage: TriageConfig = field(default_factory=TriageConfig)
     researcher: ResearcherConfig = field(default_factory=ResearcherConfig)
@@ -292,9 +294,11 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
         if "max_agents" in sw:
             swc.max_agents = int(sw["max_agents"])
 
-    if "scan_advisor" in data and isinstance(data["scan_advisor"], dict):
-        sa = data["scan_advisor"]
-        sac = cfg.scan_advisor
+    # Support both old "scan_advisor" and new "scan_analysis_advisor" YAML keys
+    sa_data = data.get("scan_analysis_advisor") or data.get("scan_advisor")
+    if sa_data and isinstance(sa_data, dict):
+        sa = sa_data
+        sac = cfg.scan_analysis_advisor
         if "enabled" in sa:
             sac.enabled = bool(sa["enabled"])
         if "mode" in sa:
@@ -419,15 +423,23 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
         with contextlib.suppress(ValueError):
             cfg.storage.retention_days = int(v)
 
-    # Scan advisor overrides
-    if v := env.get("CHAINSMITH_SCAN_ADVISOR_ENABLED"):
-        cfg.scan_advisor.enabled = v.lower() in ("true", "1", "yes")
-    if v := env.get("CHAINSMITH_SCAN_ADVISOR_MODE"):
-        cfg.scan_advisor.mode = v
-    if v := env.get("CHAINSMITH_SCAN_ADVISOR_AUTO_SEED_URLS"):
-        cfg.scan_advisor.auto_seed_urls = v.lower() in ("true", "1", "yes")
-    if v := env.get("CHAINSMITH_SCAN_ADVISOR_REQUIRE_APPROVAL"):
-        cfg.scan_advisor.require_approval = v.lower() in ("true", "1", "yes")
+    # Scan analysis advisor overrides (supports old SCAN_ADVISOR prefix too)
+    if v := env.get("CHAINSMITH_SCAN_ANALYSIS_ADVISOR_ENABLED") or env.get(
+        "CHAINSMITH_SCAN_ADVISOR_ENABLED"
+    ):
+        cfg.scan_analysis_advisor.enabled = v.lower() in ("true", "1", "yes")
+    if v := env.get("CHAINSMITH_SCAN_ANALYSIS_ADVISOR_MODE") or env.get(
+        "CHAINSMITH_SCAN_ADVISOR_MODE"
+    ):
+        cfg.scan_analysis_advisor.mode = v
+    if v := env.get("CHAINSMITH_SCAN_ANALYSIS_ADVISOR_AUTO_SEED_URLS") or env.get(
+        "CHAINSMITH_SCAN_ADVISOR_AUTO_SEED_URLS"
+    ):
+        cfg.scan_analysis_advisor.auto_seed_urls = v.lower() in ("true", "1", "yes")
+    if v := env.get("CHAINSMITH_SCAN_ANALYSIS_ADVISOR_REQUIRE_APPROVAL") or env.get(
+        "CHAINSMITH_SCAN_ADVISOR_REQUIRE_APPROVAL"
+    ):
+        cfg.scan_analysis_advisor.require_approval = v.lower() in ("true", "1", "yes")
 
     # Swarm overrides
     if v := env.get("CHAINSMITH_SWARM_ENABLED"):

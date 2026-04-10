@@ -5,7 +5,7 @@ Advisors read results and produce recommendations without LLM calls.
 See docs/future-ideas/completed/component-taxonomy.md for the taxonomy.
 """
 
-__all__ = ["CheckProofAdvisor", "ScanAdvisor"]
+__all__ = ["CheckProofAdvisor", "ScanAnalysisAdvisor", "ScanPlannerAdvisor"]
 
 
 def __getattr__(name: str):
@@ -14,8 +14,12 @@ def __getattr__(name: str):
         from app.advisors.check_proof import CheckProofAdvisor
 
         return CheckProofAdvisor
-    if name == "ScanAdvisor":
-        from app.advisors.scan_advisor import ScanAdvisor
+    if name == "ScanAnalysisAdvisor":
+        from app.advisors.scan_analysis_advisor import ScanAnalysisAdvisor
 
-        return ScanAdvisor
+        return ScanAnalysisAdvisor
+    if name == "ScanPlannerAdvisor":
+        from app.advisors.scan_planner_advisor import ScanPlannerAdvisor
+
+        return ScanPlannerAdvisor
     raise AttributeError(f"module 'app.advisors' has no attribute {name!r}")

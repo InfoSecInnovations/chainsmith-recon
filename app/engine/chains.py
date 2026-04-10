@@ -932,6 +932,10 @@ async def run_chain_analysis(state: "AppState", llm_only: bool = False):
 
         logger.info(f"Chain analysis complete. {len(chains)} total chains.")
 
+        # Guided Mode: proactive chain_identified message
+        if chains:
+            await _emit_chain_identified_proactive(state, len(chains))
+
         # Persist chains and status to DB
         await _persist_chains(scan_id, chains)
         await _update_chain_status_in_db(
@@ -1282,3 +1286,34 @@ def find_overlapping_chain(new_chain: dict, existing_chains: list[dict]) -> dict
             return existing
 
     return None
+
+
+# ─── Guided Mode: proactive chain_identified ──────────────────
+
+
+async def _emit_chain_identified_proactive(state, chain_count: int) -> None:
+    """Push a proactive chain_identified message if Guided Mode is active."""
+    try:
+        from app.engine.chat import sse_manager
+        from app.engine.guided import maybe_emit_proactive
+        from app.models import ComponentType
+
+        text = f"New attack chain{'s' if chain_count > 1 else ''} detected linking observations."
+        if chain_count > 1:
+            text = f"{chain_count} attack chains detected linking observations."
+
+        await maybe_emit_proactive(
+            sse_manager=sse_manager,
+            session_id=state.session_id,
+            agent=ComponentType.CHAINSMITH,
+            trigger="chain_identified",
+            text=text,
+            actions=[
+                {
+                    "label": "Show chains",
+                    "injected_message": "Explain the attack chains from this scan",
+                }
+            ],
+        )
+    except Exception:
+        logger.debug("Guided mode proactive chain_identified failed (non-fatal)", exc_info=True)

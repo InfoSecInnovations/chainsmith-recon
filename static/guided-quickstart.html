@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chainsmith Recon - Guided Mode Quick Start</title>
+    <link rel="stylesheet" href="/static/css/common.css">
+    <link rel="stylesheet" href="/static/css/chat.css">
+    <link rel="stylesheet" href="/static/css/guided.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <a href="index.html" class="brand">
+                <span class="brand-name"><span class="accent">Chainsmith</span> Recon</span>
+                <span class="brand-tagline">Recon for the AI Era</span>
+            </a>
+        </div>
+        <div class="header-right">
+            <a href="settings.html" class="btn btn-secondary btn-back">
+                ← Back to Settings
+            </a>
+        </div>
+    </header>
+
+    <main style="max-width: 720px; margin: 0 auto; padding: 32px 20px;">
+        <h1 style="font-size: 1.5rem; margin-bottom: 4px;">Guided Mode</h1>
+        <p style="color: var(--text-muted); margin-bottom: 32px;">
+            A reference for operators using Guided Mode.
+        </p>
+
+        <section style="margin-bottom: 28px;">
+            <h2 style="font-size: 1.125rem; margin-bottom: 8px;">What Guided Mode does</h2>
+            <ul style="color: var(--text-secondary); line-height: 1.8; padding-left: 20px;">
+                <li>Agents proactively share tips, explanations, and next-step
+                    suggestions in the chat panel.</li>
+                <li>Domain-specific terms show hover tooltips with definitions.</li>
+                <li>After each scan, you receive a summary with suggested next steps.</li>
+                <li>Adjudication, triage, and verification results include extended
+                    plain-language explanations.</li>
+            </ul>
+        </section>
+
+        <section style="margin-bottom: 28px;">
+            <h2 style="font-size: 1.125rem; margin-bottom: 8px;">What Guided Mode does NOT do</h2>
+            <ul style="color: var(--text-secondary); line-height: 1.8; padding-left: 20px;">
+                <li>It never hides features or restricts capabilities.</li>
+                <li>It does not simplify the interface &mdash; Standard Mode is
+                    not "advanced," it's just quieter.</li>
+                <li>It is not a skill judgment &mdash; experienced operators may
+                    enable it on an unfamiliar target or attack surface.</li>
+            </ul>
+        </section>
+
+        <section style="margin-bottom: 28px;">
+            <h2 style="font-size: 1.125rem; margin-bottom: 8px;">Agents that speak up</h2>
+            <table class="data-table" style="width: 100%; font-size: 0.8125rem;">
+                <thead>
+                    <tr>
+                        <th style="text-align: left;">Agent</th>
+                        <th style="text-align: left;">When it speaks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Triage</strong></td>
+                        <td>After a scan completes, pushes an action plan summary.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Adjudicator</strong></td>
+                        <td>When severity is adjusted, explains each rubric factor.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Chainsmith</strong></td>
+                        <td>When attack chains are identified, explains step-by-step logic.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Verifier</strong></td>
+                        <td>When hallucinations are caught, explains what was wrong.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Coach</strong></td>
+                        <td>Welcome message on first enable, scope guidance, explanations.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section style="margin-bottom: 28px;">
+            <h2 style="font-size: 1.125rem; margin-bottom: 8px;">Proactive messages</h2>
+            <p style="color: var(--text-secondary); line-height: 1.6;">
+                Proactive messages appear in the chat panel without you asking.
+                A red dot on the chat icon indicates new messages. Each message
+                includes action buttons you can click to follow up.
+            </p>
+            <ul style="color: var(--text-secondary); line-height: 1.8; padding-left: 20px;">
+                <li><strong>Dismissable</strong> &mdash; click &times; to close without responding.</li>
+                <li><strong>Non-blocking</strong> &mdash; they appear in the chat stream, not as popups.</li>
+                <li><strong>Auto-suppress</strong> &mdash; dismiss the same type 3 times in a session and
+                    it stops appearing until next session.</li>
+            </ul>
+        </section>
+
+        <section style="margin-bottom: 28px;">
+            <h2 style="font-size: 1.125rem; margin-bottom: 8px;">Turning Guided Mode off</h2>
+            <p style="color: var(--text-secondary); line-height: 1.6;">
+                Click the <strong style="color: var(--accent);">Guided</strong>
+                pill badge in the upper-right corner of any page. Or uncheck
+                the toggle on the <a href="settings.html" style="color: var(--accent);">Settings</a> page.
+            </p>
+        </section>
+    </main>
+
+    <script src="/static/js/chat.js"></script>
+    <script src="/static/js/guided.js"></script>
+</body>
+</html>

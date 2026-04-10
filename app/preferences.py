@@ -135,6 +135,14 @@ class Preferences:
     proof_of_scope: ProofOfScopePreferences = field(default_factory=ProofOfScopePreferences)
     advanced: AdvancedPreferences = field(default_factory=AdvancedPreferences)
     check_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    operator_assist: dict[str, Any] | None = None  # {"mode": "guided"} or None
+
+    @property
+    def guided_mode_enabled(self) -> bool:
+        """Return True if Guided Mode is active."""
+        if self.operator_assist is None:
+            return False
+        return self.operator_assist.get("mode") == "guided"
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -146,6 +154,7 @@ class Preferences:
             "proof_of_scope": asdict(self.proof_of_scope),
             "advanced": asdict(self.advanced),
             "check_overrides": self.check_overrides,
+            "operator_assist": deepcopy(self.operator_assist) if self.operator_assist else None,
         }
 
     @classmethod
@@ -185,6 +194,9 @@ class Preferences:
 
         if "check_overrides" in data and isinstance(data["check_overrides"], dict):
             prefs.check_overrides = deepcopy(data["check_overrides"])
+
+        if "operator_assist" in data and isinstance(data["operator_assist"], dict):
+            prefs.operator_assist = deepcopy(data["operator_assist"])
 
         return prefs
 
@@ -311,6 +323,22 @@ BUILTIN_PROFILES: dict[str, Profile] = {
                 "delay_between_hosts": 2.0,
                 "respect_robots_txt": True,
             },
+        },
+        built_in=True,
+    ),
+    "training": Profile(
+        name="training",
+        description="Guided Mode enabled — learning the tool or onboarding new team members",
+        overrides={
+            "operator_assist": {"mode": "guided"},
+        },
+        built_in=True,
+    ),
+    "first-engagement": Profile(
+        name="first-engagement",
+        description="Guided Mode enabled — first time running against a new target type",
+        overrides={
+            "operator_assist": {"mode": "guided"},
         },
         built_in=True,
     ),
@@ -923,6 +951,10 @@ def _calculate_overrides(default: Preferences, current: Preferences) -> dict:
     if current.check_overrides:
         overrides["check_overrides"] = deepcopy(current.check_overrides)
 
+    # Include operator_assist if set
+    if current.operator_assist:
+        overrides["operator_assist"] = deepcopy(current.operator_assist)
+
     return overrides
 
 
@@ -1339,6 +1371,35 @@ def reset_profile(name: str, save: bool = True) -> Profile:
         save_profile_store(store)
 
     return profile
+
+
+def is_guided_mode(reload: bool = False) -> bool:
+    """Check if Guided Mode is currently active.
+
+    Convenience function for agents and UI components.
+    """
+    return get_preferences(reload).guided_mode_enabled
+
+
+def set_guided_mode(enabled: bool, save: bool = True) -> None:
+    """Toggle Guided Mode on or off in the active profile.
+
+    Args:
+        enabled: True to enable, False to disable
+        save: If True, persist to file immediately
+    """
+    store = get_profile_store()
+    active = store.get_active_profile()
+
+    if enabled:
+        if "operator_assist" not in active.overrides:
+            active.overrides["operator_assist"] = {}
+        active.overrides["operator_assist"]["mode"] = "guided"
+    else:
+        active.overrides.pop("operator_assist", None)
+
+    if save:
+        save_profile_store(store)
 
 
 VALID_ON_CRITICAL_VALUES = ("annotate", "skip_downstream", "stop")

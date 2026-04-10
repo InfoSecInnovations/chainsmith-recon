@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 
 from app.db.repositories import ChatRepository
 from app.models import AgentEvent, ComponentType, RouteDecision
+from app.preferences import is_guided_mode
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,11 @@ def create_chat_event_bridge(
 
     Returns a callback function compatible with the agent event_callback
     signature: async (AgentEvent) -> None.
+
+    Also emits guided-mode proactive messages for key event types.
     """
+    from app.engine.guided import maybe_emit_proactive
+    from app.models import EventType
 
     async def bridge(event: AgentEvent) -> None:
         await sse_manager.send(
@@ -157,6 +162,40 @@ def create_chat_event_bridge(
                 "timestamp": event.timestamp.isoformat(),
             },
         )
+
+        # Phase 36: proactive messages for key events
+        if event.event_type == EventType.HALLUCINATION_CAUGHT:
+            await maybe_emit_proactive(
+                sse_manager=sse_manager,
+                session_id=session_id,
+                agent=event.agent,
+                trigger="hallucination_caught",
+                text=f"Flagged a hallucinated finding: {event.message}",
+                actions=[
+                    {
+                        "label": "What was wrong?",
+                        "injected_message": (
+                            f"Explain why {event.observation_id or 'this finding'} "
+                            "was flagged as a hallucination"
+                        ),
+                    }
+                ],
+            )
+        elif event.event_type == EventType.SEVERITY_ADJUSTED:
+            obs_id = event.observation_id or "unknown"
+            await maybe_emit_proactive(
+                sse_manager=sse_manager,
+                session_id=session_id,
+                agent=event.agent,
+                trigger="high_severity_found",
+                text=f"Severity adjusted on {obs_id}. {event.message}",
+                actions=[
+                    {
+                        "label": "Tell me more",
+                        "injected_message": f"Explain the adjudication for {obs_id}",
+                    }
+                ],
+            )
 
     return bridge
 
@@ -181,6 +220,7 @@ class ChatDispatcher:
         self.repo = chat_repo
         self._router = None  # lazy — set via set_router()
         self._coach = None  # lazy — created on first Coach request
+        self._guided_welcome_sent = False  # Phase 36: one welcome per session
 
     def set_router(self, router) -> None:
         """Inject the PromptRouter (avoids circular import)."""
@@ -190,6 +230,7 @@ class ChatDispatcher:
         """Clear Coach session memory. Called when chat is cleared."""
         if self._coach is not None:
             self._coach.clear_memory()
+        self._guided_welcome_sent = False
 
     def _get_coach(self):
         """Lazy-init the Coach agent."""
@@ -334,8 +375,10 @@ class ChatDispatcher:
                 return await self._handle_coach(text, session_id, bridge)
             elif agent_type == ComponentType.CHECK_PROOF_ADVISOR:
                 return await self._handle_check_proof_advisor(text, session_id, bridge)
-            elif agent_type == ComponentType.SCAN_ADVISOR:
-                return await self._handle_scan_advisor(text, session_id, bridge)
+            elif agent_type == ComponentType.SCAN_ANALYSIS_ADVISOR:
+                return await self._handle_scan_analysis_advisor(text, session_id, bridge)
+            elif agent_type == ComponentType.SCAN_PLANNER_ADVISOR:
+                return await self._handle_scan_planner_advisor(text, session_id, bridge)
             elif agent_type == ComponentType.RESEARCHER:
                 return await self._handle_researcher(text, session_id, bridge)
             else:
@@ -360,6 +403,17 @@ class ChatDispatcher:
 
         agent = ChainsmithAgent(event_callback=bridge)
         response = await agent.handle_message(text)
+
+        # Guided Mode: append chain narrative when discussing chains
+        if is_guided_mode() and any(kw in text.lower() for kw in ("chain", "attack path", "link")):
+            response += (
+                "\n\n💡 **How chains work:** An attack chain links individual "
+                "findings into a combined attack path. Each step enables the next — "
+                "for example, an exposed admin panel (step 1) combined with default "
+                "credentials (step 2) creates a critical access path that neither "
+                "finding alone would represent."
+            )
+
         return make_chat_response(
             agent=ComponentType.CHAINSMITH,
             text=response,
@@ -396,6 +450,21 @@ class ChatDispatcher:
         summary_lines = [plan.get("summary", "Triage plan available.")]
         if quick:
             summary_lines.append(f"\n{len(quick)} quick win(s). Top: {quick[0]['action']}")
+
+        # Guided Mode: annotated priority reasoning
+        if is_guided_mode() and actions:
+            summary_lines.append("\n**Priority breakdown:**")
+            for a in actions[:5]:
+                reasoning = a.get("reasoning", "")
+                effort = a.get("effort_estimate", "?")
+                impact = a.get("impact_estimate", "?")
+                summary_lines.append(
+                    f"  {a.get('priority', '?')}. **{a['action']}** "
+                    f"(effort: {effort}, impact: {impact})"
+                )
+                if reasoning:
+                    summary_lines.append(f"     ↳ {reasoning}")
+
         summary_lines.append(
             "\nWould you like me to write a detailed analysis to the reports directory?"
         )
@@ -446,6 +515,21 @@ class ChatDispatcher:
                 f" Example: {top['observation_id']} changed from "
                 f"{top['original_severity']} to {top['adjudicated_severity']}."
             )
+
+        # Guided Mode: per-factor extended explanations
+        if is_guided_mode() and adjusted:
+            summary += "\n\n**Adjustment details:**"
+            for adj in adjusted[:5]:
+                rationale = adj.get("rationale", "No rationale recorded.")
+                factors = adj.get("factors", {})
+                summary += (
+                    f"\n• **{adj['observation_id']}**: "
+                    f"{adj['original_severity']} → {adj['adjudicated_severity']}"
+                )
+                summary += f"\n  Rationale: {rationale}"
+                if factors:
+                    for factor_name, factor_val in factors.items():
+                        summary += f"\n  {factor_name}: {factor_val}"
         return make_chat_response(
             agent=ComponentType.ADJUDICATOR,
             text=summary,
@@ -474,20 +558,56 @@ class ChatDispatcher:
         verified = [o for o in obs if o.get("verification_status") == "verified"]
         rejected = [o for o in obs if o.get("verification_status") == "rejected"]
 
+        hallucinated = [o for o in obs if o.get("verification_status") == "hallucination"]
+
+        text = (
+            f"{len(obs)} observations total: {len(verified)} verified, "
+            f"{len(rejected)} rejected, "
+            f"{len(obs) - len(verified) - len(rejected)} pending."
+        )
+
+        # Guided Mode: extended hallucination explanations
+        if is_guided_mode() and hallucinated:
+            text += f"\n\n**{len(hallucinated)} hallucination(s) caught:**"
+            for h in hallucinated[:5]:
+                title = h.get("title", h.get("id", "unknown"))
+                desc = h.get("description", "")
+                text += f"\n• **{title}**"
+                if desc:
+                    text += f": {desc[:120]}{'...' if len(desc) > 120 else ''}"
+
         return make_chat_response(
             agent=ComponentType.VERIFIER,
-            text=(
-                f"{len(obs)} observations total: {len(verified)} verified, "
-                f"{len(rejected)} rejected, "
-                f"{len(obs) - len(verified) - len(rejected)} pending."
-            ),
+            text=text,
             route_method="keyword",
         )
 
     async def _handle_coach(self, text: str, session_id: str, bridge) -> dict:
-        """Route to Coach agent for explanations."""
+        """Route to Coach agent for explanations and scope guidance."""
         from app.db.repositories import ChainRepository, ObservationRepository
         from app.state import state
+
+        # Guided Mode: send welcome message on first Coach interaction
+        if is_guided_mode() and not self._guided_welcome_sent:
+            self._guided_welcome_sent = True
+            welcome = make_chat_response(
+                agent=ComponentType.COACH,
+                text=(
+                    "**Guided Mode is active.** Here's what changes:\n\n"
+                    "• Agents will proactively share tips and suggestions in this "
+                    "chat panel — look for the notification dot on the chat icon.\n"
+                    "• Hover over highlighted terms for quick definitions.\n"
+                    "• After each scan, you'll get a summary with suggested next steps.\n\n"
+                    "You can turn Guided Mode off anytime by clicking the "
+                    '"Guided" badge in the upper-right corner.\n\n'
+                    "For a deeper walkthrough, see the "
+                    "[Quick Start Guide](guided-quickstart.html)."
+                ),
+                route_method="direct",
+            )
+            await self._persist_and_send(
+                session_id, state.engagement_id, welcome, "direct", "coach"
+            )
 
         coach = self._get_coach()
 
@@ -688,15 +808,15 @@ class ChatDispatcher:
             route_method="direct",
         )
 
-    async def _handle_scan_advisor(self, text: str, session_id: str, bridge) -> dict:
-        """Route to ScanAdvisor for coverage and recommendation queries."""
+    async def _handle_scan_analysis_advisor(self, text: str, session_id: str, bridge) -> dict:
+        """Route to ScanAnalysisAdvisor for coverage and recommendation queries."""
         from app.db.repositories import AdvisorRepository
         from app.state import state
 
         scan_id = state.active_scan_id or state._last_scan_id
         if not scan_id:
             return make_chat_response(
-                agent=ComponentType.SCAN_ADVISOR,
+                agent=ComponentType.SCAN_ANALYSIS_ADVISOR,
                 text="No scan data available yet. Run a scan first, then I can "
                 "analyze coverage gaps and recommend follow-up checks.",
                 route_method="keyword",
@@ -707,8 +827,8 @@ class ChatDispatcher:
 
         if not recommendations:
             return make_chat_response(
-                agent=ComponentType.SCAN_ADVISOR,
-                text="No recommendations for the current scan. The scan advisor "
+                agent=ComponentType.SCAN_ANALYSIS_ADVISOR,
+                text="No recommendations for the current scan. The scan analysis advisor "
                 "may be disabled, or coverage was already comprehensive.",
                 route_method="keyword",
             )
@@ -723,7 +843,66 @@ class ChatDispatcher:
             lines.append("")
 
         return make_chat_response(
-            agent=ComponentType.SCAN_ADVISOR,
+            agent=ComponentType.SCAN_ANALYSIS_ADVISOR,
+            text="\n".join(lines),
+            route_method="keyword",
+        )
+
+    async def _handle_scan_planner_advisor(self, text: str, session_id: str, bridge) -> dict:
+        """Route to ScanPlannerAdvisor for pre-scan planning guidance."""
+        from app.advisors.scan_planner_advisor import ScanPlannerAdvisor
+        from app.engine.scanner import AVAILABLE_CHECKS
+        from app.models import ScopeDefinition
+        from app.state import state
+
+        if not state.target:
+            return make_chat_response(
+                agent=ComponentType.SCAN_PLANNER_ADVISOR,
+                text="No scope defined yet. Set your target and scope first, "
+                "then I can analyze readiness and suggest check strategies.",
+                route_method="keyword",
+            )
+
+        # Build ScopeDefinition from app state
+        scope = ScopeDefinition(
+            in_scope_domains=[state.target] if state.target else [],
+            out_of_scope_domains=state.exclude or [],
+            time_window=getattr(state.proof_settings, "engagement_window", None)
+            and state.proof_settings.engagement_window.start,
+        )
+        proof_config = {
+            "enabled": getattr(state.proof_settings, "traffic_logging", False),
+        }
+
+        advisor = ScanPlannerAdvisor(
+            scope=scope,
+            available_checks=set(AVAILABLE_CHECKS.keys()),
+            check_metadata=AVAILABLE_CHECKS,
+            proof_of_scope_config=proof_config,
+        )
+        recommendations = advisor.analyze()
+
+        if not recommendations:
+            return make_chat_response(
+                agent=ComponentType.SCAN_PLANNER_ADVISOR,
+                text="Engagement looks ready. Scope is defined and no planning "
+                "issues detected. You're good to scan.",
+                route_method="keyword",
+            )
+
+        lines = [f"**{len(recommendations)} planning recommendation(s):**\n"]
+        for i, rec in enumerate(recommendations, 1):
+            conf = rec.confidence
+            category = rec.category.replace("_", " ")
+            lines.append(f"{i}. **{category}** ({conf} confidence)")
+            lines.append(f"   {rec.suggestion}")
+            if rec.auto_fixable and rec.fix_action:
+                action_desc = ", ".join(f"{k}: {v}" for k, v in rec.fix_action.items())
+                lines.append(f"   *Auto-fixable:* {action_desc}")
+            lines.append("")
+
+        return make_chat_response(
+            agent=ComponentType.SCAN_PLANNER_ADVISOR,
             text="\n".join(lines),
             route_method="keyword",
         )

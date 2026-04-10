@@ -6,6 +6,7 @@
     <title>Chainsmith Recon - Scan</title>
     <link rel="stylesheet" href="/static/css/common.css">
     <link rel="stylesheet" href="/static/css/chat.css">
+    <link rel="stylesheet" href="/static/css/guided.css">
     <link rel="stylesheet" href="/static/css/scan.css">
 </head>
 <body>
@@ -136,7 +137,7 @@
         <!-- Observations Preview Panel -->
         <div class="scan-panel">
             <div class="panel-header">
-                <span class="panel-title">Observations</span>
+                <span class="panel-title"><span data-term="observation">Observations</span></span>
                 <div class="observations-header-right">
                     <span id="observations-severity-summary" class="u-hidden"></span>
                     <span class="progress-text" id="observations-count">0 found</span>
@@ -146,7 +147,7 @@
                 <table class="data-table u-hidden" id="observations-table">
                     <thead>
                         <tr>
-                            <th>Severity</th>
+                            <th><span data-term="severity">Severity</span></th>
                             <th>Title</th>
                         </tr>
                     </thead>
@@ -230,7 +231,7 @@
             </div>
             <div class="setting-row">
                 <div>
-                    <div class="setting-label">Auto-analyze Chains</div>
+                    <div class="setting-label">Auto-analyze <span data-term="chain">Chains</span></div>
                     <div class="setting-desc">Run chain analysis after scan</div>
                 </div>
                 <label class="toggle">
@@ -297,6 +298,7 @@
 
     <script src="/static/js/api.js"></script>
     <script src="/static/js/chat.js"></script>
+    <script src="/static/js/guided.js"></script>
     <script>
         let pollInterval = null;
         let observations = [];

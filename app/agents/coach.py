@@ -6,7 +6,7 @@ Chainsmith. No tools — pure LLM conversation grounded in session context.
 
 Coach explains results and security concepts, references specific findings by
 ID, and directs operators to the right component for their need (e.g.,
-"ask ScanAdvisor for scan suggestions").
+"ask ScanAnalysisAdvisor for coverage gaps" or "ask ScanPlannerAdvisor for scope review").
 
 Session-scoped memory: maintains a capped history of prior Q&A exchanges
 within the current session. Clears when chat is cleared.
@@ -46,7 +46,8 @@ WHAT YOU KNOW ABOUT:
 - Attack chains: linked findings that form multi-step attack paths
 - Verifier: fact-checks observations, catches hallucinations
 - Adjudicator: debates whether severity ratings are accurate (operator-triggered)
-- ScanAdvisor: recommends additional checks and identifies coverage gaps
+- ScanAnalysisAdvisor: recommends additional checks and identifies coverage gaps (post-scan)
+- ScanPlannerAdvisor: pre-scan scope planning, check selection, engagement readiness
 - CheckProofAdvisor: generates reproduction commands for verified findings
 - Researcher: enriches findings with CVE details, exploit info, advisories
 - Triage: prioritizes remediation actions
@@ -54,7 +55,8 @@ WHAT YOU KNOW ABOUT:
 
 DIRECTING OPERATORS:
 When the operator's question is better handled by another component, tell them:
-- "For scan suggestions and coverage gaps, try asking ScanAdvisor."
+- "For scan coverage gaps and follow-up suggestions, try asking ScanAnalysisAdvisor."
+- "For pre-scan planning, scope review, and check selection, try asking ScanPlannerAdvisor."
 - "To reproduce this finding, ask CheckProofAdvisor for proof guidance."
 - "To challenge the severity rating, trigger Adjudicator."
 - "For remediation priorities, ask Triage."

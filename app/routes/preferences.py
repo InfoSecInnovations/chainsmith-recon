@@ -26,7 +26,9 @@ from app.preferences import (
 )
 from app.preferences import (
     get_profile_store,
+    is_guided_mode,
     save_profile_store,
+    set_guided_mode,
 )
 from app.preferences import (
     list_profiles as list_profiles_internal,
@@ -58,6 +60,13 @@ class PreferencesUpdateInput(BaseModel):
     proof_of_scope: dict | None = None
     advanced: dict | None = None
     check_overrides: dict | None = None
+    operator_assist: dict | None = None
+
+
+class GuidedModeInput(BaseModel):
+    """Input for toggling guided mode."""
+
+    enabled: bool
 
 
 class ProfileCreateInput(BaseModel):
@@ -110,6 +119,8 @@ async def update_preferences_endpoint(updates: PreferencesUpdateInput):
         overrides["advanced"] = updates.advanced
     if updates.check_overrides:
         overrides["check_overrides"] = updates.check_overrides
+    if updates.operator_assist is not None:
+        overrides["operator_assist"] = updates.operator_assist
 
     if overrides:
         try:
@@ -270,3 +281,19 @@ async def resolve_profile_endpoint(name: str):
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+# ─── Guided Mode ─────────────────────────────────────────────
+
+
+@router.get("/api/v1/guided-mode")
+async def get_guided_mode():
+    """Check if Guided Mode is currently active."""
+    return {"enabled": is_guided_mode(reload=True)}
+
+
+@router.put("/api/v1/guided-mode")
+async def toggle_guided_mode(input: GuidedModeInput):
+    """Toggle Guided Mode on or off."""
+    set_guided_mode(input.enabled, save=True)
+    return {"enabled": input.enabled}

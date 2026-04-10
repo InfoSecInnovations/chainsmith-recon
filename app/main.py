@@ -167,6 +167,12 @@ async def profiles_page():
     return FileResponse(f"{_static_dir}/profiles.html")
 
 
+@app.get("/guided-quickstart.html")
+async def guided_quickstart_page():
+    """Serve Guided Mode quick start page."""
+    return FileResponse(f"{_static_dir}/guided-quickstart.html")
+
+
 @app.get("/trend.html")
 async def trend_page():
     """Serve trend analysis page."""

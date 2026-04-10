@@ -6,6 +6,7 @@
     <title>Chainsmith Recon - Observations</title>
     <link rel="stylesheet" href="/static/css/common.css">
     <link rel="stylesheet" href="/static/css/chat.css">
+    <link rel="stylesheet" href="/static/css/guided.css">
     <link rel="stylesheet" href="/static/css/viz.css">
     <link rel="stylesheet" href="/static/css/observations.css">
     <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -46,15 +47,15 @@
         <!-- Sidebar: Observations List -->
         <div class="observations-sidebar">
             <div class="tabs">
-                <div class="tab active" data-tab="list">Observations</div>
+                <div class="tab active" data-tab="list"><span data-term="observation">Observations</span></div>
             </div>
             <div class="sidebar-content">
                 <table class="data-table u-hidden" id="observations-table">
                     <thead>
                         <tr>
-                            <th>Sev</th>
+                            <th><span data-term="severity">Sev</span></th>
                             <th>Title</th>
-                            <th>Verified</th>
+                            <th><span data-term="verification">Verified</span></th>
                         </tr>
                     </thead>
                     <tbody id="observations-body"></tbody>
@@ -86,7 +87,7 @@
                 <div class="tab" data-viz="timeline">Timeline</div>
                 <div class="tab" data-viz="benchmark">Benchmark</div>
                 <div class="flex-spacer"></div>
-                <div class="tab" data-viz="chains">Attack Chains</div>
+                <div class="tab" data-viz="chains"><span data-term="attack-chain">Attack Chains</span></div>
             </div>
             <div class="viz-content">
                 <!-- Host Table Panel -->
@@ -193,7 +194,7 @@
                                 <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"></path>
                                 <path d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
                             </svg>
-                            <h3>No attack chains</h3>
+                            <h3>No <span data-term="attack-chain">attack chains</span></h3>
                             <p>Click "Analyze Chains" to discover attack paths</p>
                         </div>
                         <div class="u-hidden" id="chains-list"></div>
@@ -210,7 +211,7 @@
                                 <line x1="3" y1="9" x2="21" y2="9"></line>
                                 <line x1="9" y1="21" x2="9" y2="9"></line>
                             </svg>
-                            <h3>Severity Heatmap</h3>
+                            <h3><span data-term="severity">Severity</span> Heatmap</h3>
                             <p>Run a scan to see observations mapped by host and suite</p>
                         </div>
                         <div id="heatmap-content" class="u-hidden">
@@ -475,6 +476,7 @@
 
     <script src="/static/js/api.js"></script>
     <script src="/static/js/chat.js"></script>
+    <script src="/static/js/guided.js"></script>
     <script src="/static/js/viz/viz-common.js"></script>
     <script src="/static/js/viz/heatmap.js"></script>
     <script src="/static/js/viz/timeline.js"></script>

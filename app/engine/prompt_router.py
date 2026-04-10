@@ -29,8 +29,8 @@ LLM_CONFIDENCE_THRESHOLD = 0.6
 # ─── Layer 1: Context routing table ─────────────────────────────
 
 _CONTEXT_ROUTES: dict[str, ComponentType] = {
-    "scope": ComponentType.CHAINSMITH,
-    "scoping": ComponentType.CHAINSMITH,
+    "scope": ComponentType.SCAN_PLANNER_ADVISOR,
+    "scoping": ComponentType.SCAN_PLANNER_ADVISOR,
     "triage": ComponentType.TRIAGE,
     "adjudication": ComponentType.ADJUDICATOR,
     "observation_detail": ComponentType.VERIFIER,
@@ -43,8 +43,11 @@ _CONTEXT_ROUTES: dict[str, ComponentType] = {
 # Patterns are checked in order; first match wins.
 
 _KEYWORD_RULES: list[tuple[re.Pattern[str], ComponentType]] = [
-    # Chainsmith — scoping
-    (re.compile(r"\b(scope|target|exclude|exclusion|timeframe)\b", re.I), ComponentType.CHAINSMITH),
+    # ScanPlannerAdvisor — pre-scan scoping guidance (Phase 41, migrated from Coach)
+    (
+        re.compile(r"\b(scope|target|exclude|exclusion|timeframe)\b", re.I),
+        ComponentType.SCAN_PLANNER_ADVISOR,
+    ),
     # Chainsmith — chain building
     (re.compile(r"\b(chain|attack path|attack chain|link)\b", re.I), ComponentType.CHAINSMITH),
     # Chainsmith — check ecosystem management
@@ -77,10 +80,10 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], ComponentType]] = [
         re.compile(r"\b(proof|reproduce|reproduction|evidence|exploit)\b", re.I),
         ComponentType.CHECK_PROOF_ADVISOR,
     ),
-    # ScanAdvisor
+    # ScanAnalysisAdvisor — post-scan coverage and gap analysis
     (
         re.compile(r"\b(coverage|gaps|what checks|missed|scan advice|recommendations)\b", re.I),
-        ComponentType.SCAN_ADVISOR,
+        ComponentType.SCAN_ANALYSIS_ADVISOR,
     ),
     # Coach — explanations and learning
     (
@@ -103,12 +106,13 @@ You are a message classifier for a security reconnaissance platform.
 Classify the operator's message to determine which agent should handle it.
 
 Available agents:
-- chainsmith: Scoping, attack chain building, check ecosystem management (validate graph, custom checks, upstream diffs, disable impact)
+- chainsmith: Attack chain building, check ecosystem management (validate graph, custom checks, upstream diffs, disable impact)
 - verifier: Fact-checking observations, re-verification requests
 - adjudicator: Risk severity scoring, re-scoring, risk acceptance
 - triage: Remediation prioritization, action planning, fix ordering
 - check_proof_advisor: Reproduction steps, evidence collection, exploit guidance
-- scan_advisor: Scan coverage gaps, missed checks, follow-up recommendations
+- scan_analysis_advisor: Post-scan coverage gaps, missed checks, follow-up recommendations
+- scan_planner_advisor: Pre-scan scope planning, check selection guidance, engagement readiness
 - researcher: CVE enrichment, vulnerability lookups, exploit availability
 - coach: Explanations, security concepts, understanding findings and platform behavior
 
@@ -272,7 +276,8 @@ class PromptRouter:
             "adjudicator": ComponentType.ADJUDICATOR,
             "triage": ComponentType.TRIAGE,
             "check_proof_advisor": ComponentType.CHECK_PROOF_ADVISOR,
-            "scan_advisor": ComponentType.SCAN_ADVISOR,
+            "scan_analysis_advisor": ComponentType.SCAN_ANALYSIS_ADVISOR,
+            "scan_planner_advisor": ComponentType.SCAN_PLANNER_ADVISOR,
             "researcher": ComponentType.RESEARCHER,
             "coach": ComponentType.COACH,
         }

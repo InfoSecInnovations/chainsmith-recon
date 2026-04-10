@@ -215,6 +215,9 @@ async def run_scan(
         local_launcher = state.runner if not cfg.swarm.enabled else None
         await _run_scan_advisor(state, local_launcher, scan_id)
 
+        # Guided Mode: proactive scan_complete message
+        await _emit_scan_complete_proactive(state, len(observations), scan_id)
+
         # Persist remaining results to database (chains, scan completion)
         await on_scan_complete(state, scan_id, scan_start_time, obs_writer=obs_writer)
 
@@ -241,29 +244,29 @@ async def _run_scan_advisor(state: "AppState", launcher=None, scan_id: str | Non
     """
     try:
         cfg = get_config()
-        if not cfg.scan_advisor.enabled:
+        if not cfg.scan_analysis_advisor.enabled:
             return
 
         if launcher is None:
             logger.info("Scan advisor: skipped (no local launcher — swarm mode?)")
             return
 
-        from app.advisors.scan_advisor import (
-            ScanAdvisorConfig as AdvisorConfig,
+        from app.advisors.scan_analysis_advisor import (
+            ScanAnalysisAdvisorConfig as AdvisorConfig,
         )
-        from app.advisors.scan_advisor import (
-            build_advisor_from_launcher,
+        from app.advisors.scan_analysis_advisor import (
+            build_analysis_advisor_from_launcher,
         )
 
         advisor_cfg = AdvisorConfig(
-            enabled=cfg.scan_advisor.enabled,
-            mode=cfg.scan_advisor.mode,
-            auto_seed_urls=cfg.scan_advisor.auto_seed_urls,
-            require_approval=cfg.scan_advisor.require_approval,
+            enabled=cfg.scan_analysis_advisor.enabled,
+            mode=cfg.scan_analysis_advisor.mode,
+            auto_seed_urls=cfg.scan_analysis_advisor.auto_seed_urls,
+            require_approval=cfg.scan_analysis_advisor.require_approval,
         )
 
         all_checks = get_real_checks()
-        advisor = build_advisor_from_launcher(launcher, all_checks, advisor_cfg)
+        advisor = build_analysis_advisor_from_launcher(launcher, all_checks, advisor_cfg)
         recommendations = advisor.analyze()
 
         recommendation_dicts = [r.to_dict() for r in recommendations]
@@ -280,3 +283,52 @@ async def _run_scan_advisor(state: "AppState", launcher=None, scan_id: str | Non
 
     except Exception as e:
         logger.warning(f"Scan advisor failed (non-fatal): {e}")
+
+
+# ─── Guided Mode: proactive scan_complete ─────────────────────
+
+
+async def _emit_scan_complete_proactive(
+    state: "AppState", observation_count: int, scan_id: str | None
+) -> None:
+    """Push a proactive scan_complete message if Guided Mode is active."""
+    try:
+        from app.engine.chat import sse_manager
+        from app.engine.guided import maybe_emit_proactive
+        from app.models import ComponentType
+
+        # Quick-win count from triage if available
+        quick_wins = 0
+        if scan_id:
+            try:
+                from app.db.repositories import TriageRepository
+
+                repo = TriageRepository()
+                plan = await repo.get_plan(scan_id)
+                if plan:
+                    actions = await repo.get_actions(plan["id"])
+                    quick_wins = sum(1 for a in actions if a.get("effort_estimate") == "low")
+            except Exception:
+                pass
+
+        text = f"Scan finished. {observation_count} observations discovered."
+        if quick_wins:
+            text += f" {quick_wins} quick win(s) found — low-effort fixes. Want the action plan?"
+        else:
+            text += " Want me to show the triage summary?"
+
+        await maybe_emit_proactive(
+            sse_manager=sse_manager,
+            session_id=state.session_id,
+            agent=ComponentType.TRIAGE,
+            trigger="scan_complete",
+            text=text,
+            actions=[
+                {
+                    "label": "Show action plan",
+                    "injected_message": "Show me the triage action plan",
+                }
+            ],
+        )
+    except Exception:
+        logger.debug("Guided mode proactive scan_complete failed (non-fatal)", exc_info=True)

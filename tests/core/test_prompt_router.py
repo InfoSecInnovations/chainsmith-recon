@@ -50,9 +50,9 @@ def router(mock_client):
 
 class TestContextRouting:
     @pytest.mark.asyncio
-    async def test_scope_panel_routes_to_chainsmith(self, router):
+    async def test_scope_panel_routes_to_scan_planner(self, router):
         decision = await router.route("anything", ui_context={"active_panel": "scope"})
-        assert decision.target == ComponentType.CHAINSMITH
+        assert decision.target == ComponentType.SCAN_PLANNER_ADVISOR
         assert decision.method == "context"
         assert decision.confidence == 1.0
 
@@ -86,7 +86,7 @@ class TestContextRouting:
             "anything",
             ui_context={"active_panel": "scope", "page": "triage"},
         )
-        assert decision.target == ComponentType.CHAINSMITH
+        assert decision.target == ComponentType.SCAN_PLANNER_ADVISOR
 
     @pytest.mark.asyncio
     async def test_unknown_context_falls_through(self, router, mock_client):
@@ -116,7 +116,7 @@ class TestKeywordRouting:
     async def test_scope_keywords(self, router):
         for word in ["scope", "target", "exclude", "exclusion", "timeframe"]:
             decision = await router.route(f"can you {word} this?")
-            assert decision.target == ComponentType.CHAINSMITH, f"Failed for '{word}'"
+            assert decision.target == ComponentType.SCAN_PLANNER_ADVISOR, f"Failed for '{word}'"
             assert decision.method == "keyword"
 
     @pytest.mark.asyncio
@@ -328,7 +328,7 @@ class TestLayerFallthrough:
             "prioritize fixes",  # keyword would match triage
             ui_context={"active_panel": "scope"},  # context matches chainsmith
         )
-        assert decision.target == ComponentType.CHAINSMITH
+        assert decision.target == ComponentType.SCAN_PLANNER_ADVISOR
         assert decision.method == "context"
         mock_client.chat.assert_not_awaited()
 

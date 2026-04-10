@@ -1,10 +1,9 @@
 """
 app/routes/advisor.py - Scan Advisor Routes
 
-Endpoints for retrieving post-scan advisor recommendations.
-
-All reads go through the database. If no scan_id is provided,
-the active scan is used.
+Endpoints for:
+- ScanAnalysisAdvisor: post-scan recommendation retrieval (from DB)
+- ScanPlannerAdvisor: pre-scan planning analysis (live, no DB)
 """
 
 import logging
@@ -45,14 +44,14 @@ async def get_recommendations(
 
     if not sid:
         return {
-            "enabled": cfg.scan_advisor.enabled,
+            "enabled": cfg.scan_analysis_advisor.enabled,
             "recommendations": [],
             "count": 0,
         }
 
     recommendations = await _advisor_repo.get_recommendations(sid)
     return {
-        "enabled": cfg.scan_advisor.enabled,
+        "enabled": cfg.scan_analysis_advisor.enabled,
         "recommendations": recommendations,
         "count": len(recommendations),
     }
@@ -60,11 +59,57 @@ async def get_recommendations(
 
 @router.get("/api/v1/scan-advisor/config")
 async def get_advisor_config():
-    """Get current scan advisor configuration."""
+    """Get current scan analysis advisor configuration."""
     cfg = get_config()
     return {
-        "enabled": cfg.scan_advisor.enabled,
-        "mode": cfg.scan_advisor.mode,
-        "auto_seed_urls": cfg.scan_advisor.auto_seed_urls,
-        "require_approval": cfg.scan_advisor.require_approval,
+        "enabled": cfg.scan_analysis_advisor.enabled,
+        "mode": cfg.scan_analysis_advisor.mode,
+        "auto_seed_urls": cfg.scan_analysis_advisor.auto_seed_urls,
+        "require_approval": cfg.scan_analysis_advisor.require_approval,
+    }
+
+
+# ── ScanPlannerAdvisor Routes ────────────────────────────────────
+
+
+@router.get("/api/v1/scan-planner/analyze")
+async def get_planner_recommendations():
+    """
+    Run pre-scan planning analysis against the current scope.
+
+    Returns recommendations for scope completeness, check selection,
+    and engagement readiness. Runs live (not from DB).
+    """
+    from app.advisors.scan_planner_advisor import ScanPlannerAdvisor
+    from app.engine.scanner import AVAILABLE_CHECKS
+    from app.models import ScopeDefinition
+
+    if not state.target:
+        return {
+            "recommendations": [],
+            "count": 0,
+            "message": "No scope defined. Set target and scope first.",
+        }
+
+    scope = ScopeDefinition(
+        in_scope_domains=[state.target] if state.target else [],
+        out_of_scope_domains=state.exclude or [],
+        time_window=getattr(state.proof_settings, "engagement_window", None)
+        and state.proof_settings.engagement_window.start,
+    )
+    proof_config = {
+        "enabled": getattr(state.proof_settings, "traffic_logging", False),
+    }
+
+    advisor = ScanPlannerAdvisor(
+        scope=scope,
+        available_checks=set(AVAILABLE_CHECKS.keys()),
+        check_metadata=AVAILABLE_CHECKS,
+        proof_of_scope_config=proof_config,
+    )
+    recommendations = advisor.analyze()
+
+    return {
+        "recommendations": [r.to_dict() for r in recommendations],
+        "count": len(recommendations),
     }
