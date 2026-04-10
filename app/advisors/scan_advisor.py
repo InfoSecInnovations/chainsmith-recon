@@ -1,5 +1,5 @@
 """
-app/scan_advisor.py - Post-Scan Advisor (Phase 20)
+app/advisors/scan_advisor.py - Post-Scan Advisor (Phase 20)
 
 Optional, rule-based advisor that analyzes completed scan results and
 recommends follow-up actions. Disabled by default. Never runs checks —
@@ -12,7 +12,7 @@ Phase 1: Post-scan analysis only.
 - Coverage cross-reference: suites with zero or low coverage
 
 Usage:
-    from app.scan_advisor import ScanAdvisor
+    from app.advisors.scan_advisor import ScanAdvisor
 
     advisor = ScanAdvisor(launcher, all_checks)
     recommendations = advisor.analyze()

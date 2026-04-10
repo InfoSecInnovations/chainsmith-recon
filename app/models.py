@@ -25,6 +25,7 @@ class ComponentType(StrEnum):
 
     # Advisors (deterministic analysis)
     CHECK_PROOF_ADVISOR = "check_proof_advisor"
+    SCAN_ADVISOR = "scan_advisor"
 
 
 # Temporary alias for migration — remove after all references updated

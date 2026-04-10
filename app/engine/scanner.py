@@ -248,10 +248,10 @@ async def _run_scan_advisor(state: "AppState", launcher=None, scan_id: str | Non
             logger.info("Scan advisor: skipped (no local launcher — swarm mode?)")
             return
 
-        from app.scan_advisor import (
+        from app.advisors.scan_advisor import (
             ScanAdvisorConfig as AdvisorConfig,
         )
-        from app.scan_advisor import (
+        from app.advisors.scan_advisor import (
             build_advisor_from_launcher,
         )
 

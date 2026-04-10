@@ -77,6 +77,11 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], ComponentType]] = [
         re.compile(r"\b(proof|reproduce|reproduction|evidence|exploit)\b", re.I),
         ComponentType.CHECK_PROOF_ADVISOR,
     ),
+    # ScanAdvisor
+    (
+        re.compile(r"\b(coverage|gaps|what checks|missed|scan advice|recommendations)\b", re.I),
+        ComponentType.SCAN_ADVISOR,
+    ),
     # Coach — explanations and learning
     (
         re.compile(
@@ -103,6 +108,7 @@ Available agents:
 - adjudicator: Risk severity scoring, re-scoring, risk acceptance
 - triage: Remediation prioritization, action planning, fix ordering
 - check_proof_advisor: Reproduction steps, evidence collection, exploit guidance
+- scan_advisor: Scan coverage gaps, missed checks, follow-up recommendations
 - researcher: CVE enrichment, vulnerability lookups, exploit availability
 - coach: Explanations, security concepts, understanding findings and platform behavior
 
@@ -266,6 +272,7 @@ class PromptRouter:
             "adjudicator": ComponentType.ADJUDICATOR,
             "triage": ComponentType.TRIAGE,
             "check_proof_advisor": ComponentType.CHECK_PROOF_ADVISOR,
+            "scan_advisor": ComponentType.SCAN_ADVISOR,
             "researcher": ComponentType.RESEARCHER,
             "coach": ComponentType.COACH,
         }

@@ -334,6 +334,8 @@ class ChatDispatcher:
                 return await self._handle_coach(text, session_id, bridge)
             elif agent_type == ComponentType.CHECK_PROOF_ADVISOR:
                 return await self._handle_check_proof_advisor(text, session_id, bridge)
+            elif agent_type == ComponentType.SCAN_ADVISOR:
+                return await self._handle_scan_advisor(text, session_id, bridge)
             elif agent_type == ComponentType.RESEARCHER:
                 return await self._handle_researcher(text, session_id, bridge)
             else:
@@ -684,6 +686,46 @@ class ChatDispatcher:
             agent=ComponentType.CHECK_PROOF_ADVISOR,
             text="\n".join(lines),
             route_method="direct",
+        )
+
+    async def _handle_scan_advisor(self, text: str, session_id: str, bridge) -> dict:
+        """Route to ScanAdvisor for coverage and recommendation queries."""
+        from app.db.repositories import AdvisorRepository
+        from app.state import state
+
+        scan_id = state.active_scan_id or state._last_scan_id
+        if not scan_id:
+            return make_chat_response(
+                agent=ComponentType.SCAN_ADVISOR,
+                text="No scan data available yet. Run a scan first, then I can "
+                "analyze coverage gaps and recommend follow-up checks.",
+                route_method="keyword",
+            )
+
+        repo = AdvisorRepository()
+        recommendations = await repo.get_recommendations(scan_id)
+
+        if not recommendations:
+            return make_chat_response(
+                agent=ComponentType.SCAN_ADVISOR,
+                text="No recommendations for the current scan. The scan advisor "
+                "may be disabled, or coverage was already comprehensive.",
+                route_method="keyword",
+            )
+
+        # Format recommendations for chat
+        lines = [f"**{len(recommendations)} recommendation(s)** for this scan:\n"]
+        for i, rec in enumerate(recommendations, 1):
+            conf = rec.get("confidence", "medium")
+            category = rec.get("category", "").replace("_", " ")
+            lines.append(f"{i}. **{rec['check_name']}** ({conf} confidence, {category})")
+            lines.append(f"   {rec['reason']}")
+            lines.append("")
+
+        return make_chat_response(
+            agent=ComponentType.SCAN_ADVISOR,
+            text="\n".join(lines),
+            route_method="keyword",
         )
 
     async def _handle_researcher(self, text: str, session_id: str, bridge) -> dict:

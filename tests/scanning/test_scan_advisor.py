@@ -1,5 +1,5 @@
 """
-Tests for app/scan_advisor.py
+Tests for app/advisors/scan_advisor.py
 
 Covers:
 - ScanAdvisorRecommendation dataclass
@@ -14,7 +14,7 @@ Covers:
 
 import pytest
 
-from app.scan_advisor import (
+from app.advisors.scan_advisor import (
     ScanAdvisor,
     ScanAdvisorConfig,
     ScanAdvisorRecommendation,
