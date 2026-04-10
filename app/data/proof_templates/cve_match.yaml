@@ -1,0 +1,25 @@
+check_type: cve_match
+description: CVE matched to a detected software version
+proof_steps:
+  - tool: curl
+    command: "curl -sI {target_url} | grep -i \"server:\""
+    expected_output: "Confirms software version {version} in response"
+    screenshot_worthy: false
+  - tool: browser
+    command: "Search NVD for {cve_id} and confirm the affected version range includes {version}"
+    expected_output: "NVD entry shows {version} is within the affected range"
+    screenshot_worthy: true
+  - tool: curl
+    command: "curl -s 'https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}'"
+    expected_output: "NVD API returns CVE details confirming vulnerability"
+    screenshot_worthy: false
+evidence_checklist:
+  - "Detected software version documented with raw evidence"
+  - "CVE details from NVD (CVSS score, affected range, description)"
+  - "Proof that detected version falls within the affected range"
+  - "Screenshot of NVD entry for the CVE"
+  - "Exploit availability noted (ExploitDB, GitHub)"
+common_mistakes:
+  - "Version detection may be inaccurate — confirm with multiple methods"
+  - "Backported patches may fix the vulnerability without changing the version number"
+  - "CVE may be disputed or rejected — check NVD status"

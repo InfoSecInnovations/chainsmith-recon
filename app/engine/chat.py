@@ -16,7 +16,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 
 from app.db.repositories import ChatRepository
-from app.models import AgentEvent, AgentType, RouteDecision
+from app.models import AgentEvent, AgentType, EventType, RouteDecision
 
 logger = logging.getLogger(__name__)
 
@@ -171,16 +171,35 @@ class ChatDispatcher:
 
     Handles agent queuing (one message at a time per agent) and
     persistence of both operator and agent messages.
+
+    Unified chat API: if `target_agent` is specified, routes directly to
+    that agent bypassing PromptRouter. Otherwise classifies via the router.
     """
 
     def __init__(self, sse_manager: SSEManager, chat_repo: ChatRepository) -> None:
         self.sse = sse_manager
         self.repo = chat_repo
         self._router = None  # lazy — set via set_router()
+        self._coach = None  # lazy — created on first Coach request
 
     def set_router(self, router) -> None:
         """Inject the PromptRouter (avoids circular import)."""
         self._router = router
+
+    def clear_coach_memory(self) -> None:
+        """Clear Coach session memory. Called when chat is cleared."""
+        if self._coach is not None:
+            self._coach.clear_memory()
+
+    def _get_coach(self):
+        """Lazy-init the Coach agent."""
+        if self._coach is None:
+            from app.agents.coach import CoachAgent
+            from app.lib.llm import get_llm_client
+
+            client = get_llm_client()
+            self._coach = CoachAgent(client=client)
+        return self._coach
 
     async def handle_operator_message(
         self,
@@ -188,11 +207,13 @@ class ChatDispatcher:
         text: str,
         ui_context: dict[str, str] | None = None,
         engagement_id: str | None = None,
+        target_agent: str | None = None,
+        scan_id: str | None = None,
     ) -> dict:
         """Process an operator chat message end-to-end.
 
         1. Persist operator message
-        2. Route via PromptRouter
+        2. Route via PromptRouter (or direct agent if specified)
         3. Dispatch to target agent (or return clarification)
         4. Persist agent response
         5. Push response to SSE stream
@@ -208,21 +229,33 @@ class ChatDispatcher:
             ui_context=ui_context,
         )
 
-        # 2. Route
-        if self._router is None:
-            error_msg = make_system_message(
-                "Chat system is not fully initialized. The prompt router is unavailable."
-            )
-            await self.sse.send(session_id, "chat_response", error_msg)
-            return error_msg
+        # 2. Route — direct agent or PromptRouter
+        if target_agent:
+            # Direct agent targeting — bypass PromptRouter
+            agent_map = {a.value: a for a in AgentType}
+            agent = agent_map.get(target_agent)
+            if agent is None:
+                error_msg = make_system_message(
+                    f"Unknown agent '{target_agent}'. Available: {', '.join(agent_map.keys())}"
+                )
+                await self._persist_and_send(session_id, engagement_id, error_msg, None)
+                return error_msg
+            decision = RouteDecision(target=agent, method="direct", confidence=1.0)
+        else:
+            if self._router is None:
+                error_msg = make_system_message(
+                    "Chat system is not fully initialized. The prompt router is unavailable."
+                )
+                await self.sse.send(session_id, "chat_response", error_msg)
+                return error_msg
 
-        try:
-            decision: RouteDecision = await self._router.route(text, ui_context)
-        except Exception as exc:
-            logger.exception("Prompt router error")
-            error_msg = make_system_message(f"Could not classify your message: {exc}")
-            await self._persist_and_send(session_id, engagement_id, error_msg, None)
-            return error_msg
+            try:
+                decision = await self._router.route(text, ui_context)
+            except Exception as exc:
+                logger.exception("Prompt router error")
+                error_msg = make_system_message(f"Could not classify your message: {exc}")
+                await self._persist_and_send(session_id, engagement_id, error_msg, None)
+                return error_msg
 
         # 3. Handle clarification needed
         if decision.needs_clarification:
@@ -297,6 +330,12 @@ class ChatDispatcher:
                 return await self._handle_adjudicator(text, session_id, bridge)
             elif agent_type == AgentType.VERIFIER:
                 return await self._handle_verifier(text, session_id, bridge)
+            elif agent_type == AgentType.COACH:
+                return await self._handle_coach(text, session_id, bridge)
+            elif agent_type == AgentType.CHECK_PROOF_ADVISOR:
+                return await self._handle_check_proof_advisor(text, session_id, bridge)
+            elif agent_type == AgentType.RESEARCHER:
+                return await self._handle_researcher(text, session_id, bridge)
             else:
                 return make_chat_response(
                     agent=agent_type,
@@ -441,6 +480,224 @@ class ChatDispatcher:
                 f"{len(obs) - len(verified) - len(rejected)} pending."
             ),
             route_method="keyword",
+        )
+
+    async def _handle_coach(self, text: str, session_id: str, bridge) -> dict:
+        """Route to Coach agent for explanations."""
+        from app.db.repositories import ChainRepository, ObservationRepository
+        from app.state import state
+
+        coach = self._get_coach()
+
+        # Build session context for Coach
+        scan_id = state.active_scan_id or state._last_scan_id
+        observations = []
+        chains = []
+
+        if scan_id:
+            obs_repo = ObservationRepository()
+            obs_records = await obs_repo.get_observations(scan_id)
+
+            # Convert DB records to lightweight Observation-like objects for context
+            from app.models import EvidenceQuality, Observation, ObservationSeverity, ObservationStatus
+
+            for rec in obs_records:
+                try:
+                    observations.append(
+                        Observation(
+                            id=rec["id"],
+                            observation_type=rec.get("check_name", "unknown"),
+                            title=rec["title"],
+                            description=rec.get("description", ""),
+                            severity=ObservationSeverity(rec.get("severity", "info")),
+                            status=ObservationStatus(rec.get("verification_status", "pending")),
+                            confidence=rec.get("confidence", 0.5) or 0.5,
+                            discovered_by="scout",
+                            discovered_at=rec.get("created_at", datetime.now(UTC)),
+                            verification_notes=rec.get("description", ""),
+                            evidence_quality=(
+                                EvidenceQuality(rec["evidence_quality"])
+                                if rec.get("evidence_quality")
+                                else None
+                            ),
+                        )
+                    )
+                except Exception:
+                    continue
+
+            chain_repo = ChainRepository()
+            chain_records = await chain_repo.get_chains(scan_id)
+            from app.models import AttackChain, ObservationSeverity as _Sev
+
+            for crec in chain_records:
+                try:
+                    chains.append(
+                        AttackChain(
+                            id=crec["id"],
+                            title=crec["title"],
+                            description=crec.get("description", ""),
+                            impact_statement="",
+                            observation_ids=crec.get("observation_ids", []),
+                            individual_severities=[],
+                            combined_severity=_Sev(crec.get("severity", "info")),
+                            severity_reasoning="",
+                            attack_steps=[],
+                        )
+                    )
+                except Exception:
+                    continue
+
+        scope_summary = None
+        if state.target:
+            scope_summary = f"Target: {state.target}"
+            if state.exclude:
+                scope_summary += f", Exclusions: {', '.join(state.exclude)}"
+
+        answer = await coach.ask(
+            question=text,
+            observations=observations or None,
+            chains=chains or None,
+            scope_summary=scope_summary,
+        )
+
+        return make_chat_response(
+            agent=AgentType.COACH,
+            text=answer,
+            route_method="direct",
+        )
+
+    async def _handle_check_proof_advisor(self, text: str, session_id: str, bridge) -> dict:
+        """Route to CheckProofAdvisor for proof guidance."""
+        import re
+
+        from app.advisors.check_proof import CheckProofAdvisor
+        from app.db.repositories import ObservationRepository
+        from app.state import state
+
+        scan_id = state.active_scan_id or state._last_scan_id
+        if not scan_id:
+            return make_chat_response(
+                agent=AgentType.CHECK_PROOF_ADVISOR,
+                text="No scan data available. Run a scan first, then I can "
+                "generate proof guidance for verified findings.",
+                route_method="direct",
+            )
+
+        # Extract observation ID from message (e.g., "F-003", "proof for F-007")
+        id_match = re.search(r"\b(F-\d+)\b", text, re.I)
+
+        repo = ObservationRepository()
+        obs_records = await repo.get_observations(scan_id)
+
+        if id_match:
+            target_id = id_match.group(1).upper()
+            matching = [o for o in obs_records if o["id"] == target_id]
+            if not matching:
+                return make_chat_response(
+                    agent=AgentType.CHECK_PROOF_ADVISOR,
+                    text=f"Observation {target_id} not found in the current scan.",
+                    route_method="direct",
+                )
+        else:
+            # No specific ID — generate for all verified
+            matching = [
+                o for o in obs_records if o.get("verification_status") == "verified"
+            ]
+            if not matching:
+                return make_chat_response(
+                    agent=AgentType.CHECK_PROOF_ADVISOR,
+                    text="No verified observations found. Verify findings first, "
+                    "then I can generate proof guidance.",
+                    route_method="direct",
+                )
+
+        # Convert to Observation models
+        from app.models import EvidenceQuality, Observation, ObservationSeverity, ObservationStatus
+
+        observations = []
+        for rec in matching:
+            try:
+                observations.append(
+                    Observation(
+                        id=rec["id"],
+                        observation_type=rec.get("check_name", "unknown"),
+                        title=rec["title"],
+                        description=rec.get("description", ""),
+                        severity=ObservationSeverity(rec.get("severity", "info")),
+                        status=ObservationStatus(rec.get("verification_status", "pending")),
+                        confidence=rec.get("confidence", 0.5) or 0.5,
+                        discovered_by="scout",
+                        discovered_at=rec.get("created_at", datetime.now(UTC)),
+                        evidence_quality=(
+                            EvidenceQuality(rec["evidence_quality"])
+                            if rec.get("evidence_quality")
+                            else None
+                        ),
+                    )
+                )
+            except Exception:
+                continue
+
+        advisor = CheckProofAdvisor()
+        guidances = advisor.generate_batch(observations) if len(observations) > 1 else (
+            [advisor.generate_guidance(observations[0])] if observations else []
+        )
+
+        if not guidances:
+            return make_chat_response(
+                agent=AgentType.CHECK_PROOF_ADVISOR,
+                text="No proof guidance could be generated for the selected observations.",
+                route_method="direct",
+            )
+
+        # Format response
+        lines = []
+        for g in guidances:
+            lines.append(f"**[{g.finding_id}] {g.finding_title}**")
+            lines.append(f"Status: {g.verification_status} | Evidence: {g.evidence_quality or 'N/A'}")
+            lines.append("")
+            if g.proof_steps:
+                lines.append("Reproduction steps:")
+                for i, step in enumerate(g.proof_steps, 1):
+                    lines.append(f"  {i}. [{step.tool}] `{step.command}`")
+                    lines.append(f"     Expected: {step.expected_output}")
+                lines.append("")
+            if g.severity_rationale:
+                lines.append(f"Severity rationale: {g.severity_rationale}")
+                lines.append("")
+            if g.false_positive_indicators:
+                lines.append("False positive indicators:")
+                for fp in g.false_positive_indicators:
+                    lines.append(f"  - {fp}")
+                lines.append("")
+            lines.append("---")
+
+        return make_chat_response(
+            agent=AgentType.CHECK_PROOF_ADVISOR,
+            text="\n".join(lines),
+            route_method="direct",
+        )
+
+    async def _handle_researcher(self, text: str, session_id: str, bridge) -> dict:
+        """Route to Researcher agent for enrichment (summary in chat)."""
+        from app.state import state
+
+        scan_id = state.active_scan_id or state._last_scan_id
+        if not scan_id:
+            return make_chat_response(
+                agent=AgentType.RESEARCHER,
+                text="No scan data available. Run a scan first, then I can "
+                "enrich findings with CVE details and exploit information.",
+                route_method="direct",
+            )
+
+        return make_chat_response(
+            agent=AgentType.RESEARCHER,
+            text="Researcher enrichment is available via the scan pipeline. "
+            "Trigger it from the scan page or API to enrich findings with "
+            "CVE details, exploit availability, and vendor advisories. "
+            "Use `POST /api/v1/research/{scan_id}` to run enrichment.",
+            route_method="direct",
         )
 
     async def _persist_and_send(

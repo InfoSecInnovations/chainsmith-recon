@@ -1730,3 +1730,153 @@ def _chat_message_to_dict(r: ChatMessage) -> dict:
         "references": r.references,
         "actions": r.actions,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Research Enrichment (Phase 22)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class ResearchRepository(_RepositoryBase):
+    """Persist and query Researcher enrichment results."""
+
+    async def save_enrichment(
+        self,
+        scan_id: str,
+        observation_id: str,
+        enrichment: dict,
+    ) -> str:
+        """Insert a research enrichment record. Returns the record ID."""
+        from app.db.models import ResearchEnrichmentRecord
+
+        record_id = uuid.uuid4().hex[:12]
+        row = ResearchEnrichmentRecord(
+            id=record_id,
+            scan_id=scan_id,
+            observation_id=observation_id,
+            cve_details=enrichment.get("cve_details"),
+            exploit_availability=enrichment.get("exploit_availability"),
+            vendor_advisories=enrichment.get("vendor_advisories"),
+            version_vulnerabilities=enrichment.get("version_vulnerabilities"),
+            data_sources=enrichment.get("data_sources"),
+            offline_mode=1 if enrichment.get("offline_mode") else 0,
+        )
+        async with self._session() as session:
+            session.add(row)
+            await session.commit()
+        return record_id
+
+    async def get_enrichments(self, scan_id: str) -> list[dict]:
+        """Get all enrichments for a scan."""
+        from app.db.models import ResearchEnrichmentRecord
+
+        async with self._session() as session:
+            result = await session.execute(
+                select(ResearchEnrichmentRecord).where(
+                    ResearchEnrichmentRecord.scan_id == scan_id
+                )
+            )
+            return [
+                {
+                    "id": r.id,
+                    "scan_id": r.scan_id,
+                    "observation_id": r.observation_id,
+                    "cve_details": r.cve_details,
+                    "exploit_availability": r.exploit_availability,
+                    "vendor_advisories": r.vendor_advisories,
+                    "version_vulnerabilities": r.version_vulnerabilities,
+                    "data_sources": r.data_sources,
+                    "offline_mode": bool(r.offline_mode),
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in result.scalars().all()
+            ]
+
+    async def get_enrichment_for_observation(
+        self, scan_id: str, observation_id: str
+    ) -> dict | None:
+        """Get enrichment for a specific observation."""
+        from app.db.models import ResearchEnrichmentRecord
+
+        async with self._session() as session:
+            result = await session.execute(
+                select(ResearchEnrichmentRecord).where(
+                    ResearchEnrichmentRecord.scan_id == scan_id,
+                    ResearchEnrichmentRecord.observation_id == observation_id,
+                )
+            )
+            r = result.scalar_one_or_none()
+            if not r:
+                return None
+            return {
+                "id": r.id,
+                "observation_id": r.observation_id,
+                "cve_details": r.cve_details,
+                "exploit_availability": r.exploit_availability,
+                "vendor_advisories": r.vendor_advisories,
+                "version_vulnerabilities": r.version_vulnerabilities,
+                "data_sources": r.data_sources,
+                "offline_mode": bool(r.offline_mode),
+            }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Proof Guidance (Phase 22)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class ProofGuidanceRepository(_RepositoryBase):
+    """Persist and query CheckProofAdvisor results."""
+
+    async def save_guidance(
+        self,
+        scan_id: str,
+        guidance: dict,
+    ) -> str:
+        """Insert a proof guidance record. Returns the record ID."""
+        from app.db.models import ProofGuidanceRecord
+
+        record_id = uuid.uuid4().hex[:12]
+        row = ProofGuidanceRecord(
+            id=record_id,
+            scan_id=scan_id,
+            observation_id=guidance["finding_id"],
+            finding_title=guidance.get("finding_title"),
+            verification_status=guidance.get("verification_status"),
+            evidence_quality=guidance.get("evidence_quality"),
+            proof_steps=guidance.get("proof_steps"),
+            evidence_checklist=guidance.get("evidence_checklist"),
+            severity_rationale=guidance.get("severity_rationale"),
+            false_positive_indicators=guidance.get("false_positive_indicators"),
+            common_mistakes=guidance.get("common_mistakes"),
+        )
+        async with self._session() as session:
+            session.add(row)
+            await session.commit()
+        return record_id
+
+    async def get_guidances(self, scan_id: str) -> list[dict]:
+        """Get all proof guidances for a scan."""
+        from app.db.models import ProofGuidanceRecord
+
+        async with self._session() as session:
+            result = await session.execute(
+                select(ProofGuidanceRecord).where(ProofGuidanceRecord.scan_id == scan_id)
+            )
+            return [
+                {
+                    "id": r.id,
+                    "scan_id": r.scan_id,
+                    "observation_id": r.observation_id,
+                    "finding_title": r.finding_title,
+                    "verification_status": r.verification_status,
+                    "evidence_quality": r.evidence_quality,
+                    "proof_steps": r.proof_steps,
+                    "evidence_checklist": r.evidence_checklist,
+                    "severity_rationale": r.severity_rationale,
+                    "false_positive_indicators": r.false_positive_indicators,
+                    "common_mistakes": r.common_mistakes,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in result.scalars().all()
+            ]

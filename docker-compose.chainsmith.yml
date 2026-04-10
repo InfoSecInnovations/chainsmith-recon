@@ -46,12 +46,12 @@ services:
       - LITELLM_MODEL=${LITELLM_MODEL:-gpt-4o-mini}
       - LITELLM_MODEL_FALLBACK=${LITELLM_MODEL_FALLBACK:-gpt-4o-mini}
 
-      - RECON_DB_PATH=/data/recon.sqlite
+      - RECON_DB_PATH=/data/chainsmith.db
     volumes:
       - ./app:/app/app:ro
       - ./static:/app/static:ro
       - ./scenarios:/app/scenarios:ro
-      - recon-data:/data
+      - ./data:/data
     ports:
       # ── LOCALHOST ONLY ──────────────────────────────────────
       # For LAN access replace "127.0.0.1:" with "0.0.0.0:"
@@ -98,7 +98,5 @@ networks:
 
 
 volumes:
-  recon-data:
-    name: chainsmith-recon-data
   ollama-models:
     name: chainsmith-ollama-models

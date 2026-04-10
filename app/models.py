@@ -18,7 +18,9 @@ class AgentType(StrEnum):
     GUARDIAN = "guardian"
     ADJUDICATOR = "adjudicator"
     TRIAGE = "triage"
-    PROOF_ADVISOR = "proof_advisor"
+    CHECK_PROOF_ADVISOR = "check_proof_advisor"
+    RESEARCHER = "researcher"
+    COACH = "coach"
 
 
 class ObservationSeverity(StrEnum):
@@ -34,6 +36,14 @@ class ObservationStatus(StrEnum):
     VERIFIED = "verified"
     REJECTED = "rejected"
     HALLUCINATION = "hallucination"
+
+
+class EvidenceQuality(StrEnum):
+    """Quality of evidence supporting a verification verdict."""
+
+    DIRECT_OBSERVATION = "direct_observation"
+    INFERRED = "inferred"
+    CLAIMED_NO_PROOF = "claimed_no_proof"
 
 
 class EventType(StrEnum):
@@ -56,6 +66,12 @@ class EventType(StrEnum):
     TRIAGE_START = "triage_start"
     TRIAGE_COMPLETE = "triage_complete"
     TRIAGE_ACTION = "triage_action"
+    RESEARCH_REQUESTED = "research_requested"
+    RESEARCH_COMPLETE = "research_complete"
+    PROOF_GUIDANCE_REQUESTED = "proof_guidance_requested"
+    PROOF_GUIDANCE_GENERATED = "proof_guidance_generated"
+    COACH_QUERY = "coach_query"
+    COACH_RESPONSE = "coach_response"
     ERROR = "error"
     INFO = "info"
 
@@ -152,6 +168,10 @@ class Observation(BaseModel):
     verified_by: AgentType | None = None
     verified_at: datetime | None = None
     verification_notes: str | None = None
+    evidence_quality: EvidenceQuality | None = None
+
+    # Research enrichment (populated by Researcher agent)
+    research_enrichment: "ResearchEnrichment | None" = None
 
     # For hallucinations
     is_hallucination: bool = False
@@ -302,6 +322,86 @@ class TriagePlan(BaseModel):
     workstreams: list[dict[str, Any]] | None = None
 
 
+# ─── Research Enrichment Models ────────────────────────────────
+
+
+class CVEDetail(BaseModel):
+    """Structured CVE information from Researcher."""
+
+    cve_id: str
+    description: str = ""
+    cvss_score: float | None = None
+    severity: str = ""
+    published_date: str | None = None
+    affected_versions: list[str] = Field(default_factory=list)
+    references: list[str] = Field(default_factory=list)
+
+
+class ExploitInfo(BaseModel):
+    """Public exploit information from Researcher."""
+
+    source: str  # exploitdb, github, etc.
+    url: str = ""
+    description: str = ""
+    verified: bool = False
+
+
+class AdvisoryInfo(BaseModel):
+    """Vendor advisory information from Researcher."""
+
+    url: str
+    summary: str = ""
+    date: str | None = None
+    vendor: str = ""
+
+
+class ResearchEnrichment(BaseModel):
+    """Structured enrichment data produced by Researcher agent."""
+
+    observation_id: str
+    cve_details: list[CVEDetail] = Field(default_factory=list)
+    exploit_availability: list[ExploitInfo] = Field(default_factory=list)
+    vendor_advisories: list[AdvisoryInfo] = Field(default_factory=list)
+    version_vulnerabilities: list[str] = Field(default_factory=list)
+    enriched_at: datetime = Field(default_factory=datetime.utcnow)
+    data_sources: list[str] = Field(default_factory=list)
+    offline_mode: bool = False
+
+
+# ─── Proof Guidance Models ─────────────────────────────────────
+
+
+class ProofStep(BaseModel):
+    """A single reproduction step for proving a finding."""
+
+    tool: str  # curl, nmap, burp, browser, etc.
+    command: str  # exact command to run
+    expected_output: str  # what confirms the finding
+    screenshot_worthy: bool = False
+
+
+class EvidenceChecklistItem(BaseModel):
+    """An item in the evidence checklist for a finding."""
+
+    description: str
+    captured: bool = False  # false = operator still needs this
+
+
+class ProofGuidance(BaseModel):
+    """Complete proof guidance for a single finding."""
+
+    finding_id: str
+    finding_title: str
+    verification_status: str
+    evidence_quality: str | None = None
+
+    proof_steps: list[ProofStep] = Field(default_factory=list)
+    evidence_checklist: list[EvidenceChecklistItem] = Field(default_factory=list)
+    severity_rationale: str = ""
+    false_positive_indicators: list[str] = Field(default_factory=list)
+    common_mistakes: list[str] = Field(default_factory=list)
+
+
 # ─── Event Models ──────────────────────────────────────────────
 
 
@@ -443,5 +543,5 @@ class ExportResponse(BaseModel):
     generated_at: datetime
 
 
-# Resolve forward reference for Observation.adjudicated_risk
+# Resolve forward references
 Observation.model_rebuild()

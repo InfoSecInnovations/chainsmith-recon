@@ -1,0 +1,19 @@
+check_type: default
+description: Generic proof template for check types without a specific template
+proof_steps:
+  - tool: curl
+    command: "curl -s -D- {target_url}"
+    expected_output: "Response confirms the finding described in the observation"
+    screenshot_worthy: false
+  - tool: browser
+    command: "Navigate to {target_url} and inspect the response in DevTools"
+    expected_output: "Observation evidence is visible in browser"
+    screenshot_worthy: true
+evidence_checklist:
+  - "Raw request and response captured"
+  - "Screenshot of the finding"
+  - "Timestamp of verification"
+common_mistakes:
+  - "Ensure you are testing from the same network perspective as the original scan"
+  - "Some findings are timing-dependent — may not reproduce on every attempt"
+  - "Check that the target hasn't been patched since the scan"

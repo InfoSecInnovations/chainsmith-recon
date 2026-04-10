@@ -15,6 +15,7 @@ from app.config import LITELLM_BASE_URL, LITELLM_MODEL_VERIFIER
 from app.models import (
     AgentEvent,
     AgentType,
+    EvidenceQuality,
     EventImportance,
     EventType,
     Observation,
@@ -24,18 +25,13 @@ from app.tools import verify_cve, verify_endpoint_exists, verify_version_claim
 
 VERIFIER_SYSTEM_PROMPT = """You are Verifier, an AI agent that validates reconnaissance observations.
 
-Your job is to fact-check Scout's observations and catch errors, hallucinations, or overstated claims.
+Your job is to fact-check observations and catch errors, hallucinations, or overstated claims.
 
 VALIDATION RULES:
 1. For CVE claims: Use verify_cve to check if the CVE exists
 2. For version claims: Use verify_version with the raw evidence
 3. For endpoint claims: Use verify_endpoint with the ACTUAL base URL and path
 4. For port/header observations: These are usually factual - verify based on evidence quality
-
-IMPORTANT BASE URLS FOR THIS ENGAGEMENT:
-- Web service: http://sec536-lab-fakobanko-web:8082
-- Chat service: http://sec536-lab-fakobanko-chat:8081
-- API service: http://sec536-lab-fakobanko-api:8080
 
 VERIFICATION APPROACH:
 - If evidence clearly supports the claim → VERIFIED
@@ -44,12 +40,21 @@ VERIFICATION APPROACH:
 - If endpoint doesn't exist → REJECTED
 - If claim is reasonable but unverifiable → VERIFIED with lower confidence
 
+EVIDENCE QUALITY:
+When submitting a verdict, classify the evidence quality:
+- "direct_observation": Your own tool confirmed the claim (endpoint returned 200, CVE exists in NVD)
+- "inferred": Evidence is consistent but not conclusive (version string in header matches known-vulnerable range, but no direct probe)
+- "claimed_no_proof": The observation was reported with no verifiable evidence attached
+
 SUBMIT VERDICTS:
 For each observation, call submit_verdict with:
 - observation_id: The ID (e.g., "F-001")
 - status: "verified", "rejected", or "hallucination"
 - confidence: 0.0 to 1.0
-- reasoning: Brief explanation
+- evidence_quality: "direct_observation", "inferred", or "claimed_no_proof"
+- reasoning: Rich explanation including specifics from your verification.
+  Good: "CVE-2021-41773 exists in NVD. Published 2021-10-05, CVSS 7.5. Affects Apache 2.4.49-2.4.50. Claimed version (2.4.49) falls within the affected range."
+  Bad: "CVE confirmed in NVD"
 
 Be practical. Port scan results showing open ports are factual data. Header disclosures are factual if the evidence shows the header. Focus hallucination detection on CVEs and overstated claims."""
 
@@ -105,9 +110,14 @@ VERIFIER_TOOLS = [
                     "observation_id": {"type": "string"},
                     "status": {"type": "string", "enum": ["verified", "rejected", "hallucination"]},
                     "confidence": {"type": "number"},
+                    "evidence_quality": {
+                        "type": "string",
+                        "enum": ["direct_observation", "inferred", "claimed_no_proof"],
+                        "description": "Quality of evidence supporting the verdict",
+                    },
                     "reasoning": {"type": "string"},
                 },
-                "required": ["observation_id", "status", "confidence", "reasoning"],
+                "required": ["observation_id", "status", "confidence", "evidence_quality", "reasoning"],
             },
         },
     },
@@ -247,6 +257,7 @@ class VerifierAgent:
                     f.status = ObservationStatus(v["status"])
                     f.confidence = v["confidence"]
                     f.verification_notes = v["reasoning"]
+                    f.evidence_quality = EvidenceQuality(v["evidence_quality"])
                     f.verified_by = AgentType.VERIFIER
                     f.verified_at = datetime.utcnow()
 
@@ -365,11 +376,13 @@ class VerifierAgent:
                 observation_id = args["observation_id"]
                 status = args["status"]
                 confidence = args["confidence"]
+                evidence_quality = args.get("evidence_quality", "claimed_no_proof")
                 reasoning = args["reasoning"]
 
                 self.verdicts[observation_id] = {
                     "status": status,
                     "confidence": confidence,
+                    "evidence_quality": evidence_quality,
                     "reasoning": reasoning,
                 }
                 self.observations_processed += 1

@@ -151,7 +151,7 @@ class TestKeywordRouting:
     async def test_proof_advisor_keywords(self, router):
         for word in ["proof", "reproduce", "reproduction", "evidence"]:
             decision = await router.route(f"show me the {word}")
-            assert decision.target == AgentType.PROOF_ADVISOR, f"Failed for '{word}'"
+            assert decision.target == AgentType.CHECK_PROOF_ADVISOR, f"Failed for '{word}'"
             assert decision.method == "keyword"
 
     @pytest.mark.asyncio

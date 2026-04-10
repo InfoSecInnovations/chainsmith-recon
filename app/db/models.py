@@ -90,6 +90,7 @@ class ObservationRecord(Base):
     raw_data = Column(JSON, nullable=True)
     references = Column(JSON, nullable=True)
     verification_status = Column(String, default="pending")
+    evidence_quality = Column(String, nullable=True)  # direct_observation, inferred, claimed_no_proof
     confidence = Column(Float, nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     fingerprint = Column(String, nullable=True)
@@ -240,6 +241,48 @@ class TriagePlanRecord(Base):
     workstreams = Column(JSON, nullable=True)
 
     __table_args__ = (Index("idx_triage_plans_scan_id", "scan_id"),)
+
+
+class ResearchEnrichmentRecord(Base):
+    __tablename__ = "research_enrichments"
+
+    id = Column(String, primary_key=True)
+    scan_id = Column(String, nullable=False)
+    observation_id = Column(String, nullable=False)
+    cve_details = Column(JSON, nullable=True)
+    exploit_availability = Column(JSON, nullable=True)
+    vendor_advisories = Column(JSON, nullable=True)
+    version_vulnerabilities = Column(JSON, nullable=True)
+    data_sources = Column(JSON, nullable=True)
+    offline_mode = Column(Integer, default=0)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("idx_research_scan_id", "scan_id"),
+        Index("idx_research_observation_id", "observation_id"),
+    )
+
+
+class ProofGuidanceRecord(Base):
+    __tablename__ = "proof_guidance"
+
+    id = Column(String, primary_key=True)
+    scan_id = Column(String, nullable=False)
+    observation_id = Column(String, nullable=False)
+    finding_title = Column(String, nullable=True)
+    verification_status = Column(String, nullable=True)
+    evidence_quality = Column(String, nullable=True)
+    proof_steps = Column(JSON, nullable=True)
+    evidence_checklist = Column(JSON, nullable=True)
+    severity_rationale = Column(Text, nullable=True)
+    false_positive_indicators = Column(JSON, nullable=True)
+    common_mistakes = Column(JSON, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("idx_proof_scan_id", "scan_id"),
+        Index("idx_proof_observation_id", "observation_id"),
+    )
 
 
 class ChatMessage(Base):

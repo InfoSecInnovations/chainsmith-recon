@@ -1,0 +1,20 @@
+check_type: endpoint_discovery
+description: Discovery of exposed endpoints, APIs, or admin interfaces
+proof_steps:
+  - tool: curl
+    command: "curl -s -o /dev/null -w '%{{http_code}}' {target_url}{endpoint_path}"
+    expected_output: "HTTP status code confirms endpoint exists (200, 301, 302, 403)"
+    screenshot_worthy: false
+  - tool: browser
+    command: "Navigate to {target_url}{endpoint_path} and capture the response"
+    expected_output: "Endpoint responds with content confirming its function"
+    screenshot_worthy: true
+evidence_checklist:
+  - "HTTP response code documented"
+  - "Response body or relevant excerpt captured"
+  - "Screenshot of endpoint in browser"
+  - "Timestamp of access"
+common_mistakes:
+  - "404 custom pages may still reveal information — check response body"
+  - "Some endpoints require specific HTTP methods (POST, PUT) — try more than GET"
+  - "Authentication may be required — a 401/403 still proves the endpoint exists"

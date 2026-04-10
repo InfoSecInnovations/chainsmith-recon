@@ -1,0 +1,19 @@
+check_type: port_scan
+description: Open port and service detection
+proof_steps:
+  - tool: nmap
+    command: "nmap -sV -p {port} {host}"
+    expected_output: "Port {port} is open with service {service_name}"
+    screenshot_worthy: false
+  - tool: curl
+    command: "curl -s -o /dev/null -w '%{{http_code}}' {target_url}"
+    expected_output: "Service responds on port {port}"
+    screenshot_worthy: false
+evidence_checklist:
+  - "Nmap scan output showing open port and service"
+  - "Service banner or version if detected"
+  - "Timestamp of scan"
+common_mistakes:
+  - "Firewalls may filter ports intermittently — scan multiple times"
+  - "Service may be on a non-standard port — verify the service type"
+  - "Host-based firewalls may respond differently from different source IPs"

@@ -124,6 +124,30 @@ class TriageConfig:
 
 
 @dataclass
+class ResearcherConfig:
+    enabled: bool = True
+    offline_mode: bool = False
+    data_sources: list[str] = field(default_factory=lambda: ["nvd", "exploitdb", "vendor_advisories"])
+
+
+@dataclass
+class CheckProofAdvisorConfig:
+    enabled: bool = True
+    trigger: str = "operator_selected"  # operator_selected | auto_verified
+    include_commands: bool = True
+    include_screenshots: bool = True
+    template_dir: str = "app/data/proof_templates/"
+
+
+@dataclass
+class CoachConfig:
+    enabled: bool = True
+    context_window: str = "summary"  # summary | full
+    max_recent_events: int = 50
+    memory_cap: int = 10
+
+
+@dataclass
 class PathsConfig:
     db_path: Path = Path("/data/recon.sqlite")  # Legacy - prefer storage.db_path
     attack_patterns: Path = Path("/app/data/attack_patterns.json")
@@ -151,6 +175,9 @@ class ChainsmithConfig:
     scan_advisor: ScanAdvisorConfig = field(default_factory=ScanAdvisorConfig)
     adjudicator: AdjudicatorConfig = field(default_factory=AdjudicatorConfig)
     triage: TriageConfig = field(default_factory=TriageConfig)
+    researcher: ResearcherConfig = field(default_factory=ResearcherConfig)
+    check_proof_advisor: CheckProofAdvisorConfig = field(default_factory=CheckProofAdvisorConfig)
+    coach: CoachConfig = field(default_factory=CoachConfig)
 
     # Raw seed URLs (optional - scanner can discover these itself)
     seed_urls: list[str] = field(default_factory=list)
@@ -297,6 +324,42 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
         if "kb_path" in tr:
             trc.kb_path = str(tr["kb_path"])
 
+    if "researcher" in data and isinstance(data["researcher"], dict):
+        res = data["researcher"]
+        resc = cfg.researcher
+        if "enabled" in res:
+            resc.enabled = bool(res["enabled"])
+        if "offline_mode" in res:
+            resc.offline_mode = bool(res["offline_mode"])
+        if "data_sources" in res and isinstance(res["data_sources"], list):
+            resc.data_sources = [str(s) for s in res["data_sources"]]
+
+    if "check_proof_advisor" in data and isinstance(data["check_proof_advisor"], dict):
+        cpa = data["check_proof_advisor"]
+        cpac = cfg.check_proof_advisor
+        if "enabled" in cpa:
+            cpac.enabled = bool(cpa["enabled"])
+        if "trigger" in cpa:
+            cpac.trigger = str(cpa["trigger"])
+        if "include_commands" in cpa:
+            cpac.include_commands = bool(cpa["include_commands"])
+        if "include_screenshots" in cpa:
+            cpac.include_screenshots = bool(cpa["include_screenshots"])
+        if "template_dir" in cpa:
+            cpac.template_dir = str(cpa["template_dir"])
+
+    if "coach" in data and isinstance(data["coach"], dict):
+        co = data["coach"]
+        coc = cfg.coach
+        if "enabled" in co:
+            coc.enabled = bool(co["enabled"])
+        if "context_window" in co:
+            coc.context_window = str(co["context_window"])
+        if "max_recent_events" in co:
+            coc.max_recent_events = int(co["max_recent_events"])
+        if "memory_cap" in co:
+            coc.memory_cap = int(co["memory_cap"])
+
 
 def _apply_env(cfg: ChainsmithConfig) -> None:
     """Apply CHAINSMITH_* environment variable overrides."""
@@ -387,6 +450,23 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     # Triage overrides
     if v := env.get("CHAINSMITH_TRIAGE_ENABLED"):
         cfg.triage.enabled = v.lower() in ("true", "1", "yes")
+
+    # Researcher overrides
+    if v := env.get("CHAINSMITH_RESEARCHER_ENABLED"):
+        cfg.researcher.enabled = v.lower() in ("true", "1", "yes")
+    if v := env.get("CHAINSMITH_RESEARCHER_OFFLINE"):
+        cfg.researcher.offline_mode = v.lower() in ("true", "1", "yes")
+
+    # CheckProofAdvisor overrides
+    if v := env.get("CHAINSMITH_CHECK_PROOF_ADVISOR_ENABLED"):
+        cfg.check_proof_advisor.enabled = v.lower() in ("true", "1", "yes")
+
+    # Coach overrides
+    if v := env.get("CHAINSMITH_COACH_ENABLED"):
+        cfg.coach.enabled = v.lower() in ("true", "1", "yes")
+    if v := env.get("CHAINSMITH_COACH_MEMORY_CAP"):
+        with contextlib.suppress(ValueError):
+            cfg.coach.memory_cap = int(v)
 
 
 def load_config(config_path: Path | None = None) -> ChainsmithConfig:

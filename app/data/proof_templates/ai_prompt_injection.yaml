@@ -1,0 +1,22 @@
+check_type: ai_prompt_injection
+description: Prompt injection and system prompt extraction in AI/LLM endpoints
+proof_steps:
+  - tool: curl
+    command: "curl -s -X POST {target_url} -H 'Content-Type: application/json' -d '{{\"message\": \"{payload}\"}}'"
+    expected_output: "Response indicates successful injection or system prompt leakage"
+    screenshot_worthy: true
+  - tool: browser
+    command: "Open the chat interface at {target_url} and submit the injection payload manually"
+    expected_output: "Chat response reveals system prompt or unexpected behavior"
+    screenshot_worthy: true
+evidence_checklist:
+  - "Exact injection payload used"
+  - "Full response from the AI service"
+  - "Screenshot of the injection attempt and response"
+  - "Comparison with normal (non-injected) response"
+  - "Timestamp of the test"
+common_mistakes:
+  - "AI responses are non-deterministic — repeat the test multiple times"
+  - "Guardrails may block some payloads but not others — try variations"
+  - "Rate limiting may affect results — wait between attempts"
+  - "Some injections work only in multi-turn conversations"

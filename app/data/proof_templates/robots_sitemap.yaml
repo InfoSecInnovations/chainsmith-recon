@@ -1,0 +1,24 @@
+check_type: robots_sitemap
+description: Information disclosure via robots.txt or sitemap.xml
+proof_steps:
+  - tool: curl
+    command: "curl -s {target_url}/robots.txt"
+    expected_output: "robots.txt reveals disallowed paths or sensitive directories"
+    screenshot_worthy: false
+  - tool: curl
+    command: "curl -s {target_url}/sitemap.xml"
+    expected_output: "Sitemap reveals URL structure and potentially hidden endpoints"
+    screenshot_worthy: false
+  - tool: browser
+    command: "Navigate to {target_url}/robots.txt in a browser"
+    expected_output: "robots.txt content visible with disallowed paths highlighted"
+    screenshot_worthy: true
+evidence_checklist:
+  - "Full robots.txt content captured"
+  - "List of sensitive disallowed paths identified"
+  - "Verification that disallowed paths are accessible (if applicable)"
+  - "Timestamp of retrieval"
+common_mistakes:
+  - "robots.txt is advisory only — paths listed may or may not be accessible"
+  - "Disallowed paths should be tested for actual access (they may still work)"
+  - "Multiple robots.txt files may exist at different paths"

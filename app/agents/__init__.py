@@ -8,7 +8,14 @@ Imports are guarded so that individual agents can be imported directly
 requiring all agent dependencies (openai, etc.) to be installed.
 """
 
-__all__ = ["VerifierAgent", "ChainsmithAgent", "AdjudicatorAgent", "TriageAgent"]
+__all__ = [
+    "VerifierAgent",
+    "ChainsmithAgent",
+    "AdjudicatorAgent",
+    "TriageAgent",
+    "ResearcherAgent",
+    "CoachAgent",
+]
 
 
 def __getattr__(name: str):
@@ -29,4 +36,12 @@ def __getattr__(name: str):
         from app.agents.triage import TriageAgent
 
         return TriageAgent
+    if name == "ResearcherAgent":
+        from app.agents.researcher import ResearcherAgent
+
+        return ResearcherAgent
+    if name == "CoachAgent":
+        from app.agents.coach import CoachAgent
+
+        return CoachAgent
     raise AttributeError(f"module 'app.agents' has no attribute {name!r}")

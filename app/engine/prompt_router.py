@@ -61,10 +61,20 @@ _KEYWORD_RULES: list[tuple[re.Pattern[str], AgentType]] = [
         ),
         AgentType.TRIAGE,
     ),
-    # Proof Advisor (future agent)
+    # CheckProofAdvisor
     (
         re.compile(r"\b(proof|reproduce|reproduction|evidence|exploit)\b", re.I),
-        AgentType.PROOF_ADVISOR,
+        AgentType.CHECK_PROOF_ADVISOR,
+    ),
+    # Coach — explanations and learning
+    (
+        re.compile(r"\b(explain|what is|what does|why did|how does|teach|help me understand)\b", re.I),
+        AgentType.COACH,
+    ),
+    # Researcher — enrichment and lookups
+    (
+        re.compile(r"\b(research|enrich|look ?up|cve detail|exploit db|advisory)\b", re.I),
+        AgentType.RESEARCHER,
     ),
 ]
 
@@ -75,11 +85,13 @@ You are a message classifier for a security reconnaissance platform.
 Classify the operator's message to determine which agent should handle it.
 
 Available agents:
-- chainsmith: Scoping, target definition, exclusions, attack chain building
+- chainsmith: Custom check validation, attack chain building, check ecosystem guidance
 - verifier: Fact-checking observations, re-verification requests
 - adjudicator: Risk severity scoring, re-scoring, risk acceptance
 - triage: Remediation prioritization, action planning, fix ordering
-- proof_advisor: Reproduction steps, evidence collection, exploit guidance
+- check_proof_advisor: Reproduction steps, evidence collection, exploit guidance
+- researcher: CVE enrichment, vulnerability lookups, exploit availability
+- coach: Explanations, security concepts, understanding findings and platform behavior
 
 Respond with ONLY a JSON object: {"agent": "<name>", "confidence": <0.0-1.0>}
 No other text."""
@@ -240,7 +252,9 @@ class PromptRouter:
             "verifier": AgentType.VERIFIER,
             "adjudicator": AgentType.ADJUDICATOR,
             "triage": AgentType.TRIAGE,
-            "proof_advisor": AgentType.PROOF_ADVISOR,
+            "check_proof_advisor": AgentType.CHECK_PROOF_ADVISOR,
+            "researcher": AgentType.RESEARCHER,
+            "coach": AgentType.COACH,
         }
 
         agent = agent_map.get(agent_name)

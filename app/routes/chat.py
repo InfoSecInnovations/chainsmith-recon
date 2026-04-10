@@ -33,7 +33,9 @@ router = APIRouter()
 
 class ChatMessageRequest(BaseModel):
     text: str
+    agent: str | None = None  # Optional: route directly to a specific agent
     ui_context: dict | None = None
+    scan_id: str | None = None  # Optional: scope context to a specific scan
 
 
 class ClearChatRequest(BaseModel):
@@ -45,7 +47,11 @@ class ClearChatRequest(BaseModel):
 
 @router.post("/api/v1/chat/message")
 async def send_chat_message(req: ChatMessageRequest):
-    """Send an operator message. Routes through PromptRouter to agents."""
+    """Send an operator message.
+
+    If `agent` is specified, routes directly to that agent. Otherwise,
+    routes through PromptRouter for automatic classification.
+    """
     if not req.text or not req.text.strip():
         raise HTTPException(400, "Message text is required.")
 
@@ -57,6 +63,8 @@ async def send_chat_message(req: ChatMessageRequest):
         text=req.text.strip(),
         ui_context=req.ui_context,
         engagement_id=engagement_id,
+        target_agent=req.agent,
+        scan_id=req.scan_id,
     )
 
     return response
@@ -142,10 +150,13 @@ async def clear_chat(req: ClearChatRequest):
     """Clear chat history for a session.
 
     Messages are marked as cleared in the DB (retained for audit)
-    but excluded from future history queries.
+    but excluded from future history queries. Also clears Coach
+    session memory to prevent anchor/recency bias.
     """
     session_id = req.session_id or state.session_id
     count = await chat_repo.clear_session(session_id)
+    # Clear Coach memory when chat is cleared
+    chat_dispatcher.clear_coach_memory()
     return {"cleared": count, "session_id": session_id}
 
 

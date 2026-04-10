@@ -59,3 +59,65 @@ the condition is not silently swallowed. The alert should:
 - Persist until the operator acknowledges it or the DB connection recovers
 - Optionally log the event so post-engagement review can identify
   reliability patterns
+
+---
+
+## AttackChainProofAdvisor (from Phase 22)
+
+Phase 22 introduces CheckProofAdvisor for per-finding reproduction guidance.
+A natural extension is chain-level proof guidance — ordered, multi-step
+reproduction walkthroughs for entire attack chains.
+
+### What it would do
+
+- Generate ordered reproduction steps across multiple linked findings
+- Handle step dependencies (e.g., "exploit F-002 first to get the session
+  token needed to reproduce F-007")
+- Produce a single coherent proof narrative for report inclusion
+- Map prerequisite conditions between chain links
+
+### Why it's deferred
+
+Chain-level proof is meaningfully more complex than per-finding proof:
+- Reproduction order matters and steps may depend on each other
+- Prerequisite conditions between findings need to be modeled
+- Whether this should be deterministic (Advisor) or LLM-powered (Agent) is
+  an open question — the ordering and dependency reasoning may benefit from
+  LLM capabilities
+
+### When to revisit
+
+After CheckProofAdvisor has real usage data and operators express a need for
+chain-level proof guidance in their reports.
+
+---
+
+## Researcher Agent — Offline Mode Enhancements (from Phase 22)
+
+Phase 22's Researcher agent supports a basic offline mode where tools return
+cached/bundled data or "not available" responses. For air-gapped network
+deployments, this should be expanded:
+
+### Bundled vulnerability database
+
+- Ship a periodically-updated snapshot of NVD data with Chainsmith releases
+- Allow operators to import custom vulnerability feeds (vendor-specific, internal)
+- Version and date-stamp bundled data so operators know how stale it is
+
+### Cache-forward mode
+
+- When running online, Researcher caches all fetched enrichment data locally
+- Subsequent offline runs can use this cache for any previously-seen CVEs,
+  products, or versions
+- Cache is per-engagement, exportable for sharing across team members
+
+### Manual enrichment import
+
+- Operators can drop enrichment files (JSON/YAML) into a known directory
+- Researcher consumes these as if they were API responses
+- Useful when one team member has network access and another does not
+
+### When to revisit
+
+When Chainsmith is deployed in air-gapped environments and operators report
+that the basic offline mode is insufficient

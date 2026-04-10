@@ -1,0 +1,19 @@
+check_type: header_analysis
+description: Security header presence and configuration checks
+proof_steps:
+  - tool: curl
+    command: "curl -s -D- {target_url} | grep -i \"{header_name}\""
+    expected_output: "Header '{header_name}' should be present/absent as described in the finding"
+    screenshot_worthy: false
+  - tool: browser
+    command: "Open DevTools > Network tab, navigate to {target_url}, inspect response headers"
+    expected_output: "Confirm header value matches the finding's evidence"
+    screenshot_worthy: true
+evidence_checklist:
+  - "Raw HTTP response headers captured"
+  - "Screenshot of response headers in browser DevTools"
+  - "Timestamp of request"
+common_mistakes:
+  - "CDN or load balancer may add/strip headers — test from the same network perspective"
+  - "Some headers only appear on specific response codes (e.g., HSTS on 200 only)"
+  - "Check both HTTP and HTTPS responses — headers may differ"

@@ -1,0 +1,24 @@
+check_type: version_disclosure
+description: Server or software version information leakage
+proof_steps:
+  - tool: curl
+    command: "curl -sI {target_url} | grep -i \"^server:\""
+    expected_output: "Server header reveals version: {software} {version}"
+    screenshot_worthy: false
+  - tool: nmap
+    command: "nmap -sV -p {port} {host}"
+    expected_output: "Service detection confirms {software} version {version}"
+    screenshot_worthy: false
+  - tool: browser
+    command: "Navigate to {target_url}, check response headers in DevTools Network tab"
+    expected_output: "Server header or response body reveals version string"
+    screenshot_worthy: true
+evidence_checklist:
+  - "Raw Server header value captured"
+  - "Version-to-CVE mapping documented"
+  - "Screenshot showing version in response headers"
+  - "Confirmation the version falls within a known-vulnerable range (if applicable)"
+common_mistakes:
+  - "Version in header may be a facade — verify with multiple detection methods"
+  - "Load balancers may report their own version, not the backend's"
+  - "Some servers report partial version info (e.g., Apache without minor version)"

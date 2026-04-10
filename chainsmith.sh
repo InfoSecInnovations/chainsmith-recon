@@ -3,9 +3,9 @@
 # chainsmith.sh — Chainsmith Recon standalone launcher
 #
 # Usage:
-#   ./chainsmith.sh start [--profile <openai|anthropic|ollama|litellm>]
+#   ./chainsmith.sh start [--profile|--provider <openai|anthropic|ollama|litellm>]
 #   ./chainsmith.sh stop
-#   ./chainsmith.sh restart [--profile ...]
+#   ./chainsmith.sh restart [--profile|--provider ...]
 #   ./chainsmith.sh status
 #   ./chainsmith.sh logs [service]
 #   ./chainsmith.sh teardown
@@ -66,7 +66,7 @@ parse_profile_flag() {
     local i=0
     while [ $i -lt ${#args[@]} ]; do
         case "${args[$i]}" in
-            --profile|-p)
+            --profile|--provider|-p)
                 i=$(( i + 1 ))
                 PROFILE_OVERRIDE="${args[$i]:-}"
                 ;;
@@ -75,6 +75,8 @@ parse_profile_flag() {
     done
 
     if [ -n "$PROFILE_OVERRIDE" ]; then
+        # Normalize to lowercase so --profile Anthropic works
+        PROFILE_OVERRIDE="$(echo "$PROFILE_OVERRIDE" | tr '[:upper:]' '[:lower:]')"
         case "$PROFILE_OVERRIDE" in
             openai|anthropic|ollama|litellm) ;;
             *) die "Unknown profile '${PROFILE_OVERRIDE}'. Valid: openai, anthropic, ollama, litellm" ;;
@@ -393,7 +395,7 @@ cmd_help() {
     echo "  Usage: ./chainsmith.sh <command> [options]"
     echo
     echo "  Commands:"
-    echo "    start [--profile <openai|anthropic|ollama|litellm>]"
+    echo "    start [--profile|--provider <openai|anthropic|ollama|litellm>]"
     echo "      Preflight checks, build, and start Chainsmith."
     echo
     echo "    stop"
