@@ -12,11 +12,10 @@ Planted findings:
     cache_probe_timing       Timing differences reveal cache hit/miss state
 """
 
-import hashlib
 import time
 import traceback as tb
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_finding_active
 from fastapi import FastAPI, HTTPException, Request
@@ -208,12 +207,9 @@ async def cache_lookup(req: LookupRequest):
         # cache_stale_context — skip TTL validation
         if best_match and not is_finding_active("cache_stale_context"):
             # In non-finding mode, check TTL
-            from datetime import timezone
 
-            entry_time = datetime.fromisoformat(
-                best_match["timestamp"].replace("Z", "+00:00")
-            )
-            age = (datetime.now(timezone.utc) - entry_time).total_seconds()
+            entry_time = datetime.fromisoformat(best_match["timestamp"].replace("Z", "+00:00"))
+            age = (datetime.now(UTC) - entry_time).total_seconds()
             if age > best_match["ttl"]:
                 best_match = None  # Expired
 
@@ -334,11 +330,14 @@ async def cache_invalidate(request: Request):
     removed = 0
     to_remove = []
     for entry in CACHE_ENTRIES:
-        if entry_id and entry["id"] == entry_id:
-            to_remove.append(entry)
-        elif query and _query_similarity(query, entry["query"]) > 0.7:
-            to_remove.append(entry)
-        elif user_id and entry["user_id"] == user_id:
+        if (
+            entry_id
+            and entry["id"] == entry_id
+            or query
+            and _query_similarity(query, entry["query"]) > 0.7
+            or user_id
+            and entry["user_id"] == user_id
+        ):
             to_remove.append(entry)
 
     for entry in to_remove:
@@ -394,7 +393,5 @@ async def health():
         "service": "demo-domain-cache",
         "session_id": session.session_id,
         "cached_entries": len(CACHE_ENTRIES),
-        "hit_rate": round(
-            _stats["cache_hits"] / max(1, _stats["total_lookups"]), 3
-        ),
+        "hit_rate": round(_stats["cache_hits"] / max(1, _stats["total_lookups"]), 3),
     }

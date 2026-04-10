@@ -326,7 +326,9 @@ async def debug_info(request: Request):
             "docs": "http://demo-domain-docs:8206",
         },
         "database": "sqlite:///data/helpdesk.db",
-        "valid_tokens": list(VALID_TOKENS.keys()) if is_finding_active("verbose_errors") else "[redacted]",
+        "valid_tokens": list(VALID_TOKENS.keys())
+        if is_finding_active("verbose_errors")
+        else "[redacted]",
         "session_id": get_or_create_session().session_id,
     }
 

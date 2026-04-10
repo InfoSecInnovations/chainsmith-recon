@@ -53,10 +53,12 @@ async def _openai_chat(messages, system=None, tools=None, max_tokens=1024):
     if tools:
         oai_tools = []
         for t in tools:
-            oai_tools.append({
-                "type": "function",
-                "function": t.get("function", t),
-            })
+            oai_tools.append(
+                {
+                    "type": "function",
+                    "function": t.get("function", t),
+                }
+            )
 
     payload = {
         "model": OPENAI_MODEL,
@@ -84,11 +86,13 @@ async def _openai_chat(messages, system=None, tools=None, max_tokens=1024):
     tool_calls = []
     if msg.get("tool_calls"):
         for tc in msg["tool_calls"]:
-            tool_calls.append({
-                "id": tc["id"],
-                "name": tc["function"]["name"],
-                "input": json.loads(tc["function"]["arguments"]),
-            })
+            tool_calls.append(
+                {
+                    "id": tc["id"],
+                    "name": tc["function"]["name"],
+                    "input": json.loads(tc["function"]["arguments"]),
+                }
+            )
 
     return {
         "content": msg.get("content", ""),
@@ -110,11 +114,13 @@ async def _anthropic_chat(messages, system=None, tools=None, max_tokens=1024):
         anthropic_tools = []
         for t in tools:
             fn = t.get("function", t)
-            anthropic_tools.append({
-                "name": fn["name"],
-                "description": fn.get("description", ""),
-                "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
-            })
+            anthropic_tools.append(
+                {
+                    "name": fn["name"],
+                    "description": fn.get("description", ""),
+                    "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
+                }
+            )
 
     payload = {
         "model": ANTHROPIC_MODEL,
@@ -146,11 +152,13 @@ async def _anthropic_chat(messages, system=None, tools=None, max_tokens=1024):
         if block["type"] == "text":
             content_text += block["text"]
         elif block["type"] == "tool_use":
-            tool_calls.append({
-                "id": block["id"],
-                "name": block["name"],
-                "input": block["input"],
-            })
+            tool_calls.append(
+                {
+                    "id": block["id"],
+                    "name": block["name"],
+                    "input": block["input"],
+                }
+            )
 
     return {
         "content": content_text,
@@ -174,10 +182,12 @@ async def _ollama_chat(messages, system=None, tools=None, max_tokens=1024):
     if tools:
         ollama_tools = []
         for t in tools:
-            ollama_tools.append({
-                "type": "function",
-                "function": t.get("function", t),
-            })
+            ollama_tools.append(
+                {
+                    "type": "function",
+                    "function": t.get("function", t),
+                }
+            )
 
     payload = {
         "model": OLLAMA_MODEL,
@@ -202,11 +212,13 @@ async def _ollama_chat(messages, system=None, tools=None, max_tokens=1024):
     if msg.get("tool_calls"):
         for tc in msg["tool_calls"]:
             fn = tc.get("function", {})
-            tool_calls.append({
-                "id": fn.get("name", "tool"),
-                "name": fn.get("name", ""),
-                "input": fn.get("arguments", {}),
-            })
+            tool_calls.append(
+                {
+                    "id": fn.get("name", "tool"),
+                    "name": fn.get("name", ""),
+                    "input": fn.get("arguments", {}),
+                }
+            )
 
     return {
         "content": msg.get("content", ""),

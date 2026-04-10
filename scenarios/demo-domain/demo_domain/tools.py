@@ -150,7 +150,12 @@ INTERNAL_DOCS = {
 
 SERVICES_STATUS = {
     "email": {"name": "Email / Exchange", "status": "operational", "uptime": "99.98%"},
-    "vpn": {"name": "VPN (GlobalProtect)", "status": "degraded", "uptime": "97.2%", "note": "Intermittent timeouts on east-coast gateway"},
+    "vpn": {
+        "name": "VPN (GlobalProtect)",
+        "status": "degraded",
+        "uptime": "97.2%",
+        "note": "Intermittent timeouts on east-coast gateway",
+    },
     "active_directory": {"name": "Active Directory", "status": "operational", "uptime": "99.99%"},
     "ticketing": {"name": "Ticket System", "status": "operational", "uptime": "99.95%"},
     "chat_assistant": {"name": "AI Chat Assistant", "status": "operational", "uptime": "99.5%"},
@@ -351,8 +356,15 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "subject": {"type": "string", "description": "Ticket subject"},
-                    "description": {"type": "string", "description": "Detailed description of the issue"},
-                    "priority": {"type": "string", "enum": ["low", "medium", "high", "critical"], "description": "Ticket priority"},
+                    "description": {
+                        "type": "string",
+                        "description": "Detailed description of the issue",
+                    },
+                    "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high", "critical"],
+                        "description": "Ticket priority",
+                    },
                 },
                 "required": ["subject", "description"],
             },

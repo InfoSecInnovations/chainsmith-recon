@@ -279,7 +279,9 @@ async def search(req: SearchRequest, request: Request):
             "title": doc["title"],
             "collection": doc["collection"],
             "score": score,
-            "snippet": doc["content"][:200] + "..." if len(doc["content"]) > 200 else doc["content"],
+            "snippet": doc["content"][:200] + "..."
+            if len(doc["content"]) > 200
+            else doc["content"],
         }
 
         # rag_source_attribution finding — include raw source that can be spoofed
