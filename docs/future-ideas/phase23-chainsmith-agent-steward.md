@@ -237,15 +237,19 @@ deterministic, fast, and still catches the most common issues (dead checks,
 broken patterns, shadow conflicts).
 
 
-## Relationship to Other Agents and Phases
+## Relationship to Other Components
 
-| Component | Relationship |
-|---|---|
-| **CheckRunner / ChainOrchestrator** | Chainsmith validates what these will execute, but doesn't replace them. They run checks; Chainsmith ensures the check set is coherent. |
-| **chains.py** | Owns all attack chain logic (rule-based + LLM). Chainsmith validates that chain patterns reference checks that actually exist and are active. |
-| **Scan Advisor (Phase 20)** | Scan Advisor says "you missed coverage on this scan." Chainsmith says "your check set has a structural gap — no check covers X." Adjacent but different: runtime vs. design-time. |
-| **Verifier (Phase 22)** | Verifier validates findings. Chainsmith validates the checks that produce findings. Different layers. |
-| **Coach (Phase 22)** | Coach explains what's happening. Chainsmith explains why the check graph is shaped the way it is. Coach is runtime; Chainsmith is configuration-time. |
+Per the [component taxonomy](component-taxonomy.md), Chainsmith is an
+**Agent** (LLM-powered for content-aware analysis, with deterministic
+fallback for metadata-only validation).
+
+| Component | Type | Relationship |
+|---|---|---|
+| **CheckRunner / ChainOrchestrator** | Engine | Chainsmith validates what these will execute, but doesn't replace them. They run checks; Chainsmith ensures the check set is coherent. |
+| **chains.py** | Engine | Owns all attack chain logic (rule-based + LLM). Chainsmith validates that chain patterns reference checks that actually exist and are active. |
+| **ScanAdvisor** | Advisor | ScanAdvisor says "you missed coverage on this scan." Chainsmith says "your check set has a structural gap — no check covers X." Adjacent but different: runtime vs. design-time. |
+| **Verifier** | Agent | Verifier validates findings. Chainsmith validates the checks that produce findings. Different layers. |
+| **Coach** | Agent | Coach explains what's happening. Chainsmith explains why the check graph is shaped the way it is. Coach is runtime; Chainsmith is configuration-time. |
 
 ## New Events
 

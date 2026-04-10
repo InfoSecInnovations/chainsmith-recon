@@ -1,0 +1,5 @@
+name: OWASP Top 10
+short_label: OWASP
+pattern: "OWASP Top 10 - (A\\d+)"
+url_template: "https://owasp.org/Top10/"
+badge_color: "#0891b2"

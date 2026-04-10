@@ -42,10 +42,15 @@ Verifier stays a gate. It does not contextualize, teach, or advise. It
 validates and stamps.
 
 
-## 2. Proof Advisor (new agent)
+## 2. Proof Advisor (new Advisor — deterministic)
 
 Sits after Verifier in the pipeline. Takes verified findings and helps the
 operator independently confirm them and build report-quality evidence.
+
+**Component type: Advisor.** Proof Advisor generates templated reproduction
+steps from check metadata, observation evidence, and verification notes. It
+does not use LLM calls — its output is deterministic and rule-based. See
+[component-taxonomy.md](component-taxonomy.md) for the taxonomy.
 
 ### Core responsibilities
 
@@ -58,13 +63,15 @@ operator independently confirm them and build report-quality evidence.
 - **False positive indicators** — what would make this finding not real, so the
   operator knows what to look for.
 
-### Tools
+### Implementation approach
 
-Proof Advisor calls tools, but only read-oriented ones:
+Proof Advisor is deterministic — it templates reproduction commands from
+observation metadata rather than generating them via LLM:
 
-- Re-probe an endpoint to generate a copy-pasteable proof command
-- Look up a CVE to explain impact and affected versions
-- Fetch raw evidence from session state
+- Maps check types to proof command templates (curl for HTTP, nmap for ports, etc.)
+- Populates templates from observation evidence, target URL, and raw data
+- Looks up CVE details from cached verification data
+- Pulls raw evidence from session state
 
 It never discovers new things. It works with what Verifier already stamped.
 
@@ -120,11 +127,16 @@ If both are active, Proof Advisor should consume the Adjudicator's
 rationale section.
 
 
-## 3. Coach (new agent)
+## 3. Coach (new Agent — LLM-powered)
 
 An always-available conversational agent that explains anything happening
 inside Chainsmith. No tools. Pure LLM conversation grounded in session
 context.
+
+**Component type: Agent.** Coach uses LLM reasoning to generate contextual
+explanations. Despite having no tools, it requires LLM calls and its outputs
+carry the uncertainty inherent to all agents. See
+[component-taxonomy.md](component-taxonomy.md) for the taxonomy.
 
 ### What it answers
 
@@ -170,15 +182,19 @@ not streamed continuously.
 
 ## New model entries
 
+Per the [component taxonomy](component-taxonomy.md), these components should
+be registered under their correct type. If Phase 26 lands `ComponentType`:
+
 ```python
-class AgentType(str, Enum):
-    SCAN_ADVISOR = "scan_advisor"
-    VERIFIER = "verifier"
-    CHAINSMITH = "chainsmith"
-    GUARDIAN = "guardian"
-    PROOF_ADVISOR = "proof_advisor"
-    COACH = "coach"
+# Agents (LLM-powered)
+COACH = "coach"
+
+# Advisors (deterministic)
+PROOF_ADVISOR = "proof_advisor"
 ```
+
+If `AgentType` is still the only enum, both are added there but documented
+with their true classification.
 
 ## New events
 
@@ -216,10 +232,9 @@ coach:
 - **Proof Advisor for chains:** Should Proof Advisor generate proof guidance
   for entire attack chains (multi-step reproduction), or only individual
   findings? Chain-level proof is harder but more valuable for reports.
-- **LLM selection:** Coach and Proof Advisor have very different cost profiles.
-  Coach is conversational and latency-sensitive (smaller/faster model). Proof
-  Advisor needs technical precision (larger model, fewer calls). Consider
-  separate model configs like Verifier already has.
+- **LLM selection:** Coach is the only LLM-backed component here — it is
+  conversational and latency-sensitive (smaller/faster model). Proof Advisor
+  is deterministic and incurs no LLM cost.
 
 ## Dependencies
 

@@ -1,0 +1,6 @@
+name: OWASP API Security Top 10
+short_label: API
+pattern: "OWASP API Security Top 10 - API(\\d+)"
+url_template: "https://owasp.org/API-Security/editions/2023/en/0xa{id}/"
+badge_color: "#0d9488"
+id_prefix: "API"

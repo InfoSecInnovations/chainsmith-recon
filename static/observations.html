@@ -622,7 +622,11 @@
                     return;
                 }
 
-                const observationsData = await api.getObservations();
+                // Load framework map in parallel with observations
+                const [observationsData] = await Promise.all([
+                    api.getObservations(),
+                    loadFrameworkMap(),
+                ]);
                 observations = observationsData.observations;
                 renderObservations();
                 Viz.renderTreemap();

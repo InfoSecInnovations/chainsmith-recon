@@ -1,0 +1,5 @@
+name: OWASP LLM Top 10
+short_label: LLM
+pattern: "OWASP LLM Top 10 - (LLM\\d+)"
+url_template: "https://genai.owasp.org/llmrisk/{id}/"
+badge_color: "#2563eb"

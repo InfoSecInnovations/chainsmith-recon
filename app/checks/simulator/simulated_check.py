@@ -63,6 +63,7 @@ class SimulationConfig:
     disposition: str
     output: dict[str, Any]
     behavior: SimulationBehavior = field(default_factory=SimulationBehavior)
+    findings: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict) -> "SimulationConfig":
@@ -86,6 +87,7 @@ class SimulationConfig:
             disposition=data["disposition"],
             output=data.get("output", {}),
             behavior=behavior,
+            findings=data.get("findings", []),
         )
 
     @classmethod
@@ -263,6 +265,23 @@ class SimulatedCheck(BaseCheck):
                             raw_data=host_entry,
                         )
                     )
+
+        # Emit observations from the findings section of the YAML config
+        for i, finding in enumerate(config.findings):
+            result.observations.append(
+                Observation(
+                    id=f"{self.name}-f{i}",
+                    title=finding.get("title", "Untitled finding"),
+                    description=finding.get("description", ""),
+                    severity=finding.get("severity", "info"),
+                    evidence=finding.get("evidence", ""),
+                    target=None,
+                    target_url=finding.get("target_url"),
+                    check_name=finding.get("check_name", self.name),
+                    raw_data={"simulated": True, "disposition": config.disposition},
+                    references=finding.get("references", self.references),
+                )
+            )
 
         # Propagate services to context key
         if result.services:

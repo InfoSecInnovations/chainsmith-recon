@@ -60,17 +60,30 @@ Chainsmith generates reports in multiple formats (Markdown, HTML, PDF, JSON, SAR
 - **Compliance** — audit trail and proof of scope
 - **Trend** — historical analysis across an engagement
 
-## The Agents
+## The Components
 
-Chainsmith uses five specialized agents, each with a distinct role:
+Chainsmith's pipeline is built from three types of component. See [component taxonomy](future-ideas/component-taxonomy.md) for the full reference.
+
+**Agents** — LLM-powered, autonomous reasoning:
 
 | Agent | Role |
 |-------|------|
-| **Scout** | Initial discovery and enumeration |
 | **Verifier** | Validates observations, catches hallucinations |
-| **Chainsmith** | Scoping conversations and attack chain construction |
-| **Guardian** | Scope enforcement (continuous, not phase-bound) |
 | **Adjudicator** | Evidence-based severity adjudication |
+| **Triage** | Prioritized remediation planning |
+| **Chainsmith** | Chain validation for custom checks and attack chains |
+
+**Gates** — deterministic policy enforcement:
+
+| Gate | Role |
+|------|------|
+| **Guardian** | Scope enforcement (continuous, not phase-bound) |
+
+**Advisors** — deterministic post-hoc analysis:
+
+| Advisor | Role |
+|---------|------|
+| **ScanAdvisor** | Post-scan gap analysis and follow-up recommendations |
 
 ## On-Critical Behavior
 

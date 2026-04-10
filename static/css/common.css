@@ -488,6 +488,42 @@ input[type="datetime-local"]:focus {
 .severity-low { background: #1e3a5f; color: #93c5fd; }
 .severity-info { background: #1e293b; color: #94a3b8; }
 
+/* ─── Framework Badges ─────────────────────────────────────── */
+.framework-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.framework-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #fff;
+    text-decoration: none;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    white-space: nowrap;
+}
+
+.framework-badge:hover {
+    opacity: 0.85;
+}
+
+.framework-badges-overflow {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.625rem;
+    font-weight: 500;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: default;
+}
+
 /* ─── Verified Badges ───────────────────────────────────────── */
 .verified-badge {
     display: inline-block;

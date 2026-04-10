@@ -33,12 +33,15 @@ def get_all_checks() -> list:
 def get_check_info(check) -> dict:
     """Extract metadata from a check instance."""
     from app.check_resolver import infer_suite
+    from app.checks.frameworks import parse_all
 
+    refs = getattr(check, "references", [])
     return {
         "name": check.name,
         "description": getattr(check, "description", ""),
         "reason": getattr(check, "reason", ""),
-        "references": getattr(check, "references", []),
+        "references": refs,
+        "frameworks": parse_all(refs),
         "techniques": getattr(check, "techniques", []),
         "conditions": [
             f"{c.output_name} {c.operator}" + (f" {c.value}" if c.value else "")

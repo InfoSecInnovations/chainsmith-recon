@@ -47,14 +47,17 @@ class EventType(StrEnum):
 
 ### Components that exist today
 
-| Component | Type | File | In AgentType? | Emits events? |
-|-----------|------|------|---------------|---------------|
-| Verifier | AI agent | `app/agents/verifier.py` | Yes | Yes (extensive) |
-| Chainsmith | AI agent | `app/agents/chainsmith.py` | Yes | Yes |
-| Adjudicator | AI agent | `app/agents/adjudicator.py` | Yes | Yes |
-| Guardian | Deterministic | `app/guardian.py` | Yes | Yes (scope violations) |
-| ScanAdvisor | Deterministic | `app/scan_advisor.py` | **No** | No |
-| Checks (50+) | Deterministic | `app/checks/` | **No** | No (produce Observations) |
+Per the [component taxonomy](component-taxonomy.md):
+
+| Component | Taxonomy type | File | In AgentType? | Emits events? |
+|-----------|--------------|------|---------------|---------------|
+| Verifier | **Agent** | `app/agents/verifier.py` | Yes | Yes (extensive) |
+| Chainsmith | **Agent** | `app/agents/chainsmith.py` | Yes | Yes |
+| Adjudicator | **Agent** | `app/agents/adjudicator.py` | Yes | Yes |
+| Triage | **Agent** | `app/agents/triage.py` | Yes | Yes |
+| Guardian | **Gate** | `app/guardian.py` | Yes | Yes (scope violations) |
+| ScanAdvisor | **Advisor** | `app/scan_advisor.py` | **No** | No |
+| Checks (130+) | — | `app/checks/` | **No** | No (produce Observations) |
 
 ### Two Observation types
 
@@ -82,9 +85,10 @@ this model slot — it's leftover from when Scout was an AI agent.
 - ScanAdvisor has its own config, class, and route (`app/routes/advisor.py`) but
   no entry in AgentType — it's invisible to the type system.
 - No entries planned for Coach or Proof Advisor (both still proposals).
-- No distinction between AI agents (Verifier, Chainsmith, Adjudicator) and
-  deterministic components (Guardian, ScanAdvisor, checks). This matters for
-  model selection, cost tracking, and understanding what's LLM-driven vs rule-based.
+- No distinction between agents (Verifier, Chainsmith, Adjudicator, Triage),
+  gates (Guardian), and advisors (ScanAdvisor). The [component taxonomy](component-taxonomy.md)
+  now defines this classification. This matters for model selection, cost
+  tracking, and understanding what's LLM-driven vs rule-based.
 
 ### 2. EventType is growing but manageable
 
@@ -113,15 +117,40 @@ uses it, but neither can express "check_http_headers found this."
 
 ### A. Rename or split AgentType?
 
-Options:
+**Resolved.** The [component taxonomy](component-taxonomy.md) establishes
+three component types: **Agents** (LLM-powered), **Gates** (deterministic
+policy enforcement), and **Advisors** (deterministic post-hoc analysis).
 
-1. **Rename to `ComponentType`** — single enum, everything in it, name
-   reflects that not all entries are AI agents.
-2. **Split into `AgentType` + `ScriptType`** — separate enums for AI agents
-   and deterministic scripts. Cleaner semantically, but now `Observation.discovered_by`
-   and `AgentEvent.agent` need a union type or a shared base.
-3. **Keep `AgentType`, just add entries** — least churn, but the name
-   becomes increasingly misleading.
+The recommended approach is **option 1: rename to `ComponentType`** with
+all components registered in a single enum, documented with their true
+classification. This is the least churn option that also makes the name
+honest. Fields like `Observation.discovered_by` and `AgentEvent.agent`
+become `ComponentType` references.
+
+Target enum:
+
+```python
+class ComponentType(StrEnum):
+    # Agents (LLM-powered)
+    VERIFIER = "verifier"
+    ADJUDICATOR = "adjudicator"
+    TRIAGE = "triage"
+    CHAINSMITH = "chainsmith"
+
+    # Gates (deterministic enforcement)
+    GUARDIAN = "guardian"
+
+    # Advisors (deterministic analysis)
+    SCAN_ADVISOR = "scan_advisor"
+```
+
+Previous options for reference:
+
+1. ~~**Rename to `ComponentType`**~~ — **selected**
+2. **Split into `AgentType` + `ScriptType`** — rejected; union types add
+   complexity without proportional benefit.
+3. **Keep `AgentType`, just add entries** — rejected; the name is
+   increasingly misleading.
 
 ### B. How to handle EventType growth?
 
@@ -136,9 +165,11 @@ Options:
 
 ### C. Should models enforce component capabilities?
 
-Some components use tools, some don't. Some are LLM-backed, some aren't.
-Should the model layer express this, or should that stay in the component
-implementations?
+**Resolved by taxonomy.** The component taxonomy defines capabilities by
+type: agents use LLMs and may use tools; gates and advisors are deterministic.
+This distinction lives in the taxonomy documentation and component
+implementations, not in the enum itself. The enum identifies components;
+the taxonomy classifies them.
 
 ### D. Observation provenance
 

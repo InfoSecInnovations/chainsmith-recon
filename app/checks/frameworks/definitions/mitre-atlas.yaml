@@ -1,0 +1,5 @@
+name: MITRE ATLAS
+short_label: ATLAS
+pattern: "MITRE ATLAS - (AML\\.T\\d+)"
+url_template: "https://atlas.mitre.org/techniques/{id}"
+badge_color: "#7c3aed"

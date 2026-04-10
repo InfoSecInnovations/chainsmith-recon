@@ -517,6 +517,46 @@ async function updateHeaderStatus() {
     }
 }
 
+// ─── Framework Badges ──────────────────────────────────────────
+// Global check-name → frameworks[] lookup, populated once by loadFrameworkMap().
+let _frameworkMap = {};
+
+async function loadFrameworkMap() {
+    try {
+        const data = await api.getChecks();
+        const checks = data.checks || [];
+        _frameworkMap = {};
+        for (const c of checks) {
+            if (c.frameworks?.length > 0) {
+                _frameworkMap[c.name] = c.frameworks;
+            }
+        }
+    } catch (e) {
+        console.warn('Could not load framework map:', e);
+    }
+}
+
+function renderFrameworkBadges(frameworks, maxVisible = 5) {
+    if (!frameworks || frameworks.length === 0) return '';
+    const visible = frameworks.slice(0, maxVisible);
+    const overflow = frameworks.length - maxVisible;
+    const badges = visible.map(f =>
+        `<a class="framework-badge" href="${f.url}" target="_blank" rel="noopener"` +
+        ` style="background:${f.badge_color}"` +
+        ` title="${f.framework} — ${f.tag_id}">${f.short_label} ${f.tag_id}</a>`
+    ).join('');
+    const more = overflow > 0
+        ? `<span class="framework-badges-overflow">+${overflow} more</span>`
+        : '';
+    return `
+        <div class="modal-section">
+            <div class="modal-section-title">Compliance Frameworks</div>
+            <div class="modal-section-content">
+                <div class="framework-badges">${badges}${more}</div>
+            </div>
+        </div>`;
+}
+
 // ─── Check Modal Content ───────────────────────────────────────
 function getCheckModalContent(check) {
     const simulatedBadge = check.simulated
@@ -544,6 +584,7 @@ function getCheckModalContent(check) {
                 ${check.references.map(ref => `<li>${ref}</li>`).join('')}
             </ul>
         </div>` : ''}
+        ${renderFrameworkBadges(check.frameworks)}
     `;
 }
 
@@ -586,6 +627,7 @@ function getObservationModalContent(observation, chains = []) {
             <div class="modal-section-title">Discovered By</div>
             <div class="modal-section-content">${observation.check_name}</div>
         </div>` : ''}
+        ${renderFrameworkBadges(observation.check_name ? _frameworkMap[observation.check_name] : null)}
         ${chainLinks}
     `;
 }

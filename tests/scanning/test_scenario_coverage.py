@@ -25,9 +25,7 @@ def _load_scenario(name: str) -> dict:
 def _all_scenario_names() -> list[str]:
     """Discover all scenario directories containing scenario.json."""
     return [
-        d.name
-        for d in SCENARIOS_DIR.iterdir()
-        if d.is_dir() and (d / "scenario.json").exists()
+        d.name for d in SCENARIOS_DIR.iterdir() if d.is_dir() and (d / "scenario.json").exists()
     ]
 
 
@@ -94,21 +92,73 @@ class TestCheckCoverage:
         findings = scenario.get("expected_findings", [])
         # Check for at least one finding from each suite by prefix
         suite_prefixes = {
-            "network": ["dns_", "tls_", "port_", "service_probe", "banner_", "whois_",
-                        "geoip", "reverse_dns", "ipv6_", "http_method", "traceroute"],
-            "web": ["header_", "cookie_", "cors_", "robots_", "waf_", "auth_detection",
-                    "favicon", "http2_", "path_probe", "sitemap", "error_page",
-                    "openapi_", "webdav", "vcs_", "config_exposure", "directory_",
-                    "default_creds", "debug_endpoints", "redirect_", "ssrf_",
-                    "mass_assignment", "hsts_", "sri_"],
-            "ai": ["llm_endpoint", "embedding_", "model_info", "ai_framework",
-                   "ai_error", "content_filter", "rate_limit", "context_window",
-                   "model_enumeration", "api_parameter", "system_prompt",
-                   "tool_discovery", "prompt_leakage", "output_format",
-                   "jailbreak", "multiturn", "input_format", "token_cost",
-                   "cache_detect", "auth_bypass", "adversarial", "function_abuse",
-                   "guardrail", "history_leak", "streaming", "training_data",
-                   "model_fingerprint"],
+            "network": [
+                "dns_",
+                "tls_",
+                "port_",
+                "service_probe",
+                "banner_",
+                "whois_",
+                "geoip",
+                "reverse_dns",
+                "ipv6_",
+                "http_method",
+                "traceroute",
+            ],
+            "web": [
+                "header_",
+                "cookie_",
+                "cors_",
+                "robots_",
+                "waf_",
+                "auth_detection",
+                "favicon",
+                "http2_",
+                "path_probe",
+                "sitemap",
+                "error_page",
+                "openapi_",
+                "webdav",
+                "vcs_",
+                "config_exposure",
+                "directory_",
+                "default_creds",
+                "debug_endpoints",
+                "redirect_",
+                "ssrf_",
+                "mass_assignment",
+                "hsts_",
+                "sri_",
+            ],
+            "ai": [
+                "llm_endpoint",
+                "embedding_",
+                "model_info",
+                "ai_framework",
+                "ai_error",
+                "content_filter",
+                "rate_limit",
+                "context_window",
+                "model_enumeration",
+                "api_parameter",
+                "system_prompt",
+                "tool_discovery",
+                "prompt_leakage",
+                "output_format",
+                "jailbreak",
+                "multiturn",
+                "input_format",
+                "token_cost",
+                "cache_detect",
+                "auth_bypass",
+                "adversarial",
+                "function_abuse",
+                "guardrail",
+                "history_leak",
+                "streaming",
+                "training_data",
+                "model_fingerprint",
+            ],
             "mcp": ["mcp_"],
             "agent": ["agent_"],
             "rag": ["rag_"],
@@ -117,10 +167,7 @@ class TestCheckCoverage:
 
         missing_suites = []
         for suite, prefixes in suite_prefixes.items():
-            has_suite = any(
-                any(f.startswith(prefix) for prefix in prefixes)
-                for f in findings
-            )
+            has_suite = any(any(f.startswith(prefix) for prefix in prefixes) for f in findings)
             if not has_suite:
                 missing_suites.append(suite)
 
@@ -137,11 +184,30 @@ class TestCheckCoverage:
         findings = scenario.get("expected_findings", [])
         suite_indicators = {
             "network": ["dns_", "service_probe", "tls_", "http_method"],
-            "web": ["header_", "robots_", "cors_", "openapi_", "cookie_",
-                    "config_exposure", "debug_endpoints", "directory_", "auth_detection"],
-            "ai": ["llm_endpoint", "ai_framework", "model_info", "prompt_leakage",
-                   "rate_limit", "tool_discovery", "ai_error", "jailbreak",
-                   "multiturn", "guardrail", "history_leak"],
+            "web": [
+                "header_",
+                "robots_",
+                "cors_",
+                "openapi_",
+                "cookie_",
+                "config_exposure",
+                "debug_endpoints",
+                "directory_",
+                "auth_detection",
+            ],
+            "ai": [
+                "llm_endpoint",
+                "ai_framework",
+                "model_info",
+                "prompt_leakage",
+                "rate_limit",
+                "tool_discovery",
+                "ai_error",
+                "jailbreak",
+                "multiturn",
+                "guardrail",
+                "history_leak",
+            ],
             "mcp": ["mcp_"],
             "agent": ["agent_"],
             "rag": ["rag_"],
@@ -150,10 +216,7 @@ class TestCheckCoverage:
 
         missing_suites = []
         for suite, prefixes in suite_indicators.items():
-            has_suite = any(
-                any(f.startswith(prefix) for prefix in prefixes)
-                for f in findings
-            )
+            has_suite = any(any(f.startswith(prefix) for prefix in prefixes) for f in findings)
             if not has_suite:
                 missing_suites.append(suite)
 
@@ -183,9 +246,7 @@ class TestChainCoverage:
             pytest.skip("fakobanko scenario not found")
 
         chains = scenario.get("expected_chains", [])
-        assert len(chains) >= 30, (
-            f"fakobanko has {len(chains)} expected chains, need >= 30"
-        )
+        assert len(chains) >= 30, f"fakobanko has {len(chains)} expected chains, need >= 30"
 
     def test_demo_domain_chain_coverage(self, all_scenarios):
         """demo-domain triggers >= 15 chain patterns."""
@@ -194,6 +255,4 @@ class TestChainCoverage:
             pytest.skip("demo-domain scenario not found")
 
         chains = scenario.get("expected_chains", [])
-        assert len(chains) >= 15, (
-            f"demo-domain has {len(chains)} expected chains, need >= 15"
-        )
+        assert len(chains) >= 15, f"demo-domain has {len(chains)} expected chains, need >= 15"

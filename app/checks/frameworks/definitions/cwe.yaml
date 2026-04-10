@@ -1,0 +1,6 @@
+name: CWE
+short_label: CWE
+pattern: "CWE-(\\d+)"
+url_template: "https://cwe.mitre.org/data/definitions/{id}.html"
+badge_color: "#dc2626"
+id_prefix: "CWE-"
