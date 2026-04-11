@@ -377,40 +377,6 @@ class ComplianceReporter:
         return ComplianceReport(**data)
 
 
-# ─── Scope Checker ─────────────────────────────────────────────
-
-
-class ScopeChecker:
-    """Checks if targets are in scope and handles blocking."""
-
-    def __init__(self, target_pattern: str, exclusions: list[str]):
-        self.target_pattern = target_pattern
-        self.exclusions = [e.lower() for e in exclusions]
-
-    def check_host(self, host: str) -> ScopeStatus:
-        """Check if a host is in scope."""
-        host_lower = host.lower()
-
-        # Check exclusions first
-        for excl in self.exclusions:
-            if excl in host_lower or host_lower in excl:
-                return ScopeStatus.EXCLUDED
-
-        # Check if matches target pattern
-        if self.target_pattern.startswith("*."):
-            base = self.target_pattern[2:].lower()
-            if host_lower.endswith(base) or host_lower == base:
-                return ScopeStatus.IN_SCOPE
-        elif self.target_pattern.lower() == host_lower:
-            return ScopeStatus.IN_SCOPE
-
-        return ScopeStatus.OUT_OF_SCOPE
-
-    def is_excluded(self, host: str) -> bool:
-        """Check if host is in exclusion list."""
-        return self.check_host(host) == ScopeStatus.EXCLUDED
-
-
 # ─── Global Instances ──────────────────────────────────────────
 
 traffic_logger = TrafficLogger()

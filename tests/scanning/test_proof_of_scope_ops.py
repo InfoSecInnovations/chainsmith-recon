@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
+from app.guardian import Guardian
 from app.proof_of_scope import (
     ComplianceReport,
     ComplianceReporter,
     EngagementWindow,
     ProofOfScopeSettings,
-    ScopeChecker,
     ScopeStatus,
     TrafficEntryType,
     TrafficLogger,
@@ -304,62 +304,80 @@ class TestComplianceReporter:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ScopeChecker Tests
+# Guardian Scope Enforcement Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestScopeChecker:
-    """Tests for ScopeChecker class."""
+class TestGuardianUrlScope:
+    """Tests for Guardian URL scope enforcement (replaces ScopeChecker)."""
 
     def test_exact_match(self):
         """Exact domain match."""
-        checker = ScopeChecker("example.com", exclusions=[])
+        g = Guardian.from_scope("example.com")
 
-        assert checker.check_host("example.com") == ScopeStatus.IN_SCOPE
-        assert checker.check_host("EXAMPLE.COM") == ScopeStatus.IN_SCOPE  # Case insensitive
-        assert checker.check_host("other.com") == ScopeStatus.OUT_OF_SCOPE
+        ok, _ = g.check_url("http://example.com/path")
+        assert ok is True
+
+        ok, _ = g.check_url("http://other.com/path")
+        assert ok is False
 
     def test_wildcard_match(self):
         """Wildcard pattern match."""
-        checker = ScopeChecker("*.example.com", exclusions=[])
+        g = Guardian.from_scope("*.example.com")
 
-        assert checker.check_host("api.example.com") == ScopeStatus.IN_SCOPE
-        assert checker.check_host("sub.api.example.com") == ScopeStatus.IN_SCOPE
-        assert checker.check_host("example.com") == ScopeStatus.IN_SCOPE  # Base domain too
-        assert checker.check_host("other.com") == ScopeStatus.OUT_OF_SCOPE
+        ok, _ = g.check_url("http://api.example.com/")
+        assert ok is True
+
+        ok, _ = g.check_url("http://sub.api.example.com/")
+        assert ok is True
+
+        ok, _ = g.check_url("http://other.com/")
+        assert ok is False
 
     def test_exclusions(self):
         """Exclusions override scope."""
-        checker = ScopeChecker("*.example.com", exclusions=["admin.example.com"])
+        g = Guardian.from_scope("*.example.com", exclude=["admin.example.com"])
 
-        assert checker.check_host("api.example.com") == ScopeStatus.IN_SCOPE
-        assert checker.check_host("admin.example.com") == ScopeStatus.EXCLUDED
+        ok, _ = g.check_url("http://api.example.com/")
+        assert ok is True
 
-    def test_exclusion_substring_match(self):
-        """Exclusions use substring matching."""
-        checker = ScopeChecker("*.example.com", exclusions=["admin"])
-
-        # Contains "admin"
-        assert checker.check_host("admin.example.com") == ScopeStatus.EXCLUDED
-        assert checker.check_host("my-admin-panel.example.com") == ScopeStatus.EXCLUDED
-
-    def test_is_excluded(self):
-        """is_excluded helper method."""
-        checker = ScopeChecker("*.example.com", exclusions=["admin.example.com"])
-
-        assert checker.is_excluded("admin.example.com") is True
-        assert checker.is_excluded("api.example.com") is False
+        ok, _ = g.check_url("http://admin.example.com/")
+        assert ok is False
 
     def test_multiple_exclusions(self):
         """Multiple exclusion patterns."""
-        checker = ScopeChecker(
+        g = Guardian.from_scope(
             "*.example.com",
-            exclusions=["admin.example.com", "internal.example.com"],
+            exclude=["admin.example.com", "internal.example.com"],
         )
 
-        assert checker.check_host("admin.example.com") == ScopeStatus.EXCLUDED
-        assert checker.check_host("internal.example.com") == ScopeStatus.EXCLUDED
-        assert checker.check_host("api.example.com") == ScopeStatus.IN_SCOPE
+        ok, _ = g.check_url("http://admin.example.com/")
+        assert ok is False
+
+        ok, _ = g.check_url("http://internal.example.com/")
+        assert ok is False
+
+        ok, _ = g.check_url("http://api.example.com/")
+        assert ok is True
+
+    def test_url_scope_validator_callback(self):
+        """url_scope_validator works as a BaseCheck scope_validator callback."""
+        g = Guardian.from_scope("example.com")
+
+        assert g.url_scope_validator("http://example.com/test") is True
+        assert g.url_scope_validator("http://evil.com/test") is False
+        assert g.violation_count == 1
+
+    def test_forbidden_technique(self):
+        """Forbidden techniques are blocked."""
+        g = Guardian.from_scope("example.com", forbidden_techniques=["dangerous_check"])
+
+        ok, reason = g.check_technique("dangerous_check")
+        assert ok is False
+        assert "forbidden" in reason
+
+        ok, _ = g.check_technique("safe_check")
+        assert ok is True
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

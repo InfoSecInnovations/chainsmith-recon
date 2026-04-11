@@ -7,7 +7,8 @@ Centralized state management for the Chainsmith scan engine.
 import uuid
 
 from app.check_launcher import CheckLauncher
-from app.proof_of_scope import ProofOfScopeSettings, ScopeChecker, reset_proof_of_scope
+from app.guardian import Guardian
+from app.proof_of_scope import ProofOfScopeSettings, reset_proof_of_scope
 
 
 class AppState:
@@ -60,7 +61,9 @@ class AppState:
 
         # Proof of scope settings
         self.proof_settings = ProofOfScopeSettings()
-        self.scope_checker: ScopeChecker | None = None
+
+        # Guardian — single authority for scope enforcement
+        self.guardian: Guardian | None = None
 
         # Reset proof of scope logs
         reset_proof_of_scope()

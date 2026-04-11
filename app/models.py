@@ -29,10 +29,6 @@ class ComponentType(StrEnum):
     SCAN_PLANNER_ADVISOR = "scan_planner_advisor"
 
 
-# Temporary alias for migration — remove after all references updated
-AgentType = ComponentType
-
-
 class ObservationSeverity(StrEnum):
     INFO = "info"
     LOW = "low"
@@ -499,31 +495,11 @@ class ScopeResponse(BaseModel):
     scope: ScopeDefinition | None = None
 
 
-class LaunchRequest(BaseModel):
-    """Request to launch recon."""
-
-    pass
-
-
 class LaunchResponse(BaseModel):
     """Response from launching recon."""
 
     status: str
     session_id: str
-    message: str
-
-
-class DirectiveRequest(BaseModel):
-    """Request to direct an agent."""
-
-    agent: ComponentType
-    directive: str
-
-
-class DirectiveResponse(BaseModel):
-    """Response from directing an agent."""
-
-    status: str
     message: str
 
 

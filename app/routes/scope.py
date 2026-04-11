@@ -20,7 +20,8 @@ from app.preferences import (
     get_profile_store,
     save_profile_store,
 )
-from app.proof_of_scope import EngagementWindow, ScopeChecker, violation_logger
+from app.guardian import Guardian
+from app.proof_of_scope import EngagementWindow, violation_logger
 from app.state import state
 
 logger = logging.getLogger(__name__)
@@ -51,8 +52,8 @@ async def set_scope(scope: ExtendedScopeInput):
         scope.techniques if scope.techniques else state.settings["default_techniques"]
     )
 
-    # Initialize scope checker for in-scope validation
-    state.scope_checker = ScopeChecker(scope.target, scope.exclude)
+    # Initialize Guardian — single authority for scope enforcement
+    state.guardian = Guardian.from_scope(scope.target, scope.exclude)
 
     # Handle engagement window
     if scope.engagement_window:

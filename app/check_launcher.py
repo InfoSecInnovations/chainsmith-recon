@@ -25,6 +25,7 @@ from app.customizations import apply_pre_run_override
 
 if TYPE_CHECKING:
     from app.db.writers import ObservationWriter
+    from app.guardian import Guardian
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +52,19 @@ class CheckLauncher:
         checks: list,
         context: dict,
         observation_writer: ObservationWriter | None = None,
+        guardian: Guardian | None = None,
     ):
         """
         Args:
             checks: List of check instances to run
             context: Shared context dict (modified in place)
             observation_writer: Optional streaming writer for DB persistence
+            guardian: Optional scope enforcer — blocks forbidden checks
         """
         self.checks = {c.name: c for c in checks}
         self.context = context
         self.observation_writer = observation_writer
+        self.guardian = guardian
         self.completed: set[str] = set()
         self.failed: set[str] = set()
         self.skipped: set[str] = set()
@@ -111,6 +115,18 @@ class CheckLauncher:
             for check in runnable:
                 if self.scan_stopped:
                     break
+
+                # Guardian gate: check if this check name is forbidden
+                if self.guardian:
+                    ok, reason = self.guardian.check_technique(check.name)
+                    if not ok:
+                        logger.info(f"Guardian blocked {check.name}: {reason}")
+                        self.skipped.add(check.name)
+                        self.skip_reasons[check.name] = f"scope_blocked: {reason}"
+                        self.completed.add(check.name)
+                        if on_check_complete:
+                            on_check_complete(check.name, True, 0)
+                        continue
 
                 # Check on_critical skip behavior before running
                 skip_reason = self._should_skip_for_critical(check)

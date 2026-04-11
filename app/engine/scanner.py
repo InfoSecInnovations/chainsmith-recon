@@ -153,6 +153,12 @@ async def run_scan(
                     )
                 )
 
+        # Wire Guardian as scope_validator on each check (per-URL safety net)
+        if state.guardian:
+            for check in checks:
+                if hasattr(check, "set_scope_validator"):
+                    check.set_scope_validator(state.guardian.url_scope_validator)
+
         # Choose execution backend: swarm or local
         cfg = get_config()
         if cfg.swarm.enabled:
@@ -176,7 +182,9 @@ async def run_scan(
                 await obs_writer.flush()
         else:
             # Standard single-node execution
-            launcher = CheckLauncher(checks, context, observation_writer=obs_writer)
+            launcher = CheckLauncher(
+                checks, context, observation_writer=obs_writer, guardian=state.guardian
+            )
             state.runner = launcher
 
             observations = await launcher.run_all(
