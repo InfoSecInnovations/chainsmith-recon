@@ -134,7 +134,8 @@ class EngagementsModule(Module):
 | **Checks** | `core.checks.register(check_cls)` | Same `BaseCheck` contract as core checks. |
 | **Reports** | `core.reports.register_section(name, render)` | Named section renderers; report templates opt into them via `{% section "engagement" %}`. |
 | **UI slots** | `core.ui.contribute(slot, ...)` | See §7 for the slot model. |
-| **Scan hooks** | `core.scan.on_create/on_complete(...)` | Lifecycle callbacks. Fired in registration order; exceptions are isolated per module. |
+| **Scan hooks** | `core.scan.on_create/on_complete(...)` | Lifecycle callbacks. Take `scan_id` — designed concurrent-aware per `concurrent-scans-design.md`. Fired in registration order; exceptions are isolated per module. |
+| **Enrichers** | `core.scan.register_enricher(fn)` where `fn(scans: list[Scan]) -> dict[scan_id, ModuleData]` | Batch enrichment of core entity lists. Core calls once per list render; module does one bulk query; template/API reads enriched data per row. Used for cross-cutting annotations (e.g. a module adds a badge to every scan row). Avoids N+1 queries and keeps core's schema stable — module data lives in `mod_<name>_*` join tables, not columns on core tables. Generalizes beyond scans to observations, checks, chains as those lists need module contributions. |
 
 **Contract philosophy:** extension points are **additive, not subtractive**. A module can add a nav item, but cannot remove one. A module can add a column to a report, but cannot rewrite the core report. This keeps modules composable — two modules adding nav items works; two modules each "taking over" the nav doesn't.
 
@@ -162,6 +163,8 @@ shutdown
 ```
 
 **Load order is deterministic** (alphabetical by module name) so that failures are reproducible.
+
+**Dependency resolution.** The loader aggregates `[dependencies].python` entries from every manifest and resolves them together against the core venv. Two modules asking for `httpx>=0.27` and `httpx>=0.26` resolve to one install satisfying both. Conflicting constraints (`httpx<0.26` vs `httpx>=0.27`) fail loudly at load time with both module names in the error — no duplicate installs, no version pinning wars. Dedup is mandatory, not optional; anything else gets too complex as the module ecosystem grows.
 
 **Failure isolation:** a module that raises during `register()` is disabled for the process. Core logs the failure, marks the module `status=failed` in the operator-visible `/api/v1/modules` endpoint, and continues. This is the difference between "my engagements module is broken" and "my Chainsmith instance won't boot."
 
@@ -255,6 +258,10 @@ Engagements is the perfect first module because it's already the feature that mo
 
 ## 9. Phased rollout
 
+**Prerequisite:** `concurrent-scans-design.md` Phases A–C must land before Phase 1 of the module system begins. Module API contracts are designed concurrent-aware (take `scan_id`) regardless. UI Phase D of concurrent-scans can run in parallel with module system Phase 1.
+
+**POC coverage gap.** The three community POC modules (`terminal-dashboard`, `scan-reporter`, `scope-wizard`) are all CLI-only consumers. They exercise the manifest, lifecycle, CLI extension, and dependency-dedup paths — but **not** routers, DB models/migrations, UI slots, scan hooks, or enrichers. Declaring Module API v1.0 stable requires a fourth module that exercises the DB + UI + enricher contracts (engagements, when it ports, or an equivalent).
+
 1. **Phase 1 — Foundation.** Build the module API (`chainsmith.module_api`), loader, manifest parser, failure-isolation, `/api/v1/modules` introspection endpoint. No real module yet. Core refactored so existing route/CLI registration goes through the same APIs modules will use (dogfooding).
 2. **Phase 2 — Engagements port.** Engagements becomes `modules/engagements/`, shipped as a **pro-tier module** (not part of the OSS distribution). Remove all engagement references from core. Because engagements is paid-only, phase 2 also requires the license-validator hook to exist in at least a minimal form — either pull licensing forward from phase 5 or ship a placeholder validator that accepts any non-empty key, then harden later.
 3. **Phase 3 — UI slot system.** Minimal slot model (nav, dashboard cards, sidebar). Extend as real modules need more.
@@ -267,10 +274,10 @@ Engagements is the perfect first module because it's already the feature that mo
 ## 10. Open questions
 
 1. **Jinja or lighter?** Is Jinja already in the dependency tree (reports), or would the UI slot system add it? Template choice affects frontend design.
-2. **Where does `Scan.engagement_id` go?** Column on core table vs join table in module. Cleanest is join table, but existing scan-list queries would need a hook point to include module-provided badges.
+2. ~~**Where does `Scan.engagement_id` go?**~~ **Resolved:** join table owned by the module (`mod_engagements_scan_links`), not a column on the core `scans` table. Scan-list badges handled via the **Enricher** extension point (§5) — batch pattern, one bulk query per list render, no N+1. Generalizes to any module annotating core entities.
 3. **Check discovery today uses directory scanning under `app/checks/`.** Do module-contributed checks go through the same scanner, or register explicitly? Directory scanning is more ergonomic; explicit registration is more auditable.
 4. **Entry points vs folder-only?** Should modules also be installable as pip packages via `setuptools` entry points, or is `modules/<name>/` the only supported shape? Entry points help with `pip install chainsmith-engagements-pro` ergonomics; folder-only is simpler.
-5. **Chat and advisor hooks.** Today both have hardcoded engagement references. The design above covers scan-lifecycle hooks; do we need analogous `core.chat.on_message` and `core.advisor.register_rule` hooks, or can engagements live without them in v1?
+5. ~~**Chat and advisor hooks.**~~ **Resolved:** engagements is deferred well beyond initial module work; remove engagement references from chat/advisor entirely as part of that deferral. No `core.chat.on_message` or `core.advisor.register_rule` extension points in v1. If a later module needs them, design at that time against real requirements.
 6. **Module config.** Modules often need per-instance config (API keys, thresholds). Shared `.env` namespace? Per-module config file? Admin UI?
 
 ---

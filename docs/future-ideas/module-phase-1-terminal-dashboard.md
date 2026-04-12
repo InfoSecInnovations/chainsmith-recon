@@ -3,7 +3,9 @@
 **Status:** Design / pending implementation
 **Module name:** `terminal-dashboard`
 **Tier:** `community`
-**Prerequisite:** Module System (see `module-system-design.md`) must land first.
+**Prerequisites:**
+- `concurrent-scans-design.md` Phases A–C must land first (module API is concurrent-aware; `chainsmith watch` takes `--scan <id>`).
+- Module System (`module-system-design.md`) must land next.
 
 ---
 
@@ -72,20 +74,11 @@ Note: no routers, no DB, no UI slots. This is a pure consumer of core APIs.
 
 ### 4.1 Scan control endpoints
 
-**These endpoints are already assumed to exist by the web UI** — `static/scan.html` has Pause/Resume/Stop buttons wired to `/api/v1/scan/pause`, `/resume`, `/stop` via `static/js/api.js:64-66`. Those buttons 404 silently today. Implementing the routes below fixes a pre-existing bug in the web UI *and* unblocks this module.
+**Already implemented in core** at `app/routes/scan.py:71-102` (`/api/v1/scan/pause`, `/resume`, `/stop`). Runner already has cooperative pause/stop via `state.pause_event` + `state.stop_requested` at check boundaries.
 
-Add to `app/routes/scan.py`:
+Under concurrent-scans Phase B2, these become scoped: `POST /api/v1/scans/{scan_id}/pause|resume|cancel`. The module uses the scoped endpoints; old unscoped endpoints remain as back-compat aliases during transition.
 
-| Endpoint | Behavior |
-|---|---|
-| `POST /api/v1/scan/pause`    | Set `state.status = "paused"`; runner checks flag between checks and sleeps when paused |
-| `POST /api/v1/scan/resume`   | Set `state.status = "running"` |
-| `POST /api/v1/scan/stop`     | Set stop flag; runner aborts current check, writes `state.status = "cancelled"`. Named `/stop` to match the existing web UI call in `static/js/api.js:66`. |
-| `POST /api/v1/scan/start`    | Already exists as `POST /api/v1/scan` — alias for consistency |
-
-The runner (`app/engine/scanner.run_scan`) needs a cooperative pause/stop check. Propose: a single `asyncio.Event` on `state` (`state.pause_event` — set=run, clear=paused), plus a `state.stop_requested` bool the runner checks between checks. Nothing inside individual checks needs to change; pause happens at check boundaries.
-
-**Trade-off flagged:** pausing mid-check is much harder (each check would need cooperative yielding). Accepting "pause at check boundaries" keeps this simple; UX is "click pause, current check finishes, then we hold."
+**Trade-off carried forward:** pausing mid-check remains unsupported. Pause happens at check boundaries.
 
 ### 4.2 Scan-state streaming (optional but recommended)
 
@@ -93,9 +86,9 @@ The runner (`app/engine/scanner.run_scan`) needs a cooperative pause/stop check.
 
 **Recommendation:** ship the module with **polling first**, add SSE later. Polling works; SSE is an optimization. Keeps the module-Phase-1 critical path short.
 
-### 4.3 Single-scan assumption
+### 4.3 Scan selection
 
-Because `_scan_lock` + `state.status` gate a single scan globally, `chainsmith watch` takes no scan-id argument — it attaches to "the" current scan. If core later adds concurrent scans, the module can be taught `--scan <id>` then.
+`chainsmith watch --scan <id>` attaches to a specific scan by id. `chainsmith watch` with no id attaches to the most-recently-started running scan (convenience default when only one is active). Lists available scans via `GET /api/v1/scans` if multiple are running and no id given.
 
 ---
 

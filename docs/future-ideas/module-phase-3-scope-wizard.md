@@ -3,7 +3,9 @@
 **Status:** Design / pending implementation
 **Module name:** `scope-wizard`
 **Tier:** `community`
-**Prerequisite:** Module System (`module-system-design.md`) must land first.
+**Prerequisites:**
+- `concurrent-scans-design.md` Phases A–C must land first. Notably, that design **removes `POST /api/v1/scope`**; the wizard's `--apply` behavior changes to POST inline scope to `/api/v1/scan` instead of the old two-step scope-then-scan flow.
+- Module System (`module-system-design.md`) must land next.
 
 ---
 
@@ -152,14 +154,15 @@ Prompt_toolkit handles: validation on submit, multi-select, auto-completion (for
 
 ## 7. Apply-via-API
 
-When `--apply`:
-1. Build `ExtendedScopeInput` locally.
-2. POST to `/api/v1/scope` (the existing endpoint in `app/routes/scope.py:47`).
-3. On 2xx: print success.
-4. On error: print the server's validation error (don't just say "failed"), exit 1.
-5. If the core API is not reachable (chainsmith server not running), print a helpful message: "Server not reachable at <url>. Run `chainsmith.sh start` first, or drop `--apply` to write YAML only."
+After concurrent-scans lands, `POST /api/v1/scope` is gone; scope is inline on `/api/v1/scan`. `--apply` therefore means "apply and start a scan":
 
-The wizard **does not** start a scan; it only prepares scope. User runs `chainsmith scan` separately.
+1. Build `ExtendedScopeInput` locally.
+2. POST to `/api/v1/scan` with the scope inline.
+3. On 2xx: print success + returned `scan_id`. Suggest `chainsmith watch --scan <id>`.
+4. On error: print the server's validation error (don't just say "failed"), exit 1.
+5. If the core API is not reachable, print a helpful message: "Server not reachable at <url>. Run `chainsmith.sh start` first, or drop `--apply` to write YAML only."
+
+Because `--apply` now also starts a scan, consider renaming to `--run` or adding an explicit confirmation prompt — starting a scan is a side effect the old `--apply` didn't have. Open question below.
 
 ---
 
@@ -180,6 +183,7 @@ The wizard **does not** start a scan; it only prepares scope. User runs `chainsm
 3. **Defaults source.** Should the wizard read existing scope from `/api/v1/scope` and pre-fill defaults from it? (Edge case of edit-existing creeping in — decline in v1 per the non-goals.)
 4. **Scope versioning.** When writing to a file, include a `schema_version: 1` field so future wizard versions can read old files?
 5. **Autocomplete on check names.** Worth doing, since there are 133+ checks. Core needs to expose `GET /api/v1/checks` (it does). Wizard caches the list on first question and autocompletes from it.
+6. **`--apply` semantics change.** With `/api/v1/scope` gone, `--apply` starts a scan as a side effect. Rename to `--run`, add a confirmation prompt, or keep `--apply` and document the behavior change? Leaning toward `--run` for clarity.
 
 ---
 

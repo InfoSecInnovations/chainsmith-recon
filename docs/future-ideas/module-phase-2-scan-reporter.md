@@ -3,7 +3,9 @@
 **Status:** Design / pending implementation
 **Module name:** `scan-reporter`
 **Tier:** `community`
-**Prerequisite:** Module System (`module-system-design.md`) must land first.
+**Prerequisites:**
+- `concurrent-scans-design.md` Phases A–C must land first.
+- Module System (`module-system-design.md`) must land next.
 
 ---
 
