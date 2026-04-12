@@ -17,8 +17,12 @@ Examples:
 
 import hashlib
 import re
+from datetime import datetime
 
 from app.checks.base import Observation, Service
+from app.checks.base import Observation as CheckObservation
+from app.models import Observation as ModelObservation
+from app.models import ObservationSeverity, ObservationStatus
 
 
 def _slugify(value: str) -> str:
@@ -121,6 +125,47 @@ def build_observation(
         check_name=check_name,
         raw_data=raw_data,
         references=references or [],
+    )
+
+
+# ── Observation type conversion ───────────────────────────────────
+#
+# Two Observation types exist:
+#   - app.checks.base.Observation (dataclass) — produced by checks
+#   - app.models.Observation (Pydantic)        — used by agents/engine
+#
+# These functions convert between them.
+
+
+def check_to_model_observation(obs: CheckObservation) -> ModelObservation:
+    """Convert a check-layer Observation (dataclass) to a model-layer Observation (Pydantic)."""
+    return ModelObservation(
+        id=obs.id,
+        observation_type=obs.check_name or "unknown",
+        title=obs.title,
+        description=obs.description,
+        severity=ObservationSeverity(obs.severity),
+        status=ObservationStatus.PENDING,
+        check_name=obs.check_name,
+        discovered_at=datetime.utcnow(),
+        target_url=obs.target_url,
+        target_service=obs.target.url if obs.target else None,
+        evidence_summary=obs.evidence,
+        references=obs.references or [],
+    )
+
+
+def model_to_check_observation(obs: ModelObservation) -> CheckObservation:
+    """Convert a model-layer Observation (Pydantic) to a check-layer Observation (dataclass)."""
+    return CheckObservation(
+        id=obs.id,
+        title=obs.title,
+        description=obs.description,
+        severity=str(obs.severity),
+        evidence=obs.evidence_summary or "",
+        target_url=obs.target_url,
+        check_name=obs.check_name,
+        references=obs.references or [],
     )
 
 

@@ -1,7 +1,7 @@
 """
 Fakobanko Configuration and Findings System
 
-Manages randomized findings, certain findings, and session state.
+Manages randomized observations, certain findings, and session state.
 Supports both standard lab mode and range mode.
 """
 
@@ -23,7 +23,7 @@ WAF_ENABLED = os.getenv("FAKOBANKO_WAF_ENABLED", "false").lower() == "true"
 HONEYPOT_ENABLED = os.getenv("FAKOBANKO_HONEYPOT", "false").lower() == "true"
 RANGE_MODE = os.getenv("FAKOBANKO_RANGE_MODE", "false").lower() == "true"
 
-# Session state file for coordinating findings across containers
+# Session state file for coordinating observations across containers
 SESSION_STATE_PATH = Path(os.getenv("FAKOBANKO_SESSION_STATE", "/data/fakobanko_session.json"))
 
 # Range configuration paths
@@ -34,10 +34,10 @@ RANGE_CONFIG_DIR = Path(os.getenv("FAKOBANKO_RANGE_CONFIG", "/app/range"))
 
 
 class SessionState(BaseModel):
-    """Tracks which findings are active for this session."""
+    """Tracks which observations are active for this session."""
 
     session_id: str
-    active_findings: list[str]
+    active_observations: list[str]
     active_hallucinations: list[str]
     created_at: str
     # Range mode fields (optional)
@@ -48,8 +48,8 @@ class SessionState(BaseModel):
 
 # ─── Standard Lab Findings ─────────────────────────────────────
 
-# Certain findings - always present in standard mode
-CERTAIN_FINDINGS = [
+# Certain observations - always present in standard mode
+CERTAIN_OBSERVATIONS = [
     "header_vllm_version",  # X-Powered-By: vLLM/0.4.1
     "robots_model_admin",  # robots.txt discloses /internal/model-admin
     "chatbot_tool_leak",  # Error messages expose tool names
@@ -60,8 +60,8 @@ CERTAIN_FINDINGS = [
     "version_disclosure",  # Server version in headers
 ]
 
-# Random findings pool - 8-15 selected per session in standard mode
-RANDOM_FINDINGS_POOL = [
+# Random observations pool - 8-15 selected per session in standard mode
+RANDOM_OBSERVATIONS_POOL = [
     # Original findings
     "jwt_shared_secret",
     "embedding_endpoint_exposed",
@@ -258,7 +258,7 @@ def create_range_session() -> SessionState:
 
     session = SessionState(
         session_id=hashlib.sha256(os.urandom(32)).hexdigest()[:16],
-        active_findings=all_findings,
+        active_observations=all_findings,
         active_hallucinations=active_hallucinations,
         created_at=datetime.utcnow().isoformat(),
         range_mode=True,
@@ -278,7 +278,7 @@ def create_standard_session() -> SessionState:
 
     # Select random findings
     num_random = random.randint(8, 15) if RANDOMIZE_FINDINGS else 0
-    active_random = random.sample(RANDOM_FINDINGS_POOL, k=num_random)
+    active_random = random.sample(RANDOM_OBSERVATIONS_POOL, k=num_random)
 
     # Select random hallucinations
     num_hallucinations = random.randint(2, 5)
@@ -287,7 +287,7 @@ def create_standard_session() -> SessionState:
 
     session = SessionState(
         session_id=session_id,
-        active_findings=CERTAIN_FINDINGS + active_random,
+        active_observations=CERTAIN_OBSERVATIONS + active_random,
         active_hallucinations=active_hallucinations,
         created_at=datetime.utcnow().isoformat(),
         range_mode=False,
@@ -342,16 +342,16 @@ def reset_session() -> SessionState:
     return get_or_create_session()
 
 
-def is_finding_active(finding_id: str) -> bool:
+def is_observation_active(finding_id: str) -> bool:
     """Check if a specific finding is active in current session."""
     session = get_or_create_session()
-    return finding_id in session.active_findings
+    return finding_id in session.active_observations
 
 
-def get_active_findings() -> list[str]:
+def get_active_observations() -> list[str]:
     """Get list of all active findings for current session."""
     session = get_or_create_session()
-    return session.active_findings
+    return session.active_observations
 
 
 def get_active_hallucinations() -> list[str]:

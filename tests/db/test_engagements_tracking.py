@@ -234,7 +234,7 @@ class TestObservationStatusTracking:
         # Get the XSS fingerprint
         async with get_session() as session:
             result = await session.execute(
-                select(ObservationRecord.fingerprint).where(ObservationRecord.id == "h-a")
+                select(ObservationRecord.fingerprint).where(ObservationRecord.id == "hist-s1-h-a")
             )
             xss_fp = result.scalar_one()
 

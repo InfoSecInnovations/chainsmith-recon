@@ -18,7 +18,7 @@ import random
 import traceback as tb
 from datetime import datetime
 
-from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_finding_active
+from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_observation_active
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -174,7 +174,7 @@ async def add_headers_and_catch(request: Request, call_next):
             )
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
-    if is_finding_active("version_disclosure"):
+    if is_observation_active("version_disclosure"):
         response.headers["X-Powered-By"] = "FastAPI/0.111.0"
         response.headers["X-API-Version"] = "helpdesk-api/1.3.0"
         response.headers["Server"] = "uvicorn/0.29.0"
@@ -210,7 +210,7 @@ async def list_users(request: Request, user: str | None = Depends(get_current_us
     unauthed_user_endpoint finding — accessible without authentication.
     Should require auth but the check is bypassed when finding is active.
     """
-    if not is_finding_active("unauthed_user_endpoint") and not user:
+    if not is_observation_active("unauthed_user_endpoint") and not user:
         raise HTTPException(401, "Authentication required")
 
     return {
@@ -218,7 +218,7 @@ async def list_users(request: Request, user: str | None = Depends(get_current_us
         "total": len(USERS),
         # api_key_in_error finding — internal detail in normal response too
         "_source": "http://demo-domain-api:8202/api/v1/users"
-        if is_finding_active("api_key_in_error")
+        if is_observation_active("api_key_in_error")
         else None,
     }
 
@@ -226,7 +226,7 @@ async def list_users(request: Request, user: str | None = Depends(get_current_us
 @app.get("/api/v1/users/{user_id}")
 async def get_user(user_id: str, user: str | None = Depends(get_current_user)):
     """Get a single user. Auth required — unless unauthed_user_endpoint active."""
-    if not is_finding_active("unauthed_user_endpoint") and not user:
+    if not is_observation_active("unauthed_user_endpoint") and not user:
         raise HTTPException(401, "Authentication required")
 
     found = next((u for u in USERS if u["id"] == user_id), None)
@@ -313,7 +313,7 @@ async def admin_config(request: Request, user: str | None = Depends(get_current_
 @app.get("/_debug")
 async def debug_info(request: Request):
     """debug_endpoints finding — exposes internal configuration."""
-    if not is_finding_active("debug_endpoints"):
+    if not is_observation_active("debug_endpoints"):
         raise HTTPException(404, "Not found")
     return {
         "service": "demo-domain-api",
@@ -327,7 +327,7 @@ async def debug_info(request: Request):
         },
         "database": "sqlite:///data/helpdesk.db",
         "valid_tokens": list(VALID_TOKENS.keys())
-        if is_finding_active("verbose_errors")
+        if is_observation_active("verbose_errors")
         else "[redacted]",
         "session_id": get_or_create_session().session_id,
     }

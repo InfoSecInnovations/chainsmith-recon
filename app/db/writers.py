@@ -18,6 +18,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.db.repositories import CheckLogRepository, ObservationRepository
 
 if TYPE_CHECKING:
@@ -91,7 +93,7 @@ class ObservationWriter:
 
         try:
             await self._repo.bulk_create(self.scan_id, batch)
-        except Exception:
+        except SQLAlchemyError:
             logger.warning(
                 "DB write failed — switching to scratch-space fallback for scan %s",
                 self.scan_id,
@@ -108,7 +110,7 @@ class ObservationWriter:
             path = scratch / f"{self._scratch_seq:04d}.json"
             try:
                 path.write_text(json.dumps(obs, default=str), encoding="utf-8")
-            except Exception:
+            except OSError:
                 logger.error("Failed to write scratch file %s", path, exc_info=True)
 
     def _get_scratch_path(self) -> Path:
@@ -120,7 +122,7 @@ class ObservationWriter:
             # Write metadata file for the scratch-to-db tool
             meta_path = self._scratch_dir / self.scan_id / "metadata.json"
             if not meta_path.exists():
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(OSError):
                     meta_path.write_text(
                         json.dumps({"scan_id": self.scan_id, "reason": "db_write_failure"}),
                         encoding="utf-8",
@@ -153,7 +155,7 @@ class CheckLogWriter:
         """Persist a single check log event."""
         try:
             await self._repo.bulk_create(self.scan_id, [entry])
-        except Exception:
+        except SQLAlchemyError:
             logger.warning(
                 "Failed to persist check log event for scan %s: %s",
                 self.scan_id,

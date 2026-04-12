@@ -32,16 +32,16 @@ scenario.json schema:
         "known_hosts": ["www", "chat", "api"],
         "ports": [8080, 8081, 8082]
       },
-      "simulations": [
-        "network/dns_fakobanko.yaml",
-        "web/headers_fakobanko.yaml"
-      ],
+      "simulations": [],
       "expected_observations": ["dns_enumeration-fakobanko.local"],
       "expected_chains": ["ai_service_prompt_injection"]
     }
 
-Simulation paths are relative paths resolved against scenario-specific
-and global simulation directories.
+The simulations array is normally empty — all checks run for real against
+the scenario's services. Simulations are only needed when a specific check
+must be spoofed (e.g., the target can't withstand a particular test, or
+for development). When populated, paths are relative and resolved against
+scenario-specific and global simulation directories.
 
 """
 
@@ -49,11 +49,14 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.checks.simulator.simulated_check import SimulatedCheck, load_simulated_check
+
+logger = logging.getLogger(__name__)
 
 # ── Default search paths ──────────────────────────────────────────
 
@@ -281,6 +284,8 @@ class ScenarioManager:
                 errors.append(f"Failed to load {resolved_path}: {e}")
 
         if errors:
+            for err in errors:
+                logger.warning("Scenario '%s' simulation load: %s", name_or_path, err)
             scenario.description += f" [WARNINGS: {'; '.join(errors)}]"
 
         self._active = scenario

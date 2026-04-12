@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -86,6 +87,16 @@ async def lifespan(app: FastAPI):
 # ─── App ──────────────────────────────────────────────────────
 
 app = FastAPI(title="Chainsmith Recon", version="1.3.0", lifespan=lifespan)
+
+# ─── CORS ─────────────────────────────────────────────────────
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ─── Static Files ─────────────────────────────────────────────

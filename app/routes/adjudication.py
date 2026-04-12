@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_adjudication_lock = asyncio.Lock()
 _adjudication_repo = AdjudicationRepository()
 _observation_repo = ObservationRepository()
 _scan_repo = ScanRepository()
@@ -47,10 +48,10 @@ async def start_adjudication():
     if not obs:
         raise HTTPException(400, "No observations to adjudicate. Run a scan first.")
 
-    if state.adjudication_status == "adjudicating":
-        raise HTTPException(409, "Adjudication already running.")
-
-    state.adjudication_status = "adjudicating"
+    async with _adjudication_lock:
+        if state.adjudication_status == "adjudicating":
+            raise HTTPException(409, "Adjudication already running.")
+        state.adjudication_status = "adjudicating"
 
     asyncio.create_task(run_adjudication(state))
 

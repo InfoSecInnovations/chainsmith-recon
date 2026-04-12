@@ -239,6 +239,7 @@ class SimulatedCheck(BaseCheck):
                 if isinstance(host_entry, dict):
                     host = host_entry.get("name", host_entry.get("host", ""))
                     port = int(host_entry.get("port", 80))
+                    port = max(1, min(port, 65535))
                     ip = host_entry.get("ip", host)
                     scheme = host_entry.get("scheme", "http")
                     svc_type = host_entry.get("service_type", host_entry.get("type", "unknown"))

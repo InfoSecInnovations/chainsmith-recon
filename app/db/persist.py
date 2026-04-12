@@ -13,6 +13,8 @@ import time
 import uuid
 from typing import TYPE_CHECKING
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.config import get_config
 from app.db.repositories import (
     AdjudicationRepository,
@@ -53,7 +55,7 @@ async def on_scan_start(state: AppState, db: Database | None = None) -> str | No
             mgr = get_scenario_manager()
             if mgr.is_active:
                 scenario_mgr = mgr.active.name
-        except Exception:
+        except (ImportError, AttributeError):
             pass
 
         scan_repo = ScanRepository(db)
@@ -66,7 +68,7 @@ async def on_scan_start(state: AppState, db: Database | None = None) -> str | No
             engagement_id=getattr(state, "engagement_id", None),
         )
         return scan_id
-    except Exception:
+    except (SQLAlchemyError, ValueError):
         logger.warning(
             "Failed to persist scan start — scan will continue without persistence", exc_info=True
         )
@@ -124,11 +126,11 @@ async def on_scan_complete(
                     f"{statuses.get('resolved', 0)} resolved, "
                     f"{statuses.get('regressed', 0)} regressed"
                 )
-            except Exception:
+            except SQLAlchemyError:
                 logger.warning("Failed to compute observation statuses", exc_info=True)
 
         logger.info(f"Scan {scan_id} persisted: {obs_count} observations")
-    except Exception:
+    except SQLAlchemyError:
         logger.warning(
             "Failed to persist scan results — data may be partially written via streaming writers",
             exc_info=True,
@@ -151,7 +153,7 @@ async def on_adjudication_complete(
         adjudication_repo = AdjudicationRepository(db)
         count = await adjudication_repo.bulk_create(scan_id, results)
         logger.info(f"Persisted {count} adjudication results for scan {scan_id}")
-    except Exception:
+    except SQLAlchemyError:
         logger.warning(
             "Failed to persist adjudication results",
             exc_info=True,
@@ -174,7 +176,7 @@ async def on_triage_complete(
         triage_repo = TriageRepository(db)
         plan_id = await triage_repo.create_plan(scan_id, plan)
         logger.info(f"Persisted triage plan {plan_id} for scan {scan_id}")
-    except Exception:
+    except SQLAlchemyError:
         logger.warning(
             "Failed to persist triage plan",
             exc_info=True,

@@ -227,8 +227,8 @@ class CheckLauncher:
         logger.info(f"Running: {name}")
 
         try:
-            # Run the check (await since checks are async)
-            result = await check.run(self.context)
+            # Run the check through execute() for timeout protection
+            result = await check.execute(self.context)
 
             self.completed.add(name)
 
@@ -293,7 +293,7 @@ class CheckLauncher:
             logger.info(f"  Completed: {name} — {len(observations)} observations")
             return (True, len(observations))
 
-        except Exception as e:
+        except (TimeoutError, ValueError, AttributeError, RuntimeError) as e:
             logger.error(f"  Failed: {name} — {e}")
             self.failed.add(name)
             return (False, 0)
@@ -437,7 +437,7 @@ class CheckLauncher:
 
             prefs = get_preferences()
             return resolve_on_critical(prefs, suite)
-        except Exception:
+        except (ImportError, KeyError, AttributeError):
             return "annotate"  # Safe default
 
     def _extract_host(self, obs_obj) -> str | None:

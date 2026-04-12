@@ -58,7 +58,7 @@ def load_remediation_kb(kb_path: str | None = None) -> list[dict]:
             return data
         logger.warning("Remediation KB is not a JSON array")
         return []
-    except Exception as e:
+    except (FileNotFoundError, OSError, json.JSONDecodeError) as e:
         logger.warning("Failed to load remediation KB: %s", e)
         return []
 
@@ -464,7 +464,7 @@ class TriageAgent:
                         category=raw.get("category", ""),
                     )
                 )
-            except Exception as e:
+            except (KeyError, ValueError, TypeError) as e:
                 logger.warning("Failed to parse triage action: %s", e)
 
         # Count quick wins and strategic fixes

@@ -161,70 +161,10 @@ class ChainOrchestrator:
         self._build_dependency_graph()
 
     def _infer_suite(self, check: BaseCheck) -> str:
-        """Infer suite from check name or module."""
-        name = check.name.lower()
+        """Infer suite from check name. Delegates to canonical infer_suite."""
+        from app.check_resolver import infer_suite
 
-        # Check name patterns
-        suite_patterns = {
-            "network": [
-                "dns",
-                "wildcard_dns",
-                "geoip",
-                "reverse_dns",
-                "port_scan",
-                "tls_analysis",
-                "service_probe",
-                "http_method_enum",
-                "banner_grab",
-            ],
-            "web": [
-                "header",
-                "robots",
-                "path",
-                "openapi",
-                "cors",
-                "webdav",
-                "vcs_exposure",
-                "config_exposure",
-                "directory_listing",
-                "default_creds",
-                "debug_endpoints",
-                "cookie_security",
-                "auth_detection",
-                "waf_detection",
-                "sitemap",
-                "redirect_chain",
-                "error_page",
-                "ssrf_indicator",
-                "favicon",
-                "http2_detection",
-                "hsts_preload",
-                "sri_check",
-                "mass_assignment",
-            ],
-            "ai": [
-                "llm",
-                "embedding",
-                "model_info",
-                "fingerprint",
-                "error",
-                "tool_discovery",
-                "prompt",
-                "rate_limit",
-                "filter",
-                "context_window",
-            ],
-            "mcp": ["mcp"],
-            "agent": ["agent", "goal_injection"],
-            "rag": ["rag", "indirect_injection"],
-            "cag": ["cag", "cache"],
-        }
-
-        for suite, patterns in suite_patterns.items():
-            if any(p in name for p in patterns):
-                return suite
-
-        return "unknown"
+        return infer_suite(check.name)
 
     def _build_dependency_graph(self):
         """Build check dependency graph based on produces/conditions."""
@@ -481,23 +421,10 @@ class ChainOrchestrator:
 
     def _merge_services(self, new_services: list[Service]):
         """Merge new services into context."""
-        if not new_services:
-            return
+        from app.lib.services import merge_services
 
         existing = self.context.get("services", [])
-        existing_urls = set()
-
-        for svc in existing:
-            url = svc.url if isinstance(svc, Service) else svc.get("url", "")
-            existing_urls.add(url)
-
-        for svc in new_services:
-            url = svc.url if isinstance(svc, Service) else svc.get("url", "")
-            if url not in existing_urls:
-                existing.append(svc)
-                existing_urls.add(url)
-
-        self.context["services"] = existing
+        self.context["services"] = merge_services(existing, new_services)
 
     def _is_in_scope(self, url: str) -> bool:
         """Check if URL is within scope."""

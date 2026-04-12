@@ -26,7 +26,7 @@ from datetime import datetime
 from typing import Any
 
 from demo_domain import llm
-from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_finding_active
+from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_observation_active
 from demo_domain.tools import execute_tool, get_active_tools
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -226,7 +226,7 @@ async def add_headers(request: Request, call_next):
             )
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
-    if is_finding_active("version_disclosure"):
+    if is_observation_active("version_disclosure"):
         response.headers["X-Agent-Version"] = "helpdesk-agent/0.4.0-beta"
         response.headers["X-MCP-Server"] = "helpdesk-mcp/1.0"
 
@@ -246,7 +246,7 @@ def handle_initialize(params: dict) -> dict:
 
 def handle_tools_list(params: dict) -> dict:
     tools = list(MCP_PUBLIC_TOOLS)
-    if is_finding_active("mcp_tools_exposed"):
+    if is_observation_active("mcp_tools_exposed"):
         tools.extend(MCP_SENSITIVE_TOOLS)
     return {"tools": tools}
 
@@ -265,7 +265,7 @@ def handle_tools_call(params: dict) -> dict:
 
     fn = tool_map.get(name)
     if not fn:
-        if is_finding_active("mcp_backend_leakage"):
+        if is_observation_active("mcp_backend_leakage"):
             available = list(tool_map.keys())
             return {
                 "content": [
@@ -289,7 +289,7 @@ def handle_tools_call(params: dict) -> dict:
 
 def handle_resources_list(params: dict) -> dict:
     resources = list(MCP_PUBLIC_RESOURCES)
-    if is_finding_active("mcp_resources_exposed"):
+    if is_observation_active("mcp_resources_exposed"):
         resources.extend(MCP_SENSITIVE_RESOURCES)
     return {"resources": resources}
 
@@ -297,7 +297,7 @@ def handle_resources_list(params: dict) -> dict:
 def handle_resources_read(params: dict) -> dict:
     uri = params.get("uri", "")
     # Simulate resource content with topology leakage
-    if is_finding_active("mcp_backend_leakage"):
+    if is_observation_active("mcp_backend_leakage"):
         return {
             "contents": [
                 {
@@ -414,7 +414,7 @@ async def get_memory(session_id: str | None = None):
     cross_session_memory finding — returns all memory, not scoped to session.
     If session_id is passed it's ignored.
     """
-    if not is_finding_active("cross_session_memory"):
+    if not is_observation_active("cross_session_memory"):
         if not session_id:
             raise HTTPException(400, "session_id required")
         scoped = [m for m in GLOBAL_MEMORY if m["session_id"] == session_id]
@@ -569,5 +569,5 @@ async def health():
         "session_id": session.session_id,
         "memory_entries": len(GLOBAL_MEMORY),
         "mcp_tools": len(MCP_PUBLIC_TOOLS)
-        + (len(MCP_SENSITIVE_TOOLS) if is_finding_active("mcp_tools_exposed") else 0),
+        + (len(MCP_SENSITIVE_TOOLS) if is_observation_active("mcp_tools_exposed") else 0),
     }

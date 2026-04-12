@@ -17,6 +17,7 @@ Endpoints:
 """
 
 import logging
+import re
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
@@ -36,6 +37,12 @@ from app.db.repositories import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _sanitize_filename(value: str) -> str:
+    """Strip non-alphanumeric characters from a value for use in filenames."""
+    return re.sub(r"[^a-zA-Z0-9_\-]", "", value)
+
 
 _scan_repo = ScanRepository()
 _observation_repo = ObservationRepository()
@@ -106,7 +113,9 @@ async def export_scan_observations_csv(
     return Response(
         content=csv_content,
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=observations-{scan_id[:8]}.csv"},
+        headers={
+            "Content-Disposition": f"attachment; filename=observations-{_sanitize_filename(scan_id[:8])}.csv"
+        },
     )
 
 

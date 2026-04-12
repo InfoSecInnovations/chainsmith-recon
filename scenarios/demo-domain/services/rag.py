@@ -17,7 +17,7 @@ import hashlib
 import traceback as tb
 from datetime import datetime
 
-from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_finding_active
+from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_observation_active
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -227,7 +227,7 @@ async def add_headers(request: Request, call_next):
             )
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
-    if is_finding_active("version_disclosure"):
+    if is_observation_active("version_disclosure"):
         response.headers["X-Powered-By"] = "FastAPI/0.111.0"
         response.headers["X-RAG-Version"] = "knowledge-base/1.1.0"
         response.headers["X-Embedding-Model"] = "demo-embed-v1"
@@ -255,7 +255,7 @@ async def search(req: SearchRequest, request: Request):
     rag_indirect_injection finding — crafted queries can manipulate context.
     rag_source_attribution finding — source citations can be spoofed.
     """
-    if not is_finding_active("rag_endpoint_exposed"):
+    if not is_observation_active("rag_endpoint_exposed"):
         auth = request.headers.get("authorization")
         if not auth:
             raise HTTPException(401, "Authentication required")
@@ -285,7 +285,7 @@ async def search(req: SearchRequest, request: Request):
         }
 
         # rag_source_attribution finding — include raw source that can be spoofed
-        if is_finding_active("rag_source_attribution"):
+        if is_observation_active("rag_source_attribution"):
             result["source"] = {
                 "author": doc["metadata"].get("author"),
                 "uri": f"rag://docs/{doc['id']}",
@@ -293,7 +293,7 @@ async def search(req: SearchRequest, request: Request):
             }
 
         # rag_indirect_injection finding — echo back query context
-        if is_finding_active("rag_indirect_injection"):
+        if is_observation_active("rag_indirect_injection"):
             result["context_window"] = {
                 "query": req.query,
                 "augmented_prompt": f"Answer using this context:\n\n{doc['content']}\n\nUser query: {req.query}",
@@ -316,7 +316,7 @@ async def list_collections(request: Request):
     """
     rag_collection_enum finding — collection listing exposed without auth.
     """
-    if not is_finding_active("rag_collection_enum"):
+    if not is_observation_active("rag_collection_enum"):
         auth = request.headers.get("authorization")
         if not auth:
             raise HTTPException(401, "Authentication required")
@@ -336,7 +336,7 @@ async def ingest(req: IngestRequest, request: Request):
     rag_corpus_poisoning finding — document ingestion endpoint writable
     without auth. Allows injecting arbitrary content into the knowledge base.
     """
-    if not is_finding_active("rag_corpus_poisoning"):
+    if not is_observation_active("rag_corpus_poisoning"):
         auth = request.headers.get("authorization")
         if not auth:
             raise HTTPException(401, "Authentication required")
@@ -379,7 +379,7 @@ async def get_document(doc_id: str, request: Request):
     if not doc:
         raise HTTPException(404, f"Document {doc_id} not found")
 
-    if not is_finding_active("rag_document_exfil"):
+    if not is_observation_active("rag_document_exfil"):
         auth = request.headers.get("authorization")
         if not auth:
             raise HTTPException(401, "Authentication required")

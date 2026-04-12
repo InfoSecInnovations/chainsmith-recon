@@ -56,7 +56,12 @@ class Database:
             logger.info(f"SQLite database path: {db_path.resolve()}")
 
         url = _build_url(backend, db_path, postgresql_url)
-        self._engine = create_async_engine(url, echo=False)
+        self._engine = create_async_engine(
+            url,
+            echo=False,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+        )
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
 
         async with self._engine.begin() as conn:

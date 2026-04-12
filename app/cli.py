@@ -2232,7 +2232,7 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
             for f in obs_files:
                 try:
                     observations.append(json.loads(f.read_text(encoding="utf-8")))
-                except Exception as e:
+                except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
                     click.echo(click.style(f"  Warning: could not read {f.name}: {e}", fg="yellow"))
 
             if not observations:
@@ -2277,7 +2277,7 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
                 try:
                     shutil.rmtree(scan_dir)
                     click.echo(f"    Cleaned up {scan_dir}")
-                except Exception as e:
+                except OSError as e:
                     click.echo(
                         click.style(f"    Warning: could not remove {scan_dir}: {e}", fg="yellow")
                     )
@@ -2335,7 +2335,7 @@ def scratch_list():
             try:
                 data = json.loads(meta_file.read_text(encoding="utf-8"))
                 meta = f" ({data.get('reason', '')})"
-            except Exception:
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
                 pass
         click.echo(f"  {d.name}: {file_count} observation(s){meta}")
 
@@ -2502,7 +2502,7 @@ def swarm_status(ctx):
     try:
         resp = httpx.get(f"http://{server}/api/swarm/status", timeout=5.0)
         resp.raise_for_status()
-    except Exception as e:
+    except (httpx.NetworkError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
         click.echo(click.style(f"Failed to reach coordinator: {e}", fg="red"), err=True)
         sys.exit(1)
 

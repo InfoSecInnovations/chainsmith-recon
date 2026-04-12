@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fakobanko.config import (
     VERBOSE_ERRORS,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 app = FastAPI(
@@ -26,7 +26,7 @@ app = FastAPI(
 # Custom exception handler for verbose errors
 @app.exception_handler(Exception)
 async def verbose_exception_handler(request: Request, exc: Exception):
-    if VERBOSE_ERRORS and is_finding_active("debug_mode_enabled"):
+    if VERBOSE_ERRORS and is_observation_active("debug_mode_enabled"):
         tb = traceback.format_exc()
         return Response(
             content=f"Internal Server Error\n\n{tb}",
@@ -42,16 +42,16 @@ async def add_headers(request: Request, call_next):
     response = await call_next(request)
 
     # Always leak vLLM version (certain finding)
-    if is_finding_active("header_vllm_version"):
+    if is_observation_active("header_vllm_version"):
         response.headers["X-Powered-By"] = "vLLM/0.4.1"
 
     # Conditional CORS misconfiguration
-    if is_finding_active("cors_misconfigured"):
+    if is_observation_active("cors_misconfigured"):
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Credentials"] = "true"
 
     # Model temperature leak
-    if is_finding_active("model_temperature_exposed"):
+    if is_observation_active("model_temperature_exposed"):
         response.headers["X-Model-Config"] = "temperature=0.7;top_p=0.9;max_tokens=2048"
 
     return response

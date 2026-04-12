@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from fakobanko.config import get_or_create_session, is_finding_active
+from fakobanko.config import get_or_create_session, is_observation_active
 
 app = FastAPI(
     title="Fakobanko MCP Server",
@@ -97,7 +97,7 @@ SENSITIVE_RESOURCES = [
 
 def handle_initialize(params: dict) -> dict:
     capabilities = {"tools": {}, "resources": {}}
-    if is_finding_active("dynamic_tool_loading"):
+    if is_observation_active("dynamic_tool_loading"):
         capabilities["tools"]["dynamicRegistration"] = True
     return {
         "protocolVersion": "2024-11-05",
@@ -108,7 +108,7 @@ def handle_initialize(params: dict) -> dict:
 
 def handle_tools_list(params: dict) -> dict:
     tools = list(MCP_TOOLS)
-    if is_finding_active("mcp_endpoint_exposed"):
+    if is_observation_active("mcp_endpoint_exposed"):
         tools.extend(SENSITIVE_TOOLS)
     tools.extend(DYNAMIC_TOOLS.values())
     return {"tools": tools}
@@ -122,7 +122,7 @@ def handle_tools_call(params: dict) -> dict:
 
 
 def handle_tools_register(params: dict) -> dict:
-    if not is_finding_active("dynamic_tool_loading"):
+    if not is_observation_active("dynamic_tool_loading"):
         raise HTTPException(403, "Dynamic tool registration disabled")
     tool = params.get("tool", {})
     DYNAMIC_TOOLS[tool.get("name")] = tool
@@ -131,7 +131,7 @@ def handle_tools_register(params: dict) -> dict:
 
 def handle_resources_list(params: dict) -> dict:
     resources = list(MCP_RESOURCES)
-    if is_finding_active("resource_list_exposed"):
+    if is_observation_active("resource_list_exposed"):
         resources.extend(SENSITIVE_RESOURCES)
     return {"resources": resources}
 
@@ -200,7 +200,7 @@ async def sse_endpoint():
 @app.get("/.well-known/mcp")
 async def mcp_discovery():
     """MCP discovery endpoint."""
-    if not is_finding_active("mcp_endpoint_exposed"):
+    if not is_observation_active("mcp_endpoint_exposed"):
         raise HTTPException(404, "Not found")
 
     return {
@@ -210,6 +210,6 @@ async def mcp_discovery():
         "capabilities": {
             "tools": True,
             "resources": True,
-            "dynamic_tools": is_finding_active("dynamic_tool_loading"),
+            "dynamic_tools": is_observation_active("dynamic_tool_loading"),
         },
     }

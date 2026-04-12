@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlparse
 
-from app.checks.base import BaseCheck, CheckStatus, Observation, Service
+from app.checks.base import BaseCheck, CheckStatus, Observation
 from app.lib.targets import host_matches_pattern
 
 
@@ -183,32 +183,10 @@ class CheckRunner:
 
         # Merge services (don't overwrite, extend)
         if result.services:
+            from app.lib.services import merge_services
+
             existing_services = self.context.get("services", [])
-            # Convert to list of dicts for comparison
-            existing_urls = {
-                s.url if isinstance(s, Service) else s.get("url") for s in existing_services
-            }
-
-            for service in result.services:
-                svc_url = service.url if isinstance(service, Service) else service.get("url")
-                if svc_url not in existing_urls:
-                    existing_services.append(service)
-                else:
-                    # Update existing service with new info
-                    for _i, existing in enumerate(existing_services):
-                        existing_url = (
-                            existing.url if isinstance(existing, Service) else existing.get("url")
-                        )
-                        if existing_url == svc_url:
-                            if isinstance(service, Service) and isinstance(existing, Service):
-                                # Merge metadata
-                                existing.metadata.update(service.metadata)
-                                existing.service_type = (
-                                    service.service_type or existing.service_type
-                                )
-                            break
-
-            self.context["services"] = existing_services
+            self.context["services"] = merge_services(existing_services, result.services)
 
         # Process observations
         for observation in result.observations:

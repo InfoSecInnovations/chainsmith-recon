@@ -32,10 +32,10 @@ SESSION_STATE_PATH = Path(os.getenv("DEMO_DOMAIN_SESSION_STATE", "/data/demo_ses
 
 
 class SessionState(BaseModel):
-    """Tracks which findings are active for this session."""
+    """Tracks which observations are active for this session."""
 
     session_id: str
-    active_findings: list[str]
+    active_observations: list[str]
     active_hallucinations: list[str]
     created_at: str
     # Range mode fields (optional)
@@ -46,8 +46,8 @@ class SessionState(BaseModel):
 
 # ─── Standard Lab Findings ─────────────────────────────────────
 
-# Certain findings - always present in standard mode
-CERTAIN_FINDINGS = [
+# Certain observations - always present in standard mode
+CERTAIN_OBSERVATIONS = [
     "version_disclosure",
     "missing_security_headers",
     "robots_sensitive_paths",
@@ -55,8 +55,8 @@ CERTAIN_FINDINGS = [
     "cors_wildcard",
 ]
 
-# Random findings pool - 5-10 selected per session in standard mode
-RANDOM_FINDINGS_POOL = [
+# Random observations pool - 5-10 selected per session in standard mode
+RANDOM_OBSERVATIONS_POOL = [
     "unauthed_docs",
     "tool_schema_exposed",
     "no_rate_limit",
@@ -104,7 +104,7 @@ def create_standard_session() -> SessionState:
 
     # Select 5-10 random findings from pool
     num_random = random.randint(5, 10)
-    active_random = random.sample(RANDOM_FINDINGS_POOL, k=num_random)
+    active_random = random.sample(RANDOM_OBSERVATIONS_POOL, k=num_random)
 
     # Select random hallucinations
     num_hallucinations = random.randint(2, 5)
@@ -113,7 +113,7 @@ def create_standard_session() -> SessionState:
 
     session = SessionState(
         session_id=session_id,
-        active_findings=CERTAIN_FINDINGS + active_random,
+        active_observations=CERTAIN_OBSERVATIONS + active_random,
         active_hallucinations=active_hallucinations,
         created_at=datetime.utcnow().isoformat(),
         range_mode=False,
@@ -164,13 +164,13 @@ def reset_session() -> SessionState:
     return get_or_create_session()
 
 
-def is_finding_active(finding_id: str) -> bool:
+def is_observation_active(finding_id: str) -> bool:
     """Check if a specific finding is active in current session."""
     session = get_or_create_session()
-    return finding_id in session.active_findings
+    return finding_id in session.active_observations
 
 
-def get_active_findings() -> list[str]:
+def get_active_observations() -> list[str]:
     """Get list of all active findings for current session."""
     session = get_or_create_session()
-    return session.active_findings
+    return session.active_observations

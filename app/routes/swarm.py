@@ -170,16 +170,10 @@ async def list_agents(key_id: str = Depends(require_swarm_auth)):
 
 
 @router.post("/keys", status_code=201)
-async def create_key(body: KeyCreateRequest):
-    """
-    Create a new swarm API key.
-
-    No auth required -- key management is expected to be done on the
-    coordinator host itself (or behind a network boundary). The raw
-    key is returned once and never stored.
-    """
-    key_id, raw_key = await create_api_key(body.name)
-    return {"key_id": key_id, "name": body.name, "raw_key": raw_key}
+async def create_key(body: KeyCreateRequest, key_id: str = Depends(require_swarm_auth)):
+    """Create a new swarm API key. Requires existing auth."""
+    new_key_id, raw_key = await create_api_key(body.name)
+    return {"key_id": new_key_id, "name": body.name, "raw_key": raw_key}
 
 
 @router.get("/keys")

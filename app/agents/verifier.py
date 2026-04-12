@@ -6,6 +6,7 @@ Validates Scout's observations, catches hallucinations, assigns confidence score
 
 import asyncio
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 
@@ -22,6 +23,8 @@ from app.models import (
     ObservationStatus,
 )
 from app.tools import verify_cve, verify_endpoint_exists, verify_version_claim
+
+logger = logging.getLogger(__name__)
 
 VERIFIER_SYSTEM_PROMPT = """You are Verifier, an AI agent that validates reconnaissance observations.
 
@@ -224,6 +227,9 @@ class VerifierAgent:
                     max_tokens=2048,
                 )
 
+                if not response.choices:
+                    logger.warning("Verifier received empty choices array from LLM")
+                    break
                 msg = response.choices[0].message
 
                 if msg.tool_calls:
@@ -289,7 +295,7 @@ class VerifierAgent:
                 )
             )
 
-        except Exception as e:
+        except (KeyError, ValueError, RuntimeError) as e:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.ERROR,
@@ -443,7 +449,7 @@ class VerifierAgent:
 
             return {"error": f"Unknown tool: {name}"}
 
-        except Exception as e:
+        except (KeyError, ValueError, RuntimeError) as e:
             await self.emit(
                 AgentEvent(
                     event_type=EventType.ERROR,

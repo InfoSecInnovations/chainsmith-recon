@@ -14,13 +14,13 @@ from datetime import datetime
 from fastapi import APIRouter
 
 from app.api_models import ExtendedScopeInput, ScanSettings
+from app.guardian import Guardian
 from app.preferences import (
     SUITES_WITH_ON_CRITICAL,
     VALID_ON_CRITICAL_VALUES,
     get_profile_store,
     save_profile_store,
 )
-from app.guardian import Guardian
 from app.proof_of_scope import EngagementWindow, violation_logger
 from app.state import state
 
@@ -95,12 +95,11 @@ async def set_scope(scope: ExtendedScopeInput):
                 oc = scope.scan_behavior.on_critical
                 if oc.default in VALID_ON_CRITICAL_VALUES:
                     prefs.checks.on_critical = oc.default
-                for suite in SUITES_WITH_ON_CRITICAL:
-                    suite_val = getattr(oc, suite, None)
-                    if suite_val is not None and suite_val in VALID_ON_CRITICAL_VALUES:
-                        setattr(prefs.checks, f"on_critical_{suite}", suite_val)
-                    else:
-                        setattr(prefs.checks, f"on_critical_{suite}", None)
+                prefs.checks.on_critical_overrides = {
+                    suite: val
+                    for suite, val in oc.overrides.items()
+                    if val in VALID_ON_CRITICAL_VALUES and suite in SUITES_WITH_ON_CRITICAL
+                }
 
             # Apply intrusive_web
             prefs.checks.intrusive_web = scope.scan_behavior.intrusive_web
@@ -113,11 +112,7 @@ async def set_scope(scope: ExtendedScopeInput):
 
             scan_behavior_response = {
                 "on_critical": prefs.checks.on_critical,
-                "on_critical_overrides": {
-                    suite: getattr(prefs.checks, f"on_critical_{suite}")
-                    for suite in SUITES_WITH_ON_CRITICAL
-                    if getattr(prefs.checks, f"on_critical_{suite}") is not None
-                },
+                "on_critical_overrides": prefs.checks.on_critical_overrides,
                 "intrusive_web": prefs.checks.intrusive_web,
             }
         except Exception as e:
@@ -160,11 +155,7 @@ async def get_scope():
         prefs = get_preferences()
         scan_behavior = {
             "on_critical": prefs.checks.on_critical,
-            "on_critical_overrides": {
-                suite: getattr(prefs.checks, f"on_critical_{suite}")
-                for suite in SUITES_WITH_ON_CRITICAL
-                if getattr(prefs.checks, f"on_critical_{suite}") is not None
-            },
+            "on_critical_overrides": prefs.checks.on_critical_overrides,
             "intrusive_web": prefs.checks.intrusive_web,
         }
     except Exception:

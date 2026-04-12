@@ -205,7 +205,7 @@ def _load_yaml_file(path: Path) -> dict:
         with open(path) as fh:
             data = _yaml.safe_load(fh) or {}
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except (OSError, _yaml.YAMLError):
         return {}
 
 
@@ -261,24 +261,24 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
 
     if "storage" in data and isinstance(data["storage"], dict):
         st = data["storage"]
-        sc = cfg.storage
+        stc = cfg.storage
         if "backend" in st:
-            sc.backend = str(st["backend"])
+            stc.backend = str(st["backend"])
         if "db_path" in st or "sqlite" in st:
             # Support both storage.db_path and storage.sqlite.path
             if "db_path" in st:
-                sc.db_path = Path(st["db_path"])
+                stc.db_path = Path(st["db_path"])
             elif isinstance(st["sqlite"], dict) and "path" in st["sqlite"]:
-                sc.db_path = Path(st["sqlite"]["path"])
+                stc.db_path = Path(st["sqlite"]["path"])
         if "postgresql" in st and isinstance(st["postgresql"], dict):
             if "url" in st["postgresql"]:
-                sc.postgresql_url = str(st["postgresql"]["url"])
+                stc.postgresql_url = str(st["postgresql"]["url"])
         if "postgresql_url" in st:
-            sc.postgresql_url = str(st["postgresql_url"])
+            stc.postgresql_url = str(st["postgresql_url"])
         if "auto_persist" in st:
-            sc.auto_persist = bool(st["auto_persist"])
+            stc.auto_persist = bool(st["auto_persist"])
         if "retention_days" in st:
-            sc.retention_days = int(st["retention_days"])
+            stc.retention_days = int(st["retention_days"])
 
     if "swarm" in data and isinstance(data["swarm"], dict):
         sw = data["swarm"]

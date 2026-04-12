@@ -200,7 +200,9 @@ class TestOverrideWithHistory:
         # Get the fingerprint
         async with get_session() as session:
             result = await session.execute(
-                select(ObservationRecord.fingerprint).where(ObservationRecord.id == "ov-f1")
+                select(ObservationRecord.fingerprint).where(
+                    ObservationRecord.id == "ov-scan--ov-f1"
+                )
             )
             fp = result.scalar_one()
 
@@ -246,7 +248,9 @@ class TestOverrideWithHistory:
 
         async with get_session() as session:
             result = await session.execute(
-                select(ObservationRecord.fingerprint).where(ObservationRecord.id == "ro-f1")
+                select(ObservationRecord.fingerprint).where(
+                    ObservationRecord.id == "reopen-s-ro-f1"
+                )
             )
             fp = result.scalar_one()
 

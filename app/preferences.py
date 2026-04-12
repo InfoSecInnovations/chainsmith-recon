@@ -79,13 +79,7 @@ class CheckPreferences:
 
     skip_disabled: bool = True
     on_critical: str = "annotate"  # annotate, skip_downstream, stop
-    on_critical_network: str | None = None  # per-suite override (None = use global)
-    on_critical_web: str | None = None
-    on_critical_ai: str | None = None
-    on_critical_mcp: str | None = None
-    on_critical_agent: str | None = None
-    on_critical_rag: str | None = None
-    on_critical_cag: str | None = None
+    on_critical_overrides: dict[str, str] = field(default_factory=dict)  # per-suite overrides
     intrusive_web: bool = False  # gate WebDAV, credential testing checks
     verification_level: str = "none"  # none, sample, all
 
@@ -174,7 +168,12 @@ class Preferences:
 
         if "checks" in data and isinstance(data["checks"], dict):
             for key, value in data["checks"].items():
-                if hasattr(prefs.checks, key):
+                # Migrate legacy on_critical_<suite> fields to on_critical_overrides dict
+                if key.startswith("on_critical_") and key != "on_critical_overrides":
+                    suite = key[len("on_critical_") :]
+                    if value is not None:
+                        prefs.checks.on_critical_overrides[suite] = value
+                elif hasattr(prefs.checks, key):
                     setattr(prefs.checks, key, value)
 
         if "llm" in data and isinstance(data["llm"], dict):
@@ -693,46 +692,9 @@ PREFERENCE_METADATA = {
         "choices": ["annotate", "skip_downstream", "stop"],
         "advanced": False,
     },
-    "checks.on_critical_network": {
-        "type": "str",
-        "description": "Override on_critical for network suite (null = use global)",
-        "choices": ["annotate", "skip_downstream", "stop"],
-        "advanced": True,
-    },
-    "checks.on_critical_web": {
-        "type": "str",
-        "description": "Override on_critical for web suite (null = use global)",
-        "choices": ["annotate", "skip_downstream", "stop"],
-        "advanced": True,
-    },
-    "checks.on_critical_ai": {
-        "type": "str",
-        "description": "Override on_critical for AI suite (null = use global)",
-        "choices": ["annotate", "skip_downstream", "stop"],
-        "advanced": True,
-    },
-    "checks.on_critical_mcp": {
-        "type": "str",
-        "description": "Override on_critical for MCP suite (null = use global)",
-        "choices": ["annotate", "skip_downstream", "stop"],
-        "advanced": True,
-    },
-    "checks.on_critical_agent": {
-        "type": "str",
-        "description": "Override on_critical for agent suite (null = use global)",
-        "choices": ["annotate", "skip_downstream", "stop"],
-        "advanced": True,
-    },
-    "checks.on_critical_rag": {
-        "type": "str",
-        "description": "Override on_critical for RAG suite (null = use global)",
-        "choices": ["annotate", "skip_downstream", "stop"],
-        "advanced": True,
-    },
-    "checks.on_critical_cag": {
-        "type": "str",
-        "description": "Override on_critical for CAG suite (null = use global)",
-        "choices": ["annotate", "skip_downstream", "stop"],
+    "checks.on_critical_overrides": {
+        "type": "dict",
+        "description": "Per-suite on_critical overrides, e.g. {web: stop, ai: skip_downstream}",
         "advanced": True,
     },
     "checks.intrusive_web": {
@@ -1419,8 +1381,7 @@ def resolve_on_critical(prefs: Preferences, suite: str) -> str:
     Returns:
         One of: "annotate", "skip_downstream", "stop"
     """
-    suite_attr = f"on_critical_{suite}"
-    suite_value = getattr(prefs.checks, suite_attr, None)
+    suite_value = prefs.checks.on_critical_overrides.get(suite)
     if suite_value is not None and suite_value in VALID_ON_CRITICAL_VALUES:
         return suite_value
     return prefs.checks.on_critical

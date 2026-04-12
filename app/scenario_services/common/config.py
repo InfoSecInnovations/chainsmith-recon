@@ -27,6 +27,7 @@ Usage in services:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -292,11 +293,23 @@ def _load_session() -> SessionState | None:
 
 
 def _save_session(session: SessionState) -> None:
-    """Persist session state to file."""
+    """Persist session state to file atomically (temp file + rename)."""
+    import tempfile
+
     SESSION_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(SESSION_STATE_PATH, "w") as f:
-        json.dump(session.to_dict(), f, indent=2)
+    # Write to temp file, then rename for atomic update
+    fd, tmp_path = tempfile.mkstemp(dir=SESSION_STATE_PATH.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(session.to_dict(), f, indent=2)
+        # Atomic rename (on POSIX; on Windows, replaces if exists)
+        os.replace(tmp_path, SESSION_STATE_PATH)
+    except BaseException:
+        # Clean up temp file on failure
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
 
 
 def get_or_create_session() -> SessionState:

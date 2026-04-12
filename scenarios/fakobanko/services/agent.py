@@ -10,7 +10,7 @@ import os
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
-from fakobanko.config import get_or_create_session, is_finding_active
+from fakobanko.config import get_or_create_session, is_observation_active
 
 app = FastAPI(
     title="Fakobanko Agent Service",
@@ -82,7 +82,7 @@ async def add_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Agent-Service"] = "fakobanko-agent"
 
-    if is_finding_active("agent_config_leak"):
+    if is_observation_active("agent_config_leak"):
         response.headers["X-Agent-Model"] = "gpt-4-turbo"
 
     return response
@@ -105,7 +105,7 @@ async def health():
 @app.get("/tools")
 async def list_tools():
     """List available agent tools."""
-    if is_finding_active("tool_chain_exposed"):
+    if is_observation_active("tool_chain_exposed"):
         return {"tools": AGENT_TOOLS, "count": len(AGENT_TOOLS)}
     return {"tools": [{"name": t["name"]} for t in AGENT_TOOLS], "count": len(AGENT_TOOLS)}
 
@@ -126,7 +126,7 @@ async def execute_agent(request: AgentRequest):
 @app.get("/sessions")
 async def list_sessions():
     """List active sessions."""
-    if is_finding_active("no_session_isolation"):
+    if is_observation_active("no_session_isolation"):
         return {"sessions": list(MEMORY_STORE.keys()), "count": len(MEMORY_STORE)}
     return {"sessions": [], "message": "Session listing requires authentication"}
 
@@ -134,14 +134,14 @@ async def list_sessions():
 @app.get("/memory")
 async def get_memory(session_id: str | None = None):
     """Get memory/history."""
-    if not is_finding_active("memory_endpoint_exposed"):
+    if not is_observation_active("memory_endpoint_exposed"):
         raise HTTPException(404, "Endpoint not available")
 
-    if session_id and is_finding_active("no_session_isolation"):
+    if session_id and is_observation_active("no_session_isolation"):
         entries = MEMORY_STORE.get(session_id, [])
         return {"session_id": session_id, "entries": [e.model_dump() for e in entries]}
 
-    if is_finding_active("no_session_isolation"):
+    if is_observation_active("no_session_isolation"):
         all_entries = []
         for _sid, entries in MEMORY_STORE.items():
             all_entries.extend([e.model_dump() for e in entries])

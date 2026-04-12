@@ -30,7 +30,11 @@ class CheckStatus(Enum):
 
 
 class Severity(Enum):
-    """Observation severity levels."""
+    """Observation severity levels.
+
+    Note: prefer app.models.ObservationSeverity (StrEnum) for new code.
+    This Enum is retained for backward compatibility with check-layer code.
+    """
 
     INFO = "info"
     LOW = "low"
@@ -239,6 +243,13 @@ class BaseCheck(ABC):
     techniques: list[str] = []  # MITRE ATT&CK, methodology tags
 
     def __init__(self):
+        # Copy class-level mutable defaults to prevent cross-instance sharing
+        self.conditions = list(self.__class__.conditions)
+        self.produces = list(self.__class__.produces)
+        self.service_types = list(self.__class__.service_types)
+        self.references = list(self.__class__.references)
+        self.techniques = list(self.__class__.techniques)
+
         self.status = CheckStatus.PENDING
         self.result: CheckResult | None = None
         self._last_request_time: float = 0

@@ -453,7 +453,7 @@ class ResearcherAgent:
                 )
             )
 
-        except Exception as e:
+        except (KeyError, ValueError, RuntimeError) as e:
             logger.exception("Researcher error")
             await self.emit(
                 AgentEvent(
@@ -538,7 +538,7 @@ class ResearcherAgent:
 
             return {"error": f"Unknown tool: {name}"}
 
-        except Exception as e:
+        except (KeyError, ValueError, RuntimeError) as e:
             logger.warning("Researcher tool %s failed: %s", name, e)
             return {"error": str(e)}
 

@@ -66,7 +66,7 @@
                         <path d="M21 21l-4.35-4.35"></path>
                     </svg>
                     <h3>No observations</h3>
-                    <p>Run a scan to discover observations</p>
+                    <p>Configure a target on the <a href="index.html">Scope</a> page to begin scanning</p>
                 </div>
                 <div class="in-progress-message u-hidden" id="scan-in-progress">
                     <div class="spinner"></div>
@@ -100,7 +100,7 @@
                                 <line x1="9" y1="21" x2="9" y2="9"></line>
                             </svg>
                             <h3>No Observations Yet</h3>
-                            <p>Run a scan to see observations grouped by host</p>
+                            <p>Configure a target on the <a href="index.html">Scope</a> page to begin scanning</p>
                         </div>
                         <div id="hosts-content" class="u-hidden">
                             <div class="summary-bar" id="summary-bar"></div>
@@ -673,6 +673,9 @@
             const table = document.getElementById('observations-table');
             const body = document.getElementById('observations-body');
             const empty = document.getElementById('observations-empty');
+            const inProgress = document.getElementById('scan-in-progress');
+
+            inProgress.style.display = 'none';
 
             if (observations.length === 0) {
                 table.style.display = 'none';

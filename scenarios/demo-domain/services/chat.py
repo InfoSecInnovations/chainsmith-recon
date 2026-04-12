@@ -18,7 +18,7 @@ import traceback as tb
 import uuid
 
 from demo_domain import llm
-from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_finding_active
+from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_observation_active
 from demo_domain.tools import execute_tool, get_active_tools
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -106,7 +106,7 @@ async def add_headers(request: Request, call_next):
             )
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
-    if is_finding_active("version_disclosure"):
+    if is_observation_active("version_disclosure"):
         response.headers["X-Powered-By"] = "FastAPI/0.111.0"
         response.headers["X-Chat-Version"] = "helpdesk-chat/2.4.1"
         response.headers["X-LLM-Backend"] = "demo-domain-llm-router"
@@ -207,7 +207,7 @@ async def list_tools():
     """
     tool_schema_exposed finding — returns full tool schemas unauthenticated.
     """
-    if not is_finding_active("tool_schema_exposed"):
+    if not is_observation_active("tool_schema_exposed"):
         raise HTTPException(404, "Not found")
     return {
         "tools": get_active_tools(),
@@ -258,7 +258,7 @@ async def error_probe(request: Request):
     except Exception:
         body = {}
 
-    if is_finding_active("verbose_errors"):
+    if is_observation_active("verbose_errors"):
         return JSONResponse(
             status_code=422,
             content={

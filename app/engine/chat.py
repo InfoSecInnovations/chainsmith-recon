@@ -781,7 +781,7 @@ class ChatDispatcher:
         # Format response
         lines = []
         for g in guidances:
-            lines.append(f"**[{g.finding_id}] {g.finding_title}**")
+            lines.append(f"**[{g.observation_id}] {g.observation_title}**")
             lines.append(
                 f"Status: {g.verification_status} | Evidence: {g.evidence_quality or 'N/A'}"
             )

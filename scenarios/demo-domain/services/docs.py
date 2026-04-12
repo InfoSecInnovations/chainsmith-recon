@@ -12,7 +12,7 @@ Planted findings:
 
 import traceback as tb
 
-from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_finding_active
+from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_observation_active
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -43,7 +43,7 @@ async def add_headers(request: Request, call_next):
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
     # version_disclosure finding — leak versions in headers
-    if is_finding_active("version_disclosure"):
+    if is_observation_active("version_disclosure"):
         response.headers["X-Powered-By"] = "FastAPI/0.111.0 Python/3.11.9"
         response.headers["Server"] = "uvicorn/0.29.0"
         response.headers["X-Docs-Version"] = "docs-portal/1.0.3"
@@ -109,7 +109,7 @@ def _nav():
 
 def _auth_gate(request: Request):
     """Check auth unless unauthed_docs finding is active."""
-    if not is_finding_active("unauthed_docs"):
+    if not is_observation_active("unauthed_docs"):
         auth = request.headers.get("authorization")
         if not auth:
             raise HTTPException(401, "Authentication required")
@@ -127,7 +127,7 @@ async def index(request: Request):
     _auth_gate(request)
 
     # directory_listing finding — show file/directory structure
-    if is_finding_active("directory_listing"):
+    if is_observation_active("directory_listing"):
         directory_section = """
         <div class="card">
             <h2>Directory Index</h2>

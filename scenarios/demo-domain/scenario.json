@@ -10,7 +10,7 @@
     "ports": [8200, 8201, 8202, 8203, 8204, 8205, 8206],
     "notes": "Start via: ./range/start-range.sh demo-domain"
   },
-  "findings": {
+  "observations": {
     "certain": [
       "version_disclosure",
       "missing_security_headers",

@@ -285,34 +285,35 @@ class ObservationRepository(_RepositoryBase):
             return 0
 
         rows = []
-        for f in observations:
-            # Use caller-supplied ID when present; otherwise generate a
-            # fresh one to avoid UNIQUE collisions across scans (simulated
-            # checks use deterministic IDs that repeat every run).
-            observation_id = f.get("id") or uuid.uuid4().hex[:12]
-            host = f.get("host") or f.get("target_url", "")
+        for obs in observations:
+            # Scope observation IDs per scan so deterministic IDs from
+            # checks (e.g. "dns_enumeration-www.example.com") don't collide
+            # across scans.  The fingerprint column handles cross-scan dedup.
+            raw_id = obs.get("id")
+            observation_id = f"{scan_id[:8]}-{raw_id}" if raw_id else uuid.uuid4().hex[:12]
+            host = obs.get("host") or obs.get("target_url", "")
             fingerprint = _generate_fingerprint(
-                check_name=f.get("check_name", f.get("check", "")),
+                check_name=obs.get("check_name", obs.get("check", "")),
                 host=host,
-                title=f.get("title", ""),
-                evidence=f.get("evidence", ""),
+                title=obs.get("title", ""),
+                evidence=obs.get("evidence", ""),
             )
             rows.append(
                 ObservationRecord(
                     id=observation_id,
                     scan_id=scan_id,
-                    title=f.get("title", "Untitled"),
-                    description=f.get("description"),
-                    severity=f.get("severity", "info"),
-                    check_name=f.get("check_name", f.get("check", "unknown")),
-                    suite=f.get("suite"),
-                    target_url=f.get("target_url") or f.get("url"),
+                    title=obs.get("title", "Untitled"),
+                    description=obs.get("description"),
+                    severity=obs.get("severity", "info"),
+                    check_name=obs.get("check_name", obs.get("check", "unknown")),
+                    suite=obs.get("suite"),
+                    target_url=obs.get("target_url") or obs.get("url"),
                     host=host,
-                    evidence=f.get("evidence"),
-                    raw_data=f.get("raw_data") or f.get("raw"),
-                    references=f.get("references"),
-                    verification_status=f.get("verification_status", "pending"),
-                    confidence=f.get("confidence"),
+                    evidence=obs.get("evidence"),
+                    raw_data=obs.get("raw_data") or obs.get("raw"),
+                    references=obs.get("references"),
+                    verification_status=obs.get("verification_status", "pending"),
+                    confidence=obs.get("confidence"),
                     fingerprint=fingerprint,
                 )
             )
@@ -342,7 +343,7 @@ class ObservationRepository(_RepositoryBase):
 
         async with self._session() as session:
             result = await session.execute(query)
-            observations = [_observation_to_dict(f) for f in result.scalars().all()]
+            observations = [_observation_to_dict(obs) for obs in result.scalars().all()]
 
         # Apply scan-specific severity overrides from user customizations
         from app.customizations import apply_scan_overrides
@@ -351,7 +352,7 @@ class ObservationRepository(_RepositoryBase):
 
         # Filter by severity AFTER overrides so filtering sees effective severity
         if severity:
-            observations = [f for f in observations if f["severity"] == severity]
+            observations = [obs for obs in observations if obs["severity"] == severity]
 
         return observations
 
@@ -364,7 +365,7 @@ class ObservationRepository(_RepositoryBase):
             result = await session.execute(
                 select(ObservationRecord).where(ObservationRecord.scan_id == scan_id)
             )
-            observation_dicts = [_observation_to_dict(f) for f in result.scalars().all()]
+            observation_dicts = [_observation_to_dict(obs) for obs in result.scalars().all()]
 
         # Apply scan-specific severity overrides
         from app.customizations import apply_scan_overrides
@@ -372,11 +373,11 @@ class ObservationRepository(_RepositoryBase):
         observation_dicts = apply_scan_overrides(observation_dicts, scan_id)
 
         hosts: dict[str, list[dict]] = {}
-        for f in observation_dicts:
-            host = f.get("host") or "unknown"
+        for obs in observation_dicts:
+            host = obs.get("host") or "unknown"
             if host not in hosts:
                 hosts[host] = []
-            hosts[host].append(f)
+            hosts[host].append(obs)
 
         return [{"name": host, "observations": flist} for host, flist in hosts.items()]
 
@@ -1509,7 +1510,7 @@ class TriageRepository(_RepositoryBase):
             id=plan_id,
             scan_id=scan_id,
             summary=plan.get("summary"),
-            team_context_available=1 if plan.get("team_context_available") else 0,
+            team_context_available=bool(plan.get("team_context_available")),
             caveat=plan.get("caveat"),
             quick_wins=plan.get("quick_wins", 0),
             strategic_fixes=plan.get("strategic_fixes", 0),
@@ -1661,12 +1662,12 @@ class ChatRepository(_RepositoryBase):
         if engagement_id:
             query = select(ChatMessage).where(
                 ChatMessage.engagement_id == engagement_id,
-                ChatMessage.cleared == 0,
+                ChatMessage.cleared == False,  # noqa: E712 (SQLAlchemy column comparison)
             )
         else:
             query = select(ChatMessage).where(
                 ChatMessage.session_id == session_id,
-                ChatMessage.cleared == 0,
+                ChatMessage.cleared == False,  # noqa: E712
             )
 
         if before:
@@ -1693,12 +1694,12 @@ class ChatRepository(_RepositoryBase):
             result = await session.execute(
                 select(ChatMessage).where(
                     ChatMessage.session_id == session_id,
-                    ChatMessage.cleared == 0,
+                    ChatMessage.cleared == False,  # noqa: E712
                 )
             )
             rows = result.scalars().all()
             for row in rows:
-                row.cleared = 1
+                row.cleared = True
             await session.commit()
             return len(rows)
 
@@ -1759,7 +1760,7 @@ class ResearchRepository(_RepositoryBase):
             vendor_advisories=enrichment.get("vendor_advisories"),
             version_vulnerabilities=enrichment.get("version_vulnerabilities"),
             data_sources=enrichment.get("data_sources"),
-            offline_mode=1 if enrichment.get("offline_mode") else 0,
+            offline_mode=bool(enrichment.get("offline_mode")),
         )
         async with self._session() as session:
             session.add(row)
@@ -1838,8 +1839,8 @@ class ProofGuidanceRepository(_RepositoryBase):
         row = ProofGuidanceRecord(
             id=record_id,
             scan_id=scan_id,
-            observation_id=guidance["finding_id"],
-            finding_title=guidance.get("finding_title"),
+            observation_id=guidance["observation_id"],
+            observation_title=guidance.get("observation_title"),
             verification_status=guidance.get("verification_status"),
             evidence_quality=guidance.get("evidence_quality"),
             proof_steps=guidance.get("proof_steps"),
@@ -1866,7 +1867,7 @@ class ProofGuidanceRepository(_RepositoryBase):
                     "id": r.id,
                     "scan_id": r.scan_id,
                     "observation_id": r.observation_id,
-                    "finding_title": r.finding_title,
+                    "observation_title": r.observation_title,
                     "verification_status": r.verification_status,
                     "evidence_quality": r.evidence_quality,
                     "proof_steps": r.proof_steps,

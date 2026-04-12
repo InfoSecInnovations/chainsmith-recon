@@ -20,7 +20,7 @@ from fakobanko.config import (
     VERBOSE_ERRORS,
     WAF_ENABLED,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 from fakobanko.rag import get_rag_context, get_session_context
 from fakobanko.tools import (
@@ -67,17 +67,18 @@ async def add_headers_and_check_limits(request: Request, call_next):
     # Rate limiting (for Stealth Mode bonus)
     if RATE_LIMIT_ENABLED:
         now = datetime.now().timestamp()
+
+        # Check if X-Forwarded-For bypass is being used (must happen before rate check)
+        if is_observation_active("rate_limit_bypass"):
+            forwarded_for = request.headers.get("X-Forwarded-For")
+            if forwarded_for:
+                client_ip = forwarded_for  # Bypass!
+
         if client_ip not in request_counts:
             request_counts[client_ip] = []
 
         # Clean old entries (last 60 seconds)
         request_counts[client_ip] = [t for t in request_counts[client_ip] if now - t < 60]
-
-        # Check if X-Forwarded-For bypass is being used
-        if is_finding_active("rate_limit_bypass"):
-            forwarded_for = request.headers.get("X-Forwarded-For")
-            if forwarded_for:
-                client_ip = forwarded_for  # Bypass!
 
         if len(request_counts[client_ip]) > 30:  # 30 requests per minute
             return JSONResponse(
@@ -118,13 +119,13 @@ async def add_headers_and_check_limits(request: Request, call_next):
     response = await call_next(request)
 
     # Add identifying headers
-    if is_finding_active("header_vllm_version"):
+    if is_observation_active("header_vllm_version"):
         response.headers["X-Powered-By"] = "vLLM/0.4.1"
 
     response.headers["X-FakoBot-Version"] = "1.2.0"
 
     # Model config leak
-    if is_finding_active("model_temperature_exposed"):
+    if is_observation_active("model_temperature_exposed"):
         response.headers["X-Model-Config"] = "model=nova-mini;temp=0.7;max_tokens=1024"
 
     return response
@@ -139,16 +140,16 @@ async def verbose_exception_handler(request: Request, exc: Exception):
     Verbose error handler that leaks tool information.
     This is the main "chatbot_tool_leak" finding.
     """
-    if VERBOSE_ERRORS and is_finding_active("chatbot_tool_leak"):
+    if VERBOSE_ERRORS and is_observation_active("chatbot_tool_leak"):
         tb = traceback.format_exc()
 
         # Leak tool names in error message
         all_tool_names = [t["function"]["name"] for t in TOOL_DEFINITIONS]
-        if is_finding_active("customer_lookup_tool"):
+        if is_observation_active("customer_lookup_tool"):
             all_tool_names.append("lookup_customer_by_email")
-        if is_finding_active("internal_announcement_tool"):
+        if is_observation_active("internal_announcement_tool"):
             all_tool_names.append("get_internal_announcements")
-        if is_finding_active("fetch_document_tool"):
+        if is_observation_active("fetch_document_tool"):
             all_tool_names.append("fetch_document")
 
         return JSONResponse(
@@ -340,7 +341,7 @@ async def debug_tools():
     Debug endpoint - exposes tool list.
     Only available if tool_schema_disclosure is active.
     """
-    if not is_finding_active("tool_schema_disclosure"):
+    if not is_observation_active("tool_schema_disclosure"):
         raise HTTPException(status_code=404, detail="Not found")
 
     return {"active_tools": get_active_tools(), "total_tools": len(get_active_tools())}

@@ -107,17 +107,19 @@ async def add_headers_and_check_limits(request: Request, call_next):
     # Rate limiting
     if RATE_LIMIT_ENABLED:
         now = datetime.now().timestamp()
+
+        # Observation: rate_limit_bypass - X-Forwarded-For bypasses limits
+        # Must happen before rate check so the spoofed IP is what gets checked
+        if is_observation_active("rate_limit_bypass"):
+            forwarded_for = request.headers.get("X-Forwarded-For")
+            if forwarded_for:
+                client_ip = forwarded_for  # Bypass!
+
         if client_ip not in request_counts:
             request_counts[client_ip] = []
 
         # Clean old entries (last 60 seconds)
         request_counts[client_ip] = [t for t in request_counts[client_ip] if now - t < 60]
-
-        # Observation: rate_limit_bypass - X-Forwarded-For bypasses limits
-        if is_observation_active("rate_limit_bypass"):
-            forwarded_for = request.headers.get("X-Forwarded-For")
-            if forwarded_for:
-                client_ip = forwarded_for  # Bypass!
 
         if len(request_counts[client_ip]) > 30:  # 30 requests per minute
             return JSONResponse(

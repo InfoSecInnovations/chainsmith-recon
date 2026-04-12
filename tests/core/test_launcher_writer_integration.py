@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.check_launcher import CheckLauncher
 from app.checks.base import CheckResult, Observation, Service
@@ -37,6 +38,9 @@ class FakeCheck:
         result.observations = list(self._observations)
         result.outputs = dict(self._outputs)
         return result
+
+    async def execute(self, context: dict) -> CheckResult:
+        return await self.run(context)
 
 
 def make_observation(
@@ -122,7 +126,7 @@ class TestLauncherWriterIntegration:
 
     async def test_writer_db_failure_does_not_halt_scan(self, mock_obs_repo, tmp_path):
         """If the writer's DB fails, the scan still completes."""
-        mock_obs_repo.bulk_create.side_effect = Exception("DB down")
+        mock_obs_repo.bulk_create.side_effect = OperationalError("DB down", {}, None)
 
         check = FakeCheck(
             name="test_check",

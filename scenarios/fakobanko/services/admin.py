@@ -9,7 +9,7 @@ import traceback
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from fakobanko.config import get_or_create_session, is_finding_active
+from fakobanko.config import get_or_create_session, is_observation_active
 
 app = FastAPI(
     title="Fakobanko Admin Panel",
@@ -23,7 +23,7 @@ app = FastAPI(
 
 @app.exception_handler(Exception)
 async def verbose_exception_handler(request: Request, exc: Exception):
-    if is_finding_active("stack_trace_leak"):
+    if is_observation_active("stack_trace_leak"):
         tb = traceback.format_exc()
         return JSONResponse(
             status_code=500,
@@ -49,7 +49,7 @@ async def add_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Admin-Panel"] = "true"
 
-    if is_finding_active("debug_mode_enabled"):
+    if is_observation_active("debug_mode_enabled"):
         response.headers["X-Debug-Mode"] = "enabled"
 
     return response
@@ -81,7 +81,7 @@ async def health():
 @app.get("/debug")
 async def debug_info():
     """Debug endpoint - may expose sensitive info."""
-    if not is_finding_active("debug_endpoints_enabled"):
+    if not is_observation_active("debug_endpoints_enabled"):
         raise HTTPException(404, "Not found")
 
     return {
@@ -94,7 +94,7 @@ async def debug_info():
 @app.get("/debug/dump")
 async def debug_dump():
     """Full debug dump - very sensitive!"""
-    if not is_finding_active("config_dump_endpoint"):
+    if not is_observation_active("config_dump_endpoint"):
         raise HTTPException(403, "Access denied")
 
     return {

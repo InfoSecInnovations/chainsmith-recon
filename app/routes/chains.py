@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_chain_lock = asyncio.Lock()
 _chain_repo = ChainRepository()
 _scan_repo = ScanRepository()
 _observation_repo = ObservationRepository()
@@ -47,10 +48,10 @@ async def analyze_chains():
     if not obs:
         raise HTTPException(400, "No observations to analyze. Run a scan first.")
 
-    if state.chain_status == "analyzing":
-        raise HTTPException(409, "Chain analysis already running.")
-
-    state.chain_status = "analyzing"
+    async with _chain_lock:
+        if state.chain_status == "analyzing":
+            raise HTTPException(409, "Chain analysis already running.")
+        state.chain_status = "analyzing"
 
     # Launch analysis in background
     asyncio.create_task(run_chain_analysis(state))

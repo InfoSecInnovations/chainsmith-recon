@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
 
-from fakobanko.config import get_or_create_session, is_finding_active
+from fakobanko.config import get_or_create_session, is_observation_active
 
 app = FastAPI(
     title="Fakobanko API Documentation",
@@ -32,7 +32,7 @@ def custom_openapi():
     )
 
     # Add extra info if finding active
-    if is_finding_active("openapi_exposed"):
+    if is_observation_active("openapi_exposed"):
         openapi_schema["info"]["x-internal"] = True
         openapi_schema["servers"] = [
             {"url": "https://api.fakobanko.local", "description": "Production"},
@@ -40,7 +40,7 @@ def custom_openapi():
             {"url": "http://localhost:8080", "description": "Development"},
         ]
 
-    if is_finding_active("internal_endpoints_documented"):
+    if is_observation_active("internal_endpoints_documented"):
         openapi_schema["paths"]["/internal/admin"] = {
             "get": {
                 "summary": "Admin endpoint",
@@ -72,7 +72,7 @@ async def add_headers(request: Request, call_next):
 
     response.headers["X-Docs-Version"] = "2.0.0"
 
-    if is_finding_active("auth_schemes_revealed"):
+    if is_observation_active("auth_schemes_revealed"):
         response.headers["X-Auth-Schemes"] = "Bearer, API-Key, Internal-Token"
 
     return response

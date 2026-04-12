@@ -17,7 +17,7 @@
       "cache"
     ]
   },
-  "findings": {
+  "observations": {
     "certain": [
       "header_vllm_version",
       "robots_model_admin",

@@ -115,11 +115,11 @@ def observations_to_markdown(observations: list[dict], target: str) -> str:
     ]
 
     by_severity: dict[str, list[dict]] = {}
-    for f in observations:
-        sev = f.get("severity", "info")
+    for obs in observations:
+        sev = obs.get("severity", "info")
         if sev not in by_severity:
             by_severity[sev] = []
-        by_severity[sev].append(f)
+        by_severity[sev].append(obs)
 
     severity_order = ["critical", "high", "medium", "low", "info"]
 
@@ -130,20 +130,20 @@ def observations_to_markdown(observations: list[dict], target: str) -> str:
         lines.append(f"## {sev.upper()} ({len(by_severity[sev])})")
         lines.append("")
 
-        for f in by_severity[sev]:
-            lines.append(f"### {f.get('title', '')}")
+        for obs in by_severity[sev]:
+            lines.append(f"### {obs.get('title', '')}")
             lines.append("")
-            if f.get("description"):
-                lines.append(f"{f['description']}")
+            if obs.get("description"):
+                lines.append(f"{obs['description']}")
                 lines.append("")
-            if f.get("target_url"):
-                lines.append(f"**Target:** `{f['target_url']}`")
-            if f.get("evidence"):
-                lines.append(f"**Evidence:** {f['evidence']}")
-            if f.get("check_name"):
-                lines.append(f"**Check:** {f['check_name']}")
-            if f.get("references"):
-                lines.append(f"**References:** {', '.join(f['references'])}")
+            if obs.get("target_url"):
+                lines.append(f"**Target:** `{obs['target_url']}`")
+            if obs.get("evidence"):
+                lines.append(f"**Evidence:** {obs['evidence']}")
+            if obs.get("check_name"):
+                lines.append(f"**Check:** {obs['check_name']}")
+            if obs.get("references"):
+                lines.append(f"**References:** {', '.join(obs['references'])}")
             lines.append("")
 
     return "\n".join(lines)
@@ -207,16 +207,16 @@ def _sarif_rules(observations: list[dict]) -> list[dict]:
     """Generate SARIF rules from observation dicts."""
     seen = set()
     rules = []
-    for f in observations:
-        rule_id = f.get("check_name") or f.get("id", "")
+    for obs in observations:
+        rule_id = obs.get("check_name") or obs.get("id", "")
         if rule_id in seen:
             continue
         seen.add(rule_id)
         rules.append(
             {
                 "id": rule_id,
-                "shortDescription": {"text": f.get("title", "")},
-                "fullDescription": {"text": f.get("description") or f.get("title", "")},
+                "shortDescription": {"text": obs.get("title", "")},
+                "fullDescription": {"text": obs.get("description") or obs.get("title", "")},
             }
         )
     return rules
@@ -233,16 +233,16 @@ def _sarif_results(observations: list[dict], target: str) -> list[dict]:
     }
 
     results = []
-    for f in observations:
+    for obs in observations:
         results.append(
             {
-                "ruleId": f.get("check_name") or f.get("id", ""),
-                "level": severity_map.get(f.get("severity", "info"), "note"),
-                "message": {"text": f.get("title", "")},
+                "ruleId": obs.get("check_name") or obs.get("id", ""),
+                "level": severity_map.get(obs.get("severity", "info"), "note"),
+                "message": {"text": obs.get("title", "")},
                 "locations": [
                     {
                         "physicalLocation": {
-                            "artifactLocation": {"uri": f.get("target_url") or target},
+                            "artifactLocation": {"uri": obs.get("target_url") or target},
                         }
                     }
                 ],
@@ -254,8 +254,8 @@ def _sarif_results(observations: list[dict], target: str) -> list[dict]:
 def _count_by_severity(observations: list[dict]) -> dict:
     """Count observations by severity."""
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    for f in observations:
-        sev = f.get("severity", "info").lower()
+    for obs in observations:
+        sev = obs.get("severity", "info").lower()
         if sev in counts:
             counts[sev] += 1
     return counts
@@ -417,8 +417,8 @@ def output_observations(
                 click.echo(_style("No observations.", no_color, fg="yellow"))
             return
 
-        for f in observations:
-            click.echo(format_observation_terminal(f, verbose=verbose, no_color=no_color))
+        for obs in observations:
+            click.echo(format_observation_terminal(obs, verbose=verbose, no_color=no_color))
             click.echo()
 
     elif fmt == "json":

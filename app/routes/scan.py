@@ -14,6 +14,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.api_models import ScanStartInput, ScanStatus
+from app.check_resolver import infer_suite as _infer_suite
 from app.db.repositories import CheckLogRepository
 from app.engine.scanner import AVAILABLE_CHECKS, get_check_info, run_scan
 from app.scenarios import get_scenario_manager
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _check_log_repo = CheckLogRepository()
+_scan_lock = asyncio.Lock()
 
 
 # ─── Scan Execution ───────────────────────────────────────────
@@ -40,10 +42,10 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     if not state.target:
         raise HTTPException(400, "Scope not set. POST to /api/scope first.")
 
-    if state.status == "running":
-        raise HTTPException(409, "Scan already running.")
-
-    state.status = "running"
+    async with _scan_lock:
+        if state.status == "running":
+            raise HTTPException(409, "Scan already running.")
+        state.status = "running"
     state.phase = "scanning"
     state.error_message = None
     state.checks_completed = 0
@@ -139,69 +141,6 @@ async def get_check_statuses():
             checks.append(entry)
 
     return {"checks": checks, "scenario": mgr.active.name if mgr.is_active else None}
-
-
-def _infer_suite(check_name: str) -> str:
-    """Infer suite from check name for UI grouping."""
-    name_lower = check_name.lower()
-    suite_patterns = {
-        "network": [
-            "dns",
-            "wildcard_dns",
-            "geoip",
-            "reverse_dns",
-            "port_scan",
-            "tls_analysis",
-            "service_probe",
-            "http_method_enum",
-            "banner_grab",
-        ],
-        "web": [
-            "header",
-            "robots",
-            "path",
-            "openapi",
-            "cors",
-            "webdav",
-            "vcs_exposure",
-            "config_exposure",
-            "directory_listing",
-            "default_creds",
-            "debug_endpoints",
-            "cookie_security",
-            "auth_detection",
-            "waf_detection",
-            "sitemap",
-            "redirect_chain",
-            "error_page",
-            "ssrf_indicator",
-            "favicon",
-            "http2_detection",
-            "hsts_preload",
-            "sri_check",
-            "mass_assignment",
-        ],
-        "ai": [
-            "llm",
-            "embedding",
-            "model_info",
-            "fingerprint",
-            "error",
-            "tool_discovery",
-            "prompt",
-            "rate_limit",
-            "filter",
-            "context",
-        ],
-        "mcp": ["mcp"],
-        "agent": ["agent", "goal"],
-        "rag": ["rag", "indirect"],
-        "cag": ["cag", "cache"],
-    }
-    for suite, patterns in suite_patterns.items():
-        if any(p in name_lower for p in patterns):
-            return suite
-    return "other"
 
 
 @router.get("/api/v1/scan/log")

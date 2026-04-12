@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from fakobanko.config import get_or_create_session, is_finding_active
+from fakobanko.config import get_or_create_session, is_observation_active
 
 app = FastAPI(
     title="Fakobanko Internal Portal",
@@ -25,7 +25,7 @@ app = FastAPI(
 # We'll handle this in the startup event
 @app.on_event("startup")
 async def configure_cors():
-    if is_finding_active("cors_wildcard"):
+    if is_observation_active("cors_wildcard"):
         app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -117,7 +117,7 @@ async def add_headers(request: Request, call_next):
     response.headers["X-Internal-Service"] = "true"
     response.headers["X-Portal-Version"] = "3.2.1"
 
-    if is_finding_active("internal_endpoints_exposed"):
+    if is_observation_active("internal_endpoints_exposed"):
         response.headers["X-Debug-Endpoints"] = "/api/employees,/api/announcements,/api/directory"
 
     return response
@@ -128,7 +128,7 @@ async def add_headers(request: Request, call_next):
 
 def check_internal_auth(request: Request) -> bool:
     """Check if request is authorized for internal access."""
-    if is_finding_active("no_auth_internal"):
+    if is_observation_active("no_auth_internal"):
         return True  # Auth bypass!
 
     auth_header = request.headers.get("Authorization")
@@ -173,7 +173,7 @@ async def get_directory(request: Request):
     if not check_internal_auth(request):
         raise HTTPException(403, "Access denied. Internal network required.")
 
-    if is_finding_active("employee_directory_exposed"):
+    if is_observation_active("employee_directory_exposed"):
         return {"employees": [e.model_dump() for e in EMPLOYEES], "total": len(EMPLOYEES)}
 
     return {

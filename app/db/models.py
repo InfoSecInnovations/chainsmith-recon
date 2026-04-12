@@ -9,9 +9,11 @@ scan_comparisons (Phase 3).
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -62,6 +64,9 @@ class Scan(Base):
     error_message = Column(Text, nullable=True)
     metadata_ = Column("metadata", JSON, nullable=True)
 
+    # Optimistic locking
+    version = Column(Integer, nullable=False, default=1)
+
     # Phase 31: status fields migrated from AppState
     adjudication_status = Column(String, nullable=True, default="idle")
     adjudication_error = Column(Text, nullable=True)
@@ -78,7 +83,7 @@ class ObservationRecord(Base):
     __tablename__ = "observations"
 
     id = Column(String, primary_key=True)
-    scan_id = Column(String, nullable=False)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     severity = Column(String, nullable=False)
@@ -103,6 +108,7 @@ class ObservationRecord(Base):
         Index("idx_observations_severity", "severity"),
         Index("idx_observations_host", "host"),
         Index("idx_observations_fingerprint", "fingerprint"),
+        Index("idx_observations_scan_severity", "scan_id", "severity"),
     )
 
 
@@ -110,7 +116,7 @@ class Chain(Base):
     __tablename__ = "chains"
 
     id = Column(String, primary_key=True)
-    scan_id = Column(String, nullable=False)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     severity = Column(String, nullable=False)
@@ -126,7 +132,7 @@ class CheckLog(Base):
     __tablename__ = "check_log"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    scan_id = Column(String, nullable=False)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     check_name = Column(String, nullable=False)
     suite = Column(String, nullable=True)
     event = Column(String, nullable=False)  # started, completed, failed, skipped
@@ -135,7 +141,10 @@ class CheckLog(Base):
     error_message = Column(Text, nullable=True)
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
-    __table_args__ = (Index("idx_check_log_scan_id", "scan_id"),)
+    __table_args__ = (
+        Index("idx_check_log_scan_id", "scan_id"),
+        Index("idx_check_log_scan_check", "scan_id", "check_name"),
+    )
 
 
 class ObservationStatusHistory(Base):
@@ -182,8 +191,10 @@ class AdjudicationResult(Base):
     __tablename__ = "adjudication_results"
 
     id = Column(String, primary_key=True)
-    scan_id = Column(String, nullable=False)
-    observation_id = Column(String, nullable=False)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    observation_id = Column(
+        String, ForeignKey("observations.id", ondelete="CASCADE"), nullable=False
+    )
     original_severity = Column(String, nullable=False)
     adjudicated_severity = Column(String, nullable=False)
     confidence = Column(Float, nullable=False)
@@ -233,10 +244,10 @@ class TriagePlanRecord(Base):
     __tablename__ = "triage_plans"
 
     id = Column(String, primary_key=True)
-    scan_id = Column(String, nullable=False)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     generated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     summary = Column(Text, nullable=True)
-    team_context_available = Column(Integer, default=0)
+    team_context_available = Column(Boolean, default=False)
     caveat = Column(Text, nullable=True)
     quick_wins = Column(Integer, default=0)
     strategic_fixes = Column(Integer, default=0)
@@ -249,14 +260,16 @@ class ResearchEnrichmentRecord(Base):
     __tablename__ = "research_enrichments"
 
     id = Column(String, primary_key=True)
-    scan_id = Column(String, nullable=False)
-    observation_id = Column(String, nullable=False)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    observation_id = Column(
+        String, ForeignKey("observations.id", ondelete="CASCADE"), nullable=False
+    )
     cve_details = Column(JSON, nullable=True)
     exploit_availability = Column(JSON, nullable=True)
     vendor_advisories = Column(JSON, nullable=True)
     version_vulnerabilities = Column(JSON, nullable=True)
     data_sources = Column(JSON, nullable=True)
-    offline_mode = Column(Integer, default=0)
+    offline_mode = Column(Boolean, default=False)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
     __table_args__ = (
@@ -269,9 +282,11 @@ class ProofGuidanceRecord(Base):
     __tablename__ = "proof_guidance"
 
     id = Column(String, primary_key=True)
-    scan_id = Column(String, nullable=False)
-    observation_id = Column(String, nullable=False)
-    finding_title = Column(String, nullable=True)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    observation_id = Column(
+        String, ForeignKey("observations.id", ondelete="CASCADE"), nullable=False
+    )
+    observation_title = Column(String, nullable=True)
     verification_status = Column(String, nullable=True)
     evidence_quality = Column(String, nullable=True)
     proof_steps = Column(JSON, nullable=True)
@@ -301,7 +316,7 @@ class ChatMessage(Base):
     ui_context = Column(JSON, nullable=True)
     references = Column(JSON, nullable=True)  # list of Reference objects
     actions = Column(JSON, nullable=True)  # list of SuggestedAction objects
-    cleared = Column(Integer, default=0)  # 0=visible, 1=cleared by operator
+    cleared = Column(Boolean, default=False)  # False=visible, True=cleared by operator
 
     __table_args__ = (
         Index("idx_chat_session_id", "session_id"),
@@ -341,7 +356,7 @@ class TriageActionRecord(Base):
     __tablename__ = "triage_actions"
 
     id = Column(String, primary_key=True)
-    plan_id = Column(String, nullable=False)
+    plan_id = Column(String, ForeignKey("triage_plans.id", ondelete="CASCADE"), nullable=False)
     priority = Column(Integer, nullable=False)
     action = Column(String, nullable=False)
     targets = Column(JSON, nullable=True)

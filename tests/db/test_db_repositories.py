@@ -329,7 +329,7 @@ class TestObservationRepository:
 
     @pytest.mark.asyncio
     async def test_observation_preserves_existing_id(self, db, observation_repo):
-        """If a observation has an 'id' field, it is used as-is."""
+        """If a observation has an 'id' field, it is scoped with the scan_id prefix."""
         await observation_repo.bulk_create(
             "scan-001",
             [
@@ -344,10 +344,10 @@ class TestObservationRepository:
 
         async with db.session() as session:
             result = await session.execute(
-                select(ObservationRecord).where(ObservationRecord.id == "custom-id-123")
+                select(ObservationRecord).where(ObservationRecord.id == "scan-001-custom-id-123")
             )
             f = result.scalar_one()
-            assert f.id == "custom-id-123"
+            assert f.id == "scan-001-custom-id-123"
 
 
 # ─── ChainRepository Tests ──────────────────────────────────────────────────

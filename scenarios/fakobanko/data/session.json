@@ -1,60 +1,15 @@
 {
-  "session_id": "eb935e61",
-  "scenario": "fakobanko",
-  "created_at": "2026-04-09T23:21:52.829792",
-  "selected_chains": [
-    {
-      "id": "full_llm_compromise",
-      "chain_name": "Full LLM Compromise Pipeline",
-      "description": "System prompt, tools, and filters all exposed enables complete takeover",
-      "severity": "critical",
-      "required_services": [
-        "chat"
-      ],
-      "required_findings": [
-        "chatbot_tool_leak",
-        "tool_schema_disclosure",
-        "rate_limit_bypass"
-      ]
-    },
-    {
-      "id": "tool_abuse_surface",
-      "chain_name": "Agent Tool Abuse",
-      "description": "Exposed tool schemas enable unauthorized actions",
-      "severity": "critical",
-      "required_services": [
-        "chat",
-        "agent"
-      ],
-      "required_findings": [
-        "tool_chain_exposed",
-        "chatbot_tool_leak"
-      ]
-    },
-    {
-      "id": "prompt_injection_surface",
-      "chain_name": "AI Service Prompt Injection Surface",
-      "description": "Chat endpoint with exposed API docs enables targeted prompt injection",
-      "severity": "high",
-      "required_services": [
-        "chat",
-        "docs"
-      ],
-      "required_findings": [
-        "llm_endpoint_discovered",
-        "openapi_exposed"
-      ]
-    }
+  "session_id": "b5ab461410245b16",
+  "active_observations": [],
+  "active_hallucinations": [
+    "H18",
+    "H04",
+    "H15"
   ],
+  "created_at": "2026-04-11T14:49:05.597665+00:00",
+  "range_mode": false,
   "active_services": [
-    "agent",
-    "chat",
     "docs"
   ],
-  "extra_findings": [
-    "favicon_default",
-    "http2_enabled",
-    "path_traversal_hint",
-    "version_mismatch"
-  ]
+  "selected_chains": []
 }

@@ -226,8 +226,15 @@ def _classify_error(
     """
     if exception is not None:
         exc_name = type(exception).__name__
+        exc_str = str(exception).lower()
         if "Timeout" in exc_name or "TimeoutException" in exc_name:
             return LLMErrorType.TIMEOUT, True
+        if "ConnectionReset" in exc_name or "connection reset" in exc_str:
+            return LLMErrorType.TRANSIENT, True
+        if "DNS" in exc_name or "name resolution" in exc_str or "getaddrinfo" in exc_str:
+            return LLMErrorType.TRANSIENT, True
+        if "SSL" in exc_name or "certificate" in exc_str or "CERTIFICATE" in str(exception):
+            return LLMErrorType.AUTH, False
         if status_code == 0:
             return LLMErrorType.TRANSIENT, True
 

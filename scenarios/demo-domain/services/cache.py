@@ -17,7 +17,7 @@ import traceback as tb
 import uuid
 from datetime import UTC, datetime
 
-from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_finding_active
+from demo_domain.config import VERBOSE_ERRORS, get_or_create_session, is_observation_active
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -158,7 +158,7 @@ async def add_headers(request: Request, call_next):
             )
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
-    if is_finding_active("version_disclosure"):
+    if is_observation_active("version_disclosure"):
         response.headers["X-Powered-By"] = "FastAPI/0.111.0"
         response.headers["X-Cache-Version"] = "semantic-cache/0.9.2"
 
@@ -200,12 +200,12 @@ async def cache_lookup(req: LookupRequest):
     threshold = 0.5
     if best_match and best_score >= threshold:
         # cache_cross_user_leak — serve response regardless of user_id
-        if not is_finding_active("cache_cross_user_leak"):
+        if not is_observation_active("cache_cross_user_leak"):
             if req.user_id and best_match["user_id"] != req.user_id:
                 best_match = None
 
         # cache_stale_context — skip TTL validation
-        if best_match and not is_finding_active("cache_stale_context"):
+        if best_match and not is_observation_active("cache_stale_context"):
             # In non-finding mode, check TTL
 
             entry_time = datetime.fromisoformat(best_match["timestamp"].replace("Z", "+00:00"))
@@ -228,12 +228,12 @@ async def cache_lookup(req: LookupRequest):
         }
 
         # cache_probe_timing — expose precise timing
-        if is_finding_active("cache_probe_timing"):
+        if is_observation_active("cache_probe_timing"):
             result["timing_ms"] = round(elapsed_ms, 4)
             result["cache_state"] = "hit"
 
         # cache_cross_user_leak — expose whose response this was
-        if is_finding_active("cache_cross_user_leak"):
+        if is_observation_active("cache_cross_user_leak"):
             result["cached_for_user"] = best_match["user_id"]
 
         return result
@@ -247,7 +247,7 @@ async def cache_lookup(req: LookupRequest):
     }
 
     # cache_probe_timing — timing difference for misses
-    if is_finding_active("cache_probe_timing"):
+    if is_observation_active("cache_probe_timing"):
         # Simulate slower miss (add synthetic delay info)
         result["timing_ms"] = round(elapsed_ms + 15.0, 4)  # Misses are slower
         result["cache_state"] = "miss"
@@ -263,7 +263,7 @@ async def cache_store(req: StoreRequest, request: Request):
     """
     cache_poisoning finding — cache entries writable without auth.
     """
-    if not is_finding_active("cache_poisoning"):
+    if not is_observation_active("cache_poisoning"):
         auth = request.headers.get("authorization")
         if not auth:
             raise HTTPException(401, "Authentication required")
@@ -296,7 +296,7 @@ async def cache_stats(request: Request):
     """
     cache_endpoint_exposed finding — cache statistics accessible without auth.
     """
-    if not is_finding_active("cache_endpoint_exposed"):
+    if not is_observation_active("cache_endpoint_exposed"):
         auth = request.headers.get("authorization")
         if not auth:
             raise HTTPException(401, "Authentication required")
@@ -361,7 +361,7 @@ async def list_entries(request: Request):
     cache_endpoint_exposed finding — list all cached entries.
     cache_cross_user_leak finding — shows entries across all users.
     """
-    if not is_finding_active("cache_endpoint_exposed"):
+    if not is_observation_active("cache_endpoint_exposed"):
         auth = request.headers.get("authorization")
         if not auth:
             raise HTTPException(401, "Authentication required")
@@ -369,7 +369,7 @@ async def list_entries(request: Request):
     entries = CACHE_ENTRIES
 
     # When cross_user_leak is not active, filter by requesting user
-    if not is_finding_active("cache_cross_user_leak"):
+    if not is_observation_active("cache_cross_user_leak"):
         # In non-finding mode, would filter — but since no user context
         # is available without auth, return empty
         auth = request.headers.get("authorization")

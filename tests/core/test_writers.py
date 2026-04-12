@@ -14,6 +14,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app.db.writers import CheckLogWriter, ObservationWriter
 
@@ -119,7 +120,7 @@ class TestObservationWriterBatching:
 
 class TestObservationWriterScratchFallback:
     async def test_switches_to_scratch_on_db_failure(self, mock_obs_repo, tmp_path):
-        mock_obs_repo.bulk_create.side_effect = Exception("DB unreachable")
+        mock_obs_repo.bulk_create.side_effect = OperationalError("DB unreachable", {}, None)
 
         writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=2, scratch_dir=tmp_path)
 
@@ -140,7 +141,7 @@ class TestObservationWriterScratchFallback:
         assert data["title"] == "Obs 1"
 
     async def test_metadata_file_written_on_fallback(self, mock_obs_repo, tmp_path):
-        mock_obs_repo.bulk_create.side_effect = Exception("DB unreachable")
+        mock_obs_repo.bulk_create.side_effect = OperationalError("DB unreachable", {}, None)
 
         writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=1, scratch_dir=tmp_path)
         await writer.write(_make_obs("Obs 1"))
@@ -151,7 +152,7 @@ class TestObservationWriterScratchFallback:
         assert meta["scan_id"] == "scan-1"
 
     async def test_subsequent_writes_go_to_scratch(self, mock_obs_repo, tmp_path):
-        mock_obs_repo.bulk_create.side_effect = Exception("DB unreachable")
+        mock_obs_repo.bulk_create.side_effect = OperationalError("DB unreachable", {}, None)
 
         writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=1, scratch_dir=tmp_path)
 
@@ -193,7 +194,7 @@ class TestCheckLogWriter:
         mock_log_repo.bulk_create.assert_called_once_with("scan-1", [entry])
 
     async def test_failure_does_not_raise(self, mock_log_repo):
-        mock_log_repo.bulk_create.side_effect = Exception("DB error")
+        mock_log_repo.bulk_create.side_effect = OperationalError("DB error", {}, None)
         writer = CheckLogWriter("scan-1", repo=mock_log_repo)
 
         # Should not raise

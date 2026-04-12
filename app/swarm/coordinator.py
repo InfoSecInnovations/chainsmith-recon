@@ -382,22 +382,10 @@ class SwarmCoordinator:
 
     def _merge_services(self, new_services: list[dict]):
         """Merge agent-reported services into scan_context."""
-        if not new_services:
-            return
+        from app.lib.services import merge_services
 
         existing = self.scan_context.get("services", [])
-        existing_urls = set()
-        for svc in existing:
-            url = svc.url if isinstance(svc, Service) else svc.get("url", "")
-            existing_urls.add(url)
-
-        for svc_dict in new_services:
-            url = svc_dict.get("url", "")
-            if url and url not in existing_urls:
-                existing.append(Service.from_dict(svc_dict))
-                existing_urls.add(url)
-
-        self.scan_context["services"] = existing
+        self.scan_context["services"] = merge_services(existing, new_services, convert_dicts=True)
 
     def _check_scan_complete(self):
         """If all tasks are terminal, mark the scan as done."""

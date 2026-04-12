@@ -392,10 +392,10 @@ class EvidenceChecklistItem(BaseModel):
 
 
 class ProofGuidance(BaseModel):
-    """Complete proof guidance for a single finding."""
+    """Complete proof guidance for a single observation."""
 
-    finding_id: str
-    finding_title: str
+    observation_id: str
+    observation_title: str
     verification_status: str
     evidence_quality: str | None = None
 

@@ -258,21 +258,29 @@ class AdjudicatorAgent:
         observation: Observation,
         asset_context: OperatorAssetContext | None,
     ) -> str:
-        """Format observation + asset context into a prompt string."""
-        parts = [
-            f"Observation ID: {observation.id}",
-            f"Title: {observation.title}",
-            f"Description: {observation.description}",
-            f"Current Severity: {observation.severity}",
-            f"Confidence: {observation.confidence}",
-            f"Target: {observation.target_url or observation.target_service or 'unknown'}",
-        ]
+        """Format observation + asset context into a prompt string.
+
+        Uses structured JSON blocks to prevent prompt injection from
+        observation data (titles, descriptions, evidence) being
+        interpreted as instructions.
+        """
+        obs_data = {
+            "observation_id": observation.id,
+            "title": observation.title,
+            "description": observation.description,
+            "current_severity": str(observation.severity),
+            "confidence": observation.confidence,
+            "target": observation.target_url or observation.target_service or "unknown",
+        }
         if observation.evidence_summary:
-            parts.append(f"Evidence: {observation.evidence_summary}")
+            obs_data["evidence"] = observation.evidence_summary
         if observation.exploitation_techniques:
-            parts.append(
-                f"Exploitation Techniques: {', '.join(observation.exploitation_techniques)}"
-            )
+            obs_data["exploitation_techniques"] = observation.exploitation_techniques
+
+        parts = [
+            "Observation data:",
+            f"```json\n{json.dumps(obs_data, indent=2)}\n```",
+        ]
 
         if asset_context:
             parts.append("")

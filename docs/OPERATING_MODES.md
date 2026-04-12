@@ -124,13 +124,13 @@ chainsmith scenarios info fakobanko
 
 When a scenario is loaded:
 
-1. **Simulated checks are activated** — The checks listed in the scenario's `scenario.json` under `simulations` are loaded from `app/checks/simulator/simulations/`
+1. **Real checks run against the scenario's services** — By default, all real checks execute normally against the target infrastructure defined in the scenario's `docker-compose.yml`
 
-2. **Real checks are bypassed** — Instead of making actual network requests, checks return pre-configured responses from YAML simulation files
+2. **Simulated checks are optional overrides** — If specific checks are listed in `scenario.json` under `simulations`, those checks are replaced with pre-configured YAML responses instead of making real network requests. Simulations are only used when a real check needs to be spoofed (e.g., the target can't withstand a specific test, or for development reasons). An empty `"simulations": []` is the normal state — it means all checks run for real.
 
-3. **Observations are generated** — The simulated responses trigger the same observation logic as real checks, producing realistic observations
+3. **Observations are generated** — Both real and simulated checks produce observations through the same observation logic
 
-4. **Attack chains are detected** — Chainsmith's chain detection works the same way, identifying attack patterns from the simulated observations
+4. **Attack chains are detected** — Chainsmith's chain detection works the same way, identifying attack patterns from the observations
 
 ### Available Scenarios
 

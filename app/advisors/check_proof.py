@@ -75,8 +75,8 @@ def _build_context(
     ctx: dict[str, str] = {
         "target_url": observation.target_url or "",
         "host": observation.target_service or "",
-        "finding_id": observation.id,
-        "finding_title": observation.title,
+        "observation_id": observation.id,
+        "observation_title": observation.title,
         "severity": observation.severity.value,
     }
 
@@ -244,8 +244,8 @@ class CheckProofAdvisor:
         common_mistakes = template.get("common_mistakes", [])
 
         return ProofGuidance(
-            finding_id=observation.id,
-            finding_title=observation.title,
+            observation_id=observation.id,
+            observation_title=observation.title,
             verification_status=observation.status.value,
             evidence_quality=observation.evidence_quality.value
             if observation.evidence_quality

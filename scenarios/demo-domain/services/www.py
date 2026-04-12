@@ -18,7 +18,7 @@ import traceback
 from demo_domain.config import (
     VERBOSE_ERRORS,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
     reset_session,
 )
 from fastapi import FastAPI, Request
@@ -53,7 +53,7 @@ async def add_response_headers(request: Request, call_next):
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
     # version_disclosure finding — leak stack details
-    if is_finding_active("version_disclosure"):
+    if is_observation_active("version_disclosure"):
         response.headers["X-Powered-By"] = "FastAPI/0.111.0 Python/3.11.9"
         response.headers["Server"] = "uvicorn/0.29.0"
         response.headers["X-App-Version"] = "helpdesk-portal/2.4.1"
@@ -64,7 +64,7 @@ async def add_response_headers(request: Request, call_next):
     # X-Content-Type-Options, Referrer-Policy
 
     # cookie_security_missing finding — session cookie without Secure/HttpOnly
-    if is_finding_active("cookie_security_missing"):
+    if is_observation_active("cookie_security_missing"):
         response.set_cookie(
             key="helpdesk_session",
             value=get_or_create_session().session_id,
@@ -274,7 +274,7 @@ async def service_status():
 @app.get("/robots.txt", response_class=PlainTextResponse)
 async def robots_txt():
     """robots_sensitive_paths finding — discloses internal paths."""
-    if is_finding_active("robots_sensitive_paths"):
+    if is_observation_active("robots_sensitive_paths"):
         return (
             "User-agent: *\n"
             "Disallow: /admin\n"
@@ -294,7 +294,7 @@ async def robots_txt():
 @app.get("/.env", response_class=PlainTextResponse)
 async def env_file():
     """config_exposure finding — .env file accessible."""
-    if not is_finding_active("config_exposure"):
+    if not is_observation_active("config_exposure"):
         from fastapi import HTTPException
 
         raise HTTPException(404, "Not found")
@@ -331,7 +331,7 @@ async def session_reset():
     return {
         "reset": True,
         "session_id": session.session_id,
-        "active_findings": session.active_findings,
+        "active_observations": session.active_observations,
         "created_at": session.created_at,
     }
 
@@ -342,7 +342,7 @@ async def debug_info(request: Request):
     robots_sensitive_paths / verbose_errors finding.
     Exposed debug endpoint — leaks environment and request info.
     """
-    if not is_finding_active("verbose_errors"):
+    if not is_observation_active("verbose_errors"):
         from fastapi import HTTPException
 
         raise HTTPException(404, "Not found")
@@ -354,5 +354,5 @@ async def debug_info(request: Request):
         "app_module": os.environ.get("APP_MODULE"),
         "session_id": get_or_create_session().session_id,
         "request_headers": dict(request.headers),
-        "active_findings": get_or_create_session().active_findings,
+        "active_observations": get_or_create_session().active_observations,
     }

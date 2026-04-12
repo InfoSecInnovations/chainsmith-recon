@@ -9,7 +9,7 @@ import random
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
-from fakobanko.config import get_or_create_session, is_finding_active
+from fakobanko.config import get_or_create_session, is_observation_active
 
 app = FastAPI(
     title="Fakobanko Vector Service",
@@ -76,7 +76,7 @@ DOCUMENTS = {
 async def add_headers(request: Request, call_next):
     response = await call_next(request)
 
-    if is_finding_active("rag_endpoint_exposed"):
+    if is_observation_active("rag_endpoint_exposed"):
         response.headers["X-Vector-Service"] = "fakobanko-rag"
 
     return response
@@ -99,7 +99,7 @@ async def health():
 @app.get("/namespaces")
 async def list_namespaces():
     """List available namespaces."""
-    if is_finding_active("namespace_leak"):
+    if is_observation_active("namespace_leak"):
         return {"namespaces": list(DOCUMENTS.keys())}
     return {"namespaces": ["default"]}
 
@@ -109,7 +109,7 @@ async def search(request: SearchRequest):
     """Search for similar documents."""
     namespace = request.namespace
 
-    if namespace == "internal" and not is_finding_active("namespace_leak"):
+    if namespace == "internal" and not is_observation_active("namespace_leak"):
         raise HTTPException(403, "Access to internal namespace denied")
 
     docs = DOCUMENTS.get(namespace, [])
@@ -124,7 +124,7 @@ async def search(request: SearchRequest):
 @app.post("/documents")
 async def upsert_documents(request: UpsertRequest):
     """Upsert documents - may be writable!"""
-    if not is_finding_active("corpus_writable"):
+    if not is_observation_active("corpus_writable"):
         raise HTTPException(403, "Write access denied. Read-only mode.")
 
     namespace = request.namespace

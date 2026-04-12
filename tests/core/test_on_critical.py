@@ -44,6 +44,9 @@ class FakeCheck:
         result.outputs = dict(self._outputs)
         return result
 
+    async def execute(self, context: dict) -> CheckResult:
+        return await self.run(context)
+
 
 def make_observation(
     title: str = "Test observation",
@@ -80,7 +83,13 @@ def _make_prefs(on_critical: str = "annotate", **suite_overrides) -> Preferences
     prefs = Preferences()
     prefs.checks.on_critical = on_critical
     for key, value in suite_overrides.items():
-        setattr(prefs.checks, key, value)
+        # Convert on_critical_web="stop" → overrides["web"] = "stop"
+        if key.startswith("on_critical_"):
+            suite = key[len("on_critical_") :]
+            if value is not None:
+                prefs.checks.on_critical_overrides[suite] = value
+        else:
+            setattr(prefs.checks, key, value)
     return prefs
 
 
@@ -101,20 +110,20 @@ class TestResolveOnCritical:
     def test_per_suite_override(self):
         prefs = Preferences()
         prefs.checks.on_critical = "annotate"
-        prefs.checks.on_critical_web = "skip_downstream"
+        prefs.checks.on_critical_overrides["web"] = "skip_downstream"
         assert resolve_on_critical(prefs, "web") == "skip_downstream"
         assert resolve_on_critical(prefs, "ai") == "annotate"  # fallback to global
 
-    def test_per_suite_none_falls_back(self):
+    def test_per_suite_not_set_falls_back(self):
         prefs = Preferences()
         prefs.checks.on_critical = "stop"
-        prefs.checks.on_critical_web = None  # Not set
+        # "web" not in overrides → falls back to global
         assert resolve_on_critical(prefs, "web") == "stop"
 
     def test_invalid_suite_value_falls_back(self):
         prefs = Preferences()
         prefs.checks.on_critical = "annotate"
-        prefs.checks.on_critical_web = "invalid_value"
+        prefs.checks.on_critical_overrides["web"] = "invalid_value"
         assert resolve_on_critical(prefs, "web") == "annotate"
 
     def test_unknown_suite_falls_back(self):
@@ -133,9 +142,7 @@ class TestCheckPreferencesFields:
     def test_defaults(self):
         cp = CheckPreferences()
         assert cp.on_critical == "annotate"
-        assert cp.on_critical_web is None
-        assert cp.on_critical_ai is None
-        assert cp.on_critical_network is None
+        assert cp.on_critical_overrides == {}
         assert cp.intrusive_web is False
 
     def test_intrusive_web_off_by_default(self):

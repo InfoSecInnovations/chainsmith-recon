@@ -1,10 +1,12 @@
 # Scenarios
 
-Scenarios provide simulated environments for training and testing without live targets.
+Scenarios provide self-contained target environments for testing and training. Each scenario bundles Docker services, network configuration, and optional check overrides into a shareable directory.
 
 ## What is a Scenario?
 
-A scenario is a collection of YAML simulation files that define how checks should behave. Instead of making real network requests, checks return predefined responses.
+A scenario defines a target environment — real services running in Docker that Chainsmith scans with real checks. Scenarios are **not** simulations by default. All checks run normally against the scenario's services.
+
+Optionally, individual checks can be replaced with simulated (spoofed) responses via YAML files. This is only needed when a specific check must be skipped on the real target (e.g., the service can't withstand a particular test, or for development purposes). An empty `"simulations": []` is the normal and expected state.
 
 ## Using Scenarios
 
@@ -28,8 +30,6 @@ chainsmith scan fakobanko.local --scenario fakobanko
 
 **Hosts**: www, chat, api, docs, mcp, agent, rag, cache
 
-**Simulations**: 21 checks across all suites
-
 See [Fakobanko Details](fakobanko.md)
 
 ## Scenario Structure
@@ -37,8 +37,11 @@ See [Fakobanko Details](fakobanko.md)
 ```
 scenarios/
 └── fakobanko/
-    ├── scenario.json        # Metadata and simulation list
-    └── (references simulations in app/data/simulations/)
+    ├── scenario.json        # Metadata and configuration
+    ├── docker-compose.yml   # Target services
+    ├── services/            # FastAPI service implementations
+    ├── simulations/         # Optional check overrides (usually empty)
+    └── data/                # Persistent state (optional)
 ```
 
 ### scenario.json
@@ -52,20 +55,16 @@ scenarios/
     "pattern": "*.fakobanko.local",
     "known_hosts": ["www", "chat", "api", "mcp", "agent", "rag", "cache"]
   },
-  "simulations": [
-    "network/dns_fakobanko.yaml",
-    "mcp/mcp_discovery_fakobanko.yaml",
-    ...
-  ]
+  "simulations": []
 }
 ```
 
-## Simulation Files
+## Simulation Overrides
 
-Simulations define check outputs:
+When a specific check needs to be spoofed, add its YAML path to the `simulations` array. Simulations replace the corresponding real check — all other checks still run normally.
 
 ```yaml
-# app/data/simulations/mcp/mcp_discovery_fakobanko.yaml
+# scenarios/fakobanko/simulations/mcp/mcp_discovery_fakobanko.yaml
 suite: mcp
 emulates: mcp_discovery
 target: "mcp.fakobanko.local"

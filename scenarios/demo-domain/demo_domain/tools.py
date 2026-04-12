@@ -7,7 +7,7 @@ Legitimate and "mistakenly exposed" tools for the IT helpdesk AI chatbot.
 import random
 from datetime import datetime
 
-from demo_domain.config import is_finding_active
+from demo_domain.config import is_observation_active
 
 # ─── Fake Data ───────────────────────────────────────────────────
 
@@ -223,7 +223,7 @@ def lookup_employee(email: str) -> dict:
     SHOULD NOT BE EXPOSED - Internal employee directory lookup.
     Allows employee enumeration.
     """
-    if not is_finding_active("tool_schema_exposed"):
+    if not is_observation_active("tool_schema_exposed"):
         return {"error": "Tool not available"}
 
     email_lower = email.lower()
@@ -237,7 +237,7 @@ def escalate_ticket(ticket_id: str, user_id: str, reason: str = "") -> dict:
     SHOULD NOT BE EXPOSED - Escalate ticket without human-in-the-loop.
     Executes immediately with no confirmation step.
     """
-    if not is_finding_active("agent_tool_abuse"):
+    if not is_observation_active("agent_tool_abuse"):
         return {"error": "Tool not available"}
 
     ticket_id = ticket_id.upper()
@@ -259,7 +259,7 @@ def fetch_internal_doc(path: str) -> dict:
     """
     SHOULD NOT BE EXPOSED - Internal document retrieval with path traversal risk.
     """
-    if not is_finding_active("tool_schema_exposed"):
+    if not is_observation_active("tool_schema_exposed"):
         return {"error": "Tool not available"}
 
     if path in INTERNAL_DOCS:
@@ -428,10 +428,10 @@ def get_active_tools() -> list[dict]:
     tools = list(TOOL_DEFINITIONS)
 
     # Add sensitive tools if their finding is active
-    if is_finding_active("tool_schema_exposed"):
+    if is_observation_active("tool_schema_exposed"):
         tools.append(SENSITIVE_TOOL_DEFINITIONS[0])  # lookup_employee
         tools.append(SENSITIVE_TOOL_DEFINITIONS[2])  # fetch_internal_doc
-    if is_finding_active("agent_tool_abuse"):
+    if is_observation_active("agent_tool_abuse"):
         tools.append(SENSITIVE_TOOL_DEFINITIONS[1])  # escalate_ticket
 
     return tools

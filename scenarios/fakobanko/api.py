@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fakobanko.config import (
     VERBOSE_ERRORS,
     get_or_create_session,
-    is_finding_active,
+    is_observation_active,
 )
 
 app = FastAPI(
@@ -26,7 +26,7 @@ app = FastAPI(
 # Custom exception handler
 @app.exception_handler(Exception)
 async def verbose_exception_handler(request: Request, exc: Exception):
-    if VERBOSE_ERRORS and is_finding_active("stack_trace_disclosure"):
+    if VERBOSE_ERRORS and is_observation_active("stack_trace_disclosure"):
         tb = traceback.format_exc()
         return JSONResponse(
             status_code=500,
@@ -45,14 +45,14 @@ async def add_headers(request: Request, call_next):
     response = await call_next(request)
 
     # vLLM version header
-    if is_finding_active("header_vllm_version"):
+    if is_observation_active("header_vllm_version"):
         response.headers["X-Powered-By"] = "vLLM/0.4.1"
 
     # API version in header
     response.headers["X-API-Version"] = "2.1.0"
 
     # CORS misconfiguration
-    if is_finding_active("cors_misconfigured"):
+    if is_observation_active("cors_misconfigured"):
         response.headers["Access-Control-Allow-Origin"] = "*"
 
     return response
@@ -138,7 +138,7 @@ async def v2_assistant():
 @app.get("/api/v2/embeddings")
 async def v2_embeddings():
     """Embedding endpoint - conditional on finding being active."""
-    if not is_finding_active("embedding_endpoint_exposed"):
+    if not is_observation_active("embedding_endpoint_exposed"):
         raise HTTPException(status_code=404, detail="Not found")
 
     return {
@@ -152,7 +152,7 @@ async def v2_embeddings():
 @app.get("/api/v2/model-info")
 async def v2_model_info():
     """Model card disclosure - conditional finding."""
-    if not is_finding_active("model_card_disclosure"):
+    if not is_observation_active("model_card_disclosure"):
         raise HTTPException(status_code=404, detail="Not found")
 
     return {
@@ -171,7 +171,7 @@ async def v2_model_info():
 @app.get("/api/v2/tools")
 async def v2_tools():
     """Tool schema disclosure - conditional finding."""
-    if not is_finding_active("tool_schema_disclosure"):
+    if not is_observation_active("tool_schema_disclosure"):
         raise HTTPException(status_code=404, detail="Not found")
 
     return {

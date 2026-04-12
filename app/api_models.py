@@ -4,7 +4,9 @@ app/api_models.py - API Request/Response Models
 Pydantic models for HTTP API endpoints.
 """
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 # ─── Scope Models ─────────────────────────────────────────────
 
@@ -13,8 +15,8 @@ class ScopeInput(BaseModel):
     """Basic scope input."""
 
     target: str
-    exclude: list[str] = []
-    techniques: list[str] = []  # Empty = all techniques
+    exclude: list[str] = Field(default_factory=list)
+    techniques: list[str] = Field(default_factory=list)  # Empty = all techniques
 
 
 class EngagementWindowInput(BaseModel):
@@ -36,13 +38,7 @@ class OnCriticalSettings(BaseModel):
     """On-critical observation behavior settings."""
 
     default: str = "annotate"  # annotate, skip_downstream, stop
-    network: str | None = None
-    web: str | None = None
-    ai: str | None = None
-    mcp: str | None = None
-    agent: str | None = None
-    rag: str | None = None
-    cag: str | None = None
+    overrides: dict[str, str] = Field(default_factory=dict)  # per-suite overrides
 
 
 class ScanBehaviorSettings(BaseModel):
@@ -56,8 +52,8 @@ class ExtendedScopeInput(BaseModel):
     """Extended scope with engagement window and proof settings."""
 
     target: str
-    exclude: list[str] = []
-    techniques: list[str] = []
+    exclude: list[str] = Field(default_factory=list)
+    techniques: list[str] = Field(default_factory=list)
     engagement_window: EngagementWindowInput | None = None
     proof_of_scope: ProofSettingsInput | None = None
     scan_behavior: ScanBehaviorSettings | None = None
@@ -69,10 +65,10 @@ class ExtendedScopeInput(BaseModel):
 class ScanStartInput(BaseModel):
     """Optional body for POST /api/scan with check/suite filtering."""
 
-    checks: list[str] = []  # Run only these check names
-    suites: list[str] = []  # Run only checks from these suites
+    checks: list[str] = Field(default_factory=list)  # Run only these check names
+    suites: list[str] = Field(default_factory=list)  # Run only checks from these suites
     engagement_id: str | None = None  # Link scan to an engagement
-    port_profile: str | None = None  # Port profile: web, ai, full, lab
+    port_profile: Literal["web", "ai", "full", "lab"] | None = None
 
 
 # ─── Settings Models ──────────────────────────────────────────
@@ -83,7 +79,7 @@ class ScanSettings(BaseModel):
 
     parallel: bool = False
     rate_limit: float = 10.0
-    default_techniques: list[str] = []
+    default_techniques: list[str] = Field(default_factory=list)
 
 
 # ─── Status/Info Models ───────────────────────────────────────
@@ -108,8 +104,8 @@ class CheckInfo(BaseModel):
     name: str
     description: str
     reason: str = ""
-    references: list[str] = []
-    techniques: list[str] = []
+    references: list[str] = Field(default_factory=list)
+    techniques: list[str] = Field(default_factory=list)
     simulated: bool = False
 
 
@@ -164,7 +160,7 @@ class ProfileCreateInput(BaseModel):
 
     name: str
     description: str = ""
-    settings: dict = {}
+    settings: dict = Field(default_factory=dict)
 
 
 class ProfileUpdateInput(BaseModel):
@@ -201,8 +197,8 @@ class ScanSeverityOverrideDeleteInput(BaseModel):
 class PreRunSeverityOverridesInput(BaseModel):
     """Full pre-run severity override config (replaces entire file)."""
 
-    check_level: dict[str, str] = {}
-    check_title_level: dict[str, dict[str, str]] = {}
+    check_level: dict[str, str] = Field(default_factory=dict)
+    check_title_level: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class PreRunCheckOverrideInput(BaseModel):

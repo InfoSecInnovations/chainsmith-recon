@@ -10,7 +10,7 @@ import random
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
-from fakobanko.config import get_or_create_session, is_finding_active
+from fakobanko.config import get_or_create_session, is_observation_active
 
 app = FastAPI(
     title="Fakobanko ML Service",
@@ -47,11 +47,11 @@ async def add_headers(request: Request, call_next):
     response = await call_next(request)
 
     # Framework fingerprinting finding
-    if is_finding_active("framework_fingerprint"):
+    if is_observation_active("framework_fingerprint"):
         response.headers["X-Serving-Engine"] = "vLLM/0.4.1"
         response.headers["X-Model-Backend"] = "transformers"
 
-    if is_finding_active("model_version_leak"):
+    if is_observation_active("model_version_leak"):
         response.headers["X-Model-Version"] = "fakobanko-llm-v2.3.1-ft"
 
     return response
@@ -80,7 +80,7 @@ async def list_models():
     """Model listing endpoint - may leak info."""
     models = [{"id": "fakobanko-llm-v2", "object": "model", "owned_by": "fakobanko"}]
 
-    if is_finding_active("model_info_endpoint"):
+    if is_observation_active("model_info_endpoint"):
         # Leak additional model details
         models[0].update(
             {
@@ -92,7 +92,7 @@ async def list_models():
             }
         )
 
-    if is_finding_active("model_config_exposed"):
+    if is_observation_active("model_config_exposed"):
         models[0]["training_config"] = {
             "dataset": "s3://fakobanko-ml/training/customer-interactions-2024/",
             "epochs": 3,
@@ -109,10 +109,10 @@ async def create_embedding(request: EmbeddingRequest):
     texts = request.text if isinstance(request.text, list) else [request.text]
 
     # Check rate limiting finding
-    if not is_finding_active("no_rate_limit") and len(texts) > 10:
+    if not is_observation_active("no_rate_limit") and len(texts) > 10:
         raise HTTPException(429, "Rate limit exceeded: max 10 texts per request")
 
-    if not is_finding_active("bulk_query_allowed") and len(texts) > 1:
+    if not is_observation_active("bulk_query_allowed") and len(texts) > 1:
         raise HTTPException(400, "Bulk queries not allowed")
 
     # Generate fake embeddings
@@ -127,7 +127,7 @@ async def create_embedding(request: EmbeddingRequest):
         },
     }
 
-    if is_finding_active("embedding_endpoint_exposed"):
+    if is_observation_active("embedding_endpoint_exposed"):
         response["_debug"] = {
             "model_path": "/models/fakobanko-embed-v1",
             "dimension": 384,
@@ -159,7 +159,7 @@ async def create_completion(request: InferenceRequest):
 @app.get("/debug/config")
 async def debug_config():
     """Debug config endpoint - only if finding active."""
-    if not is_finding_active("model_config_exposed"):
+    if not is_observation_active("model_config_exposed"):
         raise HTTPException(404, "Not found")
 
     return {

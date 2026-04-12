@@ -9,7 +9,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from fakobanko.config import is_finding_active
+from fakobanko.config import is_observation_active
 
 # ─── Tool Response Models ──────────────────────────────────────
 
@@ -251,7 +251,7 @@ def lookup_customer_by_email(email: str) -> dict:
     SHOULD NOT BE EXPOSED - Internal tool for support agents.
     Allows customer enumeration.
     """
-    if not is_finding_active("customer_lookup_tool"):
+    if not is_observation_active("customer_lookup_tool"):
         return {"error": "Tool not available"}
 
     # Simulate customer lookup
@@ -287,7 +287,7 @@ def get_internal_announcements(category: str | None = None) -> dict:
     SHOULD NOT BE EXPOSED - Internal announcements feed.
     Leaks organizational information.
     """
-    if not is_finding_active("internal_announcement_tool"):
+    if not is_observation_active("internal_announcement_tool"):
         return {"error": "Tool not available"}
 
     announcements = [
@@ -335,7 +335,7 @@ def fetch_document(document_path: str) -> dict:
     """
     SHOULD NOT BE EXPOSED - Document retrieval with path traversal hints.
     """
-    if not is_finding_active("fetch_document_tool"):
+    if not is_observation_active("fetch_document_tool"):
         return {"error": "Tool not available"}
 
     # Simulate document fetch with path info leakage
@@ -491,11 +491,11 @@ def get_active_tools() -> list[dict]:
     tools = TOOL_DEFINITIONS.copy()
 
     # Add sensitive tools if their finding is active
-    if is_finding_active("customer_lookup_tool"):
+    if is_observation_active("customer_lookup_tool"):
         tools.append(SENSITIVE_TOOL_DEFINITIONS[0])
-    if is_finding_active("internal_announcement_tool"):
+    if is_observation_active("internal_announcement_tool"):
         tools.append(SENSITIVE_TOOL_DEFINITIONS[1])
-    if is_finding_active("fetch_document_tool"):
+    if is_observation_active("fetch_document_tool"):
         tools.append(SENSITIVE_TOOL_DEFINITIONS[2])
 
     return tools

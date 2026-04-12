@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 
 import app.db.engine as _engine_module
 from app.db.engine import Database
@@ -83,7 +84,7 @@ class TestPersistOrchestrator:
         from app.db.persist import on_scan_start
 
         broken_db = MagicMock()
-        broken_db.session.side_effect = Exception("DB down")
+        broken_db.session.side_effect = OperationalError("DB down", {}, None)
 
         with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = True
@@ -141,7 +142,7 @@ class TestPersistOrchestrator:
         from app.db.persist import on_scan_complete
 
         broken_db = MagicMock()
-        broken_db.session.side_effect = Exception("DB full")
+        broken_db.session.side_effect = OperationalError("DB full", {}, None)
 
         with patch("app.db.persist.get_config") as mock_cfg:
             mock_cfg.return_value.storage.auto_persist = True

@@ -174,7 +174,7 @@ class ChainsmithAgent:
             with open(ATTACK_PATTERNS_PATH) as f:
                 data = json.load(f)
                 return data.get("patterns", [])
-        except Exception:
+        except (FileNotFoundError, OSError, json.JSONDecodeError, KeyError):
             return []
 
     async def emit(self, event: AgentEvent):
@@ -369,7 +369,7 @@ class ChainsmithAgent:
             last_result = await ChainsmithRepository().get_validation()
             if last_result and last_result.get("result"):
                 last_hash = last_result["result"].get("community_hash")
-        except Exception:
+        except (ImportError, KeyError, AttributeError):
             pass
 
         if last_hash is None:
@@ -935,7 +935,7 @@ class {class_name}(BaseCheck):
                         )
                     )
 
-            except Exception as e:
+            except (ImportError, AttributeError, TypeError) as e:
                 result.issues.append(
                     ValidationIssue(
                         category="invalid_custom_check",
