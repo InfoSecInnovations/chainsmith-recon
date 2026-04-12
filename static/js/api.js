@@ -80,11 +80,40 @@ const api = {
     },
 
     // ─── Scan History & Trends ────────────────────────────────
-    async listScans(target = null, limit = 50) {
+    async listScans(filters = {}, limit = null) {
+        // Back-compat: allow listScans(targetString, limit) as well as
+        // listScans({target, status, engagement_id, started_after, started_before, limit, offset}).
+        if (typeof filters === 'string' || filters === null) {
+            filters = filters ? { target: filters } : {};
+        }
+        if (limit != null && filters.limit == null) filters.limit = limit;
         const params = new URLSearchParams();
-        if (target) params.set('target', target);
-        params.set('limit', limit);
+        if (filters.target) params.set('target', filters.target);
+        if (filters.status) params.set('status', filters.status);
+        if (filters.engagement_id) params.set('engagement_id', filters.engagement_id);
+        if (filters.started_after) params.set('started_after', filters.started_after);
+        if (filters.started_before) params.set('started_before', filters.started_before);
+        if (filters.limit != null) params.set('limit', filters.limit);
+        if (filters.offset != null) params.set('offset', filters.offset);
         return (await fetch(`/api/v1/scans?${params}`)).json();
+    },
+    async getScanDetail(scanId) {
+        return (await fetch(`/api/v1/scans/${scanId}`)).json();
+    },
+    async getScanObservationsByHost(scanId) {
+        return (await fetch(`/api/v1/scans/${scanId}/observations/by-host`)).json();
+    },
+    async getScanChains(scanId) {
+        return (await fetch(`/api/v1/scans/${scanId}/chains`)).json();
+    },
+    async getScanLog(scanId) {
+        return (await fetch(`/api/v1/scans/${scanId}/log`)).json();
+    },
+    async deleteScan(scanId) {
+        return (await fetch(`/api/v1/scans/${scanId}`, { method: 'DELETE' })).json();
+    },
+    async getObservationHistory(fingerprint) {
+        return (await fetch(`/api/v1/observations/${encodeURIComponent(fingerprint)}/history`)).json();
     },
     async listEngagements() { return (await fetch('/api/v1/engagements')).json(); },
     async getEngagement(id) { return (await fetch(`/api/v1/engagements/${id}`)).json(); },
@@ -130,9 +159,19 @@ const api = {
     async getCapabilities() { return (await fetch('/api/v1/capabilities')).json(); },
 
     // ─── Scan Observations (for targeted export) ──────────────────
-    async getScanObservations(scanId, severity = null) {
+    async getScanObservations(scanId, severityOrFilters = null, host = null) {
+        // Back-compat: allow getScanObservations(scanId, "high") and
+        // getScanObservations(scanId, { severity, host }).
+        let filters = {};
+        if (typeof severityOrFilters === 'string') {
+            filters.severity = severityOrFilters;
+            if (host) filters.host = host;
+        } else if (severityOrFilters && typeof severityOrFilters === 'object') {
+            filters = severityOrFilters;
+        }
         const params = new URLSearchParams();
-        if (severity) params.set('severity', severity);
+        if (filters.severity) params.set('severity', filters.severity);
+        if (filters.host) params.set('host', filters.host);
         const qs = params.toString();
         return (await fetch(`/api/v1/scans/${scanId}/observations${qs ? '?' + qs : ''}`)).json();
     },

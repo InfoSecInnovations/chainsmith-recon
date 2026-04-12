@@ -28,7 +28,6 @@ from app.routes import (
     checks_router,
     compliance_router,
     customizations_router,
-    engagements_router,
     observations_router,
     preferences_router,
     scan_history_router,
@@ -124,7 +123,6 @@ if Path(_static_dir).exists():
 app.include_router(scope_router)
 app.include_router(scan_router)
 app.include_router(scan_history_router)
-app.include_router(engagements_router)
 app.include_router(observations_router)
 app.include_router(checks_router)
 app.include_router(chains_router)
@@ -196,10 +194,10 @@ async def reports_page():
     return FileResponse(f"{_static_dir}/reports.html")
 
 
-@app.get("/engagements.html")
-async def engagements_page():
-    """Serve engagements management page."""
-    return FileResponse(f"{_static_dir}/engagements.html")
+@app.get("/scan-history.html")
+async def scan_history_page():
+    """Serve scan history page."""
+    return FileResponse(f"{_static_dir}/scan-history.html")
 
 
 # ─── Health ───────────────────────────────────────────────────

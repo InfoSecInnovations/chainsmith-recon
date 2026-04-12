@@ -235,33 +235,6 @@ class ChainsmithClient:
     def compare_scans(self, scan_a: str, scan_b: str) -> dict:
         return self._request("GET", f"/api/v1/scans/{scan_a}/compare/{scan_b}")
 
-    # ─── Engagements ─────────────────────────────────────────
-
-    def list_engagements(self) -> dict:
-        return self._request("GET", "/api/v1/engagements")
-
-    def create_engagement(
-        self, name: str, target_domain: str, description: str = None, client_name: str = None
-    ) -> dict:
-        body = {"name": name, "target_domain": target_domain}
-        if description:
-            body["description"] = description
-        if client_name:
-            body["client_name"] = client_name
-        return self._request("POST", "/api/v1/engagements", json=body)
-
-    def get_engagement(self, engagement_id: str) -> dict:
-        return self._request("GET", f"/api/v1/engagements/{engagement_id}")
-
-    def delete_engagement(self, engagement_id: str) -> dict:
-        return self._request("DELETE", f"/api/v1/engagements/{engagement_id}")
-
-    def get_engagement_scans(self, engagement_id: str) -> dict:
-        return self._request("GET", f"/api/v1/engagements/{engagement_id}/scans")
-
-    def get_engagement_trend(self, engagement_id: str) -> dict:
-        return self._request("GET", f"/api/v1/engagements/{engagement_id}/trend")
-
     def get_target_trend(self, target_domain: str) -> dict:
         return self._request("GET", f"/api/v1/targets/{target_domain}/trend")
 

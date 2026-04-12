@@ -22,7 +22,6 @@ from app.db.models import (
     Chain,
     ChatMessage,
     CheckLog,
-    Engagement,
     ObservationOverride,
     ObservationRecord,
     ObservationStatusHistory,
@@ -180,10 +179,16 @@ class ScanRepository(_RepositoryBase):
         target: str | None = None,
         status: str | None = None,
         engagement_id: str | None = None,
+        started_after: str | None = None,
+        started_before: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> dict:
-        """List scans with optional filters. Returns {total, scans}."""
+        """List scans with optional filters. Returns {total, scans}.
+
+        started_after / started_before are ISO-8601 strings and are
+        inclusive bounds on Scan.started_at.
+        """
         query = select(Scan)
         count_query = select(func.count()).select_from(Scan)
 
@@ -196,6 +201,12 @@ class ScanRepository(_RepositoryBase):
         if engagement_id:
             query = query.where(Scan.engagement_id == engagement_id)
             count_query = count_query.where(Scan.engagement_id == engagement_id)
+        if started_after:
+            query = query.where(Scan.started_at >= started_after)
+            count_query = count_query.where(Scan.started_at >= started_after)
+        if started_before:
+            query = query.where(Scan.started_at <= started_before)
+            count_query = count_query.where(Scan.started_at <= started_before)
 
         query = query.order_by(Scan.started_at.desc()).limit(limit).offset(offset)
 
@@ -512,125 +523,6 @@ def _check_log_to_dict(entry: CheckLog) -> dict:
         "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
     }
 
-
-class EngagementRepository(_RepositoryBase):
-    """Persist and query engagements."""
-
-    async def create_engagement(
-        self,
-        name: str,
-        target_domain: str,
-        description: str | None = None,
-        client_name: str | None = None,
-    ) -> dict:
-        """Create a new engagement. Returns the engagement dict."""
-        engagement_id = uuid.uuid4().hex[:16]
-        now = datetime.now(UTC)
-        engagement = Engagement(
-            id=engagement_id,
-            name=name,
-            target_domain=target_domain,
-            description=description,
-            client_name=client_name,
-            created_at=now,
-            updated_at=now,
-        )
-        async with self._session() as session:
-            session.add(engagement)
-            await session.commit()
-        logger.info(f"Created engagement {engagement_id}: {name}")
-        return _engagement_to_dict(engagement)
-
-    async def get_engagement(self, engagement_id: str) -> dict | None:
-        """Get an engagement by ID."""
-        async with self._session() as session:
-            result = await session.execute(select(Engagement).where(Engagement.id == engagement_id))
-            eng = result.scalar_one_or_none()
-            return _engagement_to_dict(eng) if eng else None
-
-    async def list_engagements(
-        self,
-        status: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> dict:
-        """List engagements. Returns {total, engagements}."""
-        query = select(Engagement)
-        count_query = select(func.count()).select_from(Engagement)
-
-        if status:
-            query = query.where(Engagement.status == status)
-            count_query = count_query.where(Engagement.status == status)
-
-        query = query.order_by(Engagement.updated_at.desc()).limit(limit).offset(offset)
-
-        async with self._session() as session:
-            total_result = await session.execute(count_query)
-            total = total_result.scalar()
-            result = await session.execute(query)
-            engagements = [_engagement_to_dict(e) for e in result.scalars().all()]
-
-        return {"total": total, "engagements": engagements}
-
-    async def update_engagement(
-        self,
-        engagement_id: str,
-        name: str | None = None,
-        description: str | None = None,
-        client_name: str | None = None,
-        status: str | None = None,
-    ) -> dict | None:
-        """Update an engagement. Returns updated dict or None if not found."""
-        async with self._session() as session:
-            result = await session.execute(select(Engagement).where(Engagement.id == engagement_id))
-            eng = result.scalar_one_or_none()
-            if eng is None:
-                return None
-            if name is not None:
-                eng.name = name
-            if description is not None:
-                eng.description = description
-            if client_name is not None:
-                eng.client_name = client_name
-            if status is not None:
-                eng.status = status
-            eng.updated_at = datetime.now(UTC)
-            await session.commit()
-            return _engagement_to_dict(eng)
-
-    async def delete_engagement(self, engagement_id: str) -> bool:
-        """Delete an engagement and unlink its scans. Returns True if existed."""
-        async with self._session() as session:
-            result = await session.execute(select(Engagement).where(Engagement.id == engagement_id))
-            eng = result.scalar_one_or_none()
-            if eng is None:
-                return False
-
-            # Unlink scans (don't delete them — they're still valid historical data)
-            scans_result = await session.execute(
-                select(Scan).where(Scan.engagement_id == engagement_id)
-            )
-            for scan in scans_result.scalars().all():
-                scan.engagement_id = None
-
-            await session.execute(delete(Engagement).where(Engagement.id == engagement_id))
-            await session.commit()
-        logger.info(f"Deleted engagement {engagement_id}")
-        return True
-
-
-def _engagement_to_dict(eng: Engagement) -> dict:
-    """Convert an Engagement ORM object to a JSON-safe dict."""
-    return {
-        "id": eng.id,
-        "name": eng.name,
-        "target_domain": eng.target_domain,
-        "description": eng.description,
-        "client_name": eng.client_name,
-        "created_at": eng.created_at.isoformat() if eng.created_at else None,
-        "updated_at": eng.updated_at.isoformat() if eng.updated_at else None,
-        "status": eng.status,
-    }
 
 
 class ComparisonRepository(_RepositoryBase):
@@ -1054,40 +946,6 @@ SEVERITY_LEVELS = ["critical", "high", "medium", "low", "info"]
 
 class TrendRepository(_RepositoryBase):
     """Compute trend data across scans for engagements or targets."""
-
-    async def get_engagement_trend(
-        self,
-        engagement_id: str,
-        since: str | None = None,
-        until: str | None = None,
-        last_n: int | None = None,
-    ) -> dict:
-        """Get trend data for all completed scans in an engagement."""
-        async with self._session() as session:
-            query = (
-                select(Scan.id)
-                .where(Scan.engagement_id == engagement_id)
-                .where(Scan.status == "complete")
-            )
-            query = self._apply_date_filters(query, since, until)
-            query = query.order_by(Scan.started_at)
-            result = await session.execute(query)
-            scan_ids = [row[0] for row in result.all()]
-
-        if last_n and last_n > 0:
-            scan_ids = scan_ids[-last_n:]
-
-        if not scan_ids:
-            return {
-                "data_points": [],
-                "averages": {"this_target": {}, "all_targets": {}},
-                "metrics": {},
-            }
-
-        data_points = await self._build_data_points(scan_ids)
-        averages = await self._compute_averages(data_points)
-        metrics = await self.compute_metrics(scan_ids)
-        return {"data_points": data_points, "averages": averages, "metrics": metrics}
 
     async def get_target_trend(
         self,

@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chainsmith Recon - Scan History</title>
+    <link rel="stylesheet" href="/static/css/common.css">
+    <link rel="stylesheet" href="/static/css/chat.css">
+    <link rel="stylesheet" href="/static/css/guided.css">
+    <link rel="stylesheet" href="/static/css/viz.css">
+    <link rel="stylesheet" href="/static/css/scan-history.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <a href="index.html" class="brand">
+                <span class="brand-name"><span class="accent">Chainsmith</span> Recon</span>
+                <span class="brand-tagline">Recon for the AI Era</span>
+            </a>
+        </div>
+        <div class="header-right">
+            <span class="header-status" id="header-status"></span>
+            <button class="btn btn-icon" id="btn-settings" title="Settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <nav class="nav">
+        <a href="index.html" class="nav-item">Scope</a>
+        <a href="scan.html" class="nav-item">Scan</a>
+        <a href="observations.html" class="nav-item">Observations</a>
+        <a href="scan-history.html" class="nav-item active">Scan History</a>
+        <a href="trend.html" class="nav-item">Trends</a>
+        <a href="reports.html" class="nav-item">Reports</a>
+    </nav>
+
+    <div id="scenario-banner" class="scenario-banner u-hidden"></div>
+
+    <main class="sh-container">
+        <!-- ─── LIST VIEW ─── -->
+        <div id="list-view">
+            <div class="sh-header">
+                <h2 class="sh-title">Scan History</h2>
+            </div>
+
+            <div class="sh-summary" id="sh-summary" aria-live="polite">
+                <div class="sh-summary-item">
+                    <div class="sh-summary-label">Scans</div>
+                    <div class="sh-summary-value" id="summary-count">--</div>
+                </div>
+                <div class="sh-summary-item">
+                    <div class="sh-summary-label">Success rate</div>
+                    <div class="sh-summary-value" id="summary-success">--</div>
+                </div>
+                <div class="sh-summary-item">
+                    <div class="sh-summary-label">Avg duration</div>
+                    <div class="sh-summary-value" id="summary-avg">--</div>
+                </div>
+            </div>
+
+            <div class="sh-filters">
+                <div class="sh-filter">
+                    <label for="filter-target">Target</label>
+                    <input type="text" id="filter-target" placeholder="domain.com">
+                </div>
+                <div class="sh-filter">
+                    <label for="filter-status">Status</label>
+                    <select id="filter-status">
+                        <option value="">All</option>
+                        <option value="running">Running</option>
+                        <option value="complete">Complete</option>
+                        <option value="error">Error</option>
+                    </select>
+                </div>
+                <div class="sh-filter" data-cap="engagements">
+                    <label for="filter-engagement">Engagement</label>
+                    <select id="filter-engagement">
+                        <option value="">All</option>
+                    </select>
+                </div>
+                <div class="sh-filter">
+                    <label for="filter-after">Started after</label>
+                    <input type="date" id="filter-after">
+                </div>
+                <div class="sh-filter">
+                    <label for="filter-before">Started before</label>
+                    <input type="date" id="filter-before">
+                </div>
+                <div class="sh-filter-actions">
+                    <button class="btn" id="btn-apply-filters">Apply</button>
+                    <button class="btn" id="btn-clear-filters">Clear</button>
+                </div>
+            </div>
+
+            <div id="scan-list-content">
+                <p class="empty-message">No scans found.</p>
+            </div>
+
+            <div class="sh-compare-bar hidden" id="compare-bar">
+                <span id="compare-status">Select 2 scans to compare</span>
+                <button class="btn btn-primary" id="btn-compare" disabled>Compare</button>
+            </div>
+
+            <div class="sh-pagination">
+                <button class="btn" id="btn-load-more" style="display:none;">Load more</button>
+            </div>
+        </div>
+
+        <!-- ─── DETAIL VIEW ─── -->
+        <div id="detail-view" class="u-hidden">
+            <a class="detail-back" id="btn-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                Back to Scan History
+            </a>
+            <div class="detail-header">
+                <div>
+                    <h2 class="detail-title" id="detail-title"></h2>
+                    <div class="detail-meta" id="detail-meta"></div>
+                </div>
+                <div class="detail-actions">
+                    <span id="detail-status"></span>
+                    <button class="btn btn-delete-text" id="btn-delete-scan">Delete Scan</button>
+                </div>
+            </div>
+
+            <div class="sub-tabs">
+                <button class="sub-tab active" data-tab="overview">Overview</button>
+                <button class="sub-tab" data-tab="observations">Observations</button>
+                <button class="sub-tab" data-tab="chains">Chains</button>
+                <button class="sub-tab" data-tab="log">Log</button>
+                <button class="sub-tab" data-tab="compare">Compare</button>
+                <button class="sub-tab" data-tab="reports">Reports</button>
+            </div>
+
+            <div class="sub-panel active" id="panel-overview"><div id="overview-content"><p class="empty-message">Loading...</p></div></div>
+            <div class="sub-panel" id="panel-observations"><div id="observations-content"><p class="empty-message">Click to load.</p></div></div>
+            <div class="sub-panel" id="panel-chains"><div id="chains-content"><p class="empty-message">Click to load.</p></div></div>
+            <div class="sub-panel" id="panel-log"><div id="log-content"><p class="empty-message">Click to load.</p></div></div>
+            <div class="sub-panel" id="panel-compare"><div id="compare-content"><p class="empty-message">Click to load.</p></div></div>
+            <div class="sub-panel" id="panel-reports">
+                <div class="report-actions">
+                    <div class="report-option">
+                        <div class="report-option-info"><h4>Technical Report</h4><p>Detailed findings with evidence</p></div>
+                        <button class="btn btn-primary btn-small" data-report="technical">Generate</button>
+                    </div>
+                    <div class="report-option">
+                        <div class="report-option-info"><h4>Executive Report</h4><p>High-level summary for stakeholders</p></div>
+                        <button class="btn btn-primary btn-small" data-report="executive">Generate</button>
+                    </div>
+                    <div class="report-option">
+                        <div class="report-option-info"><h4>Compliance Report</h4><p>Scope compliance and framework mapping</p></div>
+                        <button class="btn btn-primary btn-small" data-report="compliance">Generate</button>
+                    </div>
+                </div>
+                <div id="report-result" class="report-result-area"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Delete confirm modal -->
+    <div class="form-modal-overlay" id="confirm-modal-overlay">
+        <div class="form-modal form-modal-narrow">
+            <div class="form-modal-header">
+                <h3 id="confirm-modal-title">Confirm Delete</h3>
+                <button class="drawer-close" id="confirm-modal-close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="form-modal-body">
+                <div class="confirm-delete" id="confirm-modal-body">This action cannot be undone.</div>
+            </div>
+            <div class="form-modal-footer">
+                <button class="btn" id="confirm-modal-cancel">Cancel</button>
+                <button class="btn btn-delete" id="confirm-modal-confirm">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings drawer (shared pattern) -->
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+    <div class="drawer drawer-right" id="drawer-settings">
+        <div class="drawer-header">
+            <h2>Settings</h2>
+            <button class="drawer-close" id="close-settings">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="drawer-content">
+            <div class="setting-section setting-section-divided">
+                <div class="setting-section-title">Scan Profile</div>
+                <div class="setting-row setting-row-stacked-lg">
+                    <select class="form-input u-full-width" id="setting-profile"><option value="default">default</option></select>
+                    <div id="profile-description" class="profile-description"></div>
+                    <div id="profile-key-settings" class="profile-key-settings"></div>
+                </div>
+            </div>
+            <div class="setting-row">
+                <div><div class="setting-label">Theme</div><div class="setting-desc">Color scheme</div></div>
+                <div class="theme-selector">
+                    <button class="theme-btn active" data-theme="dark">Dark</button>
+                    <button class="theme-btn" data-theme="light">Light</button>
+                </div>
+            </div>
+            <div class="setting-section">
+                <div class="setting-section-title">Scenario</div>
+                <div class="setting-row setting-row-stacked">
+                    <div class="setting-desc">Simulate a target environment</div>
+                    <select class="form-input u-full-width" id="setting-scenario"><option value="">--- No scenario ---</option></select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal (shared) -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title"></h3>
+                <button class="drawer-close" id="close-modal">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+    (function () {
+        // ─── State ───────────────────────────────────────────
+        const state = {
+            scans: [],
+            engagements: [],
+            currentScan: null,
+            filters: { target: '', status: '', engagement_id: '', started_after: '', started_before: '' },
+            offset: 0,
+            limit: 50,
+            total: 0,
+            selectedForCompare: [],
+            capabilities: { engagements: true },
+            confirmCallback: null,
+        };
+
+        const LIMIT = 50;
+
+        // ─── Utils ───────────────────────────────────────────
+        function esc(s) {
+            if (s == null) return '';
+            const el = document.createElement('span');
+            el.textContent = String(s);
+            return el.innerHTML;
+        }
+        function fmtDate(s) { return s ? new Date(s).toLocaleString() : '--'; }
+        function fmtDuration(ms) { return ms ? (ms / 1000).toFixed(1) + 's' : '--'; }
+        function qs(params) {
+            const p = new URLSearchParams();
+            for (const [k, v] of Object.entries(params)) if (v !== '' && v != null) p.set(k, v);
+            return p.toString();
+        }
+
+        // ─── Capability gating ───────────────────────────────
+        async function applyCapabilities() {
+            try {
+                const caps = await api.getCapabilities();
+                state.capabilities = Object.assign(state.capabilities, caps);
+            } catch (e) { /* keep defaults */ }
+            const enabled = !!state.capabilities.engagements;
+            document.querySelectorAll('[data-cap="engagements"]').forEach(el => {
+                if (!enabled) el.style.display = 'none';
+            });
+            if (!enabled) {
+                // Also hide the Reports tab if engagement-specific reports are gone?
+                // No — reports sub-tab is scan-level, stays visible.
+            }
+        }
+
+        // ─── Init ────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCommon();
+            initModal();
+            await applyCapabilities();
+
+            initFilters();
+            initCompareBar();
+            initDetailView();
+            initConfirmModal();
+            initReportButtons();
+
+            // Populate engagement filter dropdown if enabled
+            if (state.capabilities.engagements) {
+                await loadEngagements();
+                populateEngagementFilter();
+            }
+
+            // Route based on URL params
+            const params = new URLSearchParams(window.location.search);
+            const scanId = params.get('scan');
+            const compare = params.get('compare');
+            const engagement = params.get('engagement');
+            const target = params.get('target');
+
+            if (target) { state.filters.target = target; document.getElementById('filter-target').value = target; }
+            if (engagement) { state.filters.engagement_id = engagement; const el = document.getElementById('filter-engagement'); if (el) el.value = engagement; }
+
+            if (scanId) {
+                await openScanDetail(scanId);
+            } else if (compare) {
+                const [a, b] = compare.split(',');
+                if (a && b) await openCompare(a, b);
+            } else {
+                await loadScans();
+            }
+
+            window.addEventListener('popstate', handlePopState);
+        });
+
+        async function handlePopState() {
+            const params = new URLSearchParams(window.location.search);
+            const scanId = params.get('scan');
+            const compare = params.get('compare');
+            if (scanId) { await openScanDetail(scanId, false); return; }
+            if (compare) { const [a,b] = compare.split(','); if (a && b) { await openCompare(a, b, false); return; } }
+            showListView(false);
+        }
+
+        // ─── Filters ─────────────────────────────────────────
+        function initFilters() {
+            document.getElementById('btn-apply-filters').addEventListener('click', applyFilters);
+            document.getElementById('btn-clear-filters').addEventListener('click', clearFilters);
+            document.getElementById('filter-target').addEventListener('keydown', e => { if (e.key === 'Enter') applyFilters(); });
+            document.getElementById('btn-load-more').addEventListener('click', loadMoreScans);
+        }
+
+        function readFilters() {
+            state.filters.target = document.getElementById('filter-target').value.trim();
+            state.filters.status = document.getElementById('filter-status').value;
+            const engEl = document.getElementById('filter-engagement');
+            state.filters.engagement_id = engEl ? engEl.value : '';
+            const after = document.getElementById('filter-after').value;
+            const before = document.getElementById('filter-before').value;
+            state.filters.started_after = after ? new Date(after).toISOString() : '';
+            // started_before: treat as end of that day for inclusivity
+            state.filters.started_before = before ? new Date(before + 'T23:59:59').toISOString() : '';
+        }
+
+        async function applyFilters() {
+            readFilters();
+            state.offset = 0;
+            await loadScans();
+        }
+
+        function clearFilters() {
+            document.getElementById('filter-target').value = '';
+            document.getElementById('filter-status').value = '';
+            const engEl = document.getElementById('filter-engagement'); if (engEl) engEl.value = '';
+            document.getElementById('filter-after').value = '';
+            document.getElementById('filter-before').value = '';
+            state.filters = { target: '', status: '', engagement_id: '', started_after: '', started_before: '' };
+            state.offset = 0;
+            loadScans();
+        }
+
+        function populateEngagementFilter() {
+            const el = document.getElementById('filter-engagement');
+            if (!el) return;
+            const current = el.value;
+            el.innerHTML = '<option value="">All</option>' +
+                state.engagements.map(e => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+            if (current) el.value = current;
+        }
+
+        // ─── Load scans ──────────────────────────────────────
+        async function loadScans(append = false) {
+            const container = document.getElementById('scan-list-content');
+            if (!append) {
+                state.offset = 0;
+                container.innerHTML = '<p class="empty-message">No scans found.</p>';
+            }
+            try {
+                const data = await api.listScans({
+                    ...state.filters,
+                    limit: state.limit,
+                    offset: state.offset,
+                });
+                const scans = data.scans || [];
+                state.total = data.total || scans.length;
+                if (append) state.scans = state.scans.concat(scans);
+                else state.scans = scans;
+                renderScanTable();
+                const loadMore = document.getElementById('btn-load-more');
+                loadMore.style.display = (state.scans.length < state.total) ? '' : 'none';
+            } catch (e) {
+                container.innerHTML = `<p style="color:var(--error);">Failed to load scans: ${esc(e.message)}</p>`;
+            }
+        }
+
+        async function loadMoreScans() {
+            state.offset += state.limit;
+            await loadScans(true);
+        }
+
+        function renderSummary() {
+            const scans = state.scans;
+            const countEl = document.getElementById('summary-count');
+            const successEl = document.getElementById('summary-success');
+            const avgEl = document.getElementById('summary-avg');
+            if (!countEl) return;
+            if (!scans.length) {
+                countEl.textContent = '0';
+                successEl.textContent = '--';
+                avgEl.textContent = '--';
+                return;
+            }
+            const shown = scans.length;
+            countEl.textContent = (shown < state.total) ? `${shown} of ${state.total}` : String(state.total);
+            const finished = scans.filter(s => s.status === 'complete' || s.status === 'error');
+            const complete = scans.filter(s => s.status === 'complete');
+            successEl.textContent = finished.length
+                ? Math.round((complete.length / finished.length) * 100) + '%'
+                : '--';
+            const durations = complete.map(s => s.duration_ms ?? s.duration).filter(d => typeof d === 'number' && d > 0);
+            avgEl.textContent = durations.length
+                ? fmtDuration(durations.reduce((a, b) => a + b, 0) / durations.length)
+                : '--';
+        }
+
+        function renderScanTable() {
+            const container = document.getElementById('scan-list-content');
+            renderSummary();
+            if (!state.scans.length) {
+                container.innerHTML = '<p class="empty-message">No scans found. Adjust filters or run a scan.</p>';
+                return;
+            }
+            const engCol = state.capabilities.engagements;
+            const engMap = Object.fromEntries(state.engagements.map(e => [e.id, e.name]));
+            container.innerHTML = `
+                <table class="sh-table">
+                    <thead>
+                        <tr>
+                            <th style="width:32px;"></th>
+                            <th>Scan ID</th>
+                            <th>Target</th>
+                            <th>Started</th>
+                            <th>Observations</th>
+                            <th>Duration</th>
+                            <th>Status</th>
+                            ${engCol ? '<th>Engagement</th>' : ''}
+                            <th style="width:32px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${state.scans.map(s => {
+                            const checked = state.selectedForCompare.includes(s.id) ? 'checked' : '';
+                            const engName = engCol ? (s.engagement_id ? esc(engMap[s.engagement_id] || s.engagement_id.substring(0,8)) : '--') : '';
+                            return `
+                            <tr class="clickable" data-scan-id="${esc(s.id)}">
+                                <td onclick="event.stopPropagation()"><input type="checkbox" data-compare-id="${esc(s.id)}" ${checked}></td>
+                                <td class="mono">${esc(s.id.substring(0, 8))}</td>
+                                <td>${esc(s.target_domain || '--')}</td>
+                                <td>${fmtDate(s.started_at)}</td>
+                                <td>${s.observations_count ?? s.total_observations ?? '--'}</td>
+                                <td>${fmtDuration(s.duration_ms)}</td>
+                                <td><span class="status-dot ${esc(s.status || 'active')}"></span>${esc(s.status || '--')}</td>
+                                ${engCol ? `<td>${engName}</td>` : ''}
+                                <td onclick="event.stopPropagation()"><button class="btn-row-delete" data-delete-id="${esc(s.id)}" title="Delete scan" aria-label="Delete scan"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path></svg></button></td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>`;
+            container.querySelectorAll('tr.clickable').forEach(tr => {
+                tr.addEventListener('click', () => openScanDetail(tr.dataset.scanId));
+            });
+            container.querySelectorAll('input[data-compare-id]').forEach(cb => {
+                cb.addEventListener('change', e => toggleCompareSelection(cb.dataset.compareId, cb.checked));
+            });
+            container.querySelectorAll('button[data-delete-id]').forEach(btn => {
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    const id = btn.dataset.deleteId;
+                    openConfirm('Delete Scan', `Delete scan ${id.substring(0, 8)}? This removes all associated observations, chains, and logs.`, async () => {
+                        await api.deleteScan(id);
+                        await loadScans();
+                    });
+                });
+            });
+        }
+
+        // ─── Compare selection ──────────────────────────────
+        function initCompareBar() {
+            document.getElementById('btn-compare').addEventListener('click', () => {
+                if (state.selectedForCompare.length === 2) {
+                    openCompare(state.selectedForCompare[0], state.selectedForCompare[1]);
+                }
+            });
+        }
+
+        function toggleCompareSelection(scanId, checked) {
+            const idx = state.selectedForCompare.indexOf(scanId);
+            if (checked && idx < 0) {
+                if (state.selectedForCompare.length >= 2) {
+                    // Uncheck oldest
+                    const oldest = state.selectedForCompare.shift();
+                    const oldCb = document.querySelector(`input[data-compare-id="${oldest}"]`);
+                    if (oldCb) oldCb.checked = false;
+                }
+                state.selectedForCompare.push(scanId);
+            } else if (!checked && idx >= 0) {
+                state.selectedForCompare.splice(idx, 1);
+            }
+            renderCompareBar();
+        }
+
+        function renderCompareBar() {
+            const bar = document.getElementById('compare-bar');
+            const status = document.getElementById('compare-status');
+            const btn = document.getElementById('btn-compare');
+            const n = state.selectedForCompare.length;
+            if (n === 0) { bar.classList.add('hidden'); return; }
+            bar.classList.remove('hidden');
+            status.textContent = `${n} scan${n === 1 ? '' : 's'} selected${n < 2 ? ' (select one more to compare)' : ''}`;
+            btn.disabled = n !== 2;
+        }
+
+        // ─── Detail view ─────────────────────────────────────
+        function initDetailView() {
+            document.getElementById('btn-back').addEventListener('click', () => showListView(true));
+            document.getElementById('btn-delete-scan').addEventListener('click', () => {
+                if (!state.currentScan) return;
+                openConfirm('Delete Scan', `Delete scan ${state.currentScan.id.substring(0,8)}? This removes all associated observations, chains, and logs.`, async () => {
+                    await api.deleteScan(state.currentScan.id);
+                    showListView(true);
+                    await loadScans();
+                });
+            });
+            document.querySelectorAll('.sub-tab').forEach(tab => {
+                tab.addEventListener('click', () => switchSubTab(tab.dataset.tab));
+            });
+        }
+
+        async function openScanDetail(scanId, pushUrl = true) {
+            try {
+                const scan = await api.getScanDetail(scanId);
+                if (scan.detail) { alert('Scan not found'); return; }
+                state.currentScan = scan;
+                if (pushUrl) {
+                    const url = new URL(window.location);
+                    url.searchParams.set('scan', scanId);
+                    url.searchParams.delete('compare');
+                    window.history.pushState({}, '', url);
+                }
+                document.getElementById('list-view').style.display = 'none';
+                document.getElementById('detail-view').style.display = 'block';
+                renderDetailHeader(scan);
+                switchSubTab('overview');
+            } catch (e) {
+                alert('Failed to open scan: ' + e.message);
+            }
+        }
+
+        function showListView(pushUrl = true) {
+            document.getElementById('detail-view').style.display = 'none';
+            document.getElementById('list-view').style.display = 'block';
+            state.currentScan = null;
+            if (pushUrl) {
+                const url = new URL(window.location);
+                url.searchParams.delete('scan');
+                url.searchParams.delete('compare');
+                window.history.pushState({}, '', url);
+            }
+        }
+
+        function renderDetailHeader(scan) {
+            document.getElementById('detail-title').textContent = `Scan ${scan.id.substring(0, 8)}`;
+            const engName = (state.capabilities.engagements && scan.engagement_id)
+                ? (state.engagements.find(e => e.id === scan.engagement_id)?.name || scan.engagement_id)
+                : null;
+            document.getElementById('detail-meta').innerHTML = `
+                <span>Target: <strong>${esc(scan.target_domain)}</strong></span>
+                <span>Started: ${fmtDate(scan.started_at)}</span>
+                <span>Duration: ${fmtDuration(scan.duration_ms)}</span>
+                ${engName ? `<span>Engagement: ${esc(engName)}</span>` : ''}
+            `;
+            const status = scan.status || '--';
+            document.getElementById('detail-status').innerHTML = `<span class="status-dot ${esc(status)}"></span>${esc(status)}`;
+        }
+
+        async function switchSubTab(tabName) {
+            document.querySelectorAll('.sub-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+            document.querySelectorAll('.sub-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${tabName}`));
+            if (!state.currentScan) return;
+            const id = state.currentScan.id;
+            switch (tabName) {
+                case 'overview': renderOverview(state.currentScan); break;
+                case 'observations': await loadObservations(id); break;
+                case 'chains': await loadChains(id); break;
+                case 'log': await loadLog(id); break;
+                case 'compare': renderCompareTabPicker(id); break;
+                case 'reports': /* static markup, nothing to load */ break;
+            }
+        }
+
+        // ─── Overview ────────────────────────────────────────
+        function renderOverview(scan) {
+            const el = document.getElementById('overview-content');
+            const sev = scan.severity_breakdown || scan.severity_counts || {};
+            const cards = ['critical','high','medium','low','info'].map(s => `
+                <div class="scan-overview-card sev-${s}">
+                    <div class="value">${sev[s] ?? 0}</div>
+                    <div class="label">${s}</div>
+                </div>
+            `).join('');
+            const meta = [
+                scan.profile_name ? `<div><strong>Profile:</strong> ${esc(scan.profile_name)}</div>` : '',
+                scan.scenario ? `<div><strong>Scenario:</strong> ${esc(scan.scenario)}</div>` : '',
+                scan.checks_run != null ? `<div><strong>Checks run:</strong> ${scan.checks_run}</div>` : '',
+                scan.total_observations != null ? `<div><strong>Total observations:</strong> ${scan.total_observations}</div>` : '',
+            ].filter(Boolean).join('');
+            el.innerHTML = `<div class="scan-overview">${cards}</div><div style="font-size:0.8125rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:6px;">${meta}</div>`;
+        }
+
+        // ─── Observations ────────────────────────────────────
+        async function loadObservations(scanId) {
+            const el = document.getElementById('observations-content');
+            el.innerHTML = '<p class="empty-message">Loading...</p>';
+            try {
+                const data = await api.getScanObservations(scanId);
+                const obs = data.observations || [];
+                if (!obs.length) { el.innerHTML = '<p class="empty-message">No observations.</p>'; return; }
+                el.innerHTML = `
+                    <table class="sh-table">
+                        <thead><tr><th>Severity</th><th>Title</th><th>Host</th><th>Check</th><th>Status</th></tr></thead>
+                        <tbody>
+                            ${obs.map(o => {
+                                const statusBadge = o.status ? `<span class="obs-badge ${esc(o.status)}">${esc(o.status)}</span>` : '';
+                                return `<tr>
+                                    <td><span class="severity-badge severity-${esc(o.severity)}">${esc(o.severity)}</span></td>
+                                    <td>${esc(o.title)}</td>
+                                    <td>${esc(o.host || o.target_url || '--')}</td>
+                                    <td>${esc(o.check_name || '--')}</td>
+                                    <td>${statusBadge}</td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>`;
+            } catch (e) {
+                el.innerHTML = `<p style="color:var(--error);">Failed: ${esc(e.message)}</p>`;
+            }
+        }
+
+        // ─── Chains ──────────────────────────────────────────
+        async function loadChains(scanId) {
+            const el = document.getElementById('chains-content');
+            el.innerHTML = '<p class="empty-message">Loading...</p>';
+            try {
+                const data = await api.getScanChains(scanId);
+                const chains = data.chains || [];
+                if (!chains.length) { el.innerHTML = '<p class="empty-message">No attack chains.</p>'; return; }
+                el.innerHTML = chains.map(c => `
+                    <div class="report-option" style="flex-direction:column;align-items:flex-start;gap:8px;">
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <span class="severity-badge severity-${esc(c.severity)}">${esc(c.severity)}</span>
+                            <span class="chain-source-badge ${esc(c.source)}">${esc(c.source)}</span>
+                            <strong>${esc(c.title || c.pattern_name || 'Chain')}</strong>
+                        </div>
+                        <div style="font-size:0.8125rem;color:var(--text-secondary);">${esc(c.description || '')}</div>
+                        <div style="font-size:0.75rem;color:var(--text-muted);">${(c.observation_ids || []).length} linked observations</div>
+                    </div>`).join('');
+            } catch (e) {
+                el.innerHTML = `<p style="color:var(--error);">Failed: ${esc(e.message)}</p>`;
+            }
+        }
+
+        // ─── Log ─────────────────────────────────────────────
+        async function loadLog(scanId) {
+            const el = document.getElementById('log-content');
+            el.innerHTML = '<p class="empty-message">Loading...</p>';
+            try {
+                const data = await api.getScanLog(scanId);
+                const log = data.log || [];
+                if (!log.length) { el.innerHTML = '<p class="empty-message">No log entries.</p>'; return; }
+                el.innerHTML = `<div class="log-timeline">
+                    <div class="log-row" style="color:var(--text-muted);font-weight:600;">
+                        <span>Event</span><span>Check</span><span>Suite</span><span>Duration</span><span>Obs</span>
+                    </div>
+                    ${log.map(r => `
+                        <div class="log-row">
+                            <span class="event">${esc(r.event || r.status || '--')}</span>
+                            <span class="check">${esc(r.check_name || '--')}</span>
+                            <span>${esc(r.suite || r.phase || '--')}</span>
+                            <span>${fmtDuration(r.duration_ms)}</span>
+                            <span>${r.observations_count ?? '--'}</span>
+                        </div>`).join('')}
+                </div>`;
+            } catch (e) {
+                el.innerHTML = `<p style="color:var(--error);">Failed: ${esc(e.message)}</p>`;
+            }
+        }
+
+        // ─── Compare ─────────────────────────────────────────
+        function renderCompareTabPicker(scanId) {
+            const el = document.getElementById('compare-content');
+            const otherScans = state.scans.filter(s =>
+                s.id !== scanId && s.target_domain === state.currentScan.target_domain
+            );
+            if (!otherScans.length) {
+                el.innerHTML = '<p class="empty-message">No other scans of the same target to compare against.</p>';
+                return;
+            }
+            el.innerHTML = `
+                <div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;">
+                    <label style="font-size:0.8125rem;">Compare with:</label>
+                    <select id="compare-other" class="form-input">
+                        <option value="">— Pick a scan —</option>
+                        ${otherScans.map(s => `<option value="${esc(s.id)}">${esc(s.id.substring(0,8))} — ${fmtDate(s.started_at)}</option>`).join('')}
+                    </select>
+                    <button class="btn btn-primary" id="btn-run-compare">Compare</button>
+                </div>
+                <div id="compare-result"></div>`;
+            document.getElementById('btn-run-compare').addEventListener('click', async () => {
+                const other = document.getElementById('compare-other').value;
+                if (!other) return;
+                await loadComparison(scanId, other, document.getElementById('compare-result'));
+            });
+        }
+
+        async function openCompare(a, b, pushUrl = true) {
+            // Load scan A as the "current" one, then render compare view in compare tab
+            await openScanDetail(a, false);
+            if (pushUrl) {
+                const url = new URL(window.location);
+                url.searchParams.delete('scan');
+                url.searchParams.set('compare', `${a},${b}`);
+                window.history.pushState({}, '', url);
+            }
+            switchSubTab('compare');
+            // Wait a tick for picker to render
+            setTimeout(async () => {
+                const sel = document.getElementById('compare-other');
+                if (sel) sel.value = b;
+                const result = document.getElementById('compare-result');
+                if (result) await loadComparison(a, b, result);
+            }, 0);
+        }
+
+        async function loadComparison(a, b, container) {
+            container.innerHTML = '<p class="empty-message">Loading comparison...</p>';
+            try {
+                const diff = await api.compareScans(a, b);
+                const newObs = diff.new || [];
+                const resolved = diff.resolved || [];
+                const recurring = diff.recurring || [];
+                const regressed = diff.regressed || [];
+                container.innerHTML = `
+                    <div class="compare-summary">
+                        <div class="compare-stat new"><div class="value">${newObs.length}</div><div class="label">New</div></div>
+                        <div class="compare-stat resolved"><div class="value">${resolved.length}</div><div class="label">Resolved</div></div>
+                        <div class="compare-stat recurring"><div class="value">${recurring.length}</div><div class="label">Recurring</div></div>
+                        <div class="compare-stat regressed"><div class="value">${regressed.length}</div><div class="label">Regressed</div></div>
+                    </div>
+                    ${renderCompareSection('New Observations', newObs, 'new')}
+                    ${renderCompareSection('Resolved', resolved, 'resolved')}
+                    ${renderCompareSection('Regressed', regressed, 'regressed')}
+                    ${renderCompareSection('Recurring', recurring, 'recurring')}
+                `;
+            } catch (e) {
+                container.innerHTML = `<p style="color:var(--error);">Failed: ${esc(e.message)}</p>`;
+            }
+        }
+
+        function renderCompareSection(title, items, cls) {
+            if (!items.length) return '';
+            return `<div class="compare-section">
+                <h4>${esc(title)} (${items.length})</h4>
+                <table class="sh-table">
+                    <tbody>
+                    ${items.map(o => `<tr>
+                        <td style="width:80px;"><span class="severity-badge severity-${esc(o.severity)}">${esc(o.severity)}</span></td>
+                        <td>${esc(o.title)}</td>
+                        <td>${esc(o.host || o.target_url || '--')}</td>
+                        <td style="width:90px;"><span class="obs-badge ${cls}">${cls}</span></td>
+                    </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        }
+
+        // ─── Reports ─────────────────────────────────────────
+        function initReportButtons() {
+            document.querySelectorAll('[data-report]').forEach(btn => {
+                btn.addEventListener('click', () => generateReport(btn.dataset.report));
+            });
+        }
+
+        async function generateReport(type) {
+            if (!state.currentScan) return;
+            const result = document.getElementById('report-result');
+            result.innerHTML = '<p class="empty-message">Generating report...</p>';
+            try {
+                const id = state.currentScan.id;
+                const engId = state.currentScan.engagement_id || null;
+                let res;
+                if (type === 'technical') res = await api.generateTechnicalReport(id, 'html');
+                else if (type === 'executive') res = await api.generateExecutiveReport(id, 'html', engId);
+                else if (type === 'compliance') res = await api.generateComplianceReport(id, 'html', engId);
+                if (res.detail) throw new Error(res.detail);
+                const iframe = document.createElement('iframe');
+                iframe.style.cssText = 'width:100%;height:600px;border:1px solid var(--border);border-radius:8px;background:#fff;';
+                iframe.sandbox = 'allow-same-origin';
+                result.innerHTML = '';
+                result.appendChild(iframe);
+                iframe.srcdoc = res.content;
+            } catch (e) {
+                result.innerHTML = `<p style="color:var(--error);">Failed: ${esc(e.message)}</p>`;
+            }
+        }
+
+        // ─── Engagements ─────────────────────────────────────
+        async function loadEngagements() {
+            try {
+                const data = await api.listEngagements();
+                state.engagements = Array.isArray(data) ? data : (data?.engagements || []);
+            } catch (e) { state.engagements = []; }
+        }
+
+        // ─── Confirm modal ───────────────────────────────────
+        function initConfirmModal() {
+            const overlay = document.getElementById('confirm-modal-overlay');
+            const close = () => { overlay.classList.remove('open'); state.confirmCallback = null; };
+            document.getElementById('confirm-modal-close').addEventListener('click', close);
+            document.getElementById('confirm-modal-cancel').addEventListener('click', close);
+            overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+            document.getElementById('confirm-modal-confirm').addEventListener('click', async () => {
+                const cb = state.confirmCallback;
+                close();
+                if (cb) { try { await cb(); } catch (e) { alert('Failed: ' + e.message); } }
+            });
+        }
+
+        function openConfirm(title, body, callback) {
+            document.getElementById('confirm-modal-title').textContent = title;
+            document.getElementById('confirm-modal-body').textContent = body;
+            state.confirmCallback = callback;
+            document.getElementById('confirm-modal-overlay').classList.add('open');
+        }
+    })();
+    </script>
+</body>
+</html>

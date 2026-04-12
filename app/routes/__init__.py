@@ -22,7 +22,6 @@ from app.routes.chat import router as chat_router
 from app.routes.checks import router as checks_router
 from app.routes.compliance import router as compliance_router
 from app.routes.customizations import router as customizations_router
-from app.routes.engagements import router as engagements_router
 from app.routes.observations import router as observations_router
 from app.routes.preferences import router as preferences_router
 from app.routes.scan import router as scan_router
@@ -42,7 +41,6 @@ __all__ = [
     "preferences_router",
     "compliance_router",
     "scan_history_router",
-    "engagements_router",
     "swarm_router",
     "customizations_router",
     "advisor_router",

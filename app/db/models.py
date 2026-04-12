@@ -2,8 +2,7 @@
 app/db/models.py - SQLAlchemy ORM models for persistent storage.
 
 Core tables: scans, observations, chains, check_log (Phase 1).
-Engagement and tracking tables: engagements, observation_status_history,
-scan_comparisons (Phase 3).
+Tracking tables: observation_status_history, scan_comparisons (Phase 3).
 """
 
 from datetime import UTC, datetime
@@ -26,20 +25,6 @@ from sqlalchemy.types import JSON
 
 class Base(DeclarativeBase):
     pass
-
-
-class Engagement(Base):
-    __tablename__ = "engagements"
-
-    id = Column(String, primary_key=True)
-    name = Column(String, nullable=False)
-    target_domain = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    client_name = Column(String, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    status = Column(String, default="active")  # active, completed, archived
-    metadata_ = Column("metadata", JSON, nullable=True)
 
 
 class Scan(Base):
