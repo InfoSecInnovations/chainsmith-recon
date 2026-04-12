@@ -80,10 +80,10 @@ Add to `app/routes/scan.py`:
 |---|---|
 | `POST /api/v1/scan/pause`    | Set `state.status = "paused"`; runner checks flag between checks and sleeps when paused |
 | `POST /api/v1/scan/resume`   | Set `state.status = "running"` |
-| `POST /api/v1/scan/cancel`   | Set cancel flag; runner aborts current check, writes `state.status = "cancelled"` |
+| `POST /api/v1/scan/stop`     | Set stop flag; runner aborts current check, writes `state.status = "cancelled"`. Named `/stop` to match the existing web UI call in `static/js/api.js:66`. |
 | `POST /api/v1/scan/start`    | Already exists as `POST /api/v1/scan` — alias for consistency |
 
-The runner (`app/engine/scanner.run_scan`) needs a cooperative pause/cancel check. Propose: a single `asyncio.Event` on `state` (`state.pause_event` — set=run, clear=paused), plus a `state.cancel_requested` bool the runner checks between checks. Nothing inside individual checks needs to change; pause happens at check boundaries.
+The runner (`app/engine/scanner.run_scan`) needs a cooperative pause/stop check. Propose: a single `asyncio.Event` on `state` (`state.pause_event` — set=run, clear=paused), plus a `state.stop_requested` bool the runner checks between checks. Nothing inside individual checks needs to change; pause happens at check boundaries.
 
 **Trade-off flagged:** pausing mid-check is much harder (each check would need cooperative yielding). Accepting "pause at check boundaries" keeps this simple; UX is "click pause, current check finishes, then we hold."
 

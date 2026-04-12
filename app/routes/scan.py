@@ -68,6 +68,40 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     return {"status": "accepted", "message": "Scan started. Poll GET /api/scan for status."}
 
 
+@router.post("/api/v1/scan/pause", status_code=202)
+async def pause_scan():
+    """Pause the running scan at the next check boundary."""
+    if state.status != "running":
+        raise HTTPException(409, f"Cannot pause: scan status is '{state.status}'.")
+    state.pause_event.clear()
+    state.status = "paused"
+    logger.info("Scan pause requested")
+    return {"status": "paused"}
+
+
+@router.post("/api/v1/scan/resume", status_code=202)
+async def resume_scan():
+    """Resume a paused scan."""
+    if state.status != "paused":
+        raise HTTPException(409, f"Cannot resume: scan status is '{state.status}'.")
+    state.status = "running"
+    state.pause_event.set()
+    logger.info("Scan resumed")
+    return {"status": "running"}
+
+
+@router.post("/api/v1/scan/stop", status_code=202)
+async def stop_scan():
+    """Stop the scan; runner aborts at the next check boundary."""
+    if state.status not in ("running", "paused"):
+        raise HTTPException(409, f"Cannot stop: scan status is '{state.status}'.")
+    state.stop_requested = True
+    # Unblock the runner if it's paused so it can observe the stop flag.
+    state.pause_event.set()
+    logger.info("Scan stop requested")
+    return {"status": "stopping"}
+
+
 @router.get("/api/v1/scan")
 async def get_scan_status():
     """Get scan status with progress."""

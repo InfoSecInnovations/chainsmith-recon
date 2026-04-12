@@ -4,6 +4,7 @@ app/state.py - Global Application State
 Centralized state management for the Chainsmith scan engine.
 """
 
+import asyncio
 import uuid
 
 from app.check_launcher import CheckLauncher
@@ -33,6 +34,12 @@ class AppState:
         self.techniques: list[str] = []
         self.status: str = "idle"
         self.phase: str = "idle"  # idle, scanning, done
+
+        # Cooperative pause/stop controls. pause_event set = running, cleared = paused.
+        # stop_requested is checked between checks; the runner breaks when true.
+        self.pause_event: asyncio.Event = asyncio.Event()
+        self.pause_event.set()
+        self.stop_requested: bool = False
         self.error_message: str | None = None
         self.runner: CheckLauncher | None = None
 

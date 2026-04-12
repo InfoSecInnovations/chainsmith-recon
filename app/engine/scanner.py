@@ -81,6 +81,11 @@ async def run_scan(
     scan_id = None
     obs_writer = None
     log_writer = None
+
+    # Reset cooperative pause/stop controls for this scan
+    state.stop_requested = False
+    state.pause_event.set()
+
     try:
         logger.info(f"Starting scan against {state.target}")
 
@@ -185,6 +190,8 @@ async def run_scan(
             launcher = CheckLauncher(
                 checks, context, observation_writer=obs_writer, guardian=state.guardian
             )
+            launcher.pause_event = state.pause_event
+            launcher.stop_check = lambda: state.stop_requested
             state.runner = launcher
 
             observations = await launcher.run_all(
@@ -206,11 +213,14 @@ async def run_scan(
                         log_writer.log_event({"check": name, "event": "skipped", "error": reason})
                     )
 
-        state.status = "complete"
+        if state.stop_requested:
+            state.status = "cancelled"
+            logger.info(f"Scan cancelled. {len(observations)} observations collected before stop.")
+        else:
+            state.status = "complete"
+            logger.info(f"Scan complete. {len(observations)} observations.")
         state.phase = "done"
         state.current_check = None
-
-        logger.info(f"Scan complete. {len(observations)} observations.")
 
         # Notify if writer fell back to scratch space
         if obs_writer and obs_writer.db_failed:

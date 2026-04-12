@@ -72,6 +72,11 @@ class CheckLauncher:
         self.skip_reasons: dict[str, str] = {}
         self.scan_stopped: bool = False
 
+        # Cooperative pause/stop hooks wired by the runner (optional).
+        # pause_event cleared = paused; stop_check() true = abort between checks.
+        self.pause_event: Any = None
+        self.stop_check: Any = None
+
         # critical_hosts tracks hosts with critical observations, keyed by host.
         # Each entry is a list of {suite, check_name, observation_title, observation_id}.
         self.critical_hosts: dict[str, list[dict]] = {}
@@ -114,6 +119,15 @@ class CheckLauncher:
 
             for check in runnable:
                 if self.scan_stopped:
+                    break
+
+                if self.pause_event is not None and not self.pause_event.is_set():
+                    logger.info("Scan paused — waiting for resume")
+                    await self.pause_event.wait()
+
+                if self.stop_check is not None and self.stop_check():
+                    logger.info("Scan stop requested — halting at check boundary")
+                    self.scan_stopped = True
                     break
 
                 # Guardian gate: check if this check name is forbidden
