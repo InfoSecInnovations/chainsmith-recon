@@ -16,7 +16,6 @@ from app.db.repositories import (
     ChainRepository,
     CheckLogRepository,
     ComparisonRepository,
-    EngagementRepository,
     ObservationOverrideRepository,
     ObservationRepository,
     ScanRepository,
@@ -31,7 +30,6 @@ _chain_repo = ChainRepository()
 _check_log_repo = CheckLogRepository()
 _comparison_repo = ComparisonRepository()
 _override_repo = ObservationOverrideRepository()
-_engagement_repo = EngagementRepository()
 _trend_repo = TrendRepository()
 
 SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]
@@ -1047,11 +1045,7 @@ async def generate_compliance_report(
     override_map = {o["fingerprint"]: o for o in overrides.get("overrides", [])}
     coverage = _check_coverage(log_entries)
 
-    # Engagement info if available
     engagement = None
-    eid = engagement_id or scan.get("engagement_id")
-    if eid:
-        engagement = await _engagement_repo.get_engagement(eid)
 
     severity_counts = _count_by_severity(observations)
 
@@ -1315,21 +1309,13 @@ async def generate_trend_report(
 
     Returns {"content": str, "filename": str, "format": str}.
     """
-    if not engagement_id and not target:
-        raise ValueError("Either engagement_id or target must be provided")
+    if not target:
+        raise ValueError("target must be provided")
 
-    if engagement_id:
-        engagement = await _engagement_repo.get_engagement(engagement_id)
-        if engagement is None:
-            raise ValueError(f"Engagement '{engagement_id}' not found")
-        trend_data = await _trend_repo.get_engagement_trend(engagement_id)
-        label = engagement.get("name", engagement_id)
-        scope = f"engagement-{engagement_id[:8]}"
-    else:
-        trend_data = await _trend_repo.get_target_trend(target)
-        label = target
-        scope = f"target-{target}"
-        engagement = None
+    trend_data = await _trend_repo.get_target_trend(target)
+    label = target
+    scope = f"target-{target}"
+    engagement = None
 
     data_points = trend_data.get("data_points", [])
     averages = trend_data.get("averages", {})
