@@ -28,7 +28,7 @@ class ServiceProbeCheck(ServiceIteratingCheck):
         CheckCondition("services", "truthy"),
     ]
 
-    produces = ["services"]  # Enriches existing services
+    produces = ["services", "services_probed"]  # Enriches existing services
 
     timeout_seconds = 60.0
     sequential = True
@@ -57,6 +57,9 @@ class ServiceProbeCheck(ServiceIteratingCheck):
 
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        # Signal to downstream discovery checks that classification has run,
+        # so they don't race ahead and see service_type="unknown".
+        result.outputs["services_probed"] = True
 
         # Try HTTPS first, then HTTP
         for scheme in ["https", "http"]:

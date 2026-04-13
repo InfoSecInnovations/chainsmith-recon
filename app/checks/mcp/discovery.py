@@ -35,7 +35,7 @@ class MCPDiscoveryCheck(ServiceIteratingCheck):
     name = "mcp_discovery"
     description = "Discover Model Context Protocol (MCP) server endpoints"
 
-    conditions = [CheckCondition("services", "truthy")]
+    conditions = [CheckCondition("services", "truthy"), CheckCondition("services_probed", "truthy")]
     produces = ["mcp_servers"]
     service_types = ["ai", "api", "http"]
 

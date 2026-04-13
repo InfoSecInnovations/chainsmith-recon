@@ -58,8 +58,12 @@ async def list_scans(
     target: str | None = Query(None, description="Filter by target domain"),
     status: str | None = Query(None, description="Filter by status"),
     engagement_id: str | None = Query(None, description="Filter by engagement"),
-    started_after: str | None = Query(None, description="ISO-8601 inclusive lower bound on started_at"),
-    started_before: str | None = Query(None, description="ISO-8601 inclusive upper bound on started_at"),
+    started_after: str | None = Query(
+        None, description="ISO-8601 inclusive lower bound on started_at"
+    ),
+    started_before: str | None = Query(
+        None, description="ISO-8601 inclusive upper bound on started_at"
+    ),
     limit: int = Query(50, ge=1, le=200, description="Max results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
 ):

@@ -18,7 +18,7 @@ class LLMEndpointCheck(ServiceIteratingCheck):
     name = "llm_endpoint_discovery"
     description = "Find chat and completion endpoints on AI services"
 
-    conditions = [CheckCondition("services", "truthy")]
+    conditions = [CheckCondition("services", "truthy"), CheckCondition("services_probed", "truthy")]
     produces = ["chat_endpoints", "completion_endpoints"]
     service_types = ["ai", "api", "http"]
 
@@ -132,7 +132,7 @@ class EmbeddingEndpointCheck(ServiceIteratingCheck):
     name = "embedding_endpoint_discovery"
     description = "Find embedding and vector endpoints on AI services"
 
-    conditions = [CheckCondition("services", "truthy")]
+    conditions = [CheckCondition("services", "truthy"), CheckCondition("services_probed", "truthy")]
     produces = ["embedding_endpoints"]
     service_types = ["ai", "api", "http"]
 

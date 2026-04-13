@@ -71,7 +71,7 @@ class Guardian:
                 base = ins[2:].lower()
                 if domain.lower().endswith(base):
                     return True, "In scope"
-            elif domain.lower() == ins.lower():
+            elif domain.lower() == ins.lower() or domain.lower().endswith("." + ins.lower()):
                 return True, "In scope"
 
         return False, f"Domain '{domain}' not in scope"

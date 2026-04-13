@@ -524,7 +524,6 @@ def _check_log_to_dict(entry: CheckLog) -> dict:
     }
 
 
-
 class ComparisonRepository(_RepositoryBase):
     """Compute and store observation status tracking and scan comparisons."""
 

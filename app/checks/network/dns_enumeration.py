@@ -47,6 +47,16 @@ DEFAULT_WORDLIST = [
     "ftp",
     "vpn",
     "remote",
+    "mcp",
+    "agent",
+    "rag",
+    "cache",
+    "vector",
+    "ml",
+    "ai",
+    "llm",
+    "tools",
+    "embeddings",
 ]
 
 

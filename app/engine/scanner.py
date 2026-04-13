@@ -125,6 +125,22 @@ async def run_scan(
             "base_domain": state.target,
             "services": [],  # Will be populated by port_scan
         }
+
+        # Seed DNS enumeration wordlist with scenario-declared known_hosts so
+        # AI/MCP/Agent/RAG/CAG subdomains (not in the default wordlist) get
+        # resolved and enter target_hosts for downstream discovery.
+        if mgr.is_active and mgr.active.target.known_hosts:
+            from app.checks.network.dns_enumeration import DnsEnumerationCheck
+
+            known = list(mgr.active.target.known_hosts)
+            for check in checks:
+                if isinstance(check, DnsEnumerationCheck):
+                    existing = set(check.wordlist)
+                    check.wordlist = check.wordlist + [h for h in known if h not in existing]
+                    logger.info(
+                        f"Extended DNS wordlist with {len(known)} scenario known_hosts: {known}"
+                    )
+                    break
         if port_profile:
             context["port_profile"] = port_profile
 

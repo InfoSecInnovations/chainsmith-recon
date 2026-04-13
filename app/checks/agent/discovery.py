@@ -126,7 +126,7 @@ class AgentDiscoveryCheck(ServiceIteratingCheck):
     name = "agent_discovery"
     description = "Detect AI agent orchestration endpoints and identify frameworks"
 
-    conditions = [CheckCondition("services", "truthy")]
+    conditions = [CheckCondition("services", "truthy"), CheckCondition("services_probed", "truthy")]
     produces = ["agent_endpoints", "agent_frameworks"]
     service_types = ["ai", "api", "http"]
 

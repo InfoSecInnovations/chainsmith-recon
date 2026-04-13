@@ -117,7 +117,7 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
     name = "cag_discovery"
     description = "Detect Cache-Augmented Generation endpoints and caching infrastructure"
 
-    conditions = [CheckCondition("services", "truthy")]
+    conditions = [CheckCondition("services", "truthy"), CheckCondition("services_probed", "truthy")]
     produces = ["cag_endpoints", "cache_infrastructure"]
     service_types = ["ai", "api", "http"]
 

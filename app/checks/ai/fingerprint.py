@@ -19,7 +19,7 @@ class AIFrameworkFingerprintCheck(ServiceIteratingCheck):
     name = "ai_framework_fingerprint"
     description = "Identify AI framework (vLLM, Ollama, LangChain, etc.) from responses"
 
-    conditions = [CheckCondition("services", "truthy")]
+    conditions = [CheckCondition("services", "truthy"), CheckCondition("services_probed", "truthy")]
     produces = ["ai_framework"]
     service_types = ["ai", "api"]
 

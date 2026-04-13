@@ -19,7 +19,7 @@ class ModelInfoCheck(ServiceIteratingCheck):
     name = "model_info_check"
     description = "Discover endpoints that expose model information and configuration"
 
-    conditions = [CheckCondition("services", "truthy")]
+    conditions = [CheckCondition("services", "truthy"), CheckCondition("services_probed", "truthy")]
     produces = ["model_info"]
     service_types = ["ai", "api"]
 

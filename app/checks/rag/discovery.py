@@ -132,7 +132,7 @@ class RAGDiscoveryCheck(ServiceIteratingCheck):
     name = "rag_discovery"
     description = "Detect RAG pipeline endpoints and vector store backends"
 
-    conditions = [CheckCondition("services", "truthy")]
+    conditions = [CheckCondition("services", "truthy"), CheckCondition("services_probed", "truthy")]
     produces = ["rag_endpoints", "vector_stores"]
     service_types = ["ai", "api", "http"]
 
