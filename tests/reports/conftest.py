@@ -10,7 +10,6 @@ from app.db.repositories import (
     ChainRepository,
     CheckLogRepository,
     ComparisonRepository,
-    EngagementRepository,
     ObservationOverrideRepository,
     ObservationRepository,
     ScanRepository,
@@ -82,11 +81,6 @@ def comparison_repo(db):
 @pytest.fixture
 def override_repo(db):
     return ObservationOverrideRepository(db)
-
-
-@pytest.fixture
-def engagement_repo(db):
-    return EngagementRepository(db)
 
 
 @pytest.fixture
