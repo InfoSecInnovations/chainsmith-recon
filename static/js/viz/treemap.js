@@ -19,7 +19,7 @@
         var suiteMap = new Map();
         observationsArr.forEach(function (f) {
             var suite = f.suite || ns.inferSuite(f.check_name);
-            var host  = f.host || 'unknown';
+            var host  = f.target_host || 'unknown';
             if (!suiteMap.has(suite)) suiteMap.set(suite, new Map());
             var hostMap = suiteMap.get(suite);
             if (!hostMap.has(host)) hostMap.set(host, []);

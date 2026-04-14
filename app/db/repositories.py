@@ -12,6 +12,7 @@ import hashlib
 import logging
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import urlparse
 
 from sqlalchemy import delete, func, select
 
@@ -302,7 +303,7 @@ class ObservationRepository(_RepositoryBase):
             # across scans.  The fingerprint column handles cross-scan dedup.
             raw_id = obs.get("id")
             observation_id = f"{scan_id[:8]}-{raw_id}" if raw_id else uuid.uuid4().hex[:12]
-            host = obs.get("host") or obs.get("target_url", "")
+            host = obs.get("target_host") or obs.get("host") or obs.get("target_url", "")
             fingerprint = _generate_fingerprint(
                 check_name=obs.get("check_name", obs.get("check", "")),
                 host=host,
@@ -393,12 +394,29 @@ class ObservationRepository(_RepositoryBase):
         return [{"name": host, "observations": flist} for host, flist in hosts.items()]
 
 
+def _derive_host_from_url(url: str | None) -> str | None:
+    """Best-effort hostname extraction from a target_url for legacy rows."""
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url if "://" in url else f"//{url}", scheme="")
+        return parsed.hostname or None
+    except (ValueError, AttributeError):
+        return None
+
+
 def _observation_to_dict(f: ObservationRecord) -> dict:
     """Convert an ObservationRecord ORM object to a JSON-safe dict.
 
     Override fields (original_severity, severity_override_reason, override_source)
     default to None and are populated by apply_scan_overrides() at read time.
+
+    target_host is guaranteed to be populated for every observation. If the
+    stored row lacks a host (legacy data), it is derived from target_url at
+    serialization time. This is the single place that fallback is allowed —
+    the frontend treats missing target_host as an API bug.
     """
+    target_host = f.host or _derive_host_from_url(f.target_url) or "unknown"
     return {
         "id": f.id,
         "scan_id": f.scan_id,
@@ -409,6 +427,7 @@ def _observation_to_dict(f: ObservationRecord) -> dict:
         "suite": f.suite,
         "target_url": f.target_url,
         "host": f.host,
+        "target_host": target_host,
         "evidence": f.evidence,
         "raw_data": f.raw_data,
         "references": f.references,

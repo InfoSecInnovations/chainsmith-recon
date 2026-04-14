@@ -17,7 +17,7 @@
         // Group observations by normalized host
         var hostMap = {};  // host -> observations[]
         observationsList.forEach(function (f) {
-            var rawHost = f.host || f.target_url || 'unknown';
+            var rawHost = f.target_host || 'unknown';
             var host = ns.normalizeHost(rawHost);
             if (!hostMap[host]) hostMap[host] = [];
             hostMap[host].push(f);

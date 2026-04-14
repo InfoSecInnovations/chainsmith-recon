@@ -11,12 +11,16 @@ Production-viable foundation for recon checks with:
 """
 
 import asyncio
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 
 class CheckStatus(Enum):
@@ -108,6 +112,10 @@ class Observation:
     # Traceability
     target: Service | None = None  # Which service this was found on
     target_url: str | None = None  # Specific URL (may include path)
+    # Canonical host identifier for this observation. Set whenever known,
+    # even when target_url is also set — port scans and other network-layer
+    # checks have a host before any URL exists.
+    target_host: str | None = None
     check_name: str | None = None  # Which check found this
 
     # Additional context
@@ -122,6 +130,10 @@ class Observation:
             "severity": self.severity,
             "evidence": self.evidence,
             "target_url": self.target_url,
+            "target_host": self.target_host,
+            # `host` mirror for downstream consumers (DB repo, viz) that
+            # already key on "host". Kept in sync with target_host.
+            "host": self.target_host,
             "check_name": self.check_name,
             "references": self.references,
         }
@@ -352,10 +364,33 @@ class BaseCheck(ABC):
         evidence: str,
         target: Service | None = None,
         target_url: str | None = None,
+        host: str | None = None,
         raw_data: dict | None = None,
         references: list[str] | None = None,
     ) -> Observation:
-        """Helper to create a properly formatted observation."""
+        """Helper to create a properly formatted observation.
+
+        Host precedence (Phase 45): explicit `host=` wins, then
+        `target.host` when a Service is passed, then parsed from the
+        effective target URL. Network-layer checks that know the host
+        before a URL exists should pass `host=` directly.
+        """
+        effective_url = target_url or (target.url if target else None)
+        resolved_host = host
+        if resolved_host is None and target is not None:
+            if target.host:
+                resolved_host = target.host
+            else:
+                logger.warning(
+                    "create_observation: Service target has empty host "
+                    "(check=%s, url=%s); target_host will fall back to URL parse",
+                    self.name,
+                    target.url,
+                )
+        if resolved_host is None and effective_url:
+            parsed = urlparse(effective_url)
+            resolved_host = parsed.hostname or None
+
         return Observation(
             id="",  # Assigned by runner
             title=title,
@@ -363,7 +398,8 @@ class BaseCheck(ABC):
             severity=severity,
             evidence=evidence,
             target=target,
-            target_url=target_url or (target.url if target else None),
+            target_url=effective_url,
+            target_host=resolved_host,
             check_name=self.name,
             raw_data=raw_data,
             references=references or [],

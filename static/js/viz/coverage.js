@@ -60,7 +60,7 @@
 
         var observationsByHost = {};
         observationsList.forEach(function (f) {
-            var rawHost = f.host || f.target_url || 'global';
+            var rawHost = f.target_host || 'global';
             var host = ns.normalizeHost(rawHost);
             if (!observationsByHost[host]) observationsByHost[host] = [];
             observationsByHost[host].push(f);

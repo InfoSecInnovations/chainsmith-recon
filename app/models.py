@@ -163,6 +163,9 @@ class Observation(BaseModel):
     discovered_at: datetime
     target_url: str | None = None
     target_service: str | None = None
+    # Canonical host identifier. Populated by checks whenever known,
+    # independent of whether target_url is also set. See Phase 45.
+    target_host: str | None = None
 
     # Evidence
     raw_evidence: RawEvidence | None = None

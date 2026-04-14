@@ -17,7 +17,7 @@
         var suites = new Set();
 
         observationsList.forEach(function (f) {
-            var rawHost = f.host || f.target_url || 'unknown';
+            var rawHost = f.target_host || 'unknown';
             var host  = ns.normalizeHost(rawHost);
             var suite = f.suite || ns.inferSuite(f.check_name);
             hosts.add(host);

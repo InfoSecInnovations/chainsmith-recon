@@ -17,7 +17,7 @@
         var points = [];
 
         observationsList.forEach(function (f, index) {
-            var rawHost = f.host || f.target_url || 'unknown';
+            var rawHost = f.target_host || 'unknown';
             var host  = ns.normalizeHost(rawHost);
             var suite = f.suite || ns.inferSuite(f.check_name);
             var lane  = mode === 'host' ? host : suite;
