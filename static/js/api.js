@@ -283,6 +283,34 @@ function setTheme(theme) {
     localStorage.setItem('theme', theme);
 }
 
+// ─── Accessibility Modes ───────────────────────────────────────
+const A11Y_KEYS = {
+    contrast: { storage: 'a11yContrast', className: 'a11y-contrast', media: '(prefers-contrast: more)' },
+    'reduce-motion': { storage: 'a11yReduceMotion', className: 'a11y-reduce-motion', media: '(prefers-reduced-motion: reduce)' },
+    'status-icons': { storage: 'a11yStatusIcons', className: 'a11y-status-icons', media: null }
+};
+
+function isA11yOn(key) {
+    const cfg = A11Y_KEYS[key];
+    if (!cfg) return false;
+    const stored = localStorage.getItem(cfg.storage);
+    if (stored !== null) return stored === 'true';
+    return cfg.media ? window.matchMedia(cfg.media).matches : false;
+}
+
+function loadA11y() {
+    Object.keys(A11Y_KEYS).forEach(key => {
+        document.body.classList.toggle(A11Y_KEYS[key].className, isA11yOn(key));
+    });
+}
+
+function setA11y(key, on) {
+    const cfg = A11Y_KEYS[key];
+    if (!cfg) return;
+    document.body.classList.toggle(cfg.className, on);
+    localStorage.setItem(cfg.storage, on ? 'true' : 'false');
+}
+
 // ─── Scenario Banner ───────────────────────────────────────────
 async function updateScenarioBanner() {
     // Remove legacy full-width banner if present
@@ -428,6 +456,11 @@ function initSettingsDrawer() {
             btn.classList.toggle('active', btn.dataset.theme === (localStorage.getItem('theme') || 'dark'));
         });
 
+        Object.keys(A11Y_KEYS).forEach(key => {
+            const cb = document.getElementById(`setting-a11y-${key}`);
+            if (cb) cb.checked = isA11yOn(key);
+        });
+
         await loadProfileSelector();
         await loadScenarioSelector();
         overlay.classList.add('open');
@@ -460,6 +493,12 @@ function initSettingsDrawer() {
     });
     document.getElementById('setting-auto-chains')?.addEventListener('change', (e) => {
         localStorage.setItem('autoChains', e.target.checked);
+    });
+
+    Object.keys(A11Y_KEYS).forEach(key => {
+        document.getElementById(`setting-a11y-${key}`)?.addEventListener('change', (e) => {
+            setA11y(key, e.target.checked);
+        });
     });
 
     // Profile selector change handler
@@ -758,6 +797,7 @@ function showStatus(message, type) {
 // ─── Initialize Common Elements ────────────────────────────────
 function initCommon() {
     loadTheme();
+    loadA11y();
     initSettingsDrawer();
     initModal();
     updateHeaderStatus();
