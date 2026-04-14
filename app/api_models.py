@@ -69,6 +69,7 @@ class ScanStartInput(BaseModel):
     suites: list[str] = Field(default_factory=list)  # Run only checks from these suites
     engagement_id: str | None = None  # Link scan to an engagement
     port_profile: Literal["web", "ai", "full", "lab"] | None = None
+    acknowledge_outside_window: bool = False  # Per-scan override for engagement-window gate
 
 
 # ─── Settings Models ──────────────────────────────────────────

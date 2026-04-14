@@ -380,6 +380,62 @@ class TestGuardianUrlScope:
         assert ok is True
 
 
+class TestGuardianEngagementWindow:
+    """Tests for Guardian.check_engagement_window gate."""
+
+    def test_no_window_configured(self):
+        g = Guardian.from_scope("example.com")
+        ok, _ = g.check_engagement_window(EngagementWindow())
+        assert ok is True
+
+    def test_within_window(self):
+        from datetime import UTC, datetime, timedelta
+
+        now = datetime.now(UTC)
+        window = EngagementWindow(
+            start=(now - timedelta(hours=1)).isoformat(),
+            end=(now + timedelta(hours=1)).isoformat(),
+        )
+        g = Guardian.from_scope("example.com")
+        ok, _ = g.check_engagement_window(window)
+        assert ok is True
+
+    def test_outside_window_blocks(self, tmp_path, monkeypatch):
+        from datetime import UTC, datetime, timedelta
+
+        from app import proof_of_scope as pos
+
+        monkeypatch.setattr(pos.violation_logger, "_data_dir", tmp_path)
+        monkeypatch.setattr(pos.violation_logger, "_log_file", tmp_path / "v.jsonl")
+
+        past = datetime.now(UTC) - timedelta(days=2)
+        window = EngagementWindow(
+            start=(past - timedelta(hours=1)).isoformat(),
+            end=past.isoformat(),
+        )
+        g = Guardian.from_scope("example.com")
+        ok, reason = g.check_engagement_window(window, acknowledged=False)
+        assert ok is False
+        assert "outside" in reason.lower()
+
+    def test_outside_window_with_ack_allowed(self, tmp_path, monkeypatch):
+        from datetime import UTC, datetime, timedelta
+
+        from app import proof_of_scope as pos
+
+        monkeypatch.setattr(pos.violation_logger, "_data_dir", tmp_path)
+        monkeypatch.setattr(pos.violation_logger, "_log_file", tmp_path / "v.jsonl")
+
+        past = datetime.now(UTC) - timedelta(days=2)
+        window = EngagementWindow(
+            start=(past - timedelta(hours=1)).isoformat(),
+            end=past.isoformat(),
+        )
+        g = Guardian.from_scope("example.com")
+        ok, _ = g.check_engagement_window(window, acknowledged=True)
+        assert ok is True
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ComplianceReport Model Tests
 # ═══════════════════════════════════════════════════════════════════════════════

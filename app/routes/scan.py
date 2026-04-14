@@ -17,6 +17,7 @@ from app.api_models import ScanStartInput, ScanStatus
 from app.check_resolver import infer_suite as _infer_suite
 from app.db.repositories import CheckLogRepository
 from app.engine.scanner import AVAILABLE_CHECKS, get_check_info, run_scan
+from app.guardian import Guardian
 from app.scenarios import get_scenario_manager
 from app.state import state
 
@@ -41,6 +42,22 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     """
     if not state.target:
         raise HTTPException(400, "Scope not set. POST to /api/scope first.")
+
+    # Engagement-window gate: delegated to Guardian so all scan allow/block
+    # decisions remain in a single chokepoint. Uses a per-scan acknowledgment
+    # from the request body rather than a sticky setting.
+    gate_guardian = state.guardian or Guardian.from_scope(
+        state.target, exclude=state.exclude, forbidden_techniques=state.techniques
+    )
+    allowed, reason = gate_guardian.check_engagement_window(
+        state.proof_settings.engagement_window,
+        acknowledged=body.acknowledge_outside_window,
+    )
+    if not allowed:
+        raise HTTPException(409, reason)
+    # Record this scan's ack value (overwrites prior — gate input is always
+    # the current request body, never a sticky flag) for compliance report.
+    state.proof_settings.outside_window_acknowledged = body.acknowledge_outside_window
 
     async with _scan_lock:
         if state.status == "running":

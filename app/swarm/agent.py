@@ -245,6 +245,23 @@ class SwarmAgent:
         if check is None:
             raise ValueError(f"Unknown check: {check_name}")
 
+        # Engagement-window gate — symmetric with coordinator-side Guardian.
+        window_data = task_data.get("engagement_window")
+        if window_data:
+            from app.guardian import Guardian
+            from app.proof_of_scope import EngagementWindow
+
+            window = EngagementWindow(**window_data)
+            target = task_data.get("target", {})
+            local_guardian = Guardian.from_scope(
+                target.get("url", ""), exclude=[], forbidden_techniques=[]
+            )
+            allowed, reason = local_guardian.check_engagement_window(
+                window, acknowledged=bool(task_data.get("outside_window_acknowledged"))
+            )
+            if not allowed:
+                raise RuntimeError(f"Swarm task blocked: {reason}")
+
         # Build context from upstream + target
         target = task_data.get("target", {})
         upstream = task_data.get("upstream_context", {})

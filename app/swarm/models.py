@@ -44,6 +44,8 @@ class SwarmTask:
     upstream_context: dict = field(default_factory=dict)
     rate_limit: float = 10.0  # requests per second
     timeout_seconds: int = 300
+    engagement_window: dict | None = None
+    outside_window_acknowledged: bool = False
     status: TaskStatus = TaskStatus.QUEUED
     assigned_agent: str | None = None
     result: dict | None = None
@@ -121,6 +123,8 @@ class TaskPayload(BaseModel):
     upstream_context: dict = Field(default_factory=dict)
     rate_limit: float = 10.0
     timeout_seconds: int = 300
+    engagement_window: dict | None = None  # {start, end} ISO datetimes
+    outside_window_acknowledged: bool = False
 
     @classmethod
     def from_swarm_task(cls, task: SwarmTask) -> TaskPayload:
@@ -132,6 +136,8 @@ class TaskPayload(BaseModel):
             upstream_context=task.upstream_context,
             rate_limit=task.rate_limit,
             timeout_seconds=task.timeout_seconds,
+            engagement_window=getattr(task, "engagement_window", None),
+            outside_window_acknowledged=getattr(task, "outside_window_acknowledged", False),
         )
 
 

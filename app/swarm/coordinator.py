@@ -170,6 +170,12 @@ class SwarmCoordinator:
             phase_task_ids = []
             for check in phase.checks:
                 task_id = str(uuid.uuid4())
+                ps = getattr(state, "proof_settings", None)
+                window = (
+                    ps.engagement_window.model_dump()
+                    if ps and ps.engagement_window.is_configured()
+                    else None
+                )
                 task = SwarmTask(
                     task_id=task_id,
                     check_name=check.name,
@@ -178,6 +184,10 @@ class SwarmCoordinator:
                     target=target_info,
                     rate_limit=cfg.swarm.default_rate_limit,
                     timeout_seconds=check.timeout_seconds or cfg.swarm.task_timeout_seconds,
+                    engagement_window=window,
+                    outside_window_acknowledged=bool(ps and ps.outside_window_acknowledged)
+                    if ps
+                    else False,
                 )
                 self.tasks[task_id] = task
                 phase_task_ids.append(task_id)

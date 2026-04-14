@@ -15,6 +15,7 @@ import logging
 from urllib.parse import urlparse
 
 from app.models import AgentEvent, ComponentType, EventImportance, EventType, ScopeDefinition
+from app.proof_of_scope import EngagementWindow, violation_logger
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,54 @@ class Guardian:
             self.violations.append({"url": url, "reason": reason, "type": "url"})
             logger.warning(f"Guardian blocked URL: {url} — {reason}")
         return ok
+
+    # ── Engagement window gate ──────────────────────────────────
+
+    def check_engagement_window(
+        self,
+        window: EngagementWindow | None,
+        acknowledged: bool = False,
+    ) -> tuple[bool, str]:
+        """Gate a scan request against the configured engagement window.
+
+        Returns (allowed, reason). When the window is unconfigured or the
+        current time falls within it, the scan is allowed. When outside
+        the window, the scan is blocked unless `acknowledged` is True
+        (per-scan override). All outcomes that involve a configured
+        window are recorded via ViolationLogger for the compliance
+        report.
+        """
+        if window is None or not window.is_configured():
+            return True, "No engagement window configured"
+
+        if window.is_within_window():
+            return True, "Within engagement window"
+
+        if acknowledged:
+            violation_logger.log_violation(
+                violation_type="outside_window",
+                reason=(
+                    f"Scan started outside engagement window "
+                    f"(start={window.start}, end={window.end}); operator acknowledged"
+                ),
+                blocked=False,
+                user_acknowledged=True,
+            )
+            return True, "Outside window — operator acknowledged"
+
+        violation_logger.log_violation(
+            violation_type="outside_window",
+            reason=(
+                f"Scan blocked: current time outside engagement window "
+                f"(start={window.start}, end={window.end})"
+            ),
+            blocked=True,
+            user_acknowledged=False,
+        )
+        return False, (
+            f"Outside engagement window (start={window.start}, end={window.end}). "
+            "Resubmit with acknowledge_outside_window=true to override."
+        )
 
     # ── Technique (check name) validation ───────────────────────
 
