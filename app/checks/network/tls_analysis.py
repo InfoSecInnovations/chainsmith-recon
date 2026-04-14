@@ -15,14 +15,15 @@ Feeds: additional hostname discovery (from SANs), security posture
 """
 
 import asyncio
-import datetime
 import logging
 import socket
 import ssl
+from datetime import UTC, datetime
 from typing import Any
 
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.lib.observations import build_observation
+from app.lib.timeutils import now_utc
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +240,7 @@ class TlsAnalysisCheck(BaseCheck):
             "%b  %d %H:%M:%S %Y %Z",
         ):
             try:
-                dt = datetime.datetime.strptime(date_str, fmt)
+                dt = datetime.strptime(date_str, fmt).replace(tzinfo=UTC)
                 return dt.isoformat()
             except ValueError:
                 continue
@@ -324,8 +325,10 @@ class TlsAnalysisCheck(BaseCheck):
         not_after = cert_info.get("not_after")
         if not_after:
             try:
-                expiry = datetime.datetime.fromisoformat(not_after)
-                now = datetime.datetime.utcnow()
+                expiry = datetime.fromisoformat(not_after)
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=UTC)
+                now = now_utc()
                 days_left = (expiry - now).days
 
                 if days_left < self.EXPIRY_CRITICAL_DAYS:

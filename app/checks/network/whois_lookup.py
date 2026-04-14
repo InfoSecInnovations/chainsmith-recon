@@ -525,7 +525,7 @@ class WhoisLookupCheck(BaseCheck):
         ]
         for fmt in formats:
             try:
-                dt = datetime.strptime(created_str.strip(), fmt)
+                dt = datetime.strptime(created_str.strip(), fmt)  # noqa: DTZ007
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=UTC)
                 now = datetime.now(UTC)

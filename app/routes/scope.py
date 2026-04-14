@@ -9,12 +9,12 @@ Endpoints for:
 """
 
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter
 
 from app.api_models import ExtendedScopeInput, ScanSettings
 from app.guardian import Guardian
+from app.lib.timeutils import iso_utc
 from app.preferences import (
     SUITES_WITH_ON_CRITICAL,
     VALID_ON_CRITICAL_VALUES,
@@ -72,7 +72,7 @@ async def set_scope(scope: ExtendedScopeInput):
     # Handle outside window acknowledgment
     if hasattr(scope, "outside_window_acknowledged") and scope.outside_window_acknowledged:
         state.proof_settings.outside_window_acknowledged = True
-        state.proof_settings.outside_window_acknowledged_at = datetime.utcnow().isoformat() + "Z"
+        state.proof_settings.outside_window_acknowledged_at = iso_utc()
 
         # Log the acknowledgment as a violation record
         if state.proof_settings.log_violations:
@@ -191,7 +191,7 @@ async def check_engagement_window():
         "is_configured": window.is_configured(),
         "start": window.start,
         "end": window.end,
-        "current_time": datetime.utcnow().isoformat() + "Z",
+        "current_time": iso_utc(),
         "outside_window_acknowledged": state.proof_settings.outside_window_acknowledged,
     }
 

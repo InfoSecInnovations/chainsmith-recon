@@ -6,8 +6,8 @@ Used by the Verifier agent to catch hallucinated CVEs.
 """
 
 import re
-from datetime import datetime
 
+from app.lib.timeutils import iso_utc, now_utc
 from app.models import RawEvidence
 
 # Known real CVEs (subset for demo purposes)
@@ -68,7 +68,7 @@ async def verify_cve(cve_id: str) -> dict:
 
     results = {
         "cve_id": cve_id,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": iso_utc(),
         "valid_format": False,
         "exists": False,
         "is_hallucination": False,
@@ -130,7 +130,7 @@ async def verify_version_claim(
         "software": software,
         "claimed_version": claimed_version,
         "actual_evidence": actual_evidence,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": iso_utc(),
         "verified": False,
         "mismatch": False,
         "reason": None,
@@ -176,7 +176,7 @@ async def verify_endpoint_exists(base_url: str, endpoint: str, timeout: float = 
         "base_url": base_url,
         "endpoint": endpoint,
         "full_url": full_url,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": iso_utc(),
         "exists": False,
         "status_code": None,
         "reason": None,
@@ -217,7 +217,7 @@ def create_verify_cve_evidence(cve_id: str, results: dict) -> RawEvidence:
     """Create evidence record for CVE verification."""
     return RawEvidence(
         tool_name="verify_cve",
-        timestamp=datetime.utcnow(),
+        timestamp=now_utc(),
         request={"cve_id": cve_id},
         response=results,
     )

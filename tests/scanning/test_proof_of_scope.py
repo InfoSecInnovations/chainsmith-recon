@@ -1,6 +1,6 @@
 """Tests for proof-of-scope data types and settings."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -117,14 +117,14 @@ class TestEngagementWindow:
     def test_start_only(self):
         """Window with only start time."""
         # Future start - not yet within window
-        future = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+        future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
         window = EngagementWindow(start=future)
 
         assert window.is_configured() is True
         assert window.is_within_window() is False
 
         # Past start - within window
-        past = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+        past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         window = EngagementWindow(start=past)
 
         assert window.is_within_window() is True
@@ -132,22 +132,22 @@ class TestEngagementWindow:
     def test_end_only(self):
         """Window with only end time."""
         # Future end - within window
-        future = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+        future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
         window = EngagementWindow(end=future)
 
         assert window.is_configured() is True
         assert window.is_within_window() is True
 
         # Past end - outside window
-        past = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+        past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         window = EngagementWindow(end=past)
 
         assert window.is_within_window() is False
 
     def test_start_and_end(self):
         """Window with both start and end."""
-        past = (datetime.utcnow() - timedelta(hours=1)).isoformat()
-        future = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+        past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
 
         window = EngagementWindow(start=past, end=future)
 
@@ -156,7 +156,7 @@ class TestEngagementWindow:
 
     def test_handles_z_suffix(self):
         """Handles ISO timestamps with Z suffix."""
-        past = (datetime.utcnow() - timedelta(hours=1)).isoformat() + "Z"
+        past = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         window = EngagementWindow(start=past)
 
         assert window.is_within_window() is True

@@ -12,11 +12,11 @@ Export reads observations and chains from the database.
 """
 
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.db.repositories import ChainRepository, ObservationRepository, ScanRepository
+from app.lib.timeutils import iso_utc
 from app.proof_of_scope import compliance_reporter, traffic_logger, violation_logger
 from app.state import state
 
@@ -120,7 +120,7 @@ async def export_report(
             "session_id": state.session_id,
             "target": state.target,
             "exclude": state.exclude,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": iso_utc(),
             "status": state.status,
         },
         "scope": {

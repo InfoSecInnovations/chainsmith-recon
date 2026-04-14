@@ -14,7 +14,7 @@ Covers:
 - Event emission
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -49,7 +49,7 @@ def _make_observation(
         status=ObservationStatus(status),
         confidence=0.8,
         check_name=check_name,
-        discovered_at=datetime(2026, 1, 1),
+        discovered_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
 

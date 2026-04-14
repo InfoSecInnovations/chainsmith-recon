@@ -17,10 +17,10 @@ Examples:
 
 import hashlib
 import re
-from datetime import datetime
 
 from app.checks.base import Observation, Service
 from app.checks.base import Observation as CheckObservation
+from app.lib.timeutils import now_utc
 from app.models import Observation as ModelObservation
 from app.models import ObservationSeverity, ObservationStatus
 
@@ -147,7 +147,7 @@ def check_to_model_observation(obs: CheckObservation) -> ModelObservation:
         severity=ObservationSeverity(obs.severity),
         status=ObservationStatus.PENDING,
         check_name=obs.check_name,
-        discovered_at=datetime.utcnow(),
+        discovered_at=now_utc(),
         target_url=obs.target_url,
         target_service=obs.target.url if obs.target else None,
         evidence_summary=obs.evidence,

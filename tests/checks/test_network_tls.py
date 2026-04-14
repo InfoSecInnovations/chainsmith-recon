@@ -26,11 +26,11 @@ from app.checks.base import Service
 
 
 def _future_iso(days: int = 365) -> str:
-    return (datetime.datetime.utcnow() + datetime.timedelta(days=days)).isoformat()
+    return (datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=days)).isoformat()
 
 
 def _past_iso(days: int = 365) -> str:
-    return (datetime.datetime.utcnow() - datetime.timedelta(days=days)).isoformat()
+    return (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=days)).isoformat()
 
 
 def _make_cert(

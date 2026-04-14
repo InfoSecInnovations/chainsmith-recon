@@ -1004,13 +1004,17 @@ class TrendRepository(_RepositoryBase):
         """Apply optional date range filters to a scan query."""
         if since:
             try:
-                since_dt = datetime.fromisoformat(since)
+                since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+                if since_dt.tzinfo is None:
+                    since_dt = since_dt.replace(tzinfo=UTC)
                 query = query.where(Scan.started_at >= since_dt)
             except ValueError:
                 pass
         if until:
             try:
-                until_dt = datetime.fromisoformat(until)
+                until_dt = datetime.fromisoformat(until.replace("Z", "+00:00"))
+                if until_dt.tzinfo is None:
+                    until_dt = until_dt.replace(tzinfo=UTC)
                 query = query.where(Scan.started_at <= until_dt)
             except ValueError:
                 pass

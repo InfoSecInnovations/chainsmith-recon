@@ -32,13 +32,13 @@ Usage in docker-compose.yml:
 import json
 import os
 import traceback
-from datetime import datetime
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.lib.timeutils import now_utc
 from app.scenario_services.ai.rag import get_rag_context, get_session_context
 from app.scenario_services.banking.tools import (
     TOOL_DEFINITIONS,
@@ -106,7 +106,7 @@ async def add_headers_and_check_limits(request: Request, call_next):
 
     # Rate limiting
     if RATE_LIMIT_ENABLED:
-        now = datetime.now().timestamp()
+        now = now_utc().timestamp()
 
         # Observation: rate_limit_bypass - X-Forwarded-For bypasses limits
         # Must happen before rate check so the spoofed IP is what gets checked
@@ -291,7 +291,7 @@ async def chat(request: ChatRequest):
     """
     Main chat endpoint for the AI assistant.
     """
-    conversation_id = request.conversation_id or f"conv-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    conversation_id = request.conversation_id or f"conv-{now_utc().strftime('%Y%m%d%H%M%S')}"
 
     # Get context
     session_context = get_session_context()

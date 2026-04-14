@@ -11,7 +11,7 @@ Covers:
 - Event emission
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -60,7 +60,7 @@ def _make_observation(obs_id: str = "F-001", title: str = "Test Obs") -> Observa
         status=ObservationStatus.VERIFIED,
         confidence=0.8,
         check_name="test_check",
-        discovered_at=datetime(2026, 1, 1),
+        discovered_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
 

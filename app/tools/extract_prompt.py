@@ -5,10 +5,10 @@ Attempts to extract system prompts from AI chatbots using various techniques.
 """
 
 import json
-from datetime import datetime
 
 import httpx
 
+from app.lib.timeutils import iso_utc, now_utc
 from app.models import RawEvidence
 
 # Prompt extraction attempts (varying difficulty)
@@ -83,7 +83,7 @@ async def extract_system_prompt(
     """
     results = {
         "url": chat_url,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": iso_utc(),
         "attempts": [],
         "potential_leaks": [],
         "confidence": 0.0,
@@ -206,7 +206,7 @@ def create_prompt_extract_evidence(chat_url: str, results: dict) -> RawEvidence:
     """Create evidence record for prompt extraction."""
     return RawEvidence(
         tool_name="extract_prompt",
-        timestamp=datetime.utcnow(),
+        timestamp=now_utc(),
         request={"url": chat_url, "technique": "multi-prompt extraction"},
         response=results,
     )

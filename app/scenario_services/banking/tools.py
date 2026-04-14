@@ -18,10 +18,10 @@ Planted observations:
 """
 
 import random
-from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.lib.timeutils import now_utc
 from app.scenario_services.common.config import is_observation_active
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -147,7 +147,7 @@ def check_loan_rates(product_type: str | None = None) -> dict:
 
     return {
         "rates": [r.model_dump() for r in rates],
-        "as_of": datetime.now().strftime("%Y-%m-%d"),
+        "as_of": now_utc().strftime("%Y-%m-%d"),
         "disclaimer": "Rates subject to change. APR based on creditworthiness.",
     }
 
@@ -160,13 +160,13 @@ def get_account_balance(account_id: str = "default") -> dict:
                 account_type="Premium Checking",
                 balance=4523.67,
                 available=4423.67,
-                as_of=datetime.now().isoformat(),
+                as_of=now_utc().isoformat(),
             ).model_dump(),
             AccountBalance(
                 account_type="High-Yield Savings",
                 balance=12750.00,
                 available=12750.00,
-                as_of=datetime.now().isoformat(),
+                as_of=now_utc().isoformat(),
             ).model_dump(),
         ],
         "customer_name": "Alex Johnson",

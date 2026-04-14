@@ -4,10 +4,9 @@ HTTP Header Grab Tool
 Fetches and analyzes HTTP headers from target URLs.
 """
 
-from datetime import datetime
-
 import httpx
 
+from app.lib.timeutils import iso_utc, now_utc
 from app.models import RawEvidence
 
 
@@ -29,7 +28,7 @@ async def grab_headers(
     results = {
         "url": url,
         "method": method,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": iso_utc(),
         "success": False,
         "status_code": None,
         "headers": {},
@@ -141,7 +140,7 @@ def create_header_grab_evidence(url: str, results: dict) -> RawEvidence:
     """Create evidence record for header grab."""
     return RawEvidence(
         tool_name="header_grab",
-        timestamp=datetime.utcnow(),
+        timestamp=now_utc(),
         request={"url": url, "method": results.get("method", "HEAD")},
         response=results,
         headers=results.get("headers"),

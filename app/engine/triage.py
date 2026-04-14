@@ -7,13 +7,13 @@ runs the Triage Agent, and persists the resulting plan.
 """
 
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from app.agents.triage import TriageAgent, _match_kb_entries, load_remediation_kb
 from app.config import get_config
 from app.lib.llm import get_llm_client
+from app.lib.timeutils import iso_utc, parse_iso_utc
 from app.models import (
     AdjudicatedRisk,
     AdjudicationApproach,
@@ -72,7 +72,7 @@ def load_team_context(config: "ChainsmithConfig | None" = None) -> TeamContext |
         answered_at = data.get("answered_at")
         if isinstance(answered_at, str):
             try:
-                answered_at = datetime.fromisoformat(answered_at.replace("Z", "+00:00"))
+                answered_at = parse_iso_utc(answered_at)
             except ValueError:
                 answered_at = None
 
@@ -122,11 +122,7 @@ def save_team_context(
             "remediation_surface": context.remediation_surface,
             "team_size": context.team_size,
             "off_limits": context.off_limits,
-            "answered_at": (
-                context.answered_at.isoformat()
-                if context.answered_at
-                else datetime.utcnow().isoformat() + "Z"
-            ),
+            "answered_at": (context.answered_at.isoformat() if context.answered_at else iso_utc()),
         }
 
         header = (

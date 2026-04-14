@@ -4,11 +4,11 @@ Robots.txt Fetch Tool
 Retrieves and parses robots.txt files from target URLs.
 """
 
-from datetime import datetime
 from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from app.lib.timeutils import iso_utc, now_utc
 from app.models import RawEvidence
 
 
@@ -30,7 +30,7 @@ async def fetch_robots(base_url: str, timeout: float = 10.0) -> dict:
     results = {
         "url": robots_url,
         "base_url": base_url,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": iso_utc(),
         "success": False,
         "status_code": None,
         "content": None,
@@ -131,7 +131,7 @@ def create_robots_fetch_evidence(base_url: str, results: dict) -> RawEvidence:
     """Create evidence record for robots.txt fetch."""
     return RawEvidence(
         tool_name="robots_fetch",
-        timestamp=datetime.utcnow(),
+        timestamp=now_utc(),
         request={"base_url": base_url},
         response=results,
         body=results.get("content"),

@@ -13,7 +13,7 @@ Covers:
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -57,7 +57,7 @@ def _make_observation(
         status=ObservationStatus(status),
         confidence=0.8,
         check_name="test_check",
-        discovered_at=datetime(2026, 1, 1),
+        discovered_at=datetime(2026, 1, 1, tzinfo=UTC),
         target_url=target_url,
         evidence_summary="Header X-Debug-Mode: true found",
     )

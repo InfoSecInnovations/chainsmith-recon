@@ -6,9 +6,9 @@ Real network port scanning using python-nmap.
 
 import asyncio
 import socket
-from datetime import datetime
 
 from app.checks.network.port_profiles import resolve_ports
+from app.lib.timeutils import iso_utc, now_utc
 from app.models import RawEvidence
 
 
@@ -34,7 +34,7 @@ async def port_scan(
 
     results = {
         "host": host,
-        "scan_time": datetime.utcnow().isoformat(),
+        "scan_time": iso_utc(),
         "ports_scanned": len(ports),
         "open_ports": [],
         "closed_ports": [],
@@ -93,7 +93,7 @@ def create_port_scan_evidence(host: str, results: dict) -> RawEvidence:
     """Create evidence record for a port scan."""
     return RawEvidence(
         tool_name="port_scan",
-        timestamp=datetime.utcnow(),
+        timestamp=now_utc(),
         request={"host": host, "type": "TCP connect scan"},
         response=results,
     )

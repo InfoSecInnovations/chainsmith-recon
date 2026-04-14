@@ -8,11 +8,11 @@ import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime
 
 from openai import AsyncOpenAI
 
 from app.config import LITELLM_BASE_URL, LITELLM_MODEL_VERIFIER
+from app.lib.timeutils import now_utc
 from app.models import (
     AgentEvent,
     ComponentType,
@@ -271,7 +271,7 @@ class VerifierAgent:
                     f.verification_notes = v["reasoning"]
                     f.evidence_quality = EvidenceQuality(v["evidence_quality"])
                     f.verified_by = ComponentType.VERIFIER
-                    f.verified_at = datetime.utcnow()
+                    f.verified_at = now_utc()
 
                     if f.status == ObservationStatus.VERIFIED:
                         verified_count += 1

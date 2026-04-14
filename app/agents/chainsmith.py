@@ -734,7 +734,7 @@ class {class_name}(BaseCheck):
                     attack_steps=pattern.get("steps", []),
                     combined_severity="high" if len(matching) > 3 else "medium",
                     confidence=0.7,
-                    identified_at=datetime.utcnow(),
+                    identified_at=datetime.now(UTC),
                 )
                 self.chains.append(chain)
 

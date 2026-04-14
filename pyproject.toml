@@ -142,6 +142,7 @@ select = [
     "UP",     # pyupgrade
     "ARG",    # flake8-unused-arguments
     "SIM",    # flake8-simplify
+    "DTZ",    # flake8-datetimez (enforce tz-aware UTC, Phase 50)
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
@@ -161,6 +162,8 @@ known-first-party = ["app", "chainsmith"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ARG001", "ARG002"]
+# Scenario services are standalone demo containers (see Phase 50 audit).
+"scenarios/**" = ["DTZ"]
 
 [tool.mypy]
 python_version = "3.12"

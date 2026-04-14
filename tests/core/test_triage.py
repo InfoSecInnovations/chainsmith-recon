@@ -14,7 +14,7 @@ Covers:
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -62,7 +62,7 @@ def _make_observation(
         status=ObservationStatus(status),
         confidence=0.8,
         check_name=observation_type,
-        discovered_at=datetime(2026, 1, 1),
+        discovered_at=datetime(2026, 1, 1, tzinfo=UTC),
         target_url=target_url,
         evidence_summary="Test evidence found",
     )
@@ -293,7 +293,7 @@ class TestTeamContextLoadSave:
             remediation_surface="both",
             team_size="4_plus",
             off_limits="Production DB",
-            answered_at=datetime(2026, 4, 9, 14, 30),
+            answered_at=datetime(2026, 4, 9, 14, 30, tzinfo=UTC),
         )
 
         yaml_file = tmp_path / "triage_context.yaml"

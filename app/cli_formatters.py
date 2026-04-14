@@ -8,9 +8,10 @@ Functions accept plain dicts (from API JSON responses) rather than domain object
 import csv
 import io
 import json
-from datetime import datetime
 
 import click
+
+from app.lib.timeutils import iso_utc
 
 SEVERITY_COLORS = {
     "critical": "red",
@@ -89,7 +90,7 @@ def observations_to_yaml(observations: list[dict], target: str) -> str:
             "tool": "chainsmith-recon",
             "version": "1.3.0",
             "target": target,
-            "generated": datetime.utcnow().isoformat() + "Z",
+            "generated": iso_utc(),
             "observations_count": len(observations),
         },
         "observations": observations,
@@ -107,7 +108,7 @@ def observations_to_markdown(observations: list[dict], target: str) -> str:
         "# Chainsmith Recon Report",
         "",
         f"**Target:** {target}",
-        f"**Generated:** {datetime.utcnow().isoformat()}Z",
+        f"**Generated:** {iso_utc()}",
         f"**Observations:** {len(observations)}",
         "",
         "---",

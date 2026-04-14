@@ -20,6 +20,8 @@ from enum import Enum
 from typing import Any
 from urllib.parse import urlparse
 
+from app.lib.timeutils import now_utc
+
 logger = logging.getLogger(__name__)
 
 
@@ -312,7 +314,7 @@ class BaseCheck(ABC):
         Execute the check with timing, rate limiting, and error handling.
         """
         self.status = CheckStatus.RUNNING
-        started = datetime.utcnow()
+        started = now_utc()
 
         result = CheckResult(success=False, check_name=self.name, started_at=started)
 
@@ -331,7 +333,7 @@ class BaseCheck(ABC):
             result.errors.append(f"Check failed: {str(e)}")
             self.status = CheckStatus.FAILED
 
-        result.completed_at = datetime.utcnow()
+        result.completed_at = now_utc()
         result.duration_ms = (result.completed_at - started).total_seconds() * 1000
 
         # Tag observations with check name

@@ -5,10 +5,10 @@ Probes AI chatbots to extract information about their capabilities and configura
 """
 
 import json
-from datetime import datetime
 
 import httpx
 
+from app.lib.timeutils import iso_utc, now_utc
 from app.models import RawEvidence
 
 
@@ -30,7 +30,7 @@ async def probe_chatbot(
     results = {
         "url": chat_url,
         "probe_message": message,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": iso_utc(),
         "success": False,
         "status_code": None,
         "response_body": None,
@@ -46,14 +46,14 @@ async def probe_chatbot(
         chat_url = chat_url.rstrip("/") + "/chat"
 
     try:
-        start_time = datetime.utcnow()
+        start_time = now_utc()
 
         async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
             response = await client.post(
                 chat_url, json={"message": message}, headers={"Content-Type": "application/json"}
             )
 
-            end_time = datetime.utcnow()
+            end_time = now_utc()
             results["response_time_ms"] = (end_time - start_time).total_seconds() * 1000
 
             results["status_code"] = response.status_code
@@ -131,7 +131,7 @@ async def trigger_error(chat_url: str, timeout: float = 15.0) -> dict:
     """
     results = {
         "url": chat_url,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": iso_utc(),
         "error_responses": [],
         "tools_leaked": [],
         "config_leaked": [],
@@ -201,7 +201,7 @@ def create_chatbot_probe_evidence(chat_url: str, results: dict) -> RawEvidence:
     """Create evidence record for chatbot probe."""
     return RawEvidence(
         tool_name="probe_chatbot",
-        timestamp=datetime.utcnow(),
+        timestamp=now_utc(),
         request={"url": chat_url, "message": results.get("probe_message")},
         response=results,
         headers=results.get("response_headers"),

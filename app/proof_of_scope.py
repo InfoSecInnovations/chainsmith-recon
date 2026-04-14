@@ -6,11 +6,12 @@ Handles traffic logging, scope violation detection, and compliance reporting.
 
 import json
 import os
-from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 
 from pydantic import BaseModel
+
+from app.lib.timeutils import iso_utc, now_utc, parse_iso_utc
 
 # ─── Configuration ─────────────────────────────────────────────
 
@@ -92,18 +93,14 @@ class EngagementWindow(BaseModel):
 
     def is_within_window(self) -> bool:
         """Check if current time is within window."""
-        now = datetime.utcnow()
+        now = now_utc()
 
         if self.start:
-            start_dt = datetime.fromisoformat(
-                self.start.replace("Z", "+00:00").replace("+00:00", "")
-            )
-            if now < start_dt:
+            if now < parse_iso_utc(self.start):
                 return False
 
         if self.end:
-            end_dt = datetime.fromisoformat(self.end.replace("Z", "+00:00").replace("+00:00", ""))
-            if now > end_dt:
+            if now > parse_iso_utc(self.end):
                 return False
 
         return True
@@ -185,7 +182,7 @@ class TrafficLogger:
     ):
         """Log a traffic entry."""
         entry = TrafficEntry(
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=iso_utc(),
             entry_type=TrafficEntryType.HTTP_REQUEST,
             dst_host=dst_host,
             dst_ip=dst_ip,
@@ -208,7 +205,7 @@ class TrafficLogger:
     ):
         """Log a tool invocation."""
         entry = TrafficEntry(
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=iso_utc(),
             entry_type=TrafficEntryType.TOOL_CALL,
             tool_name=tool_name,
             check_name=check_name,
@@ -270,7 +267,7 @@ class ViolationLogger:
     ):
         """Log a scope violation."""
         entry = ViolationEntry(
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=iso_utc(),
             violation_type=violation_type,
             target_host=target_host,
             target_path=target_path,
@@ -345,7 +342,7 @@ class ComplianceReporter:
         violations = self.violation_logger.get_violations()
 
         report = ComplianceReport(
-            generated_at=datetime.utcnow().isoformat() + "Z",
+            generated_at=iso_utc(),
             session_id=session_id,
             engagement_window=proof_settings.engagement_window,
             outside_window_acknowledged=proof_settings.outside_window_acknowledged,

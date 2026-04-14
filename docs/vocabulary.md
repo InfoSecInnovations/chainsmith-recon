@@ -112,3 +112,7 @@ Raw data captured during a check: request/response pairs, headers, status codes,
 ### Operator Context
 
 Operator-declared metadata about target assets (exposure level, criticality). Fed to the Adjudicator to inform severity decisions. Configured via `~/.chainsmith/adjudicator_context.yaml`.
+
+### Datetime handling
+
+All internal datetimes are timezone-aware UTC. Convert to operator-local time only at display boundaries (reports, UI). Use `app.lib.timeutils` helpers (`now_utc`, `iso_utc`, `parse_iso_utc`) instead of `datetime.utcnow()` or bare `datetime.now()`.
