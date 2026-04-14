@@ -127,37 +127,29 @@
                 </div>
             </div>
 
+            <div id="detail-severity" class="detail-severity"></div>
+
+            <div class="report-bar">
+                <span class="report-bar-label">Reports:</span>
+                <button class="btn btn-primary btn-small" data-report="technical">Technical</button>
+                <button class="btn btn-primary btn-small" data-report="executive">Executive</button>
+                <button class="btn btn-primary btn-small" data-report="compliance">Compliance</button>
+                <div id="report-result" class="report-result-area"></div>
+            </div>
+
             <div class="sub-tabs">
                 <button class="sub-tab active" data-tab="overview">Overview</button>
                 <button class="sub-tab" data-tab="observations">Observations</button>
                 <button class="sub-tab" data-tab="chains">Chains</button>
                 <button class="sub-tab" data-tab="log">Log</button>
                 <button class="sub-tab" data-tab="compare">Compare</button>
-                <button class="sub-tab" data-tab="reports">Reports</button>
             </div>
 
             <div class="sub-panel active" id="panel-overview"><div id="overview-content"><p class="empty-message">Loading...</p></div></div>
-            <div class="sub-panel" id="panel-observations"><div id="observations-content"><p class="empty-message">Click to load.</p></div></div>
-            <div class="sub-panel" id="panel-chains"><div id="chains-content"><p class="empty-message">Click to load.</p></div></div>
-            <div class="sub-panel" id="panel-log"><div id="log-content"><p class="empty-message">Click to load.</p></div></div>
-            <div class="sub-panel" id="panel-compare"><div id="compare-content"><p class="empty-message">Click to load.</p></div></div>
-            <div class="sub-panel" id="panel-reports">
-                <div class="report-actions">
-                    <div class="report-option">
-                        <div class="report-option-info"><h4>Technical Report</h4><p>Detailed findings with evidence</p></div>
-                        <button class="btn btn-primary btn-small" data-report="technical">Generate</button>
-                    </div>
-                    <div class="report-option">
-                        <div class="report-option-info"><h4>Executive Report</h4><p>High-level summary for stakeholders</p></div>
-                        <button class="btn btn-primary btn-small" data-report="executive">Generate</button>
-                    </div>
-                    <div class="report-option">
-                        <div class="report-option-info"><h4>Compliance Report</h4><p>Scope compliance and framework mapping</p></div>
-                        <button class="btn btn-primary btn-small" data-report="compliance">Generate</button>
-                    </div>
-                </div>
-                <div id="report-result" class="report-result-area"></div>
-            </div>
+            <div class="sub-panel" id="panel-observations"><div id="observations-content"><p class="empty-message">Loading...</p></div></div>
+            <div class="sub-panel" id="panel-chains"><div id="chains-content"><p class="empty-message">Loading...</p></div></div>
+            <div class="sub-panel" id="panel-log"><div id="log-content"><p class="empty-message">Loading...</p></div></div>
+            <div class="sub-panel" id="panel-compare"><div id="compare-content"><p class="empty-message">Loading...</p></div></div>
         </div>
     </main>
 
@@ -561,6 +553,20 @@
                 document.getElementById('list-view').style.display = 'none';
                 document.getElementById('detail-view').style.display = 'block';
                 renderDetailHeader(scan);
+                document.getElementById('report-result').innerHTML = '';
+                try {
+                    const obsData = await api.getScanObservations(scanId);
+                    state.currentObservations = obsData.observations || [];
+                    const counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+                    for (const o of state.currentObservations) {
+                        const s = (o.severity || 'info').toLowerCase();
+                        if (counts[s] != null) counts[s]++;
+                    }
+                    scan.severity_breakdown = counts;
+                } catch {
+                    state.currentObservations = [];
+                }
+                renderSeverityBar(scan);
                 switchSubTab('overview');
             } catch (e) {
                 alert('Failed to open scan: ' + e.message);
@@ -605,7 +611,6 @@
                 case 'chains': await loadChains(id); break;
                 case 'log': await loadLog(id); break;
                 case 'compare': renderCompareTabPicker(id); break;
-                case 'reports': /* static markup, nothing to load */ break;
             }
         }
 
@@ -625,7 +630,18 @@
                 scan.checks_run != null ? `<div><strong>Checks run:</strong> ${scan.checks_run}</div>` : '',
                 scan.total_observations != null ? `<div><strong>Total observations:</strong> ${scan.total_observations}</div>` : '',
             ].filter(Boolean).join('');
-            el.innerHTML = `<div class="scan-overview">${cards}</div><div style="font-size:0.8125rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:6px;">${meta}</div>`;
+            el.innerHTML = `<div style="font-size:0.875rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:8px;">${meta || '<span class="empty-message">No additional metadata.</span>'}</div>`;
+        }
+
+        function renderSeverityBar(scan) {
+            const bar = document.getElementById('detail-severity');
+            if (!bar) return;
+            const sev = scan.severity_breakdown || scan.severity_counts || {};
+            bar.innerHTML = ['critical','high','medium','low','info'].map(s => `
+                <div class="scan-overview-card sev-${s}">
+                    <div class="value">${sev[s] ?? 0}</div>
+                    <div class="label">${s}</div>
+                </div>`).join('');
         }
 
         // ─── Observations ────────────────────────────────────
@@ -688,19 +704,53 @@
                 const data = await api.getScanLog(scanId);
                 const log = data.log || [];
                 if (!log.length) { el.innerHTML = '<p class="empty-message">No log entries.</p>'; return; }
-                el.innerHTML = `<div class="log-timeline">
-                    <div class="log-row" style="color:var(--text-muted);font-weight:600;">
-                        <span>Event</span><span>Check</span><span>Suite</span><span>Duration</span><span>Obs</span>
-                    </div>
-                    ${log.map(r => `
-                        <div class="log-row">
-                            <span class="event">${esc(r.event || r.status || '--')}</span>
-                            <span class="check">${esc(r.check_name || '--')}</span>
-                            <span>${esc(r.suite || r.phase || '--')}</span>
-                            <span>${fmtDuration(r.duration_ms)}</span>
-                            <span>${r.observations_count ?? '--'}</span>
-                        </div>`).join('')}
-                </div>`;
+                const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString() : '--';
+                // Group log entries by check_name
+                const byCheck = {};
+                for (const r of log) {
+                    const name = r.check || r.check_name || 'unknown';
+                    if (!byCheck[name]) byCheck[name] = { name, started: null, completed: null, error: null, obs: 0 };
+                    const ev = (r.event || '').toLowerCase();
+                    if (ev === 'started') byCheck[name].started = r.timestamp;
+                    else if (ev === 'completed') {
+                        byCheck[name].completed = r.timestamp;
+                        byCheck[name].obs = r.observations ?? r.observations_count ?? byCheck[name].obs;
+                    }
+                    if (r.error_message) byCheck[name].error = r.error_message;
+                }
+                // Group observations by check_name
+                const obsByCheck = {};
+                for (const o of (state.currentObservations || [])) {
+                    const k = o.check_name || 'unknown';
+                    (obsByCheck[k] ||= []).push(o);
+                }
+                const checks = Object.values(byCheck).sort((a, b) =>
+                    (a.started || '').localeCompare(b.started || ''));
+                el.innerHTML = `<div class="check-log">${checks.map(c => {
+                    const status = c.error ? 'errored' : (c.completed ? 'completed' : (c.started ? 'running' : 'unknown'));
+                    const obsList = obsByCheck[c.name] || [];
+                    const obsBody = obsList.length ? obsList.map(o => `
+                        <div class="check-log-obs">
+                            <div class="check-log-obs-head">
+                                <span class="severity-badge severity-${esc(o.severity)}">${esc(o.severity)}</span>
+                                <strong>${esc(o.title || 'Untitled')}</strong>
+                                <span class="check-log-host">${esc(o.host || o.target_url || '')}</span>
+                            </div>
+                            ${o.description ? `<div class="check-log-desc">${esc(o.description)}</div>` : ''}
+                            ${o.evidence ? `<pre class="check-log-evidence">${esc(o.evidence)}</pre>` : ''}
+                            ${o.raw_data ? `<details class="check-log-raw"><summary>raw_data</summary><pre>${esc(JSON.stringify(o.raw_data, null, 2))}</pre></details>` : ''}
+                        </div>`).join('') : '<div class="check-log-empty">No observations recorded.</div>';
+                    return `<details class="check-log-check" ${obsList.length ? 'open' : ''}>
+                        <summary>
+                            <span class="check-log-status check-log-status-${status}">${status}</span>
+                            <span class="check-log-name">${esc(c.name)}</span>
+                            <span class="check-log-meta">${esc(fmtTime(c.started))}${c.completed ? ' → ' + esc(fmtTime(c.completed)) : ''}</span>
+                            <span class="check-log-count">${c.obs} obs</span>
+                            ${c.error ? `<span class="check-log-err">${esc(c.error)}</span>` : ''}
+                        </summary>
+                        <div class="check-log-body">${obsBody}</div>
+                    </details>`;
+                }).join('')}</div>`;
             } catch (e) {
                 el.innerHTML = `<p style="color:var(--error);">Failed: ${esc(e.message)}</p>`;
             }
