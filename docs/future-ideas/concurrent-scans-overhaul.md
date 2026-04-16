@@ -152,8 +152,8 @@ Breaking this into a single PR is suicidal. Phases:
 | B | Flip reads: routes read from `registry.get(scan_id or registry.current())`. Remove per-scan fields from `AppState`. | Minor — API gains `scan_id` param |
 | C | Allow second scan: remove the 409 in `start_scan`, add `max_concurrent_scans` check. | No |
 | D | Web UI scan selector. | UI change only |
-| E | Runner changes for pause/cancel + the endpoints the web UI expects (tie-in to Phase 1 module). | Fixes current 404 bugs |
-| F | Chat session decoupling. | Chat API shape changes |
+| E | Runner changes for pause/stop + scoped control endpoints (`/api/v1/scans/{id}/{pause,resume,stop,status}`); unscoped endpoints stay as back-compat aliases. SSE streaming split out to `phase51-scan-state-streaming.md`. Terminology: `stop` everywhere (not `cancel`). | Fixes current 404 bugs |
+| F | Chat session decoupling: per-browser `chat_session_id` (lazy-minted, localStorage), `ChatMessage.scan_id` column, in-memory `ChatSessionPinRegistry` with `/api/v1/chat/sessions/{id}/pin`, SSE envelopes carry `scan_id`, targeted proactive fan-out via pin registry (broadcast fallback), scanless-chat handoff to Coach when scan-scoped agents invoked with no session. Engagement removal deferred to phase 52. | Chat API shape changes |
 | G | Frontend multi-scan UI (optional). | Deferred |
 
 Each phase is a separate PR. A-through-C are the hard architectural work; D-G are visible features.

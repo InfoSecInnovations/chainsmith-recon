@@ -85,8 +85,8 @@ class ViolationEntry(BaseModel):
     user_acknowledged: bool = False
 
 
-class EngagementWindow(BaseModel):
-    """Engagement window configuration."""
+class ScanWindow(BaseModel):
+    """Scan window configuration."""
 
     start: str | None = None  # ISO datetime
     end: str | None = None  # ISO datetime
@@ -117,8 +117,8 @@ class ProofOfScopeSettings(BaseModel):
     block_exclusions: bool = True
     log_violations: bool = True
 
-    # Engagement window
-    engagement_window: EngagementWindow = EngagementWindow()
+    # Scan window
+    scan_window: ScanWindow = ScanWindow()
 
     # Track if user acknowledged outside-window warning
     outside_window_acknowledged: bool = False
@@ -131,8 +131,8 @@ class ComplianceReport(BaseModel):
     generated_at: str
     session_id: str
 
-    # Engagement window
-    engagement_window: EngagementWindow
+    # Scan window
+    scan_window: ScanWindow
     outside_window_acknowledged: bool = False
 
     # Scope definition
@@ -344,7 +344,7 @@ class ComplianceReporter:
         report = ComplianceReport(
             generated_at=iso_utc(),
             session_id=session_id,
-            engagement_window=proof_settings.engagement_window,
+            scan_window=proof_settings.scan_window,
             outside_window_acknowledged=proof_settings.outside_window_acknowledged,
             target=target,
             exclusions=exclusions,

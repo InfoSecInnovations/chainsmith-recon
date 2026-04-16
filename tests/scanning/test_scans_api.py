@@ -308,6 +308,7 @@ class TestObservationRepositoryReads:
             "check_name",
             "suite",
             "target_url",
+            "target_host",
             "host",
             "evidence",
             "raw_data",
@@ -390,6 +391,7 @@ class TestCheckLogRepositoryReads:
             "duration_ms",
             "error_message",
             "timestamp",
+            "event_seq",
         }
         assert expected_keys == set(log[0].keys())
 
@@ -406,7 +408,6 @@ class TestScanDictShape:
         scan = await repo.get_scan("scan-aaa")
         expected_keys = {
             "id",
-            "engagement_id",
             "session_id",
             "target_domain",
             "status",

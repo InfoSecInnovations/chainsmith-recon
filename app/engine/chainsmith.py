@@ -8,38 +8,30 @@ state guards, and persistence.
 """
 
 import logging
-from typing import TYPE_CHECKING
 
 from app.agents.chainsmith import ChainsmithAgent
 
-if TYPE_CHECKING:
-    from app.state import AppState
-
 logger = logging.getLogger(__name__)
 
-
-async def _update_chainsmith_status_in_db(scan_id: str | None, **fields) -> None:
-    """Persist chainsmith status fields to the Scan DB record (best-effort)."""
-    if not scan_id:
-        return
-    try:
-        from app.db.repositories import ScanRepository
-
-        await ScanRepository().update_scan_status(scan_id, **fields)
-    except Exception:
-        logger.warning("Failed to persist chainsmith status to DB", exc_info=True)
+# Module-level chainsmith status. Chainsmith operations are not tied to a scan;
+# this is a simple concurrency guard for the single-process chainsmith agent.
+_chainsmith_status: str = "idle"
 
 
-async def run_validation(state: "AppState") -> dict:
+def get_status() -> str:
+    """Return current chainsmith status (idle | validating | complete | error)."""
+    return _chainsmith_status
+
+
+async def run_validation() -> dict:
     """
     Run full check ecosystem validation.
 
-    Guards against concurrent runs via state.chainsmith_status.
+    Guards against concurrent runs via the module-level _chainsmith_status.
     Persists results to the database.
     """
-    scan_id = getattr(state, "_last_scan_id", None) or getattr(state, "active_scan_id", None)
-
-    state.chainsmith_status = "validating"
+    global _chainsmith_status
+    _chainsmith_status = "validating"
 
     try:
         agent = ChainsmithAgent()
@@ -51,7 +43,7 @@ async def run_validation(state: "AppState") -> dict:
             from app.db.repositories import ChainsmithRepository
 
             await ChainsmithRepository().save_validation(
-                scan_id=scan_id,
+                scan_id=None,
                 validation_type="full",
                 status="complete",
                 result=result_dict,
@@ -60,19 +52,17 @@ async def run_validation(state: "AppState") -> dict:
         except Exception:
             logger.warning("Failed to persist validation to DB", exc_info=True)
 
-        state.chainsmith_status = "complete"
+        _chainsmith_status = "complete"
         return result_dict
 
     except Exception as e:
         logger.exception("Chainsmith validation failed: %s", e)
-        state.chainsmith_status = "error"
+        _chainsmith_status = "error"
         raise
 
 
-async def run_upstream_diff(state: "AppState") -> dict:
+async def run_upstream_diff() -> dict:
     """Check for community check drift and persist the result."""
-    scan_id = getattr(state, "_last_scan_id", None) or getattr(state, "active_scan_id", None)
-
     try:
         agent = ChainsmithAgent()
         diff = await agent.diff_upstream()
@@ -83,7 +73,7 @@ async def run_upstream_diff(state: "AppState") -> dict:
             from app.db.repositories import ChainsmithRepository
 
             await ChainsmithRepository().save_validation(
-                scan_id=scan_id,
+                scan_id=None,
                 validation_type="upstream_diff",
                 status="complete",
                 result={"diff": diff, "community_hash": community_hash},

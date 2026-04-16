@@ -22,7 +22,7 @@ from app.lib.llm import (
 )
 
 if TYPE_CHECKING:
-    from app.state import AppState
+    from app.scan_session import ScanSession
 
 logger = logging.getLogger(__name__)
 
@@ -859,18 +859,19 @@ async def _persist_chains(scan_id: str | None, chains: list[dict]) -> None:
         logger.warning("Failed to persist chains to DB", exc_info=True)
 
 
-async def run_chain_analysis(state: "AppState", llm_only: bool = False):
+async def run_chain_analysis(session: "ScanSession", llm_only: bool = False):
     """
     Run two-pass chain analysis: rule-based then LLM.
 
     Reads observations from DB, accumulates chains locally, persists
-    chains and status to DB. Updates state.chain_status as a concurrency guard.
+    chains and status to DB. Updates session.chain_status as a
+    concurrency guard.
 
     Args:
         llm_only: If True, skip rule-based pass and re-run LLM only
                   (used by the /api/chains/retry endpoint).
     """
-    scan_id = getattr(state, "_last_scan_id", None)
+    scan_id = session.id
     chains: list[dict] = []
     chain_error: str | None = None
     chain_llm_analysis: dict | None = None
@@ -878,28 +879,24 @@ async def run_chain_analysis(state: "AppState", llm_only: bool = False):
     try:
         logger.info("Starting chain analysis...")
 
-        # Load observations from DB
         observations = await _load_observations_for_chains(scan_id)
 
         if not llm_only:
-            # Pass 1: Rule-based pattern matching
             rule_chains = detect_rule_based_chains(observations)
             logger.info(f"Rule-based analysis found {len(rule_chains)} chains")
             chains.extend(rule_chains)
         else:
-            # For retry, load existing rule-based chains from DB
             try:
                 from app.db.repositories import ChainRepository
 
-                existing = await ChainRepository().get_chains(scan_id) if scan_id else []
+                existing = await ChainRepository().get_chains(scan_id)
                 rule_chains = [c for c in existing if c.get("source") == "rule-based"]
                 chains.extend(rule_chains)
             except Exception:
                 logger.warning("Failed to load existing chains for retry", exc_info=True)
                 rule_chains = []
 
-        # Pass 2: LLM-based analysis
-        result = await detect_llm_chains(state, observations, len(chains))
+        result = await detect_llm_chains(session, observations, len(chains))
         chain_llm_analysis = result.to_analysis_dict()
 
         logger.info(
@@ -907,7 +904,6 @@ async def run_chain_analysis(state: "AppState", llm_only: bool = False):
         )
 
         for chain in result.chains:
-            # Check if this overlaps with a rule-based chain
             overlapping = find_overlapping_chain(chain, chains)
             if overlapping:
                 overlapping["source"] = "both"
@@ -917,37 +913,34 @@ async def run_chain_analysis(state: "AppState", llm_only: bool = False):
             else:
                 chains.append(chain)
 
-        # Set top-level status based on LLM outcome
         if result.llm_status == "success":
-            state.chain_status = "complete"
+            session.chain_status = "complete"
         elif result.llm_status == "not_configured":
-            state.chain_status = "complete"  # rule-only is fine
+            session.chain_status = "complete"
         elif chains:
-            state.chain_status = "partial"  # have rule chains but LLM failed
+            session.chain_status = "partial"
         else:
-            state.chain_status = "error"
+            session.chain_status = "error"
             chain_error = (
                 result.llm_response.error if result.llm_response else "LLM analysis failed"
             )
 
         logger.info(f"Chain analysis complete. {len(chains)} total chains.")
 
-        # Guided Mode: proactive chain_identified message
         if chains:
-            await _emit_chain_identified_proactive(state, len(chains))
+            await _emit_chain_identified_proactive(session, len(chains))
 
-        # Persist chains and status to DB
         await _persist_chains(scan_id, chains)
         await _update_chain_status_in_db(
             scan_id,
-            chain_status=state.chain_status,
+            chain_status=session.chain_status,
             chain_error=chain_error,
             chain_llm_analysis=chain_llm_analysis,
         )
 
     except Exception as e:
         logger.exception(f"Chain analysis error: {e}")
-        state.chain_status = "error"
+        session.chain_status = "error"
         await _update_chain_status_in_db(scan_id, chain_status="error", chain_error=str(e))
 
 
@@ -1029,11 +1022,11 @@ def match_pattern(pattern: dict, observations: list[dict]) -> list[dict]:
     return unique_observations
 
 
-def _build_chain_prompt(state: "AppState", observations_summary: list[dict]) -> str:
+def _build_chain_prompt(session: "ScanSession", observations_summary: list[dict]) -> str:
     """Build the chain analysis prompt."""
     return f"""You are a penetration testing expert analyzing reconnaissance observations for attack chain opportunities.
 
-Target: {state.target}
+Target: {session.target}
 
 Observations discovered:
 {format_observations_for_llm(observations_summary)}
@@ -1291,12 +1284,13 @@ def find_overlapping_chain(new_chain: dict, existing_chains: list[dict]) -> dict
 # ─── Guided Mode: proactive chain_identified ──────────────────
 
 
-async def _emit_chain_identified_proactive(state, chain_count: int) -> None:
+async def _emit_chain_identified_proactive(session, chain_count: int) -> None:
     """Push a proactive chain_identified message if Guided Mode is active."""
     try:
         from app.engine.chat import sse_manager
         from app.engine.guided import maybe_emit_proactive
         from app.models import ComponentType
+        from app.state import state
 
         text = f"New attack chain{'s' if chain_count > 1 else ''} detected linking observations."
         if chain_count > 1:

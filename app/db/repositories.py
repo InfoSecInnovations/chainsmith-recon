@@ -71,7 +71,6 @@ class ScanRepository(_RepositoryBase):
         scope: dict | None = None,
         profile_name: str | None = None,
         scenario_name: str | None = None,
-        engagement_id: str | None = None,
     ) -> str:
         """Insert a new scan record (status=running). Returns the scan ID."""
         scan = Scan(
@@ -84,7 +83,6 @@ class ScanRepository(_RepositoryBase):
             scope=scope,
             profile_name=profile_name,
             scenario_name=scenario_name,
-            engagement_id=engagement_id,
         )
         async with self._session() as session:
             session.add(scan)
@@ -179,7 +177,6 @@ class ScanRepository(_RepositoryBase):
         self,
         target: str | None = None,
         status: str | None = None,
-        engagement_id: str | None = None,
         started_after: str | None = None,
         started_before: str | None = None,
         limit: int = 50,
@@ -199,9 +196,6 @@ class ScanRepository(_RepositoryBase):
         if status:
             query = query.where(Scan.status == status)
             count_query = count_query.where(Scan.status == status)
-        if engagement_id:
-            query = query.where(Scan.engagement_id == engagement_id)
-            count_query = count_query.where(Scan.engagement_id == engagement_id)
         if started_after:
             query = query.where(Scan.started_at >= started_after)
             count_query = count_query.where(Scan.started_at >= started_after)
@@ -259,7 +253,6 @@ def _scan_to_dict(scan: Scan) -> dict:
     """Convert a Scan ORM object to a JSON-safe dict."""
     return {
         "id": scan.id,
-        "engagement_id": scan.engagement_id,
         "session_id": scan.session_id,
         "target_domain": scan.target_domain,
         "status": scan.status,
@@ -327,6 +320,7 @@ class ObservationRepository(_RepositoryBase):
                     verification_status=obs.get("verification_status", "pending"),
                     confidence=obs.get("confidence"),
                     fingerprint=fingerprint,
+                    event_seq=obs.get("event_seq"),
                 )
             )
 
@@ -367,6 +361,47 @@ class ObservationRepository(_RepositoryBase):
             observations = [obs for obs in observations if obs["severity"] == severity]
 
         return observations
+
+    async def get_events_since(
+        self,
+        scan_id: str,
+        last_seq: int,
+        upper_seq: int,
+    ) -> list[tuple[int, dict]]:
+        """Return observation rows as `observation_added` payloads for SSE replay.
+
+        Phase 51.3b: backs the DB-backed replay path for `observation_added`
+        events, which are never kept in the hot ring. Only rows whose
+        `event_seq` falls in `(last_seq, upper_seq]` are returned, ordered by
+        seq. Payload shape mirrors what `ObservationWriter` publishes live
+        (`app/db/writers.py`) so live and replay paths cannot drift.
+        """
+        if upper_seq <= last_seq:
+            return []
+        query = (
+            select(
+                ObservationRecord.event_seq,
+                ObservationRecord.id,
+                ObservationRecord.severity,
+                ObservationRecord.host,
+                ObservationRecord.check_name,
+            )
+            .where(ObservationRecord.scan_id == scan_id)
+            .where(ObservationRecord.event_seq.isnot(None))
+            .where(ObservationRecord.event_seq > last_seq)
+            .where(ObservationRecord.event_seq <= upper_seq)
+            .order_by(ObservationRecord.event_seq)
+        )
+        async with self._session() as session:
+            result = await session.execute(query)
+            rows = result.all()
+        return [
+            (
+                seq,
+                {"id": obs_id, "severity": severity, "host": host, "check": check},
+            )
+            for seq, obs_id, severity, host, check in rows
+        ]
 
     async def get_observations_by_host(self, scan_id: str) -> list[dict]:
         """Get observations for a scan grouped by host.
@@ -511,6 +546,7 @@ class CheckLogRepository(_RepositoryBase):
                     observations_count=entry.get("observations", 0),
                     duration_ms=entry.get("duration_ms"),
                     error_message=entry.get("error_message"),
+                    event_seq=entry.get("event_seq"),
                 )
             )
 
@@ -520,6 +556,38 @@ class CheckLogRepository(_RepositoryBase):
 
         logger.info(f"Persisted {len(rows)} check log entries for scan {scan_id}")
         return len(rows)
+
+    async def get_events_since(
+        self,
+        scan_id: str,
+        last_seq: int,
+        upper_seq: int,
+    ) -> list[tuple[int, str, dict]]:
+        """Return check_log rows as SSE (event_type, payload) tuples for replay.
+
+        Phase 51.3b: backs the DB-backed replay for `check_started`,
+        `check_completed`, and `check_skipped` events older than the hot
+        ring's floor. Uses `CheckLog.to_sse_event()` — the single mapping
+        shared with the live publisher — so replay cannot drift.
+        """
+        if upper_seq <= last_seq:
+            return []
+        query = (
+            select(CheckLog)
+            .where(CheckLog.scan_id == scan_id)
+            .where(CheckLog.event_seq.isnot(None))
+            .where(CheckLog.event_seq > last_seq)
+            .where(CheckLog.event_seq <= upper_seq)
+            .order_by(CheckLog.event_seq)
+        )
+        async with self._session() as session:
+            result = await session.execute(query)
+            rows = result.scalars().all()
+        out: list[tuple[int, str, dict]] = []
+        for row in rows:
+            event_type, payload = row.to_sse_event()
+            out.append((row.event_seq, event_type, payload))
+        return out
 
     async def get_log(self, scan_id: str) -> list[dict]:
         """Get check log entries for a scan."""
@@ -540,6 +608,7 @@ def _check_log_to_dict(entry: CheckLog) -> dict:
         "duration_ms": entry.duration_ms,
         "error_message": entry.error_message,
         "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
+        "event_seq": entry.event_seq,
     }
 
 
@@ -549,7 +618,7 @@ class ComparisonRepository(_RepositoryBase):
     async def compute_observation_statuses(self, scan_id: str) -> dict:
         """
         Compare the current scan's fingerprints against the previous scan
-        for the same target (or engagement). Writes ObservationStatusHistory
+        for the same target. Writes ObservationStatusHistory
         entries and a ScanComparison record.
 
         Returns {new, recurring, resolved, regressed, previous_scan_id}.
@@ -561,16 +630,15 @@ class ComparisonRepository(_RepositoryBase):
             if current_scan is None:
                 return {"new": 0, "recurring": 0, "resolved": 0, "regressed": 0}
 
-            # Find previous scan for the same target (or engagement)
+            # Find previous scan for the same target
             prev_query = (
                 select(Scan)
                 .where(Scan.target_domain == current_scan.target_domain)
                 .where(Scan.id != scan_id)
                 .where(Scan.status == "complete")
+                .order_by(Scan.started_at.desc())
+                .limit(1)
             )
-            if current_scan.engagement_id:
-                prev_query = prev_query.where(Scan.engagement_id == current_scan.engagement_id)
-            prev_query = prev_query.order_by(Scan.started_at.desc()).limit(1)
 
             result = await session.execute(prev_query)
             previous_scan = result.scalar_one_or_none()
@@ -963,7 +1031,7 @@ SEVERITY_LEVELS = ["critical", "high", "medium", "low", "info"]
 
 
 class TrendRepository(_RepositoryBase):
-    """Compute trend data across scans for engagements or targets."""
+    """Compute trend data across scans for a target."""
 
     async def get_target_trend(
         self,
@@ -1502,7 +1570,7 @@ class ChatRepository(_RepositoryBase):
         direction: str,
         text: str,
         agent_type: str | None = None,
-        engagement_id: str | None = None,
+        scan_id: str | None = None,
         route_method: str | None = None,
         ui_context: dict | None = None,
         references: list[dict] | None = None,
@@ -1512,7 +1580,7 @@ class ChatRepository(_RepositoryBase):
         msg = ChatMessage(
             id=msg_id,
             session_id=session_id,
-            engagement_id=engagement_id,
+            scan_id=scan_id,
             direction=direction,
             agent_type=agent_type,
             text=text,
@@ -1529,26 +1597,14 @@ class ChatRepository(_RepositoryBase):
     async def get_history(
         self,
         session_id: str,
-        engagement_id: str | None = None,
         limit: int = 50,
         before: str | None = None,
     ) -> list[dict]:
-        """Get chat history, newest first.
-
-        If engagement_id is set, returns messages across all sessions
-        in that engagement. Otherwise scoped to session_id only.
-        Cleared messages are excluded.
-        """
-        if engagement_id:
-            query = select(ChatMessage).where(
-                ChatMessage.engagement_id == engagement_id,
-                ChatMessage.cleared == False,  # noqa: E712 (SQLAlchemy column comparison)
-            )
-        else:
-            query = select(ChatMessage).where(
-                ChatMessage.session_id == session_id,
-                ChatMessage.cleared == False,  # noqa: E712
-            )
+        """Get chat history for a session, newest first. Cleared messages excluded."""
+        query = select(ChatMessage).where(
+            ChatMessage.session_id == session_id,
+            ChatMessage.cleared == False,  # noqa: E712 (SQLAlchemy column comparison)
+        )
 
         if before:
             # Cursor-based: get timestamp of the cursor message
@@ -1583,13 +1639,17 @@ class ChatRepository(_RepositoryBase):
             await session.commit()
             return len(rows)
 
-    async def export_engagement_chat(self, engagement_id: str) -> list[dict]:
-        """Export all messages for an engagement (including cleared)."""
-        query = (
-            select(ChatMessage)
-            .where(ChatMessage.engagement_id == engagement_id)
-            .order_by(ChatMessage.timestamp.asc())
-        )
+    async def export_chat_session(
+        self, session_id: str, scan_id: str | None = None
+    ) -> list[dict]:
+        """Export all messages for a chat session (including cleared).
+
+        Optionally narrow to a specific scan_id within the session.
+        """
+        query = select(ChatMessage).where(ChatMessage.session_id == session_id)
+        if scan_id:
+            query = query.where(ChatMessage.scan_id == scan_id)
+        query = query.order_by(ChatMessage.timestamp.asc())
         async with self._session() as session:
             result = await session.execute(query)
             rows = result.scalars().all()
@@ -1601,7 +1661,7 @@ def _chat_message_to_dict(r: ChatMessage) -> dict:
     return {
         "id": r.id,
         "session_id": r.session_id,
-        "engagement_id": r.engagement_id,
+        "scan_id": r.scan_id,
         "timestamp": r.timestamp.isoformat() if r.timestamp else None,
         "direction": r.direction,
         "agent_type": r.agent_type,

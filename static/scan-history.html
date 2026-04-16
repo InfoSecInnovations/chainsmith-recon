@@ -76,12 +76,6 @@
                         <option value="error">Error</option>
                     </select>
                 </div>
-                <div class="sh-filter" data-cap="engagements">
-                    <label for="filter-engagement">Engagement</label>
-                    <select id="filter-engagement">
-                        <option value="">All</option>
-                    </select>
-                </div>
                 <div class="sh-filter">
                     <label for="filter-after">Started after</label>
                     <input type="date" id="filter-after">
@@ -262,14 +256,13 @@
         // ─── State ───────────────────────────────────────────
         const state = {
             scans: [],
-            engagements: [],
             currentScan: null,
-            filters: { target: '', status: '', engagement_id: '', started_after: '', started_before: '' },
+            filters: { target: '', status: '', started_after: '', started_before: '' },
             offset: 0,
             limit: 50,
             total: 0,
             selectedForCompare: [],
-            capabilities: { engagements: true },
+            capabilities: {},
             confirmCallback: null,
         };
 
@@ -290,27 +283,10 @@
             return p.toString();
         }
 
-        // ─── Capability gating ───────────────────────────────
-        async function applyCapabilities() {
-            try {
-                const caps = await api.getCapabilities();
-                state.capabilities = Object.assign(state.capabilities, caps);
-            } catch (e) { /* keep defaults */ }
-            const enabled = !!state.capabilities.engagements;
-            document.querySelectorAll('[data-cap="engagements"]').forEach(el => {
-                if (!enabled) el.style.display = 'none';
-            });
-            if (!enabled) {
-                // Also hide the Reports tab if engagement-specific reports are gone?
-                // No — reports sub-tab is scan-level, stays visible.
-            }
-        }
-
         // ─── Init ────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', async () => {
             initCommon();
             initModal();
-            await applyCapabilities();
 
             initFilters();
             initCompareBar();
@@ -318,21 +294,13 @@
             initConfirmModal();
             initReportButtons();
 
-            // Populate engagement filter dropdown if enabled
-            if (state.capabilities.engagements) {
-                await loadEngagements();
-                populateEngagementFilter();
-            }
-
             // Route based on URL params
             const params = new URLSearchParams(window.location.search);
             const scanId = params.get('scan');
             const compare = params.get('compare');
-            const engagement = params.get('engagement');
             const target = params.get('target');
 
             if (target) { state.filters.target = target; document.getElementById('filter-target').value = target; }
-            if (engagement) { state.filters.engagement_id = engagement; const el = document.getElementById('filter-engagement'); if (el) el.value = engagement; }
 
             if (scanId) {
                 await openScanDetail(scanId);
@@ -366,8 +334,6 @@
         function readFilters() {
             state.filters.target = document.getElementById('filter-target').value.trim();
             state.filters.status = document.getElementById('filter-status').value;
-            const engEl = document.getElementById('filter-engagement');
-            state.filters.engagement_id = engEl ? engEl.value : '';
             const after = document.getElementById('filter-after').value;
             const before = document.getElementById('filter-before').value;
             state.filters.started_after = after ? new Date(after).toISOString() : '';
@@ -384,21 +350,11 @@
         function clearFilters() {
             document.getElementById('filter-target').value = '';
             document.getElementById('filter-status').value = '';
-            const engEl = document.getElementById('filter-engagement'); if (engEl) engEl.value = '';
             document.getElementById('filter-after').value = '';
             document.getElementById('filter-before').value = '';
-            state.filters = { target: '', status: '', engagement_id: '', started_after: '', started_before: '' };
+            state.filters = { target: '', status: '', started_after: '', started_before: '' };
             state.offset = 0;
             loadScans();
-        }
-
-        function populateEngagementFilter() {
-            const el = document.getElementById('filter-engagement');
-            if (!el) return;
-            const current = el.value;
-            el.innerHTML = '<option value="">All</option>' +
-                state.engagements.map(e => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
-            if (current) el.value = current;
         }
 
         // ─── Load scans ──────────────────────────────────────
@@ -463,8 +419,6 @@
                 container.innerHTML = '<p class="empty-message">No scans found. Adjust filters or run a scan.</p>';
                 return;
             }
-            const engCol = state.capabilities.engagements;
-            const engMap = Object.fromEntries(state.engagements.map(e => [e.id, e.name]));
             container.innerHTML = `
                 <table class="sh-table">
                     <thead>
@@ -476,14 +430,12 @@
                             <th>Observations</th>
                             <th>Duration</th>
                             <th>Status</th>
-                            ${engCol ? '<th>Engagement</th>' : ''}
                             <th style="width:32px;"></th>
                         </tr>
                     </thead>
                     <tbody>
                         ${state.scans.map(s => {
                             const checked = state.selectedForCompare.includes(s.id) ? 'checked' : '';
-                            const engName = engCol ? (s.engagement_id ? esc(engMap[s.engagement_id] || s.engagement_id.substring(0,8)) : '--') : '';
                             return `
                             <tr class="clickable" data-scan-id="${esc(s.id)}">
                                 <td onclick="event.stopPropagation()"><input type="checkbox" data-compare-id="${esc(s.id)}" ${checked}></td>
@@ -493,7 +445,6 @@
                                 <td>${s.observations_count ?? s.total_observations ?? '--'}</td>
                                 <td>${fmtDuration(s.duration_ms)}</td>
                                 <td><span class="status-dot ${esc(s.status || 'active')}"></span>${esc(s.status || '--')}</td>
-                                ${engCol ? `<td>${engName}</td>` : ''}
                                 <td onclick="event.stopPropagation()"><button class="btn-row-delete" data-delete-id="${esc(s.id)}" title="Delete scan" aria-label="Delete scan"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path></svg></button></td>
                             </tr>`;
                         }).join('')}
@@ -617,14 +568,10 @@
 
         function renderDetailHeader(scan) {
             document.getElementById('detail-title').textContent = `Scan ${scan.id.substring(0, 8)}`;
-            const engName = (state.capabilities.engagements && scan.engagement_id)
-                ? (state.engagements.find(e => e.id === scan.engagement_id)?.name || scan.engagement_id)
-                : null;
             document.getElementById('detail-meta').innerHTML = `
                 <span>Target: <strong>${esc(scan.target_domain)}</strong></span>
                 <span>Started: ${fmtDate(scan.started_at)}</span>
                 <span>Duration: ${fmtDuration(scan.duration_ms)}</span>
-                ${engName ? `<span>Engagement: ${esc(engName)}</span>` : ''}
             `;
             const status = scan.status || '--';
             document.getElementById('detail-status').innerHTML = `<span class="status-dot ${esc(status)}"></span>${esc(status)}`;
@@ -887,11 +834,10 @@
             result.innerHTML = '<p class="empty-message">Generating report...</p>';
             try {
                 const id = state.currentScan.id;
-                const engId = state.currentScan.engagement_id || null;
                 let res;
                 if (type === 'technical') res = await api.generateTechnicalReport(id, 'html');
-                else if (type === 'executive') res = await api.generateExecutiveReport(id, 'html', engId);
-                else if (type === 'compliance') res = await api.generateComplianceReport(id, 'html', engId);
+                else if (type === 'executive') res = await api.generateExecutiveReport(id, 'html');
+                else if (type === 'compliance') res = await api.generateComplianceReport(id, 'html');
                 if (res.detail) throw new Error(res.detail);
                 const iframe = document.createElement('iframe');
                 iframe.style.cssText = 'width:100%;height:600px;border:1px solid var(--border);border-radius:8px;background:#fff;';
@@ -902,14 +848,6 @@
             } catch (e) {
                 result.innerHTML = `<p style="color:var(--error);">Failed: ${esc(e.message)}</p>`;
             }
-        }
-
-        // ─── Engagements ─────────────────────────────────────
-        async function loadEngagements() {
-            try {
-                const data = await api.listEngagements();
-                state.engagements = Array.isArray(data) ? data : (data?.engagements || []);
-            } catch (e) { state.engagements = []; }
         }
 
         // ─── Confirm modal ───────────────────────────────────

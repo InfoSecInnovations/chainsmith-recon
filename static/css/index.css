@@ -181,17 +181,6 @@
     transition: transform 0.2s;
 }
 
-/* Engagement selector row */
-.engagement-selector-controls {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-}
-
-.engagement-selector-controls select {
-    min-width: 200px;
-}
-
 /* Hint annotation (small muted text below behavior rows) */
 .behavior-hint {
     font-size: 0.6875rem;
@@ -235,13 +224,13 @@
     margin-top: 4px;
 }
 
-/* Engagement window date row */
-.engagement-window-row {
+/* Scan window date row */
+.scan-window-row {
     display: flex;
     gap: 12px;
     width: 100%;
 }
 
-.engagement-window-col {
+.scan-window-col {
     flex: 1;
 }

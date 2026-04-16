@@ -7,7 +7,7 @@ Preference categories:
   - network: timeout, concurrency, proxy, SSL verification
   - rate_limiting: requests per second, delays
   - checks: global check behavior
-  - proof_of_scope: engagement requirements
+  - proof_of_scope: scan window + scope requirements
   - check_overrides: per-check configuration
 
 Profile system:
@@ -90,7 +90,7 @@ class ProofOfScopePreferences:
 
     traffic_logging: bool = True
     log_violations: bool = True
-    require_engagement_window: bool = True
+    require_scan_window: bool = True
 
 
 @dataclass
@@ -333,8 +333,8 @@ BUILTIN_PROFILES: dict[str, Profile] = {
         },
         built_in=True,
     ),
-    "first-engagement": Profile(
-        name="first-engagement",
+    "first-scan": Profile(
+        name="first-scan",
         description="Guided Mode enabled — first time running against a new target type",
         overrides={
             "operator_assist": {"mode": "guided"},
@@ -718,9 +718,9 @@ PREFERENCE_METADATA = {
         "description": "Log scope violations",
         "advanced": False,
     },
-    "proof_of_scope.require_engagement_window": {
+    "proof_of_scope.require_scan_window": {
         "type": "bool",
-        "description": "Require engagement window to be set",
+        "description": "Require scan window to be set",
         "advanced": False,
     },
     "llm.enabled": {

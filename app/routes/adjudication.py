@@ -7,7 +7,8 @@ Endpoints for:
 - Per-observation adjudication detail
 
 All reads go through the database. Adjudication status is read from the
-Scan record. If no scan_id is provided, the active scan is used.
+Scan record. If no scan_id is provided, the current/most-recent session
+is used via resolve_session().
 """
 
 import asyncio
@@ -17,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.db.repositories import AdjudicationRepository, ObservationRepository, ScanRepository
 from app.engine.adjudication import run_adjudication
-from app.state import state
+from app.scan_context import resolve_session
 
 logger = logging.getLogger(__name__)
 
@@ -30,30 +31,33 @@ _scan_repo = ScanRepository()
 
 
 async def _resolve_scan_id(scan_id: str | None) -> str | None:
-    """Resolve scan_id: explicit param > active scan > most recent completed scan in DB."""
-    sid = scan_id or state.active_scan_id or state._last_scan_id
-    if sid:
-        return sid
+    if scan_id:
+        return scan_id
+    session = resolve_session()
+    if session is not None:
+        return session.id
     return await _scan_repo.get_most_recent_scan_id()
 
 
 @router.post("/api/v1/adjudicate", status_code=202)
-async def start_adjudication():
+async def start_adjudication(
+    scan_id: str | None = Query(None, description="Scan ID (defaults to current)"),
+):
     """Start severity adjudication on verified observations using evidence rubric scoring."""
-    sid = state.active_scan_id or state._last_scan_id
-    if not sid:
+    session = resolve_session(scan_id)
+    if session is None:
         raise HTTPException(400, "No observations to adjudicate. Run a scan first.")
 
-    obs = await _observation_repo.get_observations(sid)
+    obs = await _observation_repo.get_observations(session.id)
     if not obs:
         raise HTTPException(400, "No observations to adjudicate. Run a scan first.")
 
     async with _adjudication_lock:
-        if state.adjudication_status == "adjudicating":
+        if session.adjudication_status == "adjudicating":
             raise HTTPException(409, "Adjudication already running.")
-        state.adjudication_status = "adjudicating"
+        session.adjudication_status = "adjudicating"
 
-    asyncio.create_task(run_adjudication(state))
+    asyncio.create_task(run_adjudication(session))
 
     return {
         "status": "accepted",
@@ -77,19 +81,18 @@ async def get_adjudication_status(
             "error": None,
         }
 
-    # Get results from DB
     results = await _adjudication_repo.get_results(sid)
     upheld = sum(1 for r in results if r["original_severity"] == r["adjudicated_severity"])
     adjusted = len(results) - upheld
 
-    # Get status from Scan record
     scan = await _scan_repo.get_scan(sid)
     adj_status = scan.get("adjudication_status", "idle") if scan else "idle"
     adj_error = scan.get("adjudication_error") if scan else None
 
-    # If this is the active scan and adjudication is running, use live state
-    if sid == state.active_scan_id and state.adjudication_status == "adjudicating":
-        adj_status = state.adjudication_status
+    # If the session is live and adjudication is running, prefer live status.
+    session = resolve_session(sid)
+    if session is not None and session.adjudication_status == "adjudicating":
+        adj_status = session.adjudication_status
 
     return {
         "status": adj_status,

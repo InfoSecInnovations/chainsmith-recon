@@ -61,24 +61,6 @@ class TestComplianceReportMarkdown:
         assert "**Total Observations:** 4" in content
 
     @pytest.mark.asyncio
-    async def test_with_engagement(
-        self, db, scan_repo, observation_repo, chain_repo, check_log_repo, engagement_repo
-    ):
-        eng = await engagement_repo.create_engagement(
-            name="Q1 Pentest",
-            target_domain="example.com",
-            description="Test engagement",
-            client_name="Acme Corp",
-        )
-        await _create_populated_scan(scan_repo, observation_repo, chain_repo, check_log_repo)
-
-        result = await generate_compliance_report("report-scan", "md", engagement_id=eng["id"])
-        content = result["content"]
-        assert "## Engagement" in content
-        assert "Q1 Pentest" in content
-        assert "Acme Corp" in content
-
-    @pytest.mark.asyncio
     async def test_override_audit_trail(
         self,
         db,

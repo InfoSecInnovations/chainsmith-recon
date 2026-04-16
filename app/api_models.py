@@ -19,7 +19,7 @@ class ScopeInput(BaseModel):
     techniques: list[str] = Field(default_factory=list)  # Empty = all techniques
 
 
-class EngagementWindowInput(BaseModel):
+class ScanWindowInput(BaseModel):
     """Time window for authorized testing."""
 
     start: str  # ISO format
@@ -49,12 +49,12 @@ class ScanBehaviorSettings(BaseModel):
 
 
 class ExtendedScopeInput(BaseModel):
-    """Extended scope with engagement window and proof settings."""
+    """Extended scope with scan window and proof settings."""
 
     target: str
     exclude: list[str] = Field(default_factory=list)
     techniques: list[str] = Field(default_factory=list)
-    engagement_window: EngagementWindowInput | None = None
+    scan_window: ScanWindowInput | None = None
     proof_of_scope: ProofSettingsInput | None = None
     scan_behavior: ScanBehaviorSettings | None = None
 
@@ -67,9 +67,8 @@ class ScanStartInput(BaseModel):
 
     checks: list[str] = Field(default_factory=list)  # Run only these check names
     suites: list[str] = Field(default_factory=list)  # Run only checks from these suites
-    engagement_id: str | None = None  # Link scan to an engagement
     port_profile: Literal["web", "ai", "full", "lab"] | None = None
-    acknowledge_outside_window: bool = False  # Per-scan override for engagement-window gate
+    acknowledge_outside_window: bool = False  # Per-scan override for scan-window gate
 
 
 # ─── Settings Models ──────────────────────────────────────────
@@ -97,6 +96,9 @@ class ScanStatus(BaseModel):
     current_check: str | None = None
     observations_count: int = 0
     error: str | None = None
+    # Phase 51.2: advertise SSE stream availability. UI opens an EventSource
+    # only when {"stream": true} is present. Absence means fall back to polling.
+    capabilities: dict[str, bool] = {}
 
 
 class CheckInfo(BaseModel):

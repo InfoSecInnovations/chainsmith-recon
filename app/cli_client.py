@@ -105,7 +105,6 @@ class ChainsmithClient:
         self,
         checks: list[str] = None,
         suites: list[str] = None,
-        engagement_id: str = None,
         port_profile: str = None,
     ) -> dict:
         body: dict = {}
@@ -113,8 +112,6 @@ class ChainsmithClient:
             body["checks"] = checks
         if suites:
             body["suites"] = suites
-        if engagement_id:
-            body["engagement_id"] = engagement_id
         if port_profile:
             body["port_profile"] = port_profile
         return self._request("POST", "/api/v1/scan", json=body if body else None)
@@ -212,15 +209,13 @@ class ChainsmithClient:
     # ─── Scan History ────────────────────────────────────────
 
     def list_scans(
-        self, target: str = None, status: str = None, engagement_id: str = None, limit: int = 50
+        self, target: str = None, status: str = None, limit: int = 50
     ) -> dict:
         params = {"limit": limit}
         if target:
             params["target"] = target
         if status:
             params["status"] = status
-        if engagement_id:
-            params["engagement_id"] = engagement_id
         return self._request("GET", "/api/v1/scans", params=params)
 
     def get_scan_detail(self, scan_id: str) -> dict:
@@ -280,28 +275,16 @@ class ChainsmithClient:
             fmt,
         )
 
-    def generate_executive_report(
-        self, scan_id: str, fmt: str = "md", engagement_id: str = None
-    ) -> dict:
+    def generate_executive_report(self, scan_id: str, fmt: str = "md") -> dict:
         payload = {"scan_id": scan_id, "format": fmt}
-        if engagement_id:
-            payload["engagement_id"] = engagement_id
         return self._report_request("/api/v1/reports/executive", payload, fmt)
 
-    def generate_compliance_report(
-        self, scan_id: str, fmt: str = "md", engagement_id: str = None
-    ) -> dict:
+    def generate_compliance_report(self, scan_id: str, fmt: str = "md") -> dict:
         payload = {"scan_id": scan_id, "format": fmt}
-        if engagement_id:
-            payload["engagement_id"] = engagement_id
         return self._report_request("/api/v1/reports/compliance", payload, fmt)
 
-    def generate_trend_report(
-        self, fmt: str = "md", engagement_id: str = None, target: str = None
-    ) -> dict:
+    def generate_trend_report(self, fmt: str = "md", target: str = None) -> dict:
         payload = {"format": fmt}
-        if engagement_id:
-            payload["engagement_id"] = engagement_id
         if target:
             payload["target"] = target
         return self._report_request("/api/v1/reports/trend", payload, fmt)

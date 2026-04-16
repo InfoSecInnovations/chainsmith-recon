@@ -8,7 +8,7 @@ internally. Local-time rendering happens only at display boundaries
 
 ## Motivation
 
-`EngagementWindow.is_within_window()` in `app/proof_of_scope.py` has a
+`ScanWindow.is_within_window()` in `app/proof_of_scope.py` has a
 silent timezone bug: it calls `datetime.utcnow()` (naive), then strips
 the `+00:00` / `Z` suffix from stored ISO strings before parsing. A
 stored window like `"2026-04-14T18:00:00-05:00"` ends up compared as if
@@ -43,7 +43,7 @@ codebase so this class of bug cannot recur.
 
 Full codebase sweep. Representative hotspots to check first:
 
-- `app/proof_of_scope.py` — `EngagementWindow.is_within_window()`, any
+- `app/proof_of_scope.py` — `ScanWindow.is_within_window()`, any
   `timestamp` fields on `ScopeViolation`, `ComplianceReport`.
 - `app/guardian.py` — violation timestamps (currently none, but the
   Phase-49 enforcement will add them).

@@ -26,6 +26,7 @@ from app.db.repositories import (
 if TYPE_CHECKING:
     from app.db.engine import Database
     from app.db.writers import ObservationWriter
+    from app.scan_session import ScanSession
     from app.state import AppState
 
 logger = logging.getLogger(__name__)
@@ -36,16 +37,25 @@ def _is_enabled() -> bool:
     return get_config().storage.auto_persist
 
 
-async def on_scan_start(state: AppState, db: Database | None = None) -> str | None:
+async def on_scan_start(
+    state: AppState,
+    db: Database | None = None,
+    scan_id: str | None = None,
+) -> str | None:
     """
     Called when a scan begins. Creates the scan record in the database.
     Returns the scan_id for use in subsequent persistence calls, or None
     if persistence is disabled or fails.
+
+    `state` supplies operator scope prep (session_id, target, settings).
+    If `scan_id` is provided, it is used verbatim — callers that pre-register
+    a ScanSession at route time pass their id in so the DB row matches.
     """
     if not _is_enabled():
         return None
 
-    scan_id = uuid.uuid4().hex[:16]
+    if scan_id is None:
+        scan_id = uuid.uuid4().hex[:16]
     try:
         get_config()
         scenario_mgr = None
@@ -65,7 +75,6 @@ async def on_scan_start(state: AppState, db: Database | None = None) -> str | No
             target_domain=state.target or "",
             settings=state.settings,
             scenario_name=scenario_mgr,
-            engagement_id=getattr(state, "engagement_id", None),
         )
         return scan_id
     except (SQLAlchemyError, ValueError):
@@ -76,7 +85,7 @@ async def on_scan_start(state: AppState, db: Database | None = None) -> str | No
 
 
 async def on_scan_complete(
-    state: AppState,
+    session: "ScanSession | None",
     scan_id: str | None,
     started_at: float,
     db: Database | None = None,
@@ -89,7 +98,7 @@ async def on_scan_complete(
     Observations and check logs are streamed during execution via writers.
     Chains are persisted by run_chain_analysis() when it runs.
     """
-    if scan_id is None or not _is_enabled():
+    if scan_id is None or not _is_enabled() or session is None:
         return
 
     duration_ms = int((time.time() - started_at) * 1000)
@@ -97,26 +106,21 @@ async def on_scan_complete(
     comparison_repo = ComparisonRepository(db)
 
     try:
-        # Count failed checks
-        checks_failed = sum(1 for s in state.check_statuses.values() if s == "failed")
-
-        # Resolve observation count from writer
+        checks_failed = sum(1 for s in session.check_statuses.values() if s == "failed")
         obs_count = obs_writer.count if obs_writer else 0
 
-        # Update scan record with final stats
         await scan_repo.complete_scan(
             scan_id=scan_id,
-            status=state.status,
-            checks_total=state.checks_total,
-            checks_completed=state.checks_completed,
+            status=session.status,
+            checks_total=session.checks_total,
+            checks_completed=session.checks_completed,
             checks_failed=checks_failed,
             observations_count=obs_count,
             duration_ms=duration_ms,
-            error_message=state.error_message,
+            error_message=session.error_message,
         )
 
-        # Compute observation statuses (new/recurring/resolved/regressed)
-        if state.status == "complete" and obs_count > 0:
+        if session.status == "complete" and obs_count > 0:
             try:
                 statuses = await comparison_repo.compute_observation_statuses(scan_id)
                 logger.info(

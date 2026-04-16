@@ -207,3 +207,73 @@ class TestCheckLogWriter:
         await writer.log_event({"check": "port_scan", "event": "completed", "observations": 5})
 
         assert mock_log_repo.bulk_create.call_count == 2
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 51.1c - Publishers stamp event_seq and push onto the session bus
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestWriterPublishers:
+    async def test_observation_writer_publishes_and_stamps_seq(self, mock_obs_repo):
+        from app.scan_session import ScanSession
+
+        session = ScanSession(id="scan-1", target="example.com")
+        sub = session.ensure_event_bus().subscribe()
+
+        writer = ObservationWriter(
+            "scan-1", repo=mock_obs_repo, batch_size=5, session=session
+        )
+        obs = _make_obs("A", "high")
+        await writer.write(obs)
+
+        event = await sub.get()
+        assert event.type == "observation_added"
+        assert event.scan_id == "scan-1"
+        assert event.seq == 1
+        assert event.payload["severity"] == "high"
+        assert event.payload["scan_id"] == "scan-1"
+        # Dict gets stamped so the DB row carries the same seq.
+        assert obs["event_seq"] == 1
+
+    async def test_check_log_writer_publishes_mapped_events(self, mock_log_repo):
+        from app.scan_session import ScanSession
+
+        session = ScanSession(id="scan-1", target="example.com")
+        sub = session.ensure_event_bus().subscribe()
+
+        writer = CheckLogWriter("scan-1", repo=mock_log_repo, session=session)
+        await writer.log_event({"check": "a", "event": "started"})
+        await writer.log_event(
+            {"check": "a", "event": "completed", "observations": 3}
+        )
+        await writer.log_event(
+            {"check": "b", "event": "skipped", "error": "precondition"}
+        )
+
+        e1 = await sub.get()
+        e2 = await sub.get()
+        e3 = await sub.get()
+        assert (e1.type, e2.type, e3.type) == (
+            "check_started",
+            "check_completed",
+            "check_skipped",
+        )
+        assert e2.payload["success"] is True
+        assert e2.payload["observations"] == 3
+        assert e3.payload["reason"] == "precondition"
+        # Monotonic seq across both events.
+        assert [e1.seq, e2.seq, e3.seq] == [1, 2, 3]
+
+    async def test_mark_terminal_publishes_scan_complete(self):
+        from app.scan_session import ScanSession
+
+        session = ScanSession(id="scan-1", target="example.com")
+        sub = session.ensure_event_bus().subscribe()
+
+        session.mark_terminal("complete")
+
+        event = await sub.get()
+        assert event.type == "scan_complete"
+        assert event.payload["status"] == "complete"
+        assert event.scan_id == "scan-1"

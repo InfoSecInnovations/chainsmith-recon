@@ -141,7 +141,8 @@
 
         var checkStatuses = [];
         try {
-            var csData = await api.getCheckStatuses();
+            var sid = (window.ScanSelector && ScanSelector.getSelectedScanId()) || null;
+            var csData = await api.getCheckStatuses(sid);
             checkStatuses = csData.checks || csData || [];
         } catch (e) { /* check statuses may not be available */ }
 

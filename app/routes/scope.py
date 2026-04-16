@@ -3,7 +3,7 @@ app/routes/scope.py - Scope and Settings Routes
 
 Endpoints for:
 - Target scope configuration
-- Engagement window management
+- Scan window management
 - Scan settings
 - State reset
 """
@@ -13,7 +13,6 @@ import logging
 from fastapi import APIRouter
 
 from app.api_models import ExtendedScopeInput, ScanSettings
-from app.guardian import Guardian
 from app.lib.timeutils import iso_utc
 from app.preferences import (
     SUITES_WITH_ON_CRITICAL,
@@ -21,7 +20,7 @@ from app.preferences import (
     get_profile_store,
     save_profile_store,
 )
-from app.proof_of_scope import EngagementWindow, violation_logger
+from app.proof_of_scope import ScanWindow, violation_logger
 from app.state import state
 
 logger = logging.getLogger(__name__)
@@ -45,20 +44,20 @@ async def reset():
 
 @router.post("/api/v1/scope")
 async def set_scope(scope: ExtendedScopeInput):
-    """Set the scan scope with optional engagement window and proof settings."""
+    """Set the scan scope with optional scan window and proof settings."""
     state.target = scope.target
     state.exclude = scope.exclude
     state.techniques = (
         scope.techniques if scope.techniques else state.settings["default_techniques"]
     )
 
-    # Initialize Guardian — single authority for scope enforcement
-    state.guardian = Guardian.from_scope(scope.target, scope.exclude)
+    # Guardian is now constructed per-scan in run_scan (Phase B of the
+    # concurrent-scans overhaul). Scope prep on AppState no longer creates one.
 
-    # Handle engagement window
-    if scope.engagement_window:
-        state.proof_settings.engagement_window = EngagementWindow(
-            start=scope.engagement_window.start, end=scope.engagement_window.end
+    # Handle scan window
+    if scope.scan_window:
+        state.proof_settings.scan_window = ScanWindow(
+            start=scope.scan_window.start, end=scope.scan_window.end
         )
 
     # Handle proof of scope settings
@@ -78,7 +77,7 @@ async def set_scope(scope: ExtendedScopeInput):
         if state.proof_settings.log_violations:
             violation_logger.log_violation(
                 violation_type="outside_window",
-                reason="User acknowledged scanning outside engagement window",
+                reason="User acknowledged scanning outside scan window",
                 user_acknowledged=True,
             )
 
@@ -120,7 +119,7 @@ async def set_scope(scope: ExtendedScopeInput):
 
     logger.info(
         f"Scope set: target={scope.target}, exclude={scope.exclude}, "
-        f"window_configured={state.proof_settings.engagement_window.is_configured()}"
+        f"window_configured={state.proof_settings.scan_window.is_configured()}"
     )
 
     return {
@@ -128,10 +127,10 @@ async def set_scope(scope: ExtendedScopeInput):
         "target": state.target,
         "exclude": state.exclude,
         "techniques": state.techniques,
-        "engagement_window": {
-            "start": state.proof_settings.engagement_window.start,
-            "end": state.proof_settings.engagement_window.end,
-            "is_within_window": state.proof_settings.engagement_window.is_within_window(),
+        "scan_window": {
+            "start": state.proof_settings.scan_window.start,
+            "end": state.proof_settings.scan_window.end,
+            "is_within_window": state.proof_settings.scan_window.is_within_window(),
         },
         "proof_of_scope": {
             "traffic_logging": state.proof_settings.traffic_logging,
@@ -144,8 +143,8 @@ async def set_scope(scope: ExtendedScopeInput):
 
 @router.get("/api/v1/scope")
 async def get_scope():
-    """Get current scope including engagement window status."""
-    window = state.proof_settings.engagement_window
+    """Get current scope including scan window status."""
+    window = state.proof_settings.scan_window
     proof = state.proof_settings
 
     # Read current scan behavior from preferences
@@ -165,7 +164,7 @@ async def get_scope():
         "target": state.target,
         "exclude": state.exclude,
         "techniques": state.techniques,
-        "engagement_window": {
+        "scan_window": {
             "start": window.start,
             "end": window.end,
             "is_within_window": window.is_within_window(),
@@ -182,9 +181,9 @@ async def get_scope():
 
 
 @router.get("/api/v1/scope/window-check")
-async def check_engagement_window():
-    """Check if current time is within engagement window."""
-    window = state.proof_settings.engagement_window
+async def check_scan_window():
+    """Check if current time is within scan window."""
+    window = state.proof_settings.scan_window
 
     return {
         "is_within_window": window.is_within_window(),

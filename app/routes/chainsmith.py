@@ -11,8 +11,6 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.state import state
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -35,23 +33,23 @@ class DisableImpactRequest(BaseModel):
 @router.post("/api/v1/chainsmith/validate", status_code=202)
 async def validate_checks():
     """Run full check ecosystem validation (async — poll status endpoint)."""
-    if state.chainsmith_status == "validating":
+    from app.engine.chainsmith import get_status, run_validation
+
+    if get_status() == "validating":
         raise HTTPException(409, "Validation already in progress")
 
-    from app.engine.chainsmith import run_validation
-
-    asyncio.create_task(run_validation(state))
+    asyncio.create_task(run_validation())
     return {"status": "accepted", "message": "Validation started. Poll /api/v1/chainsmith/status."}
 
 
 @router.get("/api/v1/chainsmith/status")
 async def chainsmith_status():
     """Poll chainsmith operation status."""
-    from app.engine.chainsmith import get_health
+    from app.engine.chainsmith import get_health, get_status
 
     health = await get_health()
     return {
-        "status": state.chainsmith_status,
+        "status": get_status(),
         **health,
     }
 
@@ -77,7 +75,7 @@ async def upstream_diff():
     """Check if community checks changed since last sync."""
     from app.engine.chainsmith import run_upstream_diff
 
-    return await run_upstream_diff(state)
+    return await run_upstream_diff()
 
 
 @router.post("/api/v1/chainsmith/scaffold")

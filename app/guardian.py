@@ -15,7 +15,7 @@ import logging
 from urllib.parse import urlparse
 
 from app.models import AgentEvent, ComponentType, EventImportance, EventType, ScopeDefinition
-from app.proof_of_scope import EngagementWindow, violation_logger
+from app.proof_of_scope import ScanWindow, violation_logger
 
 logger = logging.getLogger(__name__)
 
@@ -90,14 +90,14 @@ class Guardian:
             logger.warning(f"Guardian blocked URL: {url} — {reason}")
         return ok
 
-    # ── Engagement window gate ──────────────────────────────────
+    # ── Scan window gate ────────────────────────────────────────
 
-    def check_engagement_window(
+    def check_scan_window(
         self,
-        window: EngagementWindow | None,
+        window: ScanWindow | None,
         acknowledged: bool = False,
     ) -> tuple[bool, str]:
-        """Gate a scan request against the configured engagement window.
+        """Gate a scan request against the configured scan window.
 
         Returns (allowed, reason). When the window is unconfigured or the
         current time falls within it, the scan is allowed. When outside
@@ -107,16 +107,16 @@ class Guardian:
         report.
         """
         if window is None or not window.is_configured():
-            return True, "No engagement window configured"
+            return True, "No scan window configured"
 
         if window.is_within_window():
-            return True, "Within engagement window"
+            return True, "Within scan window"
 
         if acknowledged:
             violation_logger.log_violation(
                 violation_type="outside_window",
                 reason=(
-                    f"Scan started outside engagement window "
+                    f"Scan started outside scan window "
                     f"(start={window.start}, end={window.end}); operator acknowledged"
                 ),
                 blocked=False,
@@ -127,14 +127,14 @@ class Guardian:
         violation_logger.log_violation(
             violation_type="outside_window",
             reason=(
-                f"Scan blocked: current time outside engagement window "
+                f"Scan blocked: current time outside scan window "
                 f"(start={window.start}, end={window.end})"
             ),
             blocked=True,
             user_acknowledged=False,
         )
         return False, (
-            f"Outside engagement window (start={window.start}, end={window.end}). "
+            f"Outside scan window (start={window.start}, end={window.end}). "
             "Resubmit with acknowledge_outside_window=true to override."
         )
 

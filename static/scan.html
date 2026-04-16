@@ -17,6 +17,7 @@
             <span class="header-status" id="header-status"></span>
         </div>
         <div class="header-right">
+            <div id="scan-selector"></div>
             <button class="btn btn-icon" id="btn-settings" title="Settings">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="3"></circle>
@@ -327,10 +328,13 @@
     </div>
 
     <script src="/static/js/api.js"></script>
+    <script src="/static/js/scan-selector.js"></script>
     <script src="/static/js/chat.js"></script>
     <script src="/static/js/guided.js"></script>
     <script>
         let pollInterval = null;
+        let eventSource = null;
+        let streamRefreshPending = false;
         let observations = [];
         let isPaused = false;
         let lastPhase = 'discovery';
@@ -349,8 +353,36 @@
             initCommon();
             updateNavLinks();
             initScanControls();
+
+            // Pin scan_id from URL if present (set by index.html's Start Scan
+            // handler so this page polls the right session immediately, not
+            // whatever resolve_session() guesses during the startup race).
+            const urlScanId = new URLSearchParams(window.location.search).get('scan_id');
+            if (urlScanId) {
+                try {
+                    localStorage.setItem('chainsmith.selectedScanId', urlScanId);
+                } catch (_) { /* storage disabled */ }
+            }
+
+            ScanSelector.mount('#scan-selector', {
+                onChange: async () => {
+                    // Reset polling/streaming against the newly-selected scan.
+                    stopLiveUpdates();
+                    await checkScanStatus();
+                }
+            });
             await checkScanStatus();
         });
+
+        function selectedScanId() {
+            // Prefer the URL-pinned id on first paint, before ScanSelector has
+            // refreshed its live-scan list. Once the list is populated,
+            // ScanSelector.getSelectedScanId() takes over.
+            const urlScanId = new URLSearchParams(window.location.search).get('scan_id');
+            return (window.ScanSelector && ScanSelector.getSelectedScanId())
+                || urlScanId
+                || null;
+        }
 
         function updateNavLinks() {
             const sessionId = getSessionId();
@@ -364,7 +396,7 @@
         function initScanControls() {
             document.getElementById('btn-pause')?.addEventListener('click', async () => {
                 try {
-                    await api.pauseScan();
+                    await api.pauseScan(selectedScanId());
                     isPaused = true;
                     updateControlButtons();
                 } catch (err) {
@@ -374,7 +406,7 @@
 
             document.getElementById('btn-resume')?.addEventListener('click', async () => {
                 try {
-                    await api.resumeScan();
+                    await api.resumeScan(selectedScanId());
                     isPaused = false;
                     updateControlButtons();
                 } catch (err) {
@@ -385,9 +417,8 @@
             document.getElementById('btn-stop')?.addEventListener('click', async () => {
                 if (confirm('Stop the current scan? This cannot be undone.')) {
                     try {
-                        await api.stopScan();
-                        clearInterval(pollInterval);
-                        pollInterval = null;
+                        await api.stopScan(selectedScanId());
+                        stopLiveUpdates();
                         showComplete();
                     } catch (err) {
                         console.error('Stop error:', err);
@@ -411,10 +442,17 @@
 
         async function checkScanStatus() {
             try {
-                const status = await api.getScanStatus();
-                
+                const status = await api.getScanStatus(selectedScanId());
+
                 if (status.status === 'running' || status.status === 'verifying') {
                     document.getElementById('scan-controls').style.display = 'flex';
+                    startLiveUpdates(status);
+                } else if (status.status === 'queued') {
+                    // Scan is registered but the background task hasn't started
+                    // yet. Start polling now so we observe the queued→running
+                    // transition instead of sitting on the empty state.
+                    document.getElementById('scan-controls').style.display = 'flex';
+                    await updateUI(status);
                     startPolling();
                 } else if (status.status === 'paused') {
                     isPaused = true;
@@ -432,15 +470,85 @@
             }
         }
 
+        // Phase 51.4: prefer SSE when advertised; fall back to polling on any
+        // error. Same UI widgets, different trigger — stream events debounce
+        // into the existing updateUI path instead of a fixed 500ms poll.
+        function startLiveUpdates(status) {
+            const streamAdvertised = status && status.capabilities && status.capabilities.stream;
+            if (streamAdvertised && 'EventSource' in window) {
+                startStreaming();
+            } else {
+                startPolling();
+            }
+        }
+
+        function stopLiveUpdates() {
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+            if (eventSource) { eventSource.close(); eventSource = null; }
+        }
+
         function startPolling() {
             if (pollInterval) return;
             pollInterval = setInterval(pollStatus, 500);
             pollStatus();
         }
 
+        function startStreaming() {
+            if (eventSource) return;
+            const scanId = selectedScanId();
+            const url = scanId
+                ? `/api/v1/scans/${encodeURIComponent(scanId)}/stream`
+                : '/api/v1/scan/stream';
+            let fellBack = false;
+            const fallback = () => {
+                if (fellBack) return;
+                fellBack = true;
+                if (eventSource) { eventSource.close(); eventSource = null; }
+                startPolling();
+            };
+            try {
+                eventSource = new EventSource(url);
+            } catch (err) {
+                console.warn('EventSource construction failed; polling instead', err);
+                fallback();
+                return;
+            }
+            // Terminal events close the stream; any transport error falls back.
+            eventSource.onerror = () => {
+                // readyState === CLOSED means the server hung up (terminal TTL).
+                // Still do one refresh so the final state lands, then fall back
+                // only if we weren't in a terminal state.
+                if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+                    eventSource = null;
+                    pollStatus();
+                    return;
+                }
+                console.warn('SSE error; falling back to polling');
+                fallback();
+            };
+            const refresh = () => {
+                if (streamRefreshPending) return;
+                streamRefreshPending = true;
+                queueMicrotask(async () => {
+                    streamRefreshPending = false;
+                    await pollStatus();
+                });
+            };
+            eventSource.addEventListener('snapshot', refresh);
+            eventSource.addEventListener('status_changed', refresh);
+            eventSource.addEventListener('check_started', refresh);
+            eventSource.addEventListener('check_completed', refresh);
+            eventSource.addEventListener('check_skipped', refresh);
+            eventSource.addEventListener('observation_added', refresh);
+            eventSource.addEventListener('scan_complete', () => {
+                refresh();
+                if (eventSource) { eventSource.close(); eventSource = null; }
+            });
+        }
+
         async function pollStatus() {
             try {
-                const status = await api.getScanStatus();
+                const status = await api.getScanStatus(selectedScanId());
                 await updateUI(status);
 
                 if (status.status === 'paused') {
@@ -449,8 +557,7 @@
                 }
 
                 if (status.status === 'complete' || status.status === 'error') {
-                    clearInterval(pollInterval);
-                    pollInterval = null;
+                    stopLiveUpdates();
                     document.getElementById('scan-controls').style.display = 'none';
                     showComplete();
 
@@ -546,6 +653,9 @@
                 } else {
                     textEl.textContent = 'Scanning in progress...';
                 }
+            } else if (status.status === 'queued') {
+                activityEl.classList.add('active');
+                textEl.textContent = 'Scan queued — starting up...';
             } else if (status.status === 'paused') {
                 activityEl.classList.remove('active');
                 textEl.textContent = 'Scan paused';
@@ -572,6 +682,8 @@
                 badgeText = 'Scanning...';
             } else if (displayStatus === 'paused') {
                 badgeText = 'Paused';
+            } else if (displayStatus === 'queued') {
+                badgeText = 'Starting…';
             }
             
             badge.className = 'status-badge status-' + displayStatus;
@@ -583,7 +695,7 @@
             }
 
             // Get check data for phase determination
-            const checksData = await api.getCheckStatuses();
+            const checksData = await api.getCheckStatuses(selectedScanId());
             const activeChecks = checksData.checks.filter(c => c.status !== 'pending');
             
             // Determine current phase
@@ -635,7 +747,7 @@
             updateCheckList(activeChecks);
 
             // Observations
-            const observationsData = await api.getObservations();
+            const observationsData = await api.getObservations(selectedScanId());
             observations = observationsData.observations;
             updateObservations(observations);
 

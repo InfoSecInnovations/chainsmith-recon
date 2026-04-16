@@ -46,6 +46,7 @@ async def maybe_emit_proactive(
     text: str,
     actions: list[dict] | None = None,
     dismissable: bool = True,
+    scan_id: str | None = None,
 ) -> bool:
     """Emit a proactive message only if Guided Mode is active.
 
@@ -77,6 +78,13 @@ async def maybe_emit_proactive(
         dismissable=dismissable,
     )
 
-    await sse_manager.send(session_id, "proactive_message", payload)
-    logger.debug("Proactive message emitted: %s/%s", agent, trigger)
+    # When a scan_id is known, target chat sessions pinned to that scan and
+    # fall back to broadcast if none. Otherwise fall back to per-session send.
+    if scan_id:
+        await sse_manager.emit_to_scan_watchers(
+            scan_id, "proactive_message", payload, fallback_broadcast=True
+        )
+    else:
+        await sse_manager.send(session_id, "proactive_message", payload)
+    logger.debug("Proactive message emitted: %s/%s (scan=%s)", agent, trigger, scan_id)
     return True

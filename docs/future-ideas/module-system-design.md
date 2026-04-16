@@ -1,7 +1,21 @@
 # Module System Design
 
-**Status:** Draft / request-for-comment
-**Purpose:** Define how Chainsmith gains optional capabilities — including OSS community modules and paid/private modules — via drop-in directories, without forking the core codebase.
+> **STATUS: PARTIALLY SUPERSEDED by [`phase56-component-modularization.md`](phase56-component-modularization.md).**
+>
+> The **component folder shape** and **per-component `contract.yaml` + `config.yaml`** from §3, §5, §6 have been absorbed into phase 56, which modularizes all in-tree components (checks, agents, advisors, gates) using the shape described there. Phase 56 adopts folder-name-prefixed filenames (e.g. `ports.contract.yaml`) rather than the generic names originally proposed here, to eliminate conversational and IDE ambiguity.
+>
+> **Still future work (not in phase 56):**
+> - External `modules/` discovery root (§4.2, §4.3)
+> - UUID-based override resolution between roots (§4.1)
+> - Multi-component extension points: routes, DB models + migrations, UI slots, CLI groups, enrichers (§7, §9.1, §9.2)
+> - Manifest + lifecycle + cached index (§5, §8)
+> - Licensing and paid-tier validation (§9.3, §11 phases 2, 5)
+> - Engagements port as reference implementation (§10)
+>
+> Phase 56's in-tree restructure is the foundation for this broader system — when this module system lands, in-tree components are already in the right shape, so promoting one to an external module is a folder move.
+
+**Status:** Partially superseded (see banner above). Remaining scope is future work.
+**Purpose:** Define how Chainsmith gains capabilities — core components and community/paid add-ins alike — via fine-grained, drop-in directories that are fully self-contained (code + config + tests + contract).
 
 ---
 
@@ -9,12 +23,14 @@
 
 ### Goals
 
-- **Single codebase.** Core OSS is the only codebase. Paid/private modules are additions, never forks.
-- **Drop-in directory.** A module is one folder. Delete the folder → the feature is gone. Add the folder → the feature is present on next start.
-- **Full-stack contribution.** A module can add checks, API routes, DB tables, CLI commands, reports, and web-UI surfaces.
-- **Core doesn't import modules.** Modules register with core. Core has no knowledge of any specific module's name.
-- **Community and commercial tiers coexist.** A module declares a tier; paid modules can require license validation at load time. Some features (engagements being the first) are *intentionally* paid-only and will never ship in the OSS distribution.
-- **Graceful degradation.** If a module fails to load, the core keeps running; only that module's features are disabled.
+- **Single codebase.** Core OSS is the only codebase. Paid/private add-ins live under `modules/`, never forks.
+- **Fine-grained, self-contained modules.** One component per folder: code, YAML config, YAML contract, and tests travel together. A community member can author a single check or a single agent as a complete, shareable package without touching anything else.
+- **Low drag for contributors (human or AI).** Every module has the same shape. Nothing to wire up elsewhere; discovery is mechanical.
+- **Full-stack contribution.** A module can add checks, agents, advisors, gates, API routes, DB tables, CLI commands, reports, and web-UI surfaces.
+- **Core doesn't import modules by name.** Modules register with core via declared extension points. Core knows the contract, not the names.
+- **Community and commercial tiers coexist.** A module declares a tier; paid modules validate license at load time. Some features (engagements being the first) are *intentionally* paid-only and will never ship in the OSS distribution.
+- **Graceful degradation.** If a module fails to load, core keeps running; only that module's features are disabled.
+- **No namespace collisions.** Modules are identified by UUID internally; human-readable names are display-only.
 
 ### Non-goals
 
@@ -29,85 +45,267 @@
 
 The split that matters is **"what does core know by name"** vs. **"what does core discover at runtime"**.
 
-- Core knows, by name: `scope`, `scan`, `scan_history`, `observations`, `checks`, `chains`, `reports`, `scenarios`. These are the OSS product.
-- Core discovers, at runtime: every module in `modules/`. It knows *the shape of a module* (the contract), not any specific module.
+- Core knows, by name: `scope`, `scan`, `scan_history`, `observations`, `checks`, `chains`, `reports`, `scenarios`. These are the OSS product surfaces.
+- Core discovers, at runtime: every module in `modules/` and every component under the in-tree core component directories (`app/checks/`, `app/agents/`, `app/advisors/`, `app/gates/`). Core knows *the shape of a module* (the contract), not any specific module.
 
-Today, `engagements` lives in the first category — it's hardcoded into routes, reports, the scan pipeline, chat, and the advisor. That's why removing it touched 70 files. The module system exists to make that kind of feature live in the second category instead.
+Both paths use the same module shape. Core components are "modules that happen to live in-tree" — they carry the same manifest + contract + tests layout. This keeps the shape universal: a community contributor learns one format, and a component's promotion from `modules/` to core is a folder move, not a rewrite.
 
 ---
 
 ## 3. Module anatomy
 
-A module is a directory under `modules/<name>/` with a fixed layout:
+A **module** is a directory containing one or more **components**. A component is the smallest useful unit — one check, one agent, one advisor, one gate, one route bundle. A module may be a single component (most community modules) or a bundle of related components (feature packs like engagements).
+
+### 3.1 Single-component module (most common)
+
+```
+modules/<human-name>/
+├── manifest.yaml           # module-level metadata (required)
+├── module.py               # optional — only if the module needs a register() hook
+│                           #   beyond what component contracts declare
+├── <component-type>/       # one of: checks, agents, advisors, gates, routes, reports
+│   └── <component-name>/
+│       ├── contract.yaml   # ground-truth I/O contract (required)
+│       ├── config.yaml     # runtime tunables (optional)
+│       ├── <code>.py       # the implementation (required)
+│       ├── prompts/        # for agents: system/user prompt templates (optional)
+│       └── tests/          # component-scoped unit tests (required)
+```
+
+Example — a single community check:
+
+```
+modules/http-header-audit/
+├── manifest.yaml
+└── checks/
+    └── http_header_audit/
+        ├── contract.yaml
+        ├── config.yaml
+        ├── check.py
+        └── tests/
+            └── test_check.py
+```
+
+### 3.2 Multi-component module (feature bundles)
 
 ```
 modules/engagements/
-├── manifest.toml           # declarative metadata (required)
-├── module.py               # entry point — defines register() (required)
-├── api_models.py           # Pydantic models (optional)
-├── routes.py               # FastAPI routers (optional)
-├── cli.py                  # Click command groups (optional)
+├── manifest.yaml
+├── module.py               # bundle-level register() for routes, DB, UI slots
 ├── db/
-│   ├── models.py           # SQLAlchemy models (optional)
-│   ├── repositories.py     # data access (optional)
-│   └── migrations/         # schema migrations (optional, one file per version)
-├── checks/                 # additional check implementations (optional)
-├── reports/                # report templates/builders (optional)
-├── static/                 # web UI assets — css/js/html fragments (optional)
-├── templates/              # server-rendered fragments for UI slots (optional)
-└── tests/                  # module-scoped tests (optional)
+│   ├── models.py
+│   └── migrations/
+├── routes.py
+├── cli.py
+├── templates/              # UI slot fragments
+├── reports/
+└── agents/
+    └── engagement_coach/
+        ├── contract.yaml
+        ├── config.yaml
+        ├── agent.py
+        └── tests/
 ```
 
-**Why a fixed layout:** discovery is mechanical, not configurable. Review and audit are easier when every module looks the same.
+**Why a fixed layout:** discovery is mechanical, not configurable. Review, audit, and AI-assisted authoring are easier when every module looks the same.
+
+**Core components use the same shape, in place.** `app/checks/<name>/`, `app/agents/<name>/`, etc. each carry `manifest.yaml` (or a lighter component-local marker), `contract.yaml`, code, and tests. Core is not relocated to `modules/`; it is modularized where it lives.
 
 ---
 
-## 4. Manifest
+## 4. Identity, naming, and precedence
 
-`manifest.toml` is the only file core parses before deciding whether to load the module:
+### 4.1 UUID identity
 
-```toml
-[module]
-name = "engagements"
-version = "0.1.0"
-description = "Group related scans into engagements with trend analysis"
-tier = "pro"                # community | pro | enterprise
-chainsmith_min_version = "1.2.0"
-chainsmith_max_version = "2.0.0"
+Every module and every component has:
 
-[license]
-# Optional; present only for non-community tiers.
-# Core calls this validator at load time and skips the module if it returns False.
-validator = "module.license:check"
-offline_grace_days = 7
+- **`id`**: a UUIDv4 assigned once by the author. This is what core uses internally for registration, override, telemetry, and wire references. UUIDs never collide.
+- **`name`**: a human-readable slug (e.g., `adjudicator`, `industry_adjudicator_finance`). For display and CLI ergonomics only. Duplicates across modules are legal.
 
-[dependencies]
-# Additional Python deps the module requires. Core checks these at load time
-# and surfaces a clear error if any are missing, rather than failing deep in
-# an import.
-python = ["httpx>=0.27", "croniter>=2.0"]
+Two community modules can both call their agent `adjudicator`. Core distinguishes them by UUID; the UI disambiguates by showing the module name alongside.
 
-[contributes]
-# Declarative list of extension points the module uses. Lets core validate
-# the manifest matches the code and lets operators audit what a module does
-# without reading its source.
-routers = ["engagements"]
-cli_groups = ["engagements"]
-db_models = ["Engagement"]
-checks = []
-ui_slots = ["nav.primary", "scan.sidebar", "dashboard.cards"]
-```
+### 4.2 Discovery paths and precedence
 
-The manifest is the **contract surface**. Everything else is the module's private business.
+Core scans two roots:
+
+1. **In-tree core components** (`app/checks/`, `app/agents/`, `app/advisors/`, `app/gates/`).
+2. **`modules/`** — community and paid add-ins.
+
+Both contribute to the same registry, keyed by UUID. **A component from `modules/` takes precedence over a core component only when it explicitly declares `overrides: <uuid-of-core-component>` in its manifest.** Otherwise, components coexist — a module that adds a new adjudicator does not displace the core one; both are available and the operator picks.
+
+Explicit-override semantics keep the intent visible: replacing a core behavior is a decision an operator can audit by grepping for `overrides:`.
+
+### 4.3 Promotion path
+
+A community module proven in `modules/` can be promoted into core by moving its folder to the appropriate in-tree location (`app/checks/<name>/`, `app/agents/<name>/`, etc.). The manifest, contract, config, code, and tests move unchanged. No rewrites, no flattening — the module shape is the same in both places.
 
 ---
 
-## 5. Extension points
+## 5. Manifest
 
-These are the hooks core publishes. A module's `module.py` exports `register(core)` where `core` exposes typed APIs for each extension point it uses.
+`manifest.yaml` is the only file core parses before deciding whether to load the module. It describes *load-time* facts.
+
+```yaml
+module:
+  id: 3a1c4b8e-2f9d-4a17-8c11-7e9a5b2d4f01
+  name: engagements
+  version: 0.1.0
+  description: Group related scans into engagements with trend analysis
+  tier: pro                  # community | pro | enterprise
+  chainsmith_min_version: 1.2.0
+  chainsmith_max_version: 2.0.0
+
+license:
+  # Present only for non-community tiers. Core calls this validator at load
+  # time and skips the module if it returns False.
+  validator: module.license:check
+  offline_grace_days: 7
+
+dependencies:
+  # Extra Python deps. Aggregated and resolved together across all modules.
+  python:
+    - httpx>=0.27
+    - croniter>=2.0
+
+contributes:
+  # Declarative inventory of what this module ships. Lets core validate the
+  # manifest matches the code and lets operators audit without reading source.
+  routers: [engagements]
+  cli_groups: [engagements]
+  db_models: [Engagement]
+  ui_slots: [nav.primary, scan.sidebar, dashboard.cards]
+  components:
+    - type: agent
+      id: b7f2...
+      name: engagement_coach
+      path: agents/engagement_coach
+    - type: check
+      id: c91e...
+      name: engagement_drift_check
+      path: checks/engagement_drift
+
+overrides: []                # optional list of component UUIDs this module replaces
+```
+
+The manifest is the **module-level contract surface**. Per-component detail lives in each component's `contract.yaml`.
+
+---
+
+## 6. Component contract (`contract.yaml`)
+
+Every component ships a `contract.yaml` that declares what the component **consumes**, **does**, and **produces**. This is ground truth for the loader, the registry, and any AI agent reasoning about composition.
+
+### 6.1 Check contract
+
+```yaml
+id: 7b3e2a94-1c6f-4d82-9a37-5e8b1f3c0d22
+name: http_header_audit
+type: check
+description: Audit HTTP response headers for common misconfigurations.
+
+inputs:
+  target: Target              # core type; see chainsmith.contracts
+  config: ref(config.yaml)
+
+work:
+  summary: Issues one HEAD per URL, evaluates headers against policy.
+  side_effects: [network]     # network | filesystem | db | none
+
+outputs:
+  observations: [Observation]
+
+tests:
+  path: tests/
+```
+
+### 6.2 Agent contract
+
+Agents are **LLM-powered**. They do not declare a model tier — the LLM provider and model are chosen at chainsmith startup (see `chainsmith.sh`) and injected at runtime.
+
+```yaml
+id: a21d4b50-8e09-4f71-9d3a-c4e2f1b8a055
+name: industry_adjudicator_finance
+type: agent
+role: adjudicator            # adjudicator | coach | planner | custom
+description: Adjudicates observations using finance-sector compliance norms.
+
+triggers:
+  - observation.created
+  - chat.message
+
+inputs:
+  observation: Observation
+  scan_context: ScanContext
+
+outputs:
+  adjudication: Adjudication
+
+tools:
+  - db.read
+  - llm.call
+
+prompts:
+  system: prompts/system.md
+  user: prompts/user.md
+
+overrides: <uuid-of-core-adjudicator>   # optional; makes replacement explicit
+```
+
+### 6.3 Advisor contract
+
+Advisors are **deterministic**. They analyze data and return recommendations without calling an LLM.
+
+```yaml
+id: ...
+name: scan_planner_advisor
+type: advisor
+description: Proposes scan plans from scope + history. Pure function of inputs.
+
+inputs:
+  scope: Scope
+  history: [ScanSummary]
+
+outputs:
+  plan: ScanPlan
+```
+
+### 6.4 Gate contract
+
+Gates are **deterministic policy enforcement points** (guardian-style). They return allow/block, never "recommend."
+
+```yaml
+id: ...
+name: engagement_window_gate
+type: gate
+description: Blocks scans outside the configured scan window.
+
+inputs:
+  scan_request: ScanRequest
+  policy: ref(config.yaml)
+
+outputs:
+  decision: GateDecision      # allow | block(reason)
+```
+
+### 6.5 Component-type summary
+
+| Type | LLM? | Determinism | Typical output |
+|---|---|---|---|
+| **check** | optional | usually deterministic | observations |
+| **agent** | **yes** | non-deterministic | adjudications, coaching, plans (LLM-produced) |
+| **advisor** | **no** | deterministic | recommendations, analyses |
+| **gate** | **no** | deterministic | allow/block decisions |
+
+`role` on an agent is a *sub*-classification (adjudicator, coach, planner). Guardian-style policy enforcement is a **gate**, not an agent.
+
+---
+
+## 7. Extension points
+
+These are the hooks core publishes. A multi-component module's `module.py` exports `register(core)` where `core` exposes typed APIs for each extension point. **Single-component modules usually don't need `module.py`** — the component's `contract.yaml` plus its code file is sufficient; the loader registers it based on contract type.
 
 ```python
-# modules/engagements/module.py
+# modules/engagements/module.py  (only for multi-component bundles)
 from chainsmith.module_api import Module, Core
 from . import routes, cli, db
 
@@ -127,61 +325,72 @@ class EngagementsModule(Module):
 
 | Category | API surface | Notes |
 |---|---|---|
+| **Checks** | auto-registered from `contract.yaml` (type=check) | Directory-scan discovery across both roots; UUID-keyed. |
+| **Agents** | auto-registered from `contract.yaml` (type=agent) | Role-indexed; LLM provider injected at runtime. |
+| **Advisors** | auto-registered from `contract.yaml` (type=advisor) | Deterministic; called by core or other components. |
+| **Gates** | auto-registered from `contract.yaml` (type=gate) | Deterministic allow/block; Guardian composes gates. |
 | **Routes** | `core.routes.mount(router, prefix)` | Standard FastAPI router. Core namespace-checks prefixes. |
-| **CLI** | `core.cli.add_group(group)` / `core.cli.extend_group(name, subcommand)` | Click groups; core guarantees no name collision with built-in groups. Modules can both register new top-level groups *and* extend existing core groups (e.g., `report`, `scope`) with new subcommands — this is required for `scan-reporter` and `scope-wizard` per phases 2/3. |
-| **DB models** | `core.db.register_models(base)` | Module owns its tables. Table names must be prefixed (e.g. `mod_engagements_*`) to avoid collisions. |
-| **DB migrations** | `core.db.register_migrations(pkg, path)` | Each module has its own migration lineage, run by core's migration runner. |
-| **Checks** | `core.checks.register(check_cls)` | Same `BaseCheck` contract as core checks. |
-| **Reports** | `core.reports.register_section(name, render)` | Named section renderers; report templates opt into them via `{% section "engagement" %}`. |
-| **UI slots** | `core.ui.contribute(slot, ...)` | See §7 for the slot model. |
-| **Scan hooks** | `core.scan.on_create/on_complete(...)` | Lifecycle callbacks. Take `scan_id` — designed concurrent-aware per `concurrent-scans-design.md`. Fired in registration order; exceptions are isolated per module. |
-| **Enrichers** | `core.scan.register_enricher(fn)` where `fn(scans: list[Scan]) -> dict[scan_id, ModuleData]` | Batch enrichment of core entity lists. Core calls once per list render; module does one bulk query; template/API reads enriched data per row. Used for cross-cutting annotations (e.g. a module adds a badge to every scan row). Avoids N+1 queries and keeps core's schema stable — module data lives in `mod_<name>_*` join tables, not columns on core tables. Generalizes beyond scans to observations, checks, chains as those lists need module contributions. |
+| **CLI** | `core.cli.add_group(group)` / `core.cli.extend_group(name, subcommand)` | Click groups; modules can add new top-level groups *and* extend existing core groups. |
+| **DB models** | `core.db.register_models(base)` | Module owns its tables. Names prefixed `mod_<module-name>_*`. |
+| **DB migrations** | `core.db.register_migrations(pkg, path)` | Each module has its own migration lineage. |
+| **Reports** | `core.reports.register_section(name, render)` | Named section renderers; templates opt in via `{% section "engagement" %}`. |
+| **UI slots** | `core.ui.contribute(slot, ...)` | See §9 for the slot model. |
+| **Scan hooks** | `core.scan.on_create/on_complete(...)` | Take `scan_id`; concurrent-aware per `concurrent-scans-design.md`. Fired in registration order; exceptions isolated. |
+| **Enrichers** | `core.scan.register_enricher(fn)` | Batch enrichment for list views. Avoids N+1. Generalizes beyond scans to observations, checks, chains. |
 
-**Contract philosophy:** extension points are **additive, not subtractive**. A module can add a nav item, but cannot remove one. A module can add a column to a report, but cannot rewrite the core report. This keeps modules composable — two modules adding nav items works; two modules each "taking over" the nav doesn't.
+**Contract philosophy:** extension points are **additive, not subtractive**. A module can add a nav item; it cannot remove one. A module can register a new adjudicator alongside the core one; replacing a core component requires an explicit `overrides:` declaration. This keeps modules composable.
 
 ---
 
-## 6. Lifecycle
+## 8. Lifecycle
+
+### 8.1 Cached manifest index + lazy import
+
+With fine-grained components, a deployment may carry hundreds of modules. A naive scan-then-import-everything startup would be slow. Core uses:
+
+1. **Cached manifest index** at `.chainsmith/module-index.json`. Keyed by file path + mtime of every manifest/contract. Full scan only when mtimes change.
+2. **Lazy code import.** Manifests and contracts are parsed at startup (cheap YAML). Component `.py` files are imported on first invocation, not at boot.
+
+This keeps startup fast regardless of module count; import cost is paid only for components actually used in a given run.
+
+### 8.2 Startup flow
 
 ```
 startup
-  ├─ scan modules/ for subdirectories
-  ├─ for each module:
-  │    ├─ read manifest.toml
+  ├─ load .chainsmith/module-index.json if fresh; else rescan both roots
+  ├─ for each module entry in index:
   │    ├─ check chainsmith_min/max_version
-  │    ├─ check python dependencies resolvable
+  │    ├─ check python dependencies resolvable (aggregated across all modules)
   │    ├─ for non-community tier: call license validator
-  │    ├─ import module.py
-  │    ├─ instantiate Module class
-  │    └─ call module.register(core)  ← within try/except; failure disables the module, logs clearly, but doesn't abort startup
+  │    ├─ parse component contracts and build registries (checks/agents/advisors/gates)
+  │    ├─ if module has module.py: import and call register(core)  ← try/except per module
+  │    └─ on failure: mark module status=failed, continue
+  ├─ resolve overrides: later-loaded `overrides: <uuid>` replaces earlier entry in registry
   ├─ run DB migrations (core + each successfully loaded module, in dependency order)
   ├─ mount routers, assemble CLI, render UI manifest
-  └─ start server
+  └─ start server (component .py imports deferred to first invocation)
 
 shutdown
   └─ for each loaded module (reverse order): call module.teardown(core) if defined
 ```
 
-**Load order is deterministic** (alphabetical by module name) so that failures are reproducible.
+**Load order is deterministic** (alphabetical by module name, with core root first) so failures and overrides are reproducible.
 
-**Dependency resolution.** The loader aggregates `[dependencies].python` entries from every manifest and resolves them together against the core venv. Two modules asking for `httpx>=0.27` and `httpx>=0.26` resolve to one install satisfying both. Conflicting constraints (`httpx<0.26` vs `httpx>=0.27`) fail loudly at load time with both module names in the error — no duplicate installs, no version pinning wars. Dedup is mandatory, not optional; anything else gets too complex as the module ecosystem grows.
+**Dependency resolution.** The loader aggregates `dependencies.python` entries from every manifest and resolves them together against the core venv. Two modules requiring `httpx>=0.27` and `httpx>=0.26` resolve to one install satisfying both. Conflicting constraints fail loudly at load time with both module names in the error.
 
-**Failure isolation:** a module that raises during `register()` is disabled for the process. Core logs the failure, marks the module `status=failed` in the operator-visible `/api/v1/modules` endpoint, and continues. This is the difference between "my engagements module is broken" and "my Chainsmith instance won't boot."
+**Failure isolation:** a module that raises during load is disabled for the process. Core logs the failure, marks the module `status=failed` in the operator-visible `/api/v1/modules` endpoint, and continues. This is the difference between "my engagements module is broken" and "my Chainsmith instance won't boot."
 
 ---
 
-## 7. Hard problems
+## 9. Hard problems
 
-### 7.1 Frontend integration (hardest)
+### 9.1 Frontend integration (hardest)
 
 The current frontend is static HTML + vanilla JS (no build step). Modules need to contribute UI without forking `static/index.html`.
 
-**Proposed approach: server-side slot rendering.**
-
-Core's HTML templates define named slots:
+**Proposed approach: server-side slot rendering.** Core's HTML templates define named slots:
 
 ```html
-<!-- static/index.html -->
 <nav>
   <a href="/">Scans</a>
   <a href="/scan-history">History</a>
@@ -189,101 +398,101 @@ Core's HTML templates define named slots:
 </nav>
 ```
 
-Core serves templates through a tiny template step (Jinja is already likely in deps for reports — confirm). `ui_slot(name)` expands to the concatenated contributions from all loaded modules, each a small HTML fragment the module ships in `templates/`.
-
-For richer UI (a full Engagements tab with its own routes), a module registers a page:
+`ui_slot(name)` expands to the concatenated contributions from all loaded modules, each a small HTML fragment shipped in `templates/`. For richer UI (a full Engagements tab), a module registers a page:
 
 ```python
 core.ui.register_page("/engagements", template="templates/engagements.html")
 ```
 
-and ships its own JS/CSS under `modules/<name>/static/`, which core mounts at `/modules/<name>/static/`.
+and ships JS/CSS under `modules/<name>/static/`, mounted at `/modules/<name>/static/`.
 
-**What this doesn't solve:** deep cross-cutting UI (e.g. "every scan-history row should show an engagement badge"). For these, the slot model needs per-row context — feasible but adds template complexity. Start with coarse slots (nav, dashboard cards, sidebar panels) and extend only when needed.
+**What this doesn't solve:** deep cross-cutting UI (e.g. "every scan-history row shows an engagement badge"). Handled via the **Enricher** extension point — batch enrichment, one bulk query per list render. Module data lives in `mod_<name>_*` join tables, not columns on core tables.
 
-**Alternative to consider:** introduce a build step (Vite/esbuild) with a proper plugin mechanism. Bigger change, but unlocks real component composition. Probably the right answer for v2 of the module system, not v1.
+**Alternative for v2:** introduce a build step (Vite/esbuild) with a proper plugin mechanism. Bigger change, but unlocks real component composition.
 
-### 7.2 Database migrations
+### 9.2 Database migrations
 
-Each module owns its tables and its migration lineage. Core runs migrations in two passes:
+Each module owns its tables and migration lineage. Core runs migrations in two passes:
 
 1. Core migrations (existing lineage).
 2. Each loaded module's migrations, in load order.
 
-**Uninstall semantics:** deleting a module's folder leaves its tables behind. This is intentional — dropping tables on removal is a footgun. Provide `chainsmith modules uninstall <name> --drop-data` as an explicit, scary command.
+**Uninstall semantics:** deleting a module's folder leaves its tables behind — dropping tables on removal is a footgun. Provide `chainsmith modules uninstall <name> --drop-data` as an explicit, scary command.
 
 **Table name collisions:** enforce a `mod_<module_name>_` prefix in the migration runner. Reject migrations that create tables outside the module's namespace.
 
-Depends on the `schema-migration-tooling.md` work already in `docs/future-ideas/` — the module system assumes that lands first.
+Depends on `schema-migration-tooling.md` landing first.
 
-### 7.3 Licensing for paid modules
+### 9.3 Licensing for paid modules
 
-Paid module loads require a valid license. Mechanism:
+- License key in env var or `~/.chainsmith/license`.
+- `license.validator` function gets the key + module version, returns `bool`.
+- Short-lived signed tokens (JWT, ~30-day expiry), refreshed against a license server.
+- Offline grace period (configurable per module).
 
-- License key in env var or `~/.chainsmith/license` file.
-- Module's `license.validator` function gets the key + module version, returns `bool`.
-- Short-lived signed tokens (e.g. JWT with 30-day expiry), refreshed by contacting a license server.
-- Offline grace period (configurable per module) so a temporarily-offline instance keeps working.
+**Intentionally not solving:** DRM/obfuscation. If someone wants to run a paid module without paying, they can. Paid-tier value is support, updates, and license-server reachability — not anti-tamper.
 
-**Intentionally not solving:** DRM/obfuscation. If someone wants to run a paid module without paying, they can. The value of the paid tier is support, updates, and keeping the license server reachable — not anti-tamper.
+### 9.4 Coupling to core changes
 
-### 7.4 Coupling to core changes
+Modules pin a core version range in the manifest. Core publishes a stable **Module API** (`chainsmith.module_api`) with a semver guarantee. Everything else — internal repositories, route signatures, DB schema of core tables — is **not** a stable API.
 
-Modules pin a core version range in the manifest. Core publishes a stable **Module API** (`chainsmith.module_api`) with a semver guarantee: breaking changes bump the major version; modules pin a range and are refused if they don't match.
+### 9.5 Testing
 
-Everything else — internal repositories, route signatures, DB schema of core tables — is **not** a stable API. Modules that reach into internals risk breaking on any core release.
-
-### 7.5 Testing
-
-- Core ships a `chainsmith.module_testing` helper that spins up a core instance with only the module-under-test loaded.
-- Each module has `modules/<name>/tests/` run by a dedicated pytest command: `pytest modules/<name>/tests`.
-- CI runs: core tests, then each module's tests, then an integration job with all community modules loaded.
+- Core ships `chainsmith.module_testing` helper that spins up a core instance with only the module-under-test loaded.
+- Each component has `tests/` run via `pytest modules/<name>/<type>/<component>/tests`.
+- CI runs: core tests, then each module's tests, then integration with all community modules loaded.
 
 ---
 
-## 8. Engagements as the reference implementation
+## 10. Engagements as the reference implementation
 
-Engagements is the perfect first module because it's already the feature that motivated this design, and because **engagements is paid-only** — it's one of the primary value props of the pro tier, not an OSS feature. Porting it both validates the module API and validates the tier/licensing model in one shot. Porting it exercises every extension point:
+Engagements is the motivating case and the reference multi-component module. It's **paid-only** — validating the module API and the tier/licensing model in one shot. It exercises every extension point:
 
 - Routes (`/api/v1/engagements/*`)
 - CLI (`chainsmith engagements ...`)
-- DB models + migrations (`engagements` table, `mod_engagements_*` after rename)
-- Report sections (compliance/exec/trend all render an engagement block)
-- UI slots (nav item, scan-sidebar panel showing linked engagement)
-- Scan hooks (on scan create, optionally link to engagement by param)
+- DB models + migrations (`mod_engagements_*`)
+- Report sections (compliance/exec/trend render an engagement block)
+- UI slots (nav item, scan-sidebar panel)
+- Scan hooks (on scan create, optionally link)
+- An agent component (e.g., `engagement_coach`) exercising the agent contract
+- The enricher extension point for scan-list badges
 
-**One friction point to resolve during port:** today `Scan.engagement_id` lives on the core `scans` table. In the module model, that column belongs to the engagements module — the cleanest answer is a join table (`mod_engagements_scan_links`) owned by the module, not a column on the core `scans` table. Worth a design decision before port starts; it affects the frontend story too (badges on scan rows).
+**Resolved:** `Scan.engagement_id` becomes a join table `mod_engagements_scan_links` owned by the module, not a column on the core `scans` table.
 
 ---
 
-## 9. Phased rollout
+## 11. Phased rollout
 
-**Prerequisite:** `concurrent-scans-design.md` Phases A–C must land before Phase 1 of the module system begins. Module API contracts are designed concurrent-aware (take `scan_id`) regardless. UI Phase D of concurrent-scans can run in parallel with module system Phase 1.
+**Prerequisite:** `concurrent-scans-design.md` Phases A–C must land before Phase 1. Module API contracts are concurrent-aware (take `scan_id`) regardless. UI Phase D of concurrent-scans can run in parallel with module system Phase 1.
 
-**POC coverage gap.** The three community POC modules (`terminal-dashboard`, `scan-reporter`, `scope-wizard`) are all CLI-only consumers. They exercise the manifest, lifecycle, CLI extension, and dependency-dedup paths — but **not** routers, DB models/migrations, UI slots, scan hooks, or enrichers. Declaring Module API v1.0 stable requires a fourth module that exercises the DB + UI + enricher contracts (engagements, when it ports, or an equivalent).
+**POC coverage gap.** The three community POC modules (`terminal-dashboard`, `scan-reporter`, `scope-wizard`) are all CLI-only. They exercise manifest, lifecycle, CLI extension, dependency-dedup paths — but **not** routers, DB models/migrations, UI slots, scan hooks, enrichers, or the agent/gate/advisor contracts. Declaring Module API v1.0 stable requires additional modules exercising DB + UI + enricher + agent contracts (engagements, when it ports, covers much of this).
 
-1. **Phase 1 — Foundation.** Build the module API (`chainsmith.module_api`), loader, manifest parser, failure-isolation, `/api/v1/modules` introspection endpoint. No real module yet. Core refactored so existing route/CLI registration goes through the same APIs modules will use (dogfooding).
-2. **Phase 2 — Engagements port.** Engagements becomes `modules/engagements/`, shipped as a **pro-tier module** (not part of the OSS distribution). Remove all engagement references from core. Because engagements is paid-only, phase 2 also requires the license-validator hook to exist in at least a minimal form — either pull licensing forward from phase 5 or ship a placeholder validator that accepts any non-empty key, then harden later.
-3. **Phase 3 — UI slot system.** Minimal slot model (nav, dashboard cards, sidebar). Extend as real modules need more.
-4. **Phase 4 — Migration tooling.** Integrated per-module migrations (depends on the separate migration-tooling work).
+1. **Phase 1 — Foundation.** Build `chainsmith.module_api`, loader, manifest+contract parsers, cached index, lazy import, failure isolation, `/api/v1/modules` endpoint. Core refactored so existing checks/agents/advisors/gates carry manifest+contract files in place (dogfooding). No external modules yet.
+2. **Phase 2 — Engagements port.** Engagements becomes `modules/engagements/`, shipped as a **pro-tier module** (not in OSS distribution). Remove engagement references from core. Requires license-validator hook to exist at least minimally (placeholder accepting any non-empty key, harden later).
+3. **Phase 3 — UI slot system.** Minimal slot model (nav, dashboard cards, sidebar). Extend as modules need.
+4. **Phase 4 — Migration tooling.** Per-module migrations (depends on separate migration-tooling work).
 5. **Phase 5 — Licensing.** License validator hook, offline grace, license-server reference implementation.
-6. **Phase 6 — Second real module.** Pick something meaningfully different from engagements to stress the design (e.g. a compliance-framework module, or a SIEM-export module). Ideally this one is a *community* module so the design is proven across both tiers. Only after two real modules exist should the Module API be declared stable (v1.0).
+6. **Phase 6 — Second real module.** Ideally a *community* module meaningfully different from engagements (e.g., compliance-framework, SIEM-export). Only after two real modules exist is the Module API declared stable (v1.0).
 
 ---
 
-## 10. Open questions
+## 12. Open questions
 
-1. **Jinja or lighter?** Is Jinja already in the dependency tree (reports), or would the UI slot system add it? Template choice affects frontend design.
-2. ~~**Where does `Scan.engagement_id` go?**~~ **Resolved:** join table owned by the module (`mod_engagements_scan_links`), not a column on the core `scans` table. Scan-list badges handled via the **Enricher** extension point (§5) — batch pattern, one bulk query per list render, no N+1. Generalizes to any module annotating core entities.
-3. **Check discovery today uses directory scanning under `app/checks/`.** Do module-contributed checks go through the same scanner, or register explicitly? Directory scanning is more ergonomic; explicit registration is more auditable.
-4. **Entry points vs folder-only?** Should modules also be installable as pip packages via `setuptools` entry points, or is `modules/<name>/` the only supported shape? Entry points help with `pip install chainsmith-engagements-pro` ergonomics; folder-only is simpler.
-5. ~~**Chat and advisor hooks.**~~ **Resolved:** engagements is deferred well beyond initial module work; remove engagement references from chat/advisor entirely as part of that deferral. No `core.chat.on_message` or `core.advisor.register_rule` extension points in v1. If a later module needs them, design at that time against real requirements.
-6. **Module config.** Modules often need per-instance config (API keys, thresholds). Shared `.env` namespace? Per-module config file? Admin UI?
+1. **Templating engine.** Is Jinja already in the dep tree (reports), or does the UI slot system add it?
+2. ~~**`Scan.engagement_id` location.**~~ **Resolved:** join table owned by the module. Badges via Enricher extension point.
+3. ~~**Check discovery: scan vs explicit register.**~~ **Resolved:** directory scan across both roots (`app/checks/` and `modules/*/checks/`), registration driven by `contract.yaml`.
+4. **Entry points vs folder-only?** Should modules also be installable as pip packages via `setuptools` entry points (`pip install chainsmith-engagements-pro`), or is `modules/<name>/` the only supported shape?
+5. ~~**Chat and advisor hooks.**~~ **Resolved:** no `core.chat.on_message` / `core.advisor.register_rule` extension points in v1. Design later against real requirements.
+6. **Module config.** Per-component `config.yaml` is defined. Still open: a per-instance overlay for operator-level overrides (API keys, thresholds) — shared `.env` namespace, `~/.chainsmith/modules/<name>.yaml`, or admin UI?
+7. ~~**Naming collisions.**~~ **Resolved:** UUID identity; human names are display-only; explicit `overrides: <uuid>` for replacement.
+8. ~~**Config format.**~~ **Resolved:** YAML everywhere (manifest, contract, config).
+9. ~~**Agent model/provider selection.**~~ **Resolved:** chosen at chainsmith startup (`chainsmith.sh`), injected at runtime. Agents do not declare model tier.
+10. ~~**Promotion path.**~~ **Resolved:** proven community modules move from `modules/<name>/` to the appropriate `app/<type>/<name>/` location. Folder move, no rewrite — shape is identical in both roots.
 
 ---
 
 ## Summary
 
-The module system is a contract between core and an ecosystem of drop-in directories. Core publishes extension points; modules register against them. The design keeps OSS and commercial tiers in one codebase by making the *product surface* (what ships) depend on *what's in `modules/`*, not on which git branch was built.
+The module system is a contract between core and an ecosystem of drop-in, self-contained component directories. Every module — core or community, one check or a whole feature pack — has the same shape: `manifest.yaml` + per-component `contract.yaml` + code + tests. Core and `modules/` are two discovery roots into one registry, keyed by UUID, with explicit `overrides:` the only way a module replaces core behavior.
 
-Engagements is both the motivating case and the reference implementation. Until it's successfully ported, the Module API isn't validated.
+Engagements is both the motivating case and the reference multi-component module. Until it ports cleanly and a second community module lands, the Module API isn't validated.

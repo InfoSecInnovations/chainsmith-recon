@@ -112,7 +112,7 @@ Available agents:
 - triage: Remediation prioritization, action planning, fix ordering
 - check_proof_advisor: Reproduction steps, evidence collection, exploit guidance
 - scan_analysis_advisor: Post-scan coverage gaps, missed checks, follow-up recommendations
-- scan_planner_advisor: Pre-scan scope planning, check selection guidance, engagement readiness
+- scan_planner_advisor: Pre-scan scope planning, check selection guidance, scan readiness
 - researcher: CVE enrichment, vulnerability lookups, exploit availability
 - coach: Explanations, security concepts, understanding findings and platform behavior
 

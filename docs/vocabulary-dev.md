@@ -95,7 +95,7 @@ A logged outbound request with scope status. Types: `HTTP_REQUEST`, `DNS_LOOKUP`
 
 A logged scope violation. Captures the target, the check that triggered it, whether it was blocked, and the reason. Written to `data/violations_log.jsonl`.
 
-### EngagementWindow
+### ScanWindow
 
 An optional time boundary for authorized testing. The scope checker validates that the current time falls within the window before allowing requests.
 

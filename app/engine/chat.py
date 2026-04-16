@@ -99,19 +99,65 @@ class SSEManager:
             self._connections.pop(session_id, None)
         logger.info("SSE connection closed for session %s", session_id)
 
-    async def send(self, session_id: str, event_type: str, data: dict) -> None:
-        """Push an event to all connections for a session."""
+    async def send(
+        self,
+        session_id: str,
+        event_type: str,
+        data: dict,
+        *,
+        scan_id: str | None = None,
+    ) -> None:
+        """Push an event to all connections for a session.
+
+        Every event carries a top-level `scan_id` in its data payload
+        (null when not scan-scoped) so the client can route/filter.
+        """
         conns = self._connections.get(session_id, [])
-        payload = {"event": event_type, "data": data}
+        enriched = {**data, "scan_id": scan_id if scan_id is not None else data.get("scan_id")}
+        payload = {"event": event_type, "data": enriched}
         for queue in conns:
             await queue.put(payload)
 
-    async def broadcast_all(self, event_type: str, data: dict) -> None:
+    async def broadcast_all(
+        self,
+        event_type: str,
+        data: dict,
+        *,
+        scan_id: str | None = None,
+    ) -> None:
         """Push an event to ALL connected sessions."""
-        payload = {"event": event_type, "data": data}
+        enriched = {**data, "scan_id": scan_id if scan_id is not None else data.get("scan_id")}
+        payload = {"event": event_type, "data": enriched}
         for conns in self._connections.values():
             for queue in conns:
                 await queue.put(payload)
+
+    async def emit_to_scan_watchers(
+        self,
+        scan_id: str,
+        event_type: str,
+        data: dict,
+        *,
+        fallback_broadcast: bool = True,
+    ) -> int:
+        """Fan out an event to chat sessions pinned to `scan_id`.
+
+        If no chat session is pinned to this scan and `fallback_broadcast`
+        is True, broadcast to every open connection so users watching the
+        scan without an explicit pin still see the message. Returns the
+        number of session fan-outs attempted.
+        """
+        from app.chat_pin_registry import get_pin_registry
+
+        targets = get_pin_registry().sessions_for_scan(scan_id)
+        if targets:
+            for sid in targets:
+                await self.send(sid, event_type, data, scan_id=scan_id)
+            return len(targets)
+        if fallback_broadcast:
+            await self.broadcast_all(event_type, data, scan_id=scan_id)
+            return -1  # broadcast sentinel
+        return 0
 
     def has_connections(self, session_id: str) -> bool:
         """Check if a session has active SSE connections."""
@@ -247,7 +293,6 @@ class ChatDispatcher:
         session_id: str,
         text: str,
         ui_context: dict[str, str] | None = None,
-        engagement_id: str | None = None,
         target_agent: str | None = None,
         scan_id: str | None = None,
     ) -> dict:
@@ -266,7 +311,7 @@ class ChatDispatcher:
             session_id=session_id,
             direction="operator",
             text=text,
-            engagement_id=engagement_id,
+            scan_id=scan_id,
             ui_context=ui_context,
         )
 
@@ -279,7 +324,7 @@ class ChatDispatcher:
                 error_msg = make_system_message(
                     f"Unknown agent '{target_agent}'. Available: {', '.join(component_map.keys())}"
                 )
-                await self._persist_and_send(session_id, engagement_id, error_msg, None)
+                await self._persist_and_send(session_id, error_msg, None)
                 return error_msg
             decision = RouteDecision(target=agent, method="direct", confidence=1.0)
         else:
@@ -295,7 +340,7 @@ class ChatDispatcher:
             except Exception as exc:
                 logger.exception("Prompt router error")
                 error_msg = make_system_message(f"Could not classify your message: {exc}")
-                await self._persist_and_send(session_id, engagement_id, error_msg, None)
+                await self._persist_and_send(session_id, error_msg, None)
                 return error_msg
 
         # 3. Handle clarification needed
@@ -303,7 +348,7 @@ class ChatDispatcher:
             clarify_msg = make_system_message(
                 decision.clarification_prompt or "Could you clarify what you'd like to do?"
             )
-            await self._persist_and_send(session_id, engagement_id, clarify_msg, decision.method)
+            await self._persist_and_send(session_id, clarify_msg, decision.method)
             return clarify_msg
 
         # 4. Handle redirect notification
@@ -335,14 +380,27 @@ class ChatDispatcher:
         )
 
         # 7. Dispatch to agent
-        response = await self._dispatch_to_agent(decision, text, session_id, ui_context)
+        response = await self._dispatch_to_agent(
+            decision, text, session_id, ui_context, scan_id=scan_id
+        )
 
         # 8. Persist and push agent response
         await self._persist_and_send(
-            session_id, engagement_id, response, decision.method, agent_name
+            session_id, response, decision.method, agent_name, scan_id=scan_id
         )
 
         return response
+
+    # Agents that require an in-registry or recent scan to function.
+    # When none is available, we hand off to Coach instead of returning
+    # a dead-end "no scan data" response.
+    SCAN_DEPENDENT_AGENTS = frozenset({
+        ComponentType.TRIAGE,
+        ComponentType.ADJUDICATOR,
+        ComponentType.VERIFIER,
+        ComponentType.CHECK_PROOF_ADVISOR,
+        ComponentType.SCAN_ANALYSIS_ADVISOR,
+    })
 
     async def _dispatch_to_agent(
         self,
@@ -350,6 +408,7 @@ class ChatDispatcher:
         text: str,
         session_id: str,
         ui_context: dict[str, str] | None,
+        scan_id: str | None = None,
     ) -> dict:
         """Dispatch a message to the target agent and return the response.
 
@@ -357,9 +416,35 @@ class ChatDispatcher:
         agents that don't have a chat-compatible interface get a
         placeholder response explaining what the agent does.
         """
+        from app.scan_context import resolve_session
 
         agent_type = decision.target
         bridge = create_chat_event_bridge(self.sse, session_id)
+
+        # Phase F: scanless-chat handoff. If the user asked for a scan-scoped
+        # agent but no scan is pinned or running, route to Coach with a
+        # helpful "no scan selected" response rather than a curt dead-end.
+        if agent_type in self.SCAN_DEPENDENT_AGENTS:
+            resolved = resolve_session(scan_id)
+            if resolved is None:
+                await self.sse.send(
+                    session_id,
+                    "redirect",
+                    {
+                        "from_agent": str(agent_type),
+                        "to_agent": str(ComponentType.COACH),
+                        "reason": (
+                            f"No scan selected for {agent_type} to work against — "
+                            "handing off to Coach."
+                        ),
+                    },
+                )
+                return await self._handoff_to_coach_scanless(
+                    asked_agent=agent_type,
+                    text=text,
+                    session_id=session_id,
+                    bridge=bridge,
+                )
 
         self.sse.set_agent_busy(str(agent_type), True)
         try:
@@ -425,7 +510,10 @@ class ChatDispatcher:
         from app.db.repositories import TriageRepository
         from app.state import state
 
-        scan_id = state.active_scan_id or state._last_scan_id
+        from app.scan_context import resolve_session
+
+        _s = resolve_session()
+        scan_id = _s.id if _s else None
         if not scan_id:
             return make_chat_response(
                 agent=ComponentType.TRIAGE,
@@ -486,7 +574,10 @@ class ChatDispatcher:
         from app.db.repositories import AdjudicationRepository
         from app.state import state
 
-        scan_id = state.active_scan_id or state._last_scan_id
+        from app.scan_context import resolve_session
+
+        _s = resolve_session()
+        scan_id = _s.id if _s else None
         if not scan_id:
             return make_chat_response(
                 agent=ComponentType.ADJUDICATOR,
@@ -545,7 +636,10 @@ class ChatDispatcher:
         from app.db.repositories import ObservationRepository
         from app.state import state
 
-        scan_id = state.active_scan_id or state._last_scan_id
+        from app.scan_context import resolve_session
+
+        _s = resolve_session()
+        scan_id = _s.id if _s else None
         if not scan_id:
             return make_chat_response(
                 agent=ComponentType.VERIFIER,
@@ -582,6 +676,58 @@ class ChatDispatcher:
             route_method="keyword",
         )
 
+    async def _handoff_to_coach_scanless(
+        self,
+        asked_agent: ComponentType,
+        text: str,
+        session_id: str,
+        bridge,
+    ) -> dict:
+        """Coach steps in when a scan-scoped agent is asked but no scan exists.
+
+        Gives the user a clear "no scan selected" acknowledgment plus
+        actionable next steps (start a scan, pick one from history) rather
+        than a dead-end. Coach answers the underlying question to the
+        extent it can without scan data.
+        """
+        from app.state import state
+
+        coach = self._get_coach()
+
+        scope_summary = None
+        if state.target:
+            scope_summary = f"Target: {state.target}"
+            if state.exclude:
+                scope_summary += f", Exclusions: {', '.join(state.exclude)}"
+
+        intro = (
+            f"You asked {asked_agent} to help, but there's no scan currently "
+            "selected or running. I can still help — here's what I can tell "
+            "you without scan data, plus what to do next.\n\n"
+        )
+        answer = await coach.ask(
+            question=text,
+            observations=None,
+            chains=None,
+            scope_summary=scope_summary,
+        )
+
+        return make_chat_response(
+            agent=ComponentType.COACH,
+            text=intro + answer,
+            route_method="handoff",
+            actions=[
+                {
+                    "label": "Start a new scan",
+                    "injected_message": "How do I start a new scan?",
+                },
+                {
+                    "label": "Pick a past scan",
+                    "injected_message": "Show me my recent scans",
+                },
+            ],
+        )
+
     async def _handle_coach(self, text: str, session_id: str, bridge) -> dict:
         """Route to Coach agent for explanations and scope guidance."""
         from app.db.repositories import ChainRepository, ObservationRepository
@@ -605,14 +751,15 @@ class ChatDispatcher:
                 ),
                 route_method="direct",
             )
-            await self._persist_and_send(
-                session_id, state.engagement_id, welcome, "direct", "coach"
-            )
+            await self._persist_and_send(session_id, welcome, "direct", "coach")
 
         coach = self._get_coach()
 
         # Build session context for Coach
-        scan_id = state.active_scan_id or state._last_scan_id
+        from app.scan_context import resolve_session
+
+        _s = resolve_session()
+        scan_id = _s.id if _s else None
         observations = []
         chains = []
 
@@ -702,7 +849,10 @@ class ChatDispatcher:
         from app.db.repositories import ObservationRepository
         from app.state import state
 
-        scan_id = state.active_scan_id or state._last_scan_id
+        from app.scan_context import resolve_session
+
+        _s = resolve_session()
+        scan_id = _s.id if _s else None
         if not scan_id:
             return make_chat_response(
                 agent=ComponentType.CHECK_PROOF_ADVISOR,
@@ -813,7 +963,10 @@ class ChatDispatcher:
         from app.db.repositories import AdvisorRepository
         from app.state import state
 
-        scan_id = state.active_scan_id or state._last_scan_id
+        from app.scan_context import resolve_session
+
+        _s = resolve_session()
+        scan_id = _s.id if _s else None
         if not scan_id:
             return make_chat_response(
                 agent=ComponentType.SCAN_ANALYSIS_ADVISOR,
@@ -867,8 +1020,8 @@ class ChatDispatcher:
         scope = ScopeDefinition(
             in_scope_domains=[state.target] if state.target else [],
             out_of_scope_domains=state.exclude or [],
-            time_window=getattr(state.proof_settings, "engagement_window", None)
-            and state.proof_settings.engagement_window.start,
+            time_window=getattr(state.proof_settings, "scan_window", None)
+            and state.proof_settings.scan_window.start,
         )
         proof_config = {
             "enabled": getattr(state.proof_settings, "traffic_logging", False),
@@ -885,7 +1038,7 @@ class ChatDispatcher:
         if not recommendations:
             return make_chat_response(
                 agent=ComponentType.SCAN_PLANNER_ADVISOR,
-                text="Engagement looks ready. Scope is defined and no planning "
+                text="Scan scope looks ready. Scope is defined and no planning "
                 "issues detected. You're good to scan.",
                 route_method="keyword",
             )
@@ -911,7 +1064,10 @@ class ChatDispatcher:
         """Route to Researcher agent for enrichment (summary in chat)."""
         from app.state import state
 
-        scan_id = state.active_scan_id or state._last_scan_id
+        from app.scan_context import resolve_session
+
+        _s = resolve_session()
+        scan_id = _s.id if _s else None
         if not scan_id:
             return make_chat_response(
                 agent=ComponentType.RESEARCHER,
@@ -932,10 +1088,10 @@ class ChatDispatcher:
     async def _persist_and_send(
         self,
         session_id: str,
-        engagement_id: str | None,
         msg: dict,
         route_method: str | None,
         agent_type: str | None = None,
+        scan_id: str | None = None,
     ) -> None:
         """Persist an agent/system message and push it to SSE."""
         await self.repo.save_message(
@@ -944,12 +1100,12 @@ class ChatDispatcher:
             direction="agent",
             text=msg["text"],
             agent_type=agent_type or msg.get("agent"),
-            engagement_id=engagement_id,
+            scan_id=scan_id,
             route_method=route_method,
             references=msg.get("references"),
             actions=msg.get("actions"),
         )
-        await self.sse.send(session_id, "chat_response", msg)
+        await self.sse.send(session_id, "chat_response", msg, scan_id=scan_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

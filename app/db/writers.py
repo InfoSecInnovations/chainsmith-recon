@@ -24,6 +24,7 @@ from app.db.repositories import CheckLogRepository, ObservationRepository
 
 if TYPE_CHECKING:
     from app.db.engine import Database
+    from app.scan_session import ScanSession
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ class ObservationWriter:
         db: Database | None = None,
         batch_size: int = 10,
         scratch_dir: Path | None = None,
+        session: "ScanSession | None" = None,
     ):
         self.scan_id = scan_id
         self._repo = repo or ObservationRepository(db)
@@ -55,6 +57,9 @@ class ObservationWriter:
         self._scratch_dir = scratch_dir or SCRATCH_DIR
         self._scratch_path: Path | None = None
         self._scratch_seq = 0
+        # Phase 51.1c: when present, each observation gets an event_seq and
+        # an `observation_added` event is pushed onto the session's bus.
+        self._session = session
 
     @property
     def count(self) -> int:
@@ -73,6 +78,17 @@ class ObservationWriter:
         Flushes to DB when the buffer reaches batch_size. If the DB is
         unreachable, falls back to scratch-space writes.
         """
+        if self._session is not None:
+            seq = self._session.publish_event(
+                "observation_added",
+                {
+                    "id": observation.get("id"),
+                    "severity": observation.get("severity"),
+                    "host": observation.get("host") or observation.get("target_host"),
+                    "check": observation.get("check_name") or observation.get("check"),
+                },
+            )
+            observation["event_seq"] = seq
         self._buffer.append(observation)
         self._count += 1
 
@@ -147,12 +163,35 @@ class CheckLogWriter:
         scan_id: str,
         repo: CheckLogRepository | None = None,
         db: Database | None = None,
+        session: "ScanSession | None" = None,
     ):
         self.scan_id = scan_id
         self._repo = repo or CheckLogRepository(db)
+        # Phase 51.1c: when present, each log event also goes onto the bus
+        # as a check_started/check_completed/check_skipped SSE event.
+        self._session = session
 
     async def log_event(self, entry: dict) -> None:
         """Persist a single check log event."""
+        if self._session is not None:
+            from app.db.models import CheckLog
+
+            event_type = CheckLog._SSE_EVENT_TYPE.get(
+                entry.get("event", ""), "check_started"
+            )
+            payload: dict = {
+                "name": entry.get("check"),
+                "suite": entry.get("suite"),
+            }
+            if event_type == "check_completed":
+                payload["success"] = entry.get("event") == "completed"
+                payload["observations"] = entry.get("observations", 0)
+                if entry.get("error_message") or entry.get("error"):
+                    payload["error"] = entry.get("error_message") or entry.get("error")
+            elif event_type == "check_skipped":
+                payload["reason"] = entry.get("error_message") or entry.get("error")
+            seq = self._session.publish_event(event_type, payload)
+            entry["event_seq"] = seq
         try:
             await self._repo.bulk_create(self.scan_id, [entry])
         except SQLAlchemyError:

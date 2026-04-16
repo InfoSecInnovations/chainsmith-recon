@@ -1,8 +1,4 @@
-/* Scan History page — styles specific to the scan-first UI.
- * Shares .detail-*, .sub-*, .form-modal-*, .status-dot styles with
- * engagements.css (loaded alongside). When engagements becomes a
- * separate module, the shared styles move with it and the truly
- * scan-specific styles below stay in core. */
+/* Scan History page — styles specific to the scan-first UI. */
 
 .sh-container {
     max-width: 1200px;
@@ -279,78 +275,6 @@
 .scan-overview-card.sev-medium   .value { color: #fbbf24; }
 .scan-overview-card.sev-low      .value { color: #60a5fa; }
 .scan-overview-card.sev-info     .value { color: #94a3b8; }
-
-/* ─── Engagement drawer ─────────────────────────────────── */
-.eng-drawer {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 360px;
-    max-width: 90vw;
-    height: 100vh;
-    background: var(--bg-secondary);
-    border-left: 1px solid var(--border);
-    transform: translateX(100%);
-    transition: transform 0.25s;
-    z-index: 950;
-    display: flex;
-    flex-direction: column;
-}
-
-.eng-drawer.open { transform: translateX(0); }
-
-.eng-drawer-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
-}
-
-.eng-drawer-body {
-    padding: 16px 20px;
-    overflow-y: auto;
-    flex: 1;
-}
-
-.eng-card {
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 10px;
-    cursor: pointer;
-    transition: border-color 0.15s;
-}
-
-.eng-card:hover { border-color: var(--accent); }
-
-.eng-card-name {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-}
-
-.eng-card-meta {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
-}
-
-.eng-card-actions {
-    display: flex;
-    gap: 6px;
-    font-size: 0.75rem;
-}
-
-.eng-card-actions a {
-    color: var(--accent);
-    cursor: pointer;
-    text-decoration: none;
-}
-.eng-card-actions a.danger { color: var(--error); }
-.eng-card-actions a:hover { text-decoration: underline; }
 
 /* ─── Compare view ──────────────────────────────────────── */
 .compare-summary {

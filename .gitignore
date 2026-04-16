@@ -27,7 +27,7 @@ dist/
 *.sqlite*
 
 # Reports output
-reports/
+/reports/
 
 # IDE / editor
 .vscode/

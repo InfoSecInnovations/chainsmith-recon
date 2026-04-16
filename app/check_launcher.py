@@ -274,8 +274,10 @@ class CheckLauncher:
                 else:
                     obs_dict = {"title": str(obs)}
 
-                # Ensure host is in the dict for downstream use
-                if host and "host" not in obs_dict:
+                # Ensure host is in the dict for downstream use.
+                # to_dict() may emit host=None when target_host wasn't set;
+                # prefer the extracted host over a None placeholder.
+                if host and not obs_dict.get("host"):
                     obs_dict["host"] = host
 
                 # Ensure raw_data dict exists

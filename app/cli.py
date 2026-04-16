@@ -124,7 +124,6 @@ def _handle_api_error(e: ChainsmithAPIError):
     type=click.Choice(["web", "ai", "full", "lab"]),
     help="Port scan profile (web, ai, full, lab)",
 )
-@click.option("--engagement", help="Link scan to an engagement ID")
 @click.pass_context
 def scan(
     ctx,
@@ -144,7 +143,6 @@ def scan(
     no_llm: bool,
     provider: str,
     port_profile: str,
-    engagement: str,
 ):
     """Run reconnaissance scan against a target.
 
@@ -267,7 +265,6 @@ def scan(
         client.start_scan(
             checks=scan_checks,
             suites=scan_suites,
-            engagement_id=engagement if engagement else None,
             port_profile=port_profile if port_profile else None,
         )
 
@@ -1285,8 +1282,6 @@ def scans_show(ctx, scan_id: str, as_json: bool):
         click.echo(f"  Duration: {scan.get('duration_ms', 'N/A')}ms")
         click.echo(f"  Observations: {scan.get('observations_count', 0)}")
         click.echo(f"  Checks:   {scan.get('checks_completed', 0)}/{scan.get('checks_total', 0)}")
-        if scan.get("engagement_id"):
-            click.echo(f"  Engagement: {scan['engagement_id']}")
         if scan.get("error_message"):
             click.echo(click.style(f"  Error: {scan['error_message']}", fg="red"))
 
@@ -1753,10 +1748,9 @@ def report_delta(ctx, scan_a: str, scan_b: str, fmt: str, output: str | None):
     default="md",
     help="Output format",
 )
-@click.option("--engagement", "engagement_id", default=None, help="Engagement ID for context")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.pass_context
-def report_executive(ctx, scan_id: str, fmt: str, engagement_id: str | None, output: str | None):
+def report_executive(ctx, scan_id: str, fmt: str, output: str | None):
     """Generate an executive summary report for a scan.
 
     Examples:
@@ -1772,7 +1766,7 @@ def report_executive(ctx, scan_id: str, fmt: str, engagement_id: str | None, out
         sys.exit(1)
 
     try:
-        result = client.generate_executive_report(scan_id, fmt, engagement_id)
+        result = client.generate_executive_report(scan_id, fmt)
         _write_report(result, fmt, output)
     except ChainsmithAPIError as e:
         _handle_api_error(e)
@@ -1788,17 +1782,16 @@ def report_executive(ctx, scan_id: str, fmt: str, engagement_id: str | None, out
     default="md",
     help="Output format",
 )
-@click.option("--engagement", "engagement_id", default=None, help="Engagement ID for context")
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.pass_context
-def report_compliance(ctx, scan_id: str, fmt: str, engagement_id: str | None, output: str | None):
+def report_compliance(ctx, scan_id: str, fmt: str, output: str | None):
     """Generate a compliance report for a scan.
 
     Examples:
 
         chainsmith report compliance --scan abc123
 
-        chainsmith report compliance --scan abc123 --engagement eng-001 -f pdf -o compliance.pdf
+        chainsmith report compliance --scan abc123 -f pdf -o compliance.pdf
     """
     try:
         client = _get_client(ctx)
@@ -1807,15 +1800,14 @@ def report_compliance(ctx, scan_id: str, fmt: str, engagement_id: str | None, ou
         sys.exit(1)
 
     try:
-        result = client.generate_compliance_report(scan_id, fmt, engagement_id)
+        result = client.generate_compliance_report(scan_id, fmt)
         _write_report(result, fmt, output)
     except ChainsmithAPIError as e:
         _handle_api_error(e)
 
 
 @report_group.command("trend")
-@click.option("--target", default=None, help="Target domain for trend")
-@click.option("--engagement", "engagement_id", default=None, help="Engagement ID for trend")
+@click.option("--target", required=True, help="Target domain for trend")
 @click.option(
     "--format",
     "-f",
@@ -1826,19 +1818,13 @@ def report_compliance(ctx, scan_id: str, fmt: str, engagement_id: str | None, ou
 )
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.pass_context
-def report_trend(ctx, target: str | None, engagement_id: str | None, fmt: str, output: str | None):
+def report_trend(ctx, target: str, fmt: str, output: str | None):
     """Generate a trend report across multiple scans.
 
     Examples:
 
-        chainsmith report trend --target example.com
-
-        chainsmith report trend --engagement eng-001 -f pdf -o trend.pdf
+        chainsmith report trend --target example.com -f pdf -o trend.pdf
     """
-    if not target and not engagement_id:
-        click.echo(click.style("Error: --target or --engagement is required", fg="red"), err=True)
-        sys.exit(1)
-
     try:
         client = _get_client(ctx)
     except RuntimeError as e:
@@ -1846,7 +1832,7 @@ def report_trend(ctx, target: str | None, engagement_id: str | None, fmt: str, o
         sys.exit(1)
 
     try:
-        result = client.generate_trend_report(fmt, engagement_id, target)
+        result = client.generate_trend_report(fmt, target)
         _write_report(result, fmt, output)
     except ChainsmithAPIError as e:
         _handle_api_error(e)

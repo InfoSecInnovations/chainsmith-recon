@@ -47,7 +47,7 @@ const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 target, exclude, techniques,
-                engagement_window: options.engagement_window || null,
+                scan_window: options.scan_window || null,
                 proof_of_scope: options.proof_of_scope || null,
                 outside_window_acknowledged: options.outside_window_acknowledged || false,
                 scan_behavior: options.scan_behavior || null,
@@ -55,23 +55,54 @@ const api = {
         })).json();
     },
 
-    async checkEngagementWindow() { return (await fetch('/api/v1/scope/window-check')).json(); },
+    async checkScanWindow() { return (await fetch('/api/v1/scope/window-check')).json(); },
     async getTrafficLog(limit = 100) { return (await fetch(`/api/v1/compliance/traffic?limit=${limit}`)).json(); },
     async getViolations() { return (await fetch('/api/v1/compliance/violations')).json(); },
     async generateComplianceReport() { return (await fetch('/api/v1/compliance/report', { method: 'POST' })).json(); },
     async getComplianceReport() { return (await fetch('/api/v1/compliance/report')).json(); },
     async startScan() { return (await fetch('/api/v1/scan', { method: 'POST' })).json(); },
-    async pauseScan() { return (await fetch('/api/v1/scan/pause', { method: 'POST' })).json(); },
-    async resumeScan() { return (await fetch('/api/v1/scan/resume', { method: 'POST' })).json(); },
-    async stopScan() { return (await fetch('/api/v1/scan/stop', { method: 'POST' })).json(); },
-    async getScanStatus() { return (await fetch('/api/v1/scan')).json(); },
-    async getCheckStatuses() { return (await fetch('/api/v1/scan/checks')).json(); },
-    async getObservations() { return (await fetch('/api/v1/observations')).json(); },
-    async getObservationsByHost() { return (await fetch('/api/v1/observations/by-host')).json(); },
+    async pauseScan(scanId = null) {
+        const qs = scanId ? `?scan_id=${encodeURIComponent(scanId)}` : '';
+        return (await fetch(`/api/v1/scan/pause${qs}`, { method: 'POST' })).json();
+    },
+    async resumeScan(scanId = null) {
+        const qs = scanId ? `?scan_id=${encodeURIComponent(scanId)}` : '';
+        return (await fetch(`/api/v1/scan/resume${qs}`, { method: 'POST' })).json();
+    },
+    async stopScan(scanId = null) {
+        const qs = scanId ? `?scan_id=${encodeURIComponent(scanId)}` : '';
+        return (await fetch(`/api/v1/scan/stop${qs}`, { method: 'POST' })).json();
+    },
+    async getScanStatus(scanId = null) {
+        const qs = scanId ? `?scan_id=${encodeURIComponent(scanId)}` : '';
+        return (await fetch(`/api/v1/scan${qs}`)).json();
+    },
+    async getCheckStatuses(scanId = null) {
+        const qs = scanId ? `?scan_id=${encodeURIComponent(scanId)}` : '';
+        return (await fetch(`/api/v1/scan/checks${qs}`)).json();
+    },
+    async listLiveScans() { return (await fetch('/api/v1/scans/live')).json(); },
+    async getObservations(scanId = null) {
+        const qs = scanId ? `?scan_id=${encodeURIComponent(scanId)}` : '';
+        return (await fetch(`/api/v1/observations${qs}`)).json();
+    },
+    async getObservationsByHost(scanId = null) {
+        const qs = scanId ? `?scan_id=${encodeURIComponent(scanId)}` : '';
+        return (await fetch(`/api/v1/observations/by-host${qs}`)).json();
+    },
     async getChecks() { return (await fetch('/api/v1/checks')).json(); },
-    async analyzeChains() { return (await fetch('/api/v1/chains/analyze', { method: 'POST' })).json(); },
-    async retryChains() { return (await fetch('/api/v1/chains/retry', { method: 'POST' })).json(); },
-    async getChains() { return (await fetch('/api/v1/chains')).json(); },
+    async analyzeChains(scanId = null) {
+        const qs = scanId ? `?scan_id=${encodeURIComponent(scanId)}` : '';
+        return (await fetch(`/api/v1/chains/analyze${qs}`, { method: 'POST' })).json();
+    },
+    async retryChains(scanId = null) {
+        const qs = scanId ? `?scan_id=${encodeURIComponent(scanId)}` : '';
+        return (await fetch(`/api/v1/chains/retry${qs}`, { method: 'POST' })).json();
+    },
+    async getChains(scanId = null) {
+        const qs = scanId ? `?scan_id=${encodeURIComponent(scanId)}` : '';
+        return (await fetch(`/api/v1/chains${qs}`)).json();
+    },
     async getChainDetail(chainId) { return (await fetch(`/api/v1/chains/${chainId}`)).json(); },
     async exportReport() { return (await fetch('/api/v1/export', { method: 'POST' })).json(); },
     async exportObservationsCsv(scanId) {
@@ -82,7 +113,7 @@ const api = {
     // ─── Scan History & Trends ────────────────────────────────
     async listScans(filters = {}, limit = null) {
         // Back-compat: allow listScans(targetString, limit) as well as
-        // listScans({target, status, engagement_id, started_after, started_before, limit, offset}).
+        // listScans({target, status, started_after, started_before, limit, offset}).
         if (typeof filters === 'string' || filters === null) {
             filters = filters ? { target: filters } : {};
         }
@@ -90,7 +121,6 @@ const api = {
         const params = new URLSearchParams();
         if (filters.target) params.set('target', filters.target);
         if (filters.status) params.set('status', filters.status);
-        if (filters.engagement_id) params.set('engagement_id', filters.engagement_id);
         if (filters.started_after) params.set('started_after', filters.started_after);
         if (filters.started_before) params.set('started_before', filters.started_before);
         if (filters.limit != null) params.set('limit', filters.limit);
@@ -115,28 +145,6 @@ const api = {
     async getObservationHistory(fingerprint) {
         return (await fetch(`/api/v1/observations/${encodeURIComponent(fingerprint)}/history`)).json();
     },
-    async listEngagements() { return (await fetch('/api/v1/engagements')).json(); },
-    async getEngagement(id) { return (await fetch(`/api/v1/engagements/${id}`)).json(); },
-    async createEngagement(data) {
-        return (await fetch('/api/v1/engagements', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        })).json();
-    },
-    async updateEngagement(id, data) {
-        return (await fetch(`/api/v1/engagements/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        })).json();
-    },
-    async deleteEngagement(id) {
-        return (await fetch(`/api/v1/engagements/${id}`, { method: 'DELETE' })).json();
-    },
-    async getEngagementScans(id, limit = 50) {
-        return (await fetch(`/api/v1/engagements/${id}/scans?limit=${limit}`)).json();
-    },
     async compareScans(scanAId, scanBId) { return (await fetch(`/api/v1/scans/${scanAId}/compare/${scanBId}`)).json(); },
     async getTargetTrend(domain, filters = {}) {
         const params = new URLSearchParams();
@@ -145,14 +153,6 @@ const api = {
         if (filters.last_n) params.set('last_n', filters.last_n);
         const qs = params.toString();
         return (await fetch(`/api/v1/targets/${encodeURIComponent(domain)}/trend${qs ? '?' + qs : ''}`)).json();
-    },
-    async getEngagementTrend(engId, filters = {}) {
-        const params = new URLSearchParams();
-        if (filters.since) params.set('since', filters.since);
-        if (filters.until) params.set('until', filters.until);
-        if (filters.last_n) params.set('last_n', filters.last_n);
-        const qs = params.toString();
-        return (await fetch(`/api/v1/engagements/${engId}/trend${qs ? '?' + qs : ''}`)).json();
     },
 
     // ─── Capabilities ─────────────────────────────────────────
@@ -195,9 +195,8 @@ const api = {
         if (format === 'pdf') return res;
         return res.json();
     },
-    async generateExecutiveReport(scanId, format = 'md', engagementId = null) {
+    async generateExecutiveReport(scanId, format = 'md') {
         const body = { scan_id: scanId, format };
-        if (engagementId) body.engagement_id = engagementId;
         const res = await fetch('/api/v1/reports/executive', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -206,9 +205,8 @@ const api = {
         if (format === 'pdf') return res;
         return res.json();
     },
-    async generateComplianceReport(scanId, format = 'md', engagementId = null) {
+    async generateComplianceReport(scanId, format = 'md') {
         const body = { scan_id: scanId, format };
-        if (engagementId) body.engagement_id = engagementId;
         const res = await fetch('/api/v1/reports/compliance', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -217,9 +215,8 @@ const api = {
         if (format === 'pdf') return res;
         return res.json();
     },
-    async generateTrendReport(format = 'md', engagementId = null, target = null) {
+    async generateTrendReport(format = 'md', target = null) {
         const body = { format };
-        if (engagementId) body.engagement_id = engagementId;
         if (target) body.target = target;
         const res = await fetch('/api/v1/reports/trend', {
             method: 'POST',
@@ -586,7 +583,8 @@ async function updateHeaderStatus() {
     if (!statusEl) return;
     try {
         const scope = await api.getScope();
-        const observations = await api.getObservations();
+        const sid = (window.ScanSelector && ScanSelector.getSelectedScanId()) || null;
+        const observations = await api.getObservations(sid);
         statusEl.innerHTML = scope.target
             ? `<strong>${scope.target}</strong> | ${observations.total || 0} observations`
             : '<em>No target set</em>';

@@ -282,7 +282,7 @@
                     </div>
                     <div class="setting-item">
                         <div class="setting-info">
-                            <div class="setting-name">Require Engagement Window</div>
+                            <div class="setting-name">Require Scan Window</div>
                             <div class="setting-desc">Enforce time-based scanning restrictions</div>
                         </div>
                         <div class="setting-control">
@@ -454,7 +454,7 @@
                 // Proof of Scope
                 document.getElementById('pos-traffic').checked = prefs.proof_of_scope.traffic_logging;
                 document.getElementById('pos-violations').checked = prefs.proof_of_scope.log_violations;
-                document.getElementById('pos-window').checked = prefs.proof_of_scope.require_engagement_window;
+                document.getElementById('pos-window').checked = prefs.proof_of_scope.require_scan_window;
 
                 // Advanced
                 document.getElementById('adv-mutation').checked = prefs.advanced.payload_mutation;
@@ -493,7 +493,7 @@
                 proof_of_scope: {
                     traffic_logging: document.getElementById('pos-traffic').checked,
                     log_violations: document.getElementById('pos-violations').checked,
-                    require_engagement_window: document.getElementById('pos-window').checked
+                    require_scan_window: document.getElementById('pos-window').checked
                 },
                 advanced: {
                     payload_mutation: document.getElementById('adv-mutation').checked,

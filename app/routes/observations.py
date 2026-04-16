@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 from app.db.repositories import ObservationRepository, ScanRepository
+from app.scan_context import resolve_session
 from app.state import state
 
 logger = logging.getLogger(__name__)
@@ -27,10 +28,12 @@ _scan_repo = ScanRepository()
 
 
 async def _resolve_scan_id(scan_id: str | None) -> str | None:
-    """Resolve scan_id: explicit param > active scan > most recent completed scan in DB."""
-    sid = scan_id or state.active_scan_id or state._last_scan_id
-    if sid:
-        return sid
+    """Resolve scan_id: explicit param > current session > most recent DB scan."""
+    if scan_id:
+        return scan_id
+    session = resolve_session()
+    if session is not None:
+        return session.id
     return await _scan_repo.get_most_recent_scan_id()
 
 

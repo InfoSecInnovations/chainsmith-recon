@@ -96,8 +96,8 @@ class TestMCPDiscoveryCheck:
         """Test check has required metadata."""
         assert check.name == "mcp_discovery"
         assert check.produces == ["mcp_servers"]
-        assert len(check.conditions) == 1
-        assert check.conditions[0].output_name == "services"
+        assert len(check.conditions) == 2
+        assert {c.output_name for c in check.conditions} == {"services", "services_probed"}
 
     @pytest.mark.asyncio
     async def test_discovers_mcp_via_well_known(self, check, sample_service):

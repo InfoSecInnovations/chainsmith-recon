@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.proof_of_scope import (
-    EngagementWindow,
+    ScanWindow,
     ProofOfScopeSettings,
     ScopeStatus,
     TrafficEntry,
@@ -100,16 +100,16 @@ class TestViolationEntry:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# EngagementWindow Tests
+# ScanWindow Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestEngagementWindow:
-    """Tests for EngagementWindow model."""
+class TestScanWindow:
+    """Tests for ScanWindow model."""
 
     def test_no_window_configured(self):
         """No window means not configured."""
-        window = EngagementWindow()
+        window = ScanWindow()
 
         assert window.is_configured() is False
         assert window.is_within_window() is True  # No restrictions
@@ -118,14 +118,14 @@ class TestEngagementWindow:
         """Window with only start time."""
         # Future start - not yet within window
         future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
-        window = EngagementWindow(start=future)
+        window = ScanWindow(start=future)
 
         assert window.is_configured() is True
         assert window.is_within_window() is False
 
         # Past start - within window
         past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
-        window = EngagementWindow(start=past)
+        window = ScanWindow(start=past)
 
         assert window.is_within_window() is True
 
@@ -133,14 +133,14 @@ class TestEngagementWindow:
         """Window with only end time."""
         # Future end - within window
         future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
-        window = EngagementWindow(end=future)
+        window = ScanWindow(end=future)
 
         assert window.is_configured() is True
         assert window.is_within_window() is True
 
         # Past end - outside window
         past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
-        window = EngagementWindow(end=past)
+        window = ScanWindow(end=past)
 
         assert window.is_within_window() is False
 
@@ -149,7 +149,7 @@ class TestEngagementWindow:
         past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
 
-        window = EngagementWindow(start=past, end=future)
+        window = ScanWindow(start=past, end=future)
 
         assert window.is_configured() is True
         assert window.is_within_window() is True
@@ -157,7 +157,7 @@ class TestEngagementWindow:
     def test_handles_z_suffix(self):
         """Handles ISO timestamps with Z suffix."""
         past = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        window = EngagementWindow(start=past)
+        window = ScanWindow(start=past)
 
         assert window.is_within_window() is True
 
@@ -184,11 +184,11 @@ class TestProofOfScopeSettings:
         settings = ProofOfScopeSettings(
             traffic_logging=False,
             block_exclusions=False,
-            engagement_window=EngagementWindow(start="2024-01-01T00:00:00Z"),
+            scan_window=ScanWindow(start="2024-01-01T00:00:00Z"),
             outside_window_acknowledged=True,
             outside_window_acknowledged_at="2024-01-01T00:00:00Z",
         )
 
         assert settings.traffic_logging is False
-        assert settings.engagement_window.is_configured() is True
+        assert settings.scan_window.is_configured() is True
         assert settings.outside_window_acknowledged is True

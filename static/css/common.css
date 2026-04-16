@@ -1634,3 +1634,31 @@ input[type="datetime-local"]:focus {
 .a11y-status-icons .status-rejected::before  { content: "⊘"; }
 .a11y-status-icons .status-retrying::before  { content: "↻"; }
 
+
+/* ── Scan Selector (Phase D concurrent scans) ── */
+.scan-selector-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--text-secondary, #a0a0a0);
+}
+.scan-selector-dropdown {
+    background: var(--bg-secondary, #1a1a1a);
+    color: var(--text-primary, #e0e0e0);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    min-width: 180px;
+    max-width: 320px;
+}
+.scan-selector-dropdown:focus {
+    outline: 1px solid var(--accent, #00b7ff);
+}
+.scan-selector-empty {
+    font-size: 0.85rem;
+    color: var(--text-muted, #707070);
+    font-style: italic;
+}

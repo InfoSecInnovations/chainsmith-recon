@@ -57,7 +57,6 @@ _trend_repo = TrendRepository()
 async def list_scans(
     target: str | None = Query(None, description="Filter by target domain"),
     status: str | None = Query(None, description="Filter by status"),
-    engagement_id: str | None = Query(None, description="Filter by engagement"),
     started_after: str | None = Query(
         None, description="ISO-8601 inclusive lower bound on started_at"
     ),
@@ -71,12 +70,41 @@ async def list_scans(
     return await _scan_repo.list_scans(
         target=target,
         status=status,
-        engagement_id=engagement_id,
         started_after=started_after,
         started_before=started_before,
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/api/v1/scans/live")
+async def list_live_scans():
+    """List scans currently tracked in the registry (active + TTL-window terminals).
+
+    Backs the UI scan-selector. DB-backed /api/v1/scans lags on live progress;
+    this hits the in-process registry for real-time phase/progress fields.
+    """
+    from app.scan_registry import get_registry
+
+    sessions = get_registry().list()
+    sessions.sort(key=lambda s: s.started_at, reverse=True)
+    return {
+        "scans": [
+            {
+                "id": s.id,
+                "target": s.target,
+                "status": s.status,
+                "phase": s.phase,
+                "checks_total": s.checks_total,
+                "checks_completed": s.checks_completed,
+                "current_check": s.current_check,
+                "started_at": s.started_at,
+                "completed_at": s.completed_at,
+                "is_terminal": s.is_terminal,
+            }
+            for s in sessions
+        ]
+    }
 
 
 @router.get("/api/v1/scans/{scan_id}")
@@ -352,9 +380,6 @@ async def get_capabilities():
         "pdf": pdf_available,
         "sarif": True,
         "formats": ["md", "json", "html", "sarif"] + (["pdf"] if pdf_available else []),
-        # Engagements is core for now but gated so it can be cleanly
-        # extracted into a Pro/Enterprise module later.
-        "engagements": True,
     }
 
 
@@ -394,18 +419,15 @@ class DeltaReportInput(BaseModel):
 class ExecutiveReportInput(BaseModel):
     scan_id: str
     format: str | None = "md"
-    engagement_id: str | None = None
 
 
 class ComplianceReportInput(BaseModel):
     scan_id: str
     format: str | None = "md"
-    engagement_id: str | None = None
 
 
 class TrendReportInput(BaseModel):
     format: str | None = "md"
-    engagement_id: str | None = None
     target: str | None = None
 
 
@@ -445,7 +467,7 @@ async def generate_executive_report_endpoint(body: ExecutiveReportInput):
     if body.format not in VALID_FORMATS:
         raise HTTPException(400, f"Format must be one of: {', '.join(VALID_FORMATS)}")
     try:
-        result = await generate_executive_report(body.scan_id, body.format, body.engagement_id)
+        result = await generate_executive_report(body.scan_id, body.format)
         return _pdf_response(result) if body.format == "pdf" else result
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
@@ -459,7 +481,7 @@ async def generate_compliance_report_endpoint(body: ComplianceReportInput):
     if body.format not in VALID_FORMATS:
         raise HTTPException(400, f"Format must be one of: {', '.join(VALID_FORMATS)}")
     try:
-        result = await generate_compliance_report(body.scan_id, body.format, body.engagement_id)
+        result = await generate_compliance_report(body.scan_id, body.format)
         return _pdf_response(result) if body.format == "pdf" else result
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
@@ -473,7 +495,7 @@ async def generate_trend_report_endpoint(body: TrendReportInput):
     if body.format not in VALID_FORMATS:
         raise HTTPException(400, f"Format must be one of: {', '.join(VALID_FORMATS)}")
     try:
-        result = await generate_trend_report(body.format, body.engagement_id, body.target)
+        result = await generate_trend_report(body.format, body.target)
         return _pdf_response(result) if body.format == "pdf" else result
     except ValueError as e:
         raise HTTPException(404, str(e)) from e

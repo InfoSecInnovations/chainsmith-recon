@@ -12,7 +12,8 @@
      * Render the host-table visualization.
      */
     ns.renderHostTable = async function (openModal) {
-        var data    = await api.getObservationsByHost();
+        var sid     = (window.ScanSelector && ScanSelector.getSelectedScanId()) || null;
+        var data    = await api.getObservationsByHost(sid);
         var emptyEl   = document.getElementById('hosts-empty');
         var contentEl = document.getElementById('hosts-content');
 

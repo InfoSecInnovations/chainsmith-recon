@@ -12,6 +12,7 @@ from fastapi import APIRouter, Query
 
 from app.config import get_config
 from app.db.repositories import AdvisorRepository, ScanRepository
+from app.scan_context import resolve_session
 from app.state import state
 
 logger = logging.getLogger(__name__)
@@ -23,10 +24,12 @@ _scan_repo = ScanRepository()
 
 
 async def _resolve_scan_id(scan_id: str | None) -> str | None:
-    """Resolve scan_id: explicit param > active scan > most recent completed scan in DB."""
-    sid = scan_id or state.active_scan_id or state._last_scan_id
-    if sid:
-        return sid
+    """Resolve scan_id: explicit param > current session > most recent DB scan."""
+    if scan_id:
+        return scan_id
+    session = resolve_session()
+    if session is not None:
+        return session.id
     return await _scan_repo.get_most_recent_scan_id()
 
 
@@ -78,7 +81,7 @@ async def get_planner_recommendations():
     Run pre-scan planning analysis against the current scope.
 
     Returns recommendations for scope completeness, check selection,
-    and engagement readiness. Runs live (not from DB).
+    and scan readiness. Runs live (not from DB).
     """
     from app.advisors.scan_planner_advisor import ScanPlannerAdvisor
     from app.engine.scanner import AVAILABLE_CHECKS
@@ -94,8 +97,8 @@ async def get_planner_recommendations():
     scope = ScopeDefinition(
         in_scope_domains=[state.target] if state.target else [],
         out_of_scope_domains=state.exclude or [],
-        time_window=getattr(state.proof_settings, "engagement_window", None)
-        and state.proof_settings.engagement_window.start,
+        time_window=getattr(state.proof_settings, "scan_window", None)
+        and state.proof_settings.scan_window.start,
     )
     proof_config = {
         "enabled": getattr(state.proof_settings, "traffic_logging", False),

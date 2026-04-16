@@ -9,7 +9,7 @@ from app.guardian import Guardian
 from app.proof_of_scope import (
     ComplianceReport,
     ComplianceReporter,
-    EngagementWindow,
+    ScanWindow,
     ProofOfScopeSettings,
     ScopeStatus,
     TrafficEntryType,
@@ -380,24 +380,24 @@ class TestGuardianUrlScope:
         assert ok is True
 
 
-class TestGuardianEngagementWindow:
-    """Tests for Guardian.check_engagement_window gate."""
+class TestGuardianScanWindow:
+    """Tests for Guardian.check_scan_window gate."""
 
     def test_no_window_configured(self):
         g = Guardian.from_scope("example.com")
-        ok, _ = g.check_engagement_window(EngagementWindow())
+        ok, _ = g.check_scan_window(ScanWindow())
         assert ok is True
 
     def test_within_window(self):
         from datetime import UTC, datetime, timedelta
 
         now = datetime.now(UTC)
-        window = EngagementWindow(
+        window = ScanWindow(
             start=(now - timedelta(hours=1)).isoformat(),
             end=(now + timedelta(hours=1)).isoformat(),
         )
         g = Guardian.from_scope("example.com")
-        ok, _ = g.check_engagement_window(window)
+        ok, _ = g.check_scan_window(window)
         assert ok is True
 
     def test_outside_window_blocks(self, tmp_path, monkeypatch):
@@ -409,12 +409,12 @@ class TestGuardianEngagementWindow:
         monkeypatch.setattr(pos.violation_logger, "_log_file", tmp_path / "v.jsonl")
 
         past = datetime.now(UTC) - timedelta(days=2)
-        window = EngagementWindow(
+        window = ScanWindow(
             start=(past - timedelta(hours=1)).isoformat(),
             end=past.isoformat(),
         )
         g = Guardian.from_scope("example.com")
-        ok, reason = g.check_engagement_window(window, acknowledged=False)
+        ok, reason = g.check_scan_window(window, acknowledged=False)
         assert ok is False
         assert "outside" in reason.lower()
 
@@ -427,12 +427,12 @@ class TestGuardianEngagementWindow:
         monkeypatch.setattr(pos.violation_logger, "_log_file", tmp_path / "v.jsonl")
 
         past = datetime.now(UTC) - timedelta(days=2)
-        window = EngagementWindow(
+        window = ScanWindow(
             start=(past - timedelta(hours=1)).isoformat(),
             end=past.isoformat(),
         )
         g = Guardian.from_scope("example.com")
-        ok, _ = g.check_engagement_window(window, acknowledged=True)
+        ok, _ = g.check_scan_window(window, acknowledged=True)
         assert ok is True
 
 
@@ -450,7 +450,7 @@ class TestComplianceReport:
         report = ComplianceReport(
             generated_at="2024-01-01T00:00:00Z",
             session_id="test-session",
-            engagement_window=EngagementWindow(),
+            scan_window=ScanWindow(),
             target="example.com",
             exclusions=["admin.example.com"],
             total_requests=100,
@@ -477,7 +477,7 @@ class TestComplianceReport:
         report = ComplianceReport(
             generated_at="2024-01-01T00:00:00Z",
             session_id="test",
-            engagement_window=EngagementWindow(),
+            scan_window=ScanWindow(),
             target="example.com",
             exclusions=[],
             violations=[violation],

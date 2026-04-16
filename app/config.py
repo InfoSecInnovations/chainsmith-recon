@@ -148,6 +148,27 @@ class CoachConfig:
 
 
 @dataclass
+class ConcurrencyConfig:
+    """
+    Concurrent-scan limits.
+
+    Introduced in the concurrent-scans overhaul (Phase A). Values are parsed
+    and surfaced here but not yet enforced — Phase C flips enforcement on.
+    """
+
+    max_concurrent_scans: int = 4
+    completed_scan_ttl_seconds: int = 300
+    rate_limit_scope: str = "per_scan"  # "per_scan" | "global"
+
+
+@dataclass
+class ScanStreamConfig:
+    """Phase 51.4 — gates advertisement of the SSE streaming capability."""
+
+    enabled: bool = False
+
+
+@dataclass
 class PathsConfig:
     db_path: Path = Path("/data/recon.sqlite")  # Legacy - prefer storage.db_path
     attack_patterns: Path = Path("/app/data/attack_patterns.json")
@@ -180,6 +201,8 @@ class ChainsmithConfig:
     researcher: ResearcherConfig = field(default_factory=ResearcherConfig)
     check_proof_advisor: CheckProofAdvisorConfig = field(default_factory=CheckProofAdvisorConfig)
     coach: CoachConfig = field(default_factory=CoachConfig)
+    concurrency: ConcurrencyConfig = field(default_factory=ConcurrencyConfig)
+    scan_stream: ScanStreamConfig = field(default_factory=ScanStreamConfig)
 
     # Raw seed URLs (optional - scanner can discover these itself)
     seed_urls: list[str] = field(default_factory=list)
@@ -362,6 +385,21 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
         if "memory_cap" in co:
             coc.memory_cap = int(co["memory_cap"])
 
+    if "concurrency" in data and isinstance(data["concurrency"], dict):
+        cc = data["concurrency"]
+        ccc = cfg.concurrency
+        if "max_concurrent_scans" in cc:
+            ccc.max_concurrent_scans = int(cc["max_concurrent_scans"])
+        if "completed_scan_ttl_seconds" in cc:
+            ccc.completed_scan_ttl_seconds = int(cc["completed_scan_ttl_seconds"])
+        if "rate_limit_scope" in cc:
+            ccc.rate_limit_scope = str(cc["rate_limit_scope"])
+
+    if "scan_stream" in data and isinstance(data["scan_stream"], dict):
+        ss = data["scan_stream"]
+        if "enabled" in ss:
+            cfg.scan_stream.enabled = bool(ss["enabled"])
+
 
 def _apply_env(cfg: ChainsmithConfig) -> None:
     """Apply CHAINSMITH_* environment variable overrides."""
@@ -468,6 +506,10 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     # CheckProofAdvisor overrides
     if v := env.get("CHAINSMITH_CHECK_PROOF_ADVISOR_ENABLED"):
         cfg.check_proof_advisor.enabled = v.lower() in ("true", "1", "yes")
+
+    # Scan stream (SSE) overrides
+    if v := env.get("CHAINSMITH_SCAN_STREAM_ENABLED"):
+        cfg.scan_stream.enabled = v.lower() in ("true", "1", "yes")
 
     # Coach overrides
     if v := env.get("CHAINSMITH_COACH_ENABLED"):

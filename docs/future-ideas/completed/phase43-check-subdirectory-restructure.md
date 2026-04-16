@@ -1,5 +1,14 @@
 # Phase 43: Check Subdirectory Restructure
 
+> **STATUS: SUPERSEDED by [`phase56-component-modularization.md`](phase56-component-modularization.md).**
+> The subdirectory restructure has been merged with `phase17-check-configurability.txt`
+> and the component-shape portion of `module-system-design.md` into a single
+> coordinated rollout. The 7-suite migration plan here maps directly onto
+> phase 56 sub-phases 56.2-56.8. Filenames now follow the folder-name-prefix
+> rule (e.g. `ports.py` + `ports.contract.yaml` + `ports.config.yaml`) rather
+> than generic `check.py` + `config.yaml`, for conversational and IDE clarity.
+> Retained here as historical reference only.
+
 ## Overview
 
 Restructure every check from a flat file (`app/checks/web/robots.py`)

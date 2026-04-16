@@ -8,7 +8,7 @@ starts scanning.
 Responsibilities:
 - Scope completeness: flag missing exclusions, suggest common patterns
 - Check selection guidance: recommend suites based on target characteristics
-- Engagement readiness: verify scope, proof-of-scope, prerequisites
+- Scan readiness: verify scope, proof-of-scope, prerequisites
 - Target analysis: identify target characteristics and suggest strategies
 
 This advisor never modifies scope or executes checks. It recommends —
@@ -133,7 +133,7 @@ class ScanPlannerAdvisor:
         recommendations.extend(self._check_third_party_in_scope())
         recommendations.extend(self._check_proof_of_scope())
         recommendations.extend(self._check_ai_suite_suggestion())
-        recommendations.extend(self._check_engagement_window())
+        recommendations.extend(self._check_scan_window())
         recommendations.extend(self._check_single_domain_broad_ports())
 
         logger.info(f"Scan planner: {len(recommendations)} recommendations")
@@ -268,10 +268,10 @@ class ScanPlannerAdvisor:
 
         return []
 
-    # ── Rule: Engagement window not set ──────────────────────────
+    # ── Rule: Scan window not set ────────────────────────────────
 
-    def _check_engagement_window(self) -> list[ScanPlannerRecommendation]:
-        """Flag when no time window is defined for the engagement."""
+    def _check_scan_window(self) -> list[ScanPlannerRecommendation]:
+        """Flag when no time window is defined for the scan."""
         if self.scope.time_window:
             return []
 
@@ -281,9 +281,9 @@ class ScanPlannerAdvisor:
         return [
             ScanPlannerRecommendation(
                 category="readiness",
-                reason="No engagement time window defined.",
+                reason="No scan time window defined.",
                 suggestion=(
-                    "Consider setting a time window for the engagement to "
+                    "Consider setting a time window for the scan to "
                     "document the authorized testing period."
                 ),
                 confidence="low",

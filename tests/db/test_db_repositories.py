@@ -244,6 +244,27 @@ class TestObservationRepository:
         assert count == 0
 
     @pytest.mark.asyncio
+    async def test_observation_event_seq_persisted(self, db, observation_repo):
+        """Phase 51.1b: event_seq passes through bulk_create into the DB."""
+        await observation_repo.bulk_create(
+            "scan-001",
+            [
+                {"id": "a", "title": "x", "severity": "info", "check_name": "c",
+                 "host": "h", "event_seq": 42},
+                {"id": "b", "title": "y", "severity": "info", "check_name": "c",
+                 "host": "h"},
+            ],
+        )
+        async with db.session() as session:
+            result = await session.execute(
+                select(ObservationRecord.event_seq)
+                .where(ObservationRecord.scan_id == "scan-001")
+                .order_by(ObservationRecord.id)
+            )
+            seqs = sorted([row[0] for row in result.all()], key=lambda v: (v is None, v))
+            assert seqs == [42, None]
+
+    @pytest.mark.asyncio
     async def test_observations_have_fingerprints(self, db, observation_repo, sample_observations):
         """Each observation gets a fingerprint assigned."""
         await observation_repo.bulk_create("scan-001", sample_observations)
@@ -480,3 +501,110 @@ class TestCheckLogRepository:
             ids = [row[0] for row in result.all()]
             assert len(ids) == 6
             assert ids == sorted(ids)  # Auto-increment means sorted
+
+    # ─── Phase 51.1b: event_seq wiring ──────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_event_seq_persisted_and_exposed(self, db, check_log_repo):
+        """event_seq passes through bulk_create and appears in get_log output."""
+        await check_log_repo.bulk_create(
+            "scan-001",
+            [
+                {"check": "a", "event": "started", "event_seq": 1},
+                {"check": "a", "event": "completed", "event_seq": 7, "observations": 2},
+                {"check": "b", "event": "started"},  # no seq — stays NULL
+            ],
+        )
+        entries = await check_log_repo.get_log("scan-001")
+        by_event = {(e["check"], e["event"]): e for e in entries}
+        assert by_event[("a", "started")]["event_seq"] == 1
+        assert by_event[("a", "completed")]["event_seq"] == 7
+        assert by_event[("b", "started")]["event_seq"] is None
+
+    @pytest.mark.asyncio
+    async def test_to_sse_event_maps_event_types(self, db, check_log_repo):
+        """CheckLog.to_sse_event() is the shared live/replay mapping."""
+        await check_log_repo.bulk_create(
+            "scan-001",
+            [
+                {"check": "a", "event": "started", "suite": "s"},
+                {"check": "a", "event": "completed", "observations": 3},
+                {"check": "b", "event": "failed", "error_message": "boom"},
+                {"check": "c", "event": "skipped", "error_message": "precondition"},
+            ],
+        )
+        async with db.session() as session:
+            result = await session.execute(
+                select(CheckLog).where(CheckLog.scan_id == "scan-001").order_by(CheckLog.id)
+            )
+            rows = list(result.scalars().all())
+
+        types_and_payloads = [r.to_sse_event() for r in rows]
+        assert types_and_payloads[0] == ("check_started", {"name": "a", "suite": "s"})
+        assert types_and_payloads[1][0] == "check_completed"
+        assert types_and_payloads[1][1]["success"] is True
+        assert types_and_payloads[1][1]["observations"] == 3
+        assert types_and_payloads[2][0] == "check_completed"
+        assert types_and_payloads[2][1]["success"] is False
+        assert types_and_payloads[2][1]["error"] == "boom"
+        assert types_and_payloads[3] == (
+            "check_skipped",
+            {"name": "c", "suite": None, "reason": "precondition"},
+        )
+
+    # ─── Phase 51.3b: DB-backed replay ──────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_check_log_get_events_since_range(self, db, check_log_repo):
+        """get_events_since returns rows in (last_seq, upper_seq] ordered by seq."""
+        await check_log_repo.bulk_create(
+            "scan-R",
+            [
+                {"check": "a", "event": "started", "event_seq": 1},
+                {"check": "a", "event": "completed", "event_seq": 4, "observations": 2},
+                {"check": "b", "event": "started", "event_seq": 5},
+                {"check": "b", "event": "skipped", "event_seq": 9,
+                 "error_message": "precond"},
+                {"check": "c", "event": "started"},  # NULL seq — excluded
+            ],
+        )
+        events = await check_log_repo.get_events_since("scan-R", last_seq=1, upper_seq=5)
+        assert [seq for seq, _, _ in events] == [4, 5]
+        assert events[0][1] == "check_completed"
+        assert events[1][1] == "check_started"
+        # Empty range is a no-op.
+        assert await check_log_repo.get_events_since("scan-R", 10, 10) == []
+        # upper_seq < last_seq is also a no-op.
+        assert await check_log_repo.get_events_since("scan-R", 10, 5) == []
+
+
+class TestObservationRepositoryReplay:
+    """Phase 51.3b: DB-backed replay for observation_added events."""
+
+    @pytest.mark.asyncio
+    async def test_get_events_since_range(self, db, observation_repo):
+        await observation_repo.bulk_create(
+            "scan-OR",
+            [
+                {"id": "a", "title": "x", "severity": "low", "check_name": "c1",
+                 "host": "h1", "event_seq": 2},
+                {"id": "b", "title": "y", "severity": "high", "check_name": "c2",
+                 "host": "h2", "event_seq": 6},
+                {"id": "c", "title": "z", "severity": "info", "check_name": "c3",
+                 "host": "h3", "event_seq": 11},
+                {"id": "d", "title": "w", "severity": "info", "check_name": "c4",
+                 "host": "h4"},  # NULL seq — excluded
+            ],
+        )
+        events = await observation_repo.get_events_since(
+            "scan-OR", last_seq=2, upper_seq=10
+        )
+        assert [seq for seq, _ in events] == [6]
+        assert events[0][1]["severity"] == "high"
+        assert events[0][1]["host"] == "h2"
+        assert events[0][1]["check"] == "c2"
+        # Inclusive of upper bound.
+        events = await observation_repo.get_events_since("scan-OR", 5, 6)
+        assert [seq for seq, _ in events] == [6]
+        # Empty range.
+        assert await observation_repo.get_events_since("scan-OR", 11, 11) == []

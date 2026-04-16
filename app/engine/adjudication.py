@@ -17,7 +17,7 @@ from app.models import OperatorContext
 
 if TYPE_CHECKING:
     from app.config import ChainsmithConfig
-    from app.state import AppState
+    from app.scan_session import ScanSession
 
 # Optional YAML support
 try:
@@ -95,27 +95,27 @@ def load_operator_context(config: "ChainsmithConfig | None" = None) -> OperatorC
 
 
 async def run_adjudication(
-    state: "AppState",
+    session: "ScanSession",
 ) -> None:
     """
     Run adjudication on verified observations.
 
     Reads observations from the database, runs the adjudicator agent,
-    and persists results. Updates state.adjudication_status as a
+    and persists results. Updates session.adjudication_status as a
     concurrency guard.
     """
     from app.models import Observation, ObservationStatus
 
-    scan_id = getattr(state, "_last_scan_id", None)
+    scan_id = session.id
 
-    state.adjudication_status = "adjudicating"
+    session.adjudication_status = "adjudicating"
     await _update_adjudication_status_in_db(scan_id, adjudication_status="adjudicating")
 
     try:
         # Check if adjudicator is enabled
         cfg = get_config()
         if not cfg.adjudicator.enabled:
-            state.adjudication_status = "complete"
+            session.adjudication_status = "complete"
             await _update_adjudication_status_in_db(
                 scan_id,
                 adjudication_status="complete",
@@ -151,7 +151,7 @@ async def run_adjudication(
 
         verified = [f for f in observations if f.status == ObservationStatus.VERIFIED]
         if not verified:
-            state.adjudication_status = "complete"
+            session.adjudication_status = "complete"
             await _update_adjudication_status_in_db(scan_id, adjudication_status="complete")
             logger.info("No verified observations to adjudicate")
             return
@@ -164,7 +164,7 @@ async def run_adjudication(
         results = await agent.adjudicate_observations(verified, operator_context)
 
         result_dicts = [r.model_dump(mode="json") for r in results]
-        state.adjudication_status = "complete"
+        session.adjudication_status = "complete"
 
         logger.info(
             "Adjudication complete: %d results (%d adjusted)",
@@ -180,7 +180,7 @@ async def run_adjudication(
 
     except Exception as e:
         logger.exception("Adjudication failed: %s", e)
-        state.adjudication_status = "error"
+        session.adjudication_status = "error"
         await _update_adjudication_status_in_db(
             scan_id, adjudication_status="error", adjudication_error=str(e)
         )

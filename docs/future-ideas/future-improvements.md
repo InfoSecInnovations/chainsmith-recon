@@ -121,3 +121,21 @@ deployments, this should be expanded:
 
 When Chainsmith is deployed in air-gapped environments and operators report
 that the basic offline mode is insufficient
+
+---
+
+## Scan State Streaming (Phase 51)
+
+### Strict event ordering
+Phase 51 delivers events best-effort per scan. `observation_added` from
+`ObservationWriter` can interleave with `check_completed` from the scanner
+callback rather than strictly preceding it. Revisit if UI/consumers start
+depending on strict per-check ordering — likely requires funnelling both
+publish sites through a single ordered queue per check, or buffering
+`check_completed` until its observations have drained.
+
+### Dedicated `/api/v1/capabilities` endpoint
+Phase 51 advertises streaming support via a `capabilities` field on
+`GET /api/v1/scan`. Once a second feature flag needs advertisement, lift
+this into a standalone `/api/v1/capabilities` endpoint so clients fetch
+flags once at page load instead of reading them off a scan response.

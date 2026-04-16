@@ -69,22 +69,6 @@
                 Advanced Options
             </div>
             <div id="advanced-section" class="u-hidden">
-                <!-- Engagement Selector -->
-                <div class="behavior-section mb-3">
-                    <div class="behavior-row">
-                        <div class="flex-1">
-                            <div class="behavior-label">Engagement</div>
-                            <div class="behavior-desc">Link this scan to a pentest engagement for tracking and reporting</div>
-                        </div>
-                        <div class="engagement-selector-controls">
-                            <select class="form-input" id="scope-engagement">
-                                <option value="">-- None --</option>
-                            </select>
-                            <button class="btn btn-small" type="button" onclick="quickCreateEngagement()" title="Create new engagement">+</button>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Scan Behavior -->
                 <div class="behavior-section">
                     <div class="behavior-row">
@@ -255,15 +239,15 @@
             </div>
 
             <div class="setting-section">
-                <div class="setting-section-title">Engagement Window</div>
+                <div class="setting-section-title">Scan Window</div>
                 <div class="setting-row setting-row-stacked-lg">
                     <div class="setting-desc">Optional. You'll be warned when scanning outside this window.</div>
-                    <div class="engagement-window-row">
-                        <div class="engagement-window-col">
+                    <div class="scan-window-row">
+                        <div class="scan-window-col">
                             <label class="setting-label form-label-sm">Start</label>
                             <input type="datetime-local" class="form-input u-full-width" id="window-start">
                         </div>
-                        <div class="engagement-window-col">
+                        <div class="scan-window-col">
                             <label class="setting-label form-label-sm">End</label>
                             <input type="datetime-local" class="form-input u-full-width" id="window-end">
                         </div>
@@ -331,7 +315,7 @@
     <div class="modal-overlay" id="modal-overlay">
         <div class="modal">
             <div class="modal-header">
-                <h3 id="modal-title">Outside Engagement Window</h3>
+                <h3 id="modal-title">Outside Scan Window</h3>
                 <button class="drawer-close" id="close-modal">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -340,7 +324,7 @@
                 </button>
             </div>
             <div class="modal-body" id="modal-body">
-                <p>You are attempting to start a scan outside the configured engagement window.</p>
+                <p>You are attempting to start a scan outside the configured scan window.</p>
                 <p class="mt-3 text-secondary">This action will be logged. Do you want to proceed?</p>
             </div>
             <div class="modal-footer">
@@ -442,46 +426,12 @@
             chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
         }
 
-        // Load engagements into scope page dropdown
-        async function loadScopeEngagements() {
-            const select = document.getElementById('scope-engagement');
-            if (!select) return;
-            try {
-                const data = await api.listEngagements();
-                const engs = data.engagements || data || [];
-                // Keep the "None" option, add engagements
-                select.innerHTML = '<option value="">-- None --</option>';
-                for (const eng of engs) {
-                    const opt = document.createElement('option');
-                    opt.value = eng.id;
-                    opt.textContent = `${eng.name} (${eng.target_domain})`;
-                    select.appendChild(opt);
-                }
-            } catch (e) { /* engagements may not exist yet */ }
-        }
-
-        // Quick-create engagement from scope page
-        async function quickCreateEngagement() {
-            const name = prompt('Engagement name:');
-            if (!name) return;
-            const target = document.getElementById('scope-target').value.trim() || prompt('Target domain:');
-            if (!target) return;
-            try {
-                const eng = await api.createEngagement({ name, target_domain: target });
-                await loadScopeEngagements();
-                if (eng.id) document.getElementById('scope-engagement').value = eng.id;
-            } catch (e) {
-                alert('Failed to create engagement: ' + e.message);
-            }
-        }
-
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
             initCommon();
             await loadCheckSuites();
             renderSuites();
             await loadExistingScope();
-            await loadScopeEngagements();
             updateNavLinks();
             initChipInput();
             initModals();
@@ -856,7 +806,7 @@
                 return;
             }
 
-            // Check engagement window
+            // Check scan window
             if (!isWithinWindow()) {
                 showWindowWarning();
                 return;
@@ -911,7 +861,7 @@
             // Gather window settings
             const windowStart = document.getElementById('window-start').value;
             const windowEnd = document.getElementById('window-end').value;
-            const engagementWindow = (windowStart || windowEnd) ? {
+            const scanWindow = (windowStart || windowEnd) ? {
                 start: windowStart ? new Date(windowStart).toISOString() : null,
                 end: windowEnd ? new Date(windowEnd).toISOString() : null
             } : null;
@@ -921,26 +871,29 @@
 
             // Set scope with all options
             await api.setScope(target, exclusions, techniques, {
-                engagement_window: engagementWindow,
+                scan_window: scanWindow,
                 proof_of_scope: proofSettings,
                 outside_window_acknowledged: outsideWindow,
                 scan_behavior: scanBehavior,
             });
 
-            // Start scan (with optional engagement link)
-            const engagementId = document.getElementById('scope-engagement')?.value || null;
-            if (engagementId) {
-                await fetch('/api/v1/scan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ engagement_id: engagementId })
-                });
-            } else {
-                await api.startScan();
-            }
+            const startResult = await api.startScan();
 
-            // Navigate to scan page
-            navigateTo('scan.html');
+            // Pin the new scan_id into the ScanSelector and the URL so
+            // scan.html polls the right session from first paint, instead
+            // of racing the background task's registration.
+            if (startResult?.scan_id) {
+                try {
+                    localStorage.setItem('chainsmith.selectedScanId', startResult.scan_id);
+                } catch (_) { /* storage disabled — URL param still carries it */ }
+                const sessionId = getSessionId();
+                const qs = new URLSearchParams();
+                if (sessionId) qs.set('session', sessionId);
+                qs.set('scan_id', startResult.scan_id);
+                window.location.href = `scan.html?${qs.toString()}`;
+            } else {
+                navigateTo('scan.html');
+            }
         }
     </script>
 </body>

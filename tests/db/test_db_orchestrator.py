@@ -35,7 +35,6 @@ def mock_state():
     state.status = "complete"
     state.phase = "done"
     state.error_message = None
-    state.engagement_id = None
     state.checks_total = 3
     state.checks_completed = 3
     state.check_statuses = {

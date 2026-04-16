@@ -229,7 +229,8 @@
      * Render the treemap visualization.
      */
     ns.renderTreemap = async function () {
-        var observationsData = await api.getObservations();
+        var sid = (window.ScanSelector && ScanSelector.getSelectedScanId()) || null;
+        var observationsData = await api.getObservations(sid);
         treemapObservations = observationsData.observations;
 
         var empty    = document.getElementById('treemap-empty');

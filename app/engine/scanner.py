@@ -1,12 +1,15 @@
 """
 app/engine/scanner.py - Scan Orchestration
 
-Coordinates scans using CheckLauncher and CheckResolver.
-Handles state updates and progress callbacks.
+Coordinates scans using CheckLauncher and CheckResolver. In Phase B of the
+concurrent-scans overhaul, run_scan creates a ScanSession and drives all
+per-scan state through it. `state` is still the entry point (operator
+scope prep), but no per-scan fields live there anymore.
 """
 
 import logging
 import time
+import uuid
 from typing import TYPE_CHECKING
 
 from app.check_launcher import CheckLauncher
@@ -14,6 +17,9 @@ from app.check_resolver import get_real_checks, resolve_checks
 from app.config import get_config
 from app.db.persist import on_scan_complete, on_scan_start
 from app.db.writers import CheckLogWriter, ObservationWriter
+from app.guardian import Guardian
+from app.scan_registry import get_registry
+from app.scan_session import ScanSession
 from app.scenarios import get_scenario_manager
 
 if TYPE_CHECKING:
@@ -67,39 +73,73 @@ async def run_scan(
     check_names: list[str] | None = None,
     suites: list[str] | None = None,
     port_profile: str | None = None,
+    session: "ScanSession | None" = None,
 ):
     """
     Run web reconnaissance checks with progress tracking.
 
-    Args:
-        state: The application state object to update during scan
-        check_names: If provided, only run these specific checks
-        suites: If provided, only run checks from these suites
-        port_profile: Port scan profile override (web, ai, full, lab)
+    `state` supplies operator scope prep (target, exclude, techniques,
+    settings, proof_settings, session_id). Per-scan runtime state lives
+    on a ScanSession. If the caller pre-registered one (route handler
+    pre-registration so the scan_id is returned synchronously), we flip
+    its status from "queued" to "running"; otherwise we create one here.
     """
     scan_start_time = time.time()
-    scan_id = None
+    scan_id = session.id if session is not None else None
     obs_writer = None
     log_writer = None
-
-    # Reset cooperative pause/stop controls for this scan
-    state.stop_requested = False
-    state.pause_event.set()
 
     try:
         logger.info(f"Starting scan against {state.target}")
 
-        # Persist scan start (fire-and-forget on failure)
-        scan_id = await on_scan_start(state)
+        # Persist scan start (fire-and-forget on failure). If the route
+        # pre-registered the session, reuse that id so the DB row matches.
+        preregistered_id = scan_id
+        scan_id = await on_scan_start(state, scan_id=preregistered_id)
+        if not scan_id:
+            # Persistence disabled or DB write failed. Keep the pre-registered
+            # id if we have one (so the already-in-registry session stays
+            # addressable); otherwise mint a fresh one.
+            scan_id = preregistered_id or uuid.uuid4().hex[:16]
 
-        # Store scan_id on state so routes and post-scan phases can find it
-        state.active_scan_id = scan_id
-        state._last_scan_id = scan_id
+        # Construct and register the session if the caller didn't. Guardian
+        # is built fresh per scan from the operator's scope prep.
+        # state.techniques is the UI allowlist (already applied by
+        # resolve_checks) — it must NOT be passed as forbidden_techniques,
+        # which is the Guardian's denylist.
+        if session is None:
+            guardian = Guardian.from_scope(
+                state.target or "",
+                exclude=state.exclude,
+            )
+            session = ScanSession(
+                id=scan_id,
+                target=state.target or "",
+                exclude=list(state.exclude or []),
+                techniques=list(state.techniques or []),
+                status="running",
+                phase="scanning",
+                guardian=guardian,
+                settings=dict(state.settings),
+                proof_settings=state.proof_settings,
+                started_at=scan_start_time,
+            )
+            get_registry().register(session)
+        else:
+            # Pre-registered path: flip to running and align start time
+            # with the DB row on_scan_start just wrote. The session id
+            # stays the same (registry keyed off it).
+            session.status = "running"
+            session.phase = "scanning"
+            session.started_at = scan_start_time
+            if session.guardian is None:
+                session.guardian = Guardian.from_scope(
+                    state.target or "",
+                    exclude=state.exclude,
+                )
 
-        # Create streaming writers if we have a scan_id (persistence enabled)
-        if scan_id:
-            obs_writer = ObservationWriter(scan_id)
-            log_writer = CheckLogWriter(scan_id)
+        obs_writer = ObservationWriter(scan_id, session=session)
+        log_writer = CheckLogWriter(scan_id, session=session)
 
         # Resolve which checks to run
         mgr = get_scenario_manager()
@@ -114,8 +154,9 @@ async def run_scan(
 
         if not checks:
             logger.warning("No checks to run!")
-            state.status = "complete"
-            state.phase = "done"
+            if session is not None:
+                session.phase = "done"
+                session.mark_terminal("complete")
             return
 
         # Build initial context
@@ -123,12 +164,10 @@ async def run_scan(
             "scope_domains": [state.target],
             "excluded_domains": state.exclude or [],
             "base_domain": state.target,
-            "services": [],  # Will be populated by port_scan
+            "services": [],  # populated by port_scan
         }
 
-        # Seed DNS enumeration wordlist with scenario-declared known_hosts so
-        # AI/MCP/Agent/RAG/CAG subdomains (not in the default wordlist) get
-        # resolved and enter target_hosts for downstream discovery.
+        # Seed DNS enumeration wordlist with scenario-declared known_hosts.
         if mgr.is_active and mgr.active.target.known_hosts:
             from app.checks.network.dns_enumeration import DnsEnumerationCheck
 
@@ -144,23 +183,26 @@ async def run_scan(
         if port_profile:
             context["port_profile"] = port_profile
 
-        # Initialize state tracking
-        state.checks_total = len(checks)
-        for check in checks:
-            state.check_statuses[check.name] = "pending"
+        # Initialize session progress tracking
+        if session is not None:
+            session.checks_total = len(checks)
+            for check in checks:
+                session.check_statuses[check.name] = "pending"
 
-        # Define progress callbacks
+        # Progress callbacks write to the session.
         def on_start(name: str):
-            state.current_check = name
-            state.check_statuses[name] = "running"
+            if session is not None:
+                session.current_check = name
+                session.check_statuses[name] = "running"
             if log_writer:
                 import asyncio
 
                 asyncio.ensure_future(log_writer.log_event({"check": name, "event": "started"}))
 
         def on_complete(name: str, success: bool, observations_count: int):
-            state.checks_completed += 1
-            state.check_statuses[name] = "completed" if success else "failed"
+            if session is not None:
+                session.checks_completed += 1
+                session.check_statuses[name] = "completed" if success else "failed"
             if log_writer:
                 import asyncio
 
@@ -174,54 +216,57 @@ async def run_scan(
                     )
                 )
 
-        # Wire Guardian as scope_validator on each check (per-URL safety net)
-        if state.guardian:
+        # Wire Guardian as scope_validator on each check.
+        if session is not None and session.guardian:
             for check in checks:
                 if hasattr(check, "set_scope_validator"):
-                    check.set_scope_validator(state.guardian.url_scope_validator)
+                    check.set_scope_validator(session.guardian.url_scope_validator)
 
-        # Choose execution backend: swarm or local
+        # Choose execution backend
         cfg = get_config()
         if cfg.swarm.enabled:
             from app.swarm.coordinator import get_coordinator
             from app.swarm.runner import SwarmRunner
 
             coordinator = get_coordinator()
-            coordinator.create_tasks_from_plan(state, checks, context)
+            coordinator.create_tasks_from_plan(session, checks, context)
             coordinator.observation_writer = obs_writer
 
             runner = SwarmRunner(checks, context, coordinator)
-            state.runner = runner
+            if session is not None:
+                session.runner = runner
 
             observations = await runner.run_all(
                 on_check_start=on_start,
                 on_check_complete=on_complete,
             )
 
-            # Final flush for any buffered observations
             if obs_writer:
                 await obs_writer.flush()
         else:
-            # Standard single-node execution
             launcher = CheckLauncher(
-                checks, context, observation_writer=obs_writer, guardian=state.guardian
+                checks,
+                context,
+                observation_writer=obs_writer,
+                guardian=session.guardian if session is not None else None,
             )
-            launcher.pause_event = state.pause_event
-            launcher.stop_check = lambda: state.stop_requested
-            state.runner = launcher
+            if session is not None:
+                launcher.pause_event = session.pause_event
+                launcher.stop_check = lambda: session.stop_requested
+                session.runner = launcher
 
             observations = await launcher.run_all(
                 on_check_start=on_start,
                 on_check_complete=on_complete,
             )
 
-        # Propagate skip reasons from launcher to state
-        runner = state.runner
-        if hasattr(runner, "skip_reasons"):
-            state.skip_reasons = dict(runner.skip_reasons)
-            for name, reason in runner.skip_reasons.items():
-                if state.check_statuses.get(name) in ("pending", "completed", None):
-                    state.check_statuses[name] = "skipped"
+        # Propagate skip reasons from runner to session.
+        runner_obj = session.runner if session is not None else None
+        if runner_obj is not None and hasattr(runner_obj, "skip_reasons") and session is not None:
+            session.skip_reasons = dict(runner_obj.skip_reasons)
+            for name, reason in runner_obj.skip_reasons.items():
+                if session.check_statuses.get(name) in ("pending", "completed", None):
+                    session.check_statuses[name] = "skipped"
                 if log_writer:
                     import asyncio
 
@@ -229,53 +274,50 @@ async def run_scan(
                         log_writer.log_event({"check": name, "event": "skipped", "error": reason})
                     )
 
-        if state.stop_requested:
-            state.status = "cancelled"
-            logger.info(f"Scan cancelled. {len(observations)} observations collected before stop.")
-        else:
-            state.status = "complete"
-            logger.info(f"Scan complete. {len(observations)} observations.")
-        state.phase = "done"
-        state.current_check = None
+        if session is not None:
+            final_status = "cancelled" if session.stop_requested else "complete"
+            if session.stop_requested:
+                logger.info(
+                    f"Scan cancelled. {len(observations)} observations collected before stop."
+                )
+            else:
+                logger.info(f"Scan complete. {len(observations)} observations.")
+            session.phase = "done"
+            session.current_check = None
+            session.mark_terminal(final_status)
 
-        # Notify if writer fell back to scratch space
         if obs_writer and obs_writer.db_failed:
             logger.warning(
                 "Some observations were written to scratch space due to DB failure. "
                 "Run scratch-to-db to import them."
             )
 
-        # Run scan advisor if enabled (only for local CheckLauncher, not swarm)
-        local_launcher = state.runner if not cfg.swarm.enabled else None
-        await _run_scan_advisor(state, local_launcher, scan_id)
+        # Scan advisor (local CheckLauncher only).
+        local_launcher = (
+            session.runner if session is not None and not cfg.swarm.enabled else None
+        )
+        await _run_scan_advisor(local_launcher, scan_id)
 
-        # Guided Mode: proactive scan_complete message
-        await _emit_scan_complete_proactive(state, len(observations), scan_id)
+        # Guided Mode proactive message.
+        await _emit_scan_complete_proactive(state, session, len(observations), scan_id)
 
-        # Persist remaining results to database (chains, scan completion)
-        await on_scan_complete(state, scan_id, scan_start_time, obs_writer=obs_writer)
+        # Final persistence.
+        await on_scan_complete(session, scan_id, scan_start_time, obs_writer=obs_writer)
 
     except Exception as e:
         logger.exception(f"Scan failed: {e}")
-        state.status = "error"
-        state.error_message = str(e)
-        # Flush any buffered observations before recording failure
+        if session is not None:
+            session.mark_terminal("error", error_message=str(e))
         if obs_writer:
             await obs_writer.flush()
-        # Still try to persist the error state
-        await on_scan_complete(state, scan_id, scan_start_time, obs_writer=obs_writer)
+        await on_scan_complete(session, scan_id, scan_start_time, obs_writer=obs_writer)
 
 
 # ─── Scan Advisor ─────────────────────────────────────────────
 
 
-async def _run_scan_advisor(state: "AppState", launcher=None, scan_id: str | None = None) -> None:
-    """
-    Run post-scan advisor analysis if enabled.
-
-    Only runs when a local CheckLauncher was used (not swarm mode yet)
-    and the advisor is enabled in config. Persists recommendations to DB.
-    """
+async def _run_scan_advisor(launcher=None, scan_id: str | None = None) -> None:
+    """Run post-scan advisor analysis if enabled."""
     try:
         cfg = get_config()
         if not cfg.scan_analysis_advisor.enabled:
@@ -306,7 +348,6 @@ async def _run_scan_advisor(state: "AppState", launcher=None, scan_id: str | Non
         recommendation_dicts = [r.to_dict() for r in recommendations]
         logger.info(f"Scan advisor: {len(recommendations)} recommendations")
 
-        # Persist to DB
         if scan_id and recommendation_dicts:
             try:
                 from app.db.repositories import AdvisorRepository
@@ -323,7 +364,10 @@ async def _run_scan_advisor(state: "AppState", launcher=None, scan_id: str | Non
 
 
 async def _emit_scan_complete_proactive(
-    state: "AppState", observation_count: int, scan_id: str | None
+    state: "AppState",
+    session: ScanSession | None,
+    observation_count: int,
+    scan_id: str | None,
 ) -> None:
     """Push a proactive scan_complete message if Guided Mode is active."""
     try:
@@ -331,7 +375,6 @@ async def _emit_scan_complete_proactive(
         from app.engine.guided import maybe_emit_proactive
         from app.models import ComponentType
 
-        # Quick-win count from triage if available
         quick_wins = 0
         if scan_id:
             try:
@@ -363,6 +406,7 @@ async def _emit_scan_complete_proactive(
                     "injected_message": "Show me the triage action plan",
                 }
             ],
+            scan_id=scan_id,
         )
     except Exception:
         logger.debug("Guided mode proactive scan_complete failed (non-fatal)", exc_info=True)

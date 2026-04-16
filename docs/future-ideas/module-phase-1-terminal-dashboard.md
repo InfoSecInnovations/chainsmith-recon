@@ -6,6 +6,9 @@
 **Prerequisites:**
 - `concurrent-scans-design.md` Phases A–C must land first (module API is concurrent-aware; `chainsmith watch` takes `--scan <id>`).
 - Module System (`module-system-design.md`) must land next.
+- `phase55-terminal-dashboard-stream-client.md` must land before this module
+  is implemented, so the dashboard ships with both polling and SSE transports
+  from day one (avoids a post-ship data-layer rewrite).
 
 ---
 
@@ -76,15 +79,24 @@ Note: no routers, no DB, no UI slots. This is a pure consumer of core APIs.
 
 **Already implemented in core** at `app/routes/scan.py:71-102` (`/api/v1/scan/pause`, `/resume`, `/stop`). Runner already has cooperative pause/stop via `state.pause_event` + `state.stop_requested` at check boundaries.
 
-Under concurrent-scans Phase B2, these become scoped: `POST /api/v1/scans/{scan_id}/pause|resume|cancel`. The module uses the scoped endpoints; old unscoped endpoints remain as back-compat aliases during transition.
+Under concurrent-scans Phase E, scoped variants ship alongside the unscoped endpoints: `POST /api/v1/scans/{scan_id}/{pause,resume,stop}` and `GET /api/v1/scans/{scan_id}/status`. The module uses the scoped endpoints; old unscoped endpoints remain as back-compat aliases. Terminology: `stop` is the canonical verb across API, CLI, and web UI (not `cancel`).
 
 **Trade-off carried forward:** pausing mid-check remains unsupported. Pause happens at check boundaries.
 
 ### 4.2 Scan-state streaming (optional but recommended)
 
-`GET /api/v1/scan/stream` returning Server-Sent Events. Emits one event per state change: `status_changed`, `check_started`, `check_completed`, `observation_added`. If this lands, the dashboard is reactive and idle. If it doesn't, the dashboard falls back to polling at ~500ms.
+Split out to `phase51-scan-state-streaming.md`. That phase adds
+`GET /api/v1/scans/{scan_id}/stream` (and unscoped alias), emitting one event
+per state change: `status_changed`, `check_started`, `check_completed`,
+`observation_added`, etc. If phase 51 lands, the dashboard is reactive and
+idle. If it hasn't landed yet, the dashboard falls back to polling at ~500ms.
 
-**Recommendation:** ship the module with **polling first**, add SSE later. Polling works; SSE is an optimization. Keeps the module-Phase-1 critical path short.
+**Updated plan:** phase 55 (`phase55-terminal-dashboard-stream-client.md`) is
+now a hard prerequisite of this module. The module ships with both polling
+and SSE transports at once; the `--stream` flag selects SSE and flips to
+default once baked in. This replaces the earlier "polling first, SSE later"
+recommendation, which would have required a post-ship rewrite of the client
+layer.
 
 ### 4.3 Scan selection
 

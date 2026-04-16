@@ -7,7 +7,8 @@ Endpoints for:
 - Chain details
 
 All reads go through the database. Chain status is read from the Scan
-record. If no scan_id is provided, the active scan is used.
+record. If no scan_id is provided, the current/most-recent session is
+used via resolve_session().
 """
 
 import asyncio
@@ -17,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.db.repositories import ChainRepository, ObservationRepository, ScanRepository
 from app.engine.chains import run_chain_analysis
-from app.state import state
+from app.scan_context import resolve_session
 
 logger = logging.getLogger(__name__)
 
@@ -30,31 +31,35 @@ _observation_repo = ObservationRepository()
 
 
 async def _resolve_scan_id(scan_id: str | None) -> str | None:
-    """Resolve scan_id: explicit param > active scan > most recent completed scan in DB."""
-    sid = scan_id or state.active_scan_id or state._last_scan_id
-    if sid:
-        return sid
+    """Resolve scan_id: explicit param > current session > most recent DB scan."""
+    if scan_id:
+        return scan_id
+    session = resolve_session()
+    if session is not None:
+        return session.id
     return await _scan_repo.get_most_recent_scan_id()
 
 
 @router.post("/api/v1/chains/analyze", status_code=202)
-async def analyze_chains():
+async def analyze_chains(
+    scan_id: str | None = Query(None, description="Scan ID (defaults to current)"),
+):
     """Start chain analysis (rule-based + LLM)."""
-    sid = state.active_scan_id or state._last_scan_id
-    if not sid:
+    session = resolve_session(scan_id)
+    if session is None:
         raise HTTPException(400, "No observations to analyze. Run a scan first.")
 
-    obs = await _observation_repo.get_observations(sid)
+    obs = await _observation_repo.get_observations(session.id)
     if not obs:
         raise HTTPException(400, "No observations to analyze. Run a scan first.")
 
     async with _chain_lock:
-        if state.chain_status == "analyzing":
+        if session.chain_status == "analyzing":
             raise HTTPException(409, "Chain analysis already running.")
-        state.chain_status = "analyzing"
+        session.chain_status = "analyzing"
 
     # Launch analysis in background
-    asyncio.create_task(run_chain_analysis(state))
+    asyncio.create_task(run_chain_analysis(session))
 
     return {
         "status": "accepted",
@@ -90,9 +95,11 @@ async def get_chains(
     chain_error = scan.get("chain_error") if scan else None
     chain_llm_analysis = scan.get("chain_llm_analysis") if scan else None
 
-    # If scan is still running and chain analysis hasn't started, use state for live status
-    if sid == state.active_scan_id and state.chain_status == "analyzing":
-        chain_status = state.chain_status
+    # If this scan's session is still live and analysis is running, prefer
+    # the in-memory status (DB is updated on completion).
+    session = resolve_session(sid)
+    if session is not None and session.chain_status == "analyzing":
+        chain_status = session.chain_status
 
     return {
         "status": chain_status,
@@ -106,22 +113,24 @@ async def get_chains(
 
 
 @router.post("/api/v1/chains/retry", status_code=202)
-async def retry_chain_analysis():
+async def retry_chain_analysis(
+    scan_id: str | None = Query(None, description="Scan ID (defaults to current)"),
+):
     """Re-run LLM chain analysis only (keeps existing rule-based chains)."""
-    sid = state.active_scan_id or state._last_scan_id
-    if not sid:
+    session = resolve_session(scan_id)
+    if session is None:
         raise HTTPException(400, "No observations to analyze. Run a scan first.")
 
-    obs = await _observation_repo.get_observations(sid)
+    obs = await _observation_repo.get_observations(session.id)
     if not obs:
         raise HTTPException(400, "No observations to analyze. Run a scan first.")
 
-    if state.chain_status == "analyzing":
+    if session.chain_status == "analyzing":
         raise HTTPException(409, "Chain analysis already running.")
 
-    state.chain_status = "analyzing"
+    session.chain_status = "analyzing"
 
-    asyncio.create_task(run_chain_analysis(state, llm_only=True))
+    asyncio.create_task(run_chain_analysis(session, llm_only=True))
 
     return {
         "status": "accepted",

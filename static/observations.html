@@ -20,6 +20,7 @@
             <span class="header-status" id="header-status"></span>
         </div>
         <div class="header-right">
+            <div id="scan-selector"></div>
             <button class="btn btn-icon" id="btn-settings" title="Settings">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="3"></circle>
@@ -505,6 +506,7 @@
     </div>
 
     <script src="/static/js/api.js"></script>
+    <script src="/static/js/scan-selector.js"></script>
     <script src="/static/js/chat.js"></script>
     <script src="/static/js/guided.js"></script>
     <script src="/static/js/viz/viz-common.js"></script>
@@ -527,6 +529,10 @@
         const Viz = window.ChainsmithViz;
         let timelineGroupBy = 'host';
 
+        function selectedScanId() {
+            return (window.ScanSelector && ScanSelector.getSelectedScanId()) || null;
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
             initCommon();
@@ -535,6 +541,9 @@
             initChainButtons();
             initExpandAllButton();
             initTimelineToggle();
+            ScanSelector.mount('#scan-selector', {
+                onChange: async () => { await loadData(); }
+            });
             await loadData();
 
             // Re-render active viz on resize (fullscreen toggle, window resize)
@@ -606,7 +615,7 @@
                     alert('No observations to analyze. Run a scan first.');
                     return;
                 }
-                await api.analyzeChains();
+                await api.analyzeChains(selectedScanId());
                 updateChainStatus('analyzing');
                 startChainPolling();
             });
@@ -626,7 +635,7 @@
             });
 
             document.getElementById('btn-retry-chains').addEventListener('click', async () => {
-                await api.retryChains();
+                await api.retryChains(selectedScanId());
                 updateChainStatus('analyzing');
                 document.getElementById('chain-error-detail').style.display = 'none';
                 startChainPolling();
@@ -647,7 +656,8 @@
 
         async function loadData() {
             try {
-                const status = await api.getScanStatus();
+                const sid = selectedScanId();
+                const status = await api.getScanStatus(sid);
 
                 if (status.status === 'running' || status.status === 'verifying') {
                     showInProgress();
@@ -656,7 +666,7 @@
 
                 // Load framework map in parallel with observations
                 const [observationsData] = await Promise.all([
-                    api.getObservations(),
+                    api.getObservations(sid),
                     loadFrameworkMap(),
                 ]);
                 observations = observationsData.observations;
@@ -677,7 +687,7 @@
                 }
 
                 // Load existing chains
-                const chainsData = await api.getChains();
+                const chainsData = await api.getChains(sid);
                 if (chainsData.chains?.length > 0) {
                     chains = chainsData.chains;
                     updateChainStatus(chainsData.status);
@@ -686,7 +696,7 @@
 
                 // Auto-analyze chains if enabled and no chains yet
                 if (localStorage.getItem('autoChains') === 'true' && chains.length === 0 && observations.length > 0) {
-                    await api.analyzeChains();
+                    await api.analyzeChains(selectedScanId());
                     startChainPolling();
                 }
             } catch (err) {
@@ -813,7 +823,7 @@
 
         async function pollChainStatus() {
             try {
-                const data = await api.getChains();
+                const data = await api.getChains(selectedScanId());
                 chains = data.chains || [];
                 lastLlmAnalysis = data.llm_analysis || null;
                 updateChainStatus(data.status);

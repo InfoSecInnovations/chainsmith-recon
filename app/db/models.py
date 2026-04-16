@@ -31,7 +31,6 @@ class Scan(Base):
     __tablename__ = "scans"
 
     id = Column(String, primary_key=True)
-    engagement_id = Column(String, nullable=True)  # Optional link to engagement
     session_id = Column(String, nullable=False)
     target_domain = Column(String, nullable=False)
     status = Column(String, nullable=False)  # running, complete, error, cancelled
@@ -87,6 +86,10 @@ class ObservationRecord(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     fingerprint = Column(String, nullable=True)
     metadata_ = Column("metadata", JSON, nullable=True)
+    # Phase 51.1b: monotonic per-scan sequence stamped at insert from
+    # ScanSession.next_seq(). Shared id space with the SSE hot ring so the
+    # DB-backed replay path can page events older than the ring.
+    event_seq = Column(Integer, nullable=True)
 
     __table_args__ = (
         Index("idx_observations_scan_id", "scan_id"),
@@ -94,6 +97,7 @@ class ObservationRecord(Base):
         Index("idx_observations_host", "host"),
         Index("idx_observations_fingerprint", "fingerprint"),
         Index("idx_observations_scan_severity", "scan_id", "severity"),
+        Index("idx_observations_scan_event_seq", "scan_id", "event_seq"),
     )
 
 
@@ -125,11 +129,42 @@ class CheckLog(Base):
     duration_ms = Column(Integer, nullable=True)
     error_message = Column(Text, nullable=True)
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    # Phase 51.1b: see ObservationRecord.event_seq.
+    event_seq = Column(Integer, nullable=True)
 
     __table_args__ = (
         Index("idx_check_log_scan_id", "scan_id"),
         Index("idx_check_log_scan_check", "scan_id", "check_name"),
+        Index("idx_check_log_scan_event_seq", "scan_id", "event_seq"),
     )
+
+    # Maps `event` values onto SSE event types for phase 51 streaming.
+    # Single source of truth shared by the live publisher (51.1c) and the
+    # DB-backed replay path (51.3) — design doc §4.
+    _SSE_EVENT_TYPE = {
+        "started": "check_started",
+        "completed": "check_completed",
+        "failed": "check_completed",
+        "skipped": "check_skipped",
+    }
+
+    def to_sse_event(self) -> tuple[str, dict]:
+        """Return (event_type, payload) for this log row.
+
+        Payload excludes the outer envelope (seq/scan_id/ts_ns); the caller
+        wraps it. `success` is derived from `event` — there is no explicit
+        success column.
+        """
+        event_type = self._SSE_EVENT_TYPE.get(self.event, "check_started")
+        payload: dict = {"name": self.check_name, "suite": self.suite}
+        if event_type == "check_completed":
+            payload["success"] = self.event == "completed"
+            payload["observations"] = self.observations_count or 0
+            if self.error_message:
+                payload["error"] = self.error_message
+        elif event_type == "check_skipped":
+            payload["reason"] = self.error_message
+        return event_type, payload
 
 
 class ObservationStatusHistory(Base):
@@ -292,7 +327,7 @@ class ChatMessage(Base):
 
     id = Column(String, primary_key=True)
     session_id = Column(String, nullable=False)
-    engagement_id = Column(String, nullable=True)
+    scan_id = Column(String, nullable=True)
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     direction = Column(String, nullable=False)  # 'operator' or 'agent'
     agent_type = Column(String, nullable=True)  # null for operator messages
@@ -305,7 +340,7 @@ class ChatMessage(Base):
 
     __table_args__ = (
         Index("idx_chat_session_id", "session_id"),
-        Index("idx_chat_engagement_id", "engagement_id"),
+        Index("idx_chat_scan_id", "scan_id"),
     )
 
 

@@ -30,7 +30,7 @@ from app.swarm.models import (
 )
 
 if TYPE_CHECKING:
-    from app.state import AppState
+    from app.scan_session import ScanSession
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class SwarmCoordinator:
         self.phase_tasks: dict[int, list[str]] = {}  # phase_number -> [task_ids]
         self.scan_context: dict[str, Any] = {}
         self.observations: list[dict] = []
-        self.state: AppState | None = None
+        self.session: ScanSession | None = None
         self.scan_id: str | None = None
         self.scan_start_time: float | None = None
         self.is_running: bool = False
@@ -67,7 +67,7 @@ class SwarmCoordinator:
         self.phase_tasks.clear()
         self.scan_context.clear()
         self.observations.clear()
-        self.state = None
+        self.session = None
         self.scan_id = None
         self.scan_start_time = None
         self.is_running = False
@@ -130,7 +130,7 @@ class SwarmCoordinator:
 
     def create_tasks_from_plan(
         self,
-        state: AppState,
+        session: "ScanSession",
         checks: list,
         context: dict,
     ):
@@ -141,7 +141,8 @@ class SwarmCoordinator:
         then creates one SwarmTask per check.
         """
         self.reset()
-        self.state = state
+        self.session = session
+        self.scan_id = session.id
         self.scan_context = dict(context)
         if "services" not in self.scan_context:
             self.scan_context["services"] = []
@@ -156,12 +157,11 @@ class SwarmCoordinator:
         orchestrator.add_checks(checks, suite_resolver=infer_suite)
         phases = orchestrator.get_execution_plan()
 
-        # Build target info from state
+        # Build target info from session
+        target = session.target
         target_info = {
-            "url": f"https://{state.target}"
-            if not state.target.startswith("http")
-            else state.target,
-            "domains": self.scan_context.get("scope_domains", [state.target]),
+            "url": f"https://{target}" if not target.startswith("http") else target,
+            "domains": self.scan_context.get("scope_domains", [target]),
             "ports": cfg.scope.in_scope_ports or [],
         }
 
@@ -170,10 +170,10 @@ class SwarmCoordinator:
             phase_task_ids = []
             for check in phase.checks:
                 task_id = str(uuid.uuid4())
-                ps = getattr(state, "proof_settings", None)
+                ps = session.proof_settings
                 window = (
-                    ps.engagement_window.model_dump()
-                    if ps and ps.engagement_window.is_configured()
+                    ps.scan_window.model_dump()
+                    if ps and ps.scan_window.is_configured()
                     else None
                 )
                 task = SwarmTask(
@@ -184,7 +184,7 @@ class SwarmCoordinator:
                     target=target_info,
                     rate_limit=cfg.swarm.default_rate_limit,
                     timeout_seconds=check.timeout_seconds or cfg.swarm.task_timeout_seconds,
-                    engagement_window=window,
+                    scan_window=window,
                     outside_window_acknowledged=bool(ps and ps.outside_window_acknowledged)
                     if ps
                     else False,
@@ -199,7 +199,7 @@ class SwarmCoordinator:
             "Created %d tasks across %d phases for scan of %s",
             len(self.tasks),
             len(phases),
-            state.target,
+            session.target,
         )
 
     # ── Task assignment ──────────────────────────────────────────
@@ -340,10 +340,12 @@ class SwarmCoordinator:
         if self.observation_writer and result.observations:
             await self.observation_writer.flush()
 
-        # Update AppState progress counters
-        if self.state:
-            self.state.checks_completed += 1
-            self.state.check_statuses[task.check_name] = "completed" if result.success else "failed"
+        # Update session progress counters
+        if self.session:
+            self.session.checks_completed += 1
+            self.session.check_statuses[task.check_name] = (
+                "completed" if result.success else "failed"
+            )
 
         if self._on_check_complete:
             self._on_check_complete(task.check_name, result.success, len(result.observations))
@@ -373,9 +375,9 @@ class SwarmCoordinator:
         task.completed_at = datetime.now(UTC)
         task.error = error
 
-        if self.state:
-            self.state.checks_completed += 1
-            self.state.check_statuses[task.check_name] = "failed"
+        if self.session:
+            self.session.checks_completed += 1
+            self.session.check_statuses[task.check_name] = "failed"
 
         if self._on_check_complete:
             self._on_check_complete(task.check_name, False, 0)

@@ -35,13 +35,6 @@ def client(prefs_env, monkeypatch):
     monkeypatch.setattr(fastapi.staticfiles.StaticFiles, "__init__", mock_init)
     monkeypatch.setattr(fastapi.staticfiles.StaticFiles, "__call__", MagicMock())
 
-    # Force reimport
-    import sys
-
-    for mod in list(sys.modules.keys()):
-        if mod.startswith("app."):
-            del sys.modules[mod]
-
     from fastapi.testclient import TestClient
 
     from app.main import app

@@ -32,6 +32,7 @@ from app.routes import (
     preferences_router,
     scan_history_router,
     scan_router,
+    scan_stream_router,
     scenarios_router,
     scope_router,
     swarm_router,
@@ -79,8 +80,35 @@ async def lifespan(app: FastAPI):
             exc_info=True,
         )
 
-    yield
-    await close_db()
+    # Periodic reaper for completed ScanSessions past TTL.
+    import asyncio as _asyncio
+
+    from app.scan_registry import get_registry as _get_registry
+
+    async def _reaper():
+        ttl = cfg.concurrency.completed_scan_ttl_seconds
+        while True:
+            try:
+                await _asyncio.sleep(max(30, ttl // 2))
+                reaped = _get_registry().reap_completed(ttl)
+                if reaped:
+                    logger.info("Reaped %d completed scan session(s)", reaped)
+            except _asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning("Scan registry reaper tick failed", exc_info=True)
+
+    reaper_task = _asyncio.create_task(_reaper())
+
+    try:
+        yield
+    finally:
+        reaper_task.cancel()
+        try:
+            await reaper_task
+        except (_asyncio.CancelledError, Exception):
+            pass
+        await close_db()
 
 
 # ─── App ──────────────────────────────────────────────────────
@@ -122,6 +150,7 @@ if Path(_static_dir).exists():
 
 app.include_router(scope_router)
 app.include_router(scan_router)
+app.include_router(scan_stream_router)
 app.include_router(scan_history_router)
 app.include_router(observations_router)
 app.include_router(checks_router)

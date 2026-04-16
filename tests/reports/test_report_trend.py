@@ -138,57 +138,6 @@ class TestTrendReportHTML:
         assert "No completed scans" in result["content"]
 
 
-class TestTrendReportEngagement:
-    @pytest.fixture
-    async def engagement_scans(
-        self, db, scan_repo, observation_repo, chain_repo, check_log_repo, engagement_repo
-    ):
-        eng = await engagement_repo.create_engagement(
-            name="Trend Engagement",
-            target_domain="eng-trend.com",
-        )
-        await scan_repo.create_scan(
-            scan_id="te-1",
-            session_id="s1",
-            target_domain="eng-trend.com",
-            engagement_id=eng["id"],
-        )
-        await observation_repo.bulk_create(
-            "te-1",
-            [
-                {
-                    "title": "F1",
-                    "severity": "high",
-                    "check_name": "c1",
-                    "host": "eng-trend.com",
-                    "suite": "web",
-                },
-            ],
-        )
-        await scan_repo.complete_scan("te-1", status="complete", observations_count=1)
-        return eng["id"]
-
-    @pytest.mark.asyncio
-    async def test_engagement_trend(self, engagement_scans):
-        eid = engagement_scans
-        result = await generate_trend_report("md", engagement_id=eid)
-        content = result["content"]
-        assert "# Trend Report" in content
-        assert "Trend Engagement" in content
-
-
-class TestTrendReportErrors:
-    @pytest.mark.asyncio
-    async def test_no_scope(self, db):
-        with pytest.raises(ValueError, match="Either engagement_id or target"):
-            await generate_trend_report("md")
-
-    @pytest.mark.asyncio
-    async def test_engagement_not_found(self, db):
-        with pytest.raises(ValueError, match="not found"):
-            await generate_trend_report("md", engagement_id="nonexistent")
-
-
 class TestTrendReportPDF:
     xhtml2pdf = pytest.importorskip("xhtml2pdf")
 

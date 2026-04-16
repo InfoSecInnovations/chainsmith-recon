@@ -1,3 +1,11 @@
+**STATUS: SUPERSEDED by `phase56-component-modularization.md`.**
+This plan has been merged with `phase43-check-subdirectory-restructure.md`
+and the component-shape portion of `module-system-design.md` into a single
+coordinated rollout. The original wave breakdown (Waves 1-6) maps onto
+phase 56 sub-phases 56.13-56.17 and the per-component `config.yaml`
+carries the Wave 1 schema. Retained here as historical reference only.
+==========================================
+
 Phase 17: Check Configurability
 ==========================================
 Make check behavior tunable without touching Python. Currently, check-

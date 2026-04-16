@@ -26,7 +26,7 @@ from app.models import (
 
 if TYPE_CHECKING:
     from app.config import ChainsmithConfig
-    from app.state import AppState
+    from app.scan_session import ScanSession
 
 # Optional YAML support
 try:
@@ -201,7 +201,7 @@ async def _load_chains_from_db(scan_id: str | None) -> list[dict]:
 # ─── Orchestrator ────────────────────────────────────────────────
 
 
-async def run_triage(state: "AppState") -> None:
+async def run_triage(session: "ScanSession") -> None:
     """
     Run triage on adjudicated observations and attack chains.
 
@@ -209,16 +209,16 @@ async def run_triage(state: "AppState") -> None:
     and team context from YAML files, creates TriageAgent, calls triage(),
     persists the resulting plan, and updates scan status.
     """
-    scan_id = getattr(state, "_last_scan_id", None)
+    scan_id = session.id
 
-    state.triage_status = "triaging"
+    session.triage_status = "triaging"
     await _update_triage_status_in_db(scan_id, triage_status="triaging")
 
     try:
         # Check if triage is enabled
         cfg = get_config()
         if not cfg.triage.enabled:
-            state.triage_status = "complete"
+            session.triage_status = "complete"
             await _update_triage_status_in_db(
                 scan_id,
                 triage_status="complete",
@@ -254,7 +254,7 @@ async def run_triage(state: "AppState") -> None:
 
         verified = [f for f in observations if f.status == ObservationStatus.VERIFIED]
         if not verified:
-            state.triage_status = "complete"
+            session.triage_status = "complete"
             await _update_triage_status_in_db(scan_id, triage_status="complete")
             logger.info("No verified observations to triage")
             return
@@ -323,7 +323,7 @@ async def run_triage(state: "AppState") -> None:
             scan_id=scan_id or "",
         )
 
-        state.triage_status = "complete"
+        session.triage_status = "complete"
 
         logger.info(
             "Triage complete: %d actions (%d quick wins, %d strategic)",
@@ -340,20 +340,21 @@ async def run_triage(state: "AppState") -> None:
         await _update_triage_status_in_db(scan_id, triage_status="complete")
 
         # Guided Mode: proactive triage_plan_ready message
-        await _emit_triage_plan_proactive(state, plan)
+        await _emit_triage_plan_proactive(plan)
 
     except Exception as e:
         logger.exception("Triage failed: %s", e)
-        state.triage_status = "error"
+        session.triage_status = "error"
         await _update_triage_status_in_db(scan_id, triage_status="error", triage_error=str(e))
 
 
-async def _emit_triage_plan_proactive(state, plan) -> None:
+async def _emit_triage_plan_proactive(plan) -> None:
     """Push a proactive triage_plan_ready message if Guided Mode is active."""
     try:
         from app.engine.chat import sse_manager
         from app.engine.guided import maybe_emit_proactive
         from app.models import ComponentType
+        from app.state import state
 
         top_action = plan.actions[0].action if plan.actions else "review findings"
         text = (

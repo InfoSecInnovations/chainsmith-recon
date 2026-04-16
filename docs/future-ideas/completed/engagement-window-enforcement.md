@@ -2,7 +2,7 @@
 
 ## Context
 
-`EngagementWindow` in `proof_of_scope.py` tracks whether the current
+`ScanWindow` in `proof_of_scope.py` tracks whether the current
 time falls within a configured engagement window (start/end datetime).
 Currently it is informational only — the `is_within_window()` check is
 exposed via the API but does not block scans.
@@ -40,7 +40,7 @@ through `ViolationLogger` so the compliance report reflects it.
 
 ### Prerequisite: Phase 50 (UTC datetime hygiene)
 
-`EngagementWindow.is_within_window()` currently compares naive
+`ScanWindow.is_within_window()` currently compares naive
 `datetime.utcnow()` against a parsed datetime whose timezone offset
 has been stripped — a silent bug that produces wrong results for any
 non-UTC stored window. Enforcement work assumes
@@ -50,7 +50,7 @@ is correct.
 ### Proposed behavior
 
 1. `POST /api/v1/scan` delegates to Guardian, which consults
-   `state.proof_settings.engagement_window`.
+   `state.proof_settings.scan_window`.
 2. If a window is configured and `is_within_window()` returns False:
    - If `outside_window_acknowledged` is True, Guardian allows the scan
      and logs the override to the violation logger.
@@ -63,7 +63,7 @@ is correct.
 
 - Window violations should be recorded by `ViolationLogger` for the
   compliance report.
-- The `ComplianceReport` already includes `engagement_window` and
+- The `ComplianceReport` already includes `scan_window` and
   `outside_window_acknowledged` fields.
 
 ## When to revisit

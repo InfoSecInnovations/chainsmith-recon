@@ -47,7 +47,7 @@ WHAT YOU KNOW ABOUT:
 - Verifier: fact-checks observations, catches hallucinations
 - Adjudicator: debates whether severity ratings are accurate (operator-triggered)
 - ScanAnalysisAdvisor: recommends additional checks and identifies coverage gaps (post-scan)
-- ScanPlannerAdvisor: pre-scan scope planning, check selection, engagement readiness
+- ScanPlannerAdvisor: pre-scan scope planning, check selection, scan readiness
 - CheckProofAdvisor: generates reproduction commands for verified findings
 - Researcher: enriches findings with CVE details, exploit info, advisories
 - Triage: prioritizes remediation actions

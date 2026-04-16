@@ -789,7 +789,6 @@ def _delta_html(scan_a, scan_b, comparison, sev_a, sev_b, risk_a, risk_b) -> str
 async def generate_executive_report(
     scan_id: str,
     fmt: str = "md",
-    engagement_id: str | None = None,
 ) -> dict:
     """
     Generate an executive summary report for a scan.
@@ -1025,12 +1024,11 @@ def _executive_html(d: dict) -> str:
 async def generate_compliance_report(
     scan_id: str,
     fmt: str = "md",
-    engagement_id: str | None = None,
 ) -> dict:
     """
-    Generate a compliance report for a scan (optionally within an engagement).
+    Generate a compliance report for a scan.
 
-    Covers engagement scope, scan window, check coverage, observation remediation
+    Covers scan scope, scan window, check coverage, observation remediation
     status, and override audit trail. Suitable for audit/compliance teams.
 
     Returns {"content": str, "filename": str, "format": str}.
@@ -1044,8 +1042,6 @@ async def generate_compliance_report(
     overrides = await _override_repo.list_overrides()
     override_map = {o["fingerprint"]: o for o in overrides.get("overrides", [])}
     coverage = _check_coverage(log_entries)
-
-    engagement = None
 
     severity_counts = _count_by_severity(observations)
 
@@ -1078,7 +1074,6 @@ async def generate_compliance_report(
 
     data = {
         "scan": scan,
-        "engagement": engagement,
         "target": scan.get("target_domain", "unknown"),
         "severity_counts": severity_counts,
         "total_observations": len(observations),
@@ -1113,7 +1108,6 @@ async def generate_compliance_report(
 def _compliance_markdown(d: dict) -> str:
     scan = d["scan"]
     target = d["target"]
-    engagement = d["engagement"]
     cov = d["coverage"]
 
     lines = [
@@ -1125,18 +1119,6 @@ def _compliance_markdown(d: dict) -> str:
         f"**Completed:** {scan.get('completed_at', 'N/A')}",
         f"**Status:** {scan.get('status', 'N/A')}",
     ]
-
-    if engagement:
-        lines.extend(
-            [
-                "",
-                "## Engagement",
-                "",
-                f"**Name:** {engagement.get('name', 'N/A')}",
-                f"**Client:** {engagement.get('client_name', 'N/A')}",
-                f"**Status:** {engagement.get('status', 'N/A')}",
-            ]
-        )
 
     lines.extend(
         [
@@ -1201,7 +1183,6 @@ def _compliance_json(d: dict) -> str:
         "report_type": "compliance",
         "generated_at": datetime.now(UTC).isoformat(),
         "scan": d["scan"],
-        "engagement": d["engagement"],
         "target": d["target"],
         "scope": {
             "checks_executed": d["coverage"]["total"],
@@ -1224,7 +1205,6 @@ def _compliance_html(d: dict) -> str:
     scan = d["scan"]
     target = _esc(d["target"])
     cov = d["coverage"]
-    engagement = d["engagement"]
 
     parts = [
         "<h1>Compliance Report</h1>",
@@ -1233,13 +1213,6 @@ def _compliance_html(d: dict) -> str:
         f"<span>Started: {_esc(scan.get('started_at', 'N/A'))}</span>"
         f"<span>Status: {_esc(scan.get('status', 'N/A'))}</span></div>",
     ]
-
-    if engagement:
-        parts.append(
-            f'<div class="card"><div class="card-title">Engagement: {_esc(engagement.get("name", "N/A"))}</div>'
-            f'<div class="card-detail">Client: {_esc(engagement.get("client_name", "N/A"))} &middot; '
-            f"Status: {_esc(engagement.get('status', 'N/A'))}</div></div>"
-        )
 
     # Coverage stats
     parts.append("<h2>Scope and Coverage</h2>")
@@ -1298,13 +1271,11 @@ def _compliance_html(d: dict) -> str:
 
 async def generate_trend_report(
     fmt: str = "md",
-    engagement_id: str | None = None,
     target: str | None = None,
 ) -> dict:
     """
-    Generate a trend report across multiple scans.
+    Generate a trend report across multiple scans for a target.
 
-    Either engagement_id or target must be provided.
     Includes risk score over time, severity breakdown, and suite-level trends.
 
     Returns {"content": str, "filename": str, "format": str}.
@@ -1315,7 +1286,6 @@ async def generate_trend_report(
     trend_data = await _trend_repo.get_target_trend(target)
     label = target
     scope = f"target-{target}"
-    engagement = None
 
     data_points = trend_data.get("data_points", [])
     averages = trend_data.get("averages", {})
@@ -1323,7 +1293,6 @@ async def generate_trend_report(
     data = {
         "label": label,
         "scope": scope,
-        "engagement": engagement,
         "target": target,
         "data_points": data_points,
         "averages": averages,
@@ -1453,7 +1422,6 @@ def _trend_json(d: dict) -> str:
         "report_type": "trend",
         "generated_at": datetime.now(UTC).isoformat(),
         "scope": d["label"],
-        "engagement": d["engagement"],
         "target": d["target"],
         "scan_count": len(d["data_points"]),
         "data_points": d["data_points"],
@@ -1751,7 +1719,6 @@ def _compliance_sarif(data: dict) -> str:
             "checkCoverage": data["coverage"],
             "checksRun": len(data["checks_run"]),
             "overrideCount": data["overridden_count"],
-            "engagement": data.get("engagement"),
         },
     )
 

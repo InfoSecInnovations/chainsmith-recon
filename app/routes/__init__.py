@@ -26,6 +26,7 @@ from app.routes.observations import router as observations_router
 from app.routes.preferences import router as preferences_router
 from app.routes.scan import router as scan_router
 from app.routes.scan_history import router as scan_history_router
+from app.routes.scan_stream import router as scan_stream_router
 from app.routes.scenarios import router as scenarios_router
 from app.routes.scope import router as scope_router
 from app.routes.swarm import router as swarm_router
@@ -41,6 +42,7 @@ __all__ = [
     "preferences_router",
     "compliance_router",
     "scan_history_router",
+    "scan_stream_router",
     "swarm_router",
     "customizations_router",
     "advisor_router",

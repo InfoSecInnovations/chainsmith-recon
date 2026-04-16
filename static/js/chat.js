@@ -14,6 +14,57 @@
     let unreadCount = 0;
     let typingAgent = null;
 
+    // ─── Chat session identity (Phase F) ────────────────────────
+    // Lazy-minted on drawer open / first message. Persists in localStorage
+    // so the tab survives refreshes; wiped by the trashcan.
+
+    const CHAT_SESSION_KEY = 'chainsmith.chatSessionId';
+
+    function mintChatSessionId() {
+        // RFC4122-ish: good enough for a per-browser token.
+        const rand = () => Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
+        return `${rand()}${rand()}`.slice(0, 16);
+    }
+
+    function getChatSessionId() {
+        let id = localStorage.getItem(CHAT_SESSION_KEY);
+        if (!id) {
+            id = mintChatSessionId();
+            localStorage.setItem(CHAT_SESSION_KEY, id);
+        }
+        return id;
+    }
+
+    function resetChatSessionId() {
+        localStorage.removeItem(CHAT_SESSION_KEY);
+    }
+
+    function currentScanIdOrNull() {
+        try {
+            return (window.ScanSelector && window.ScanSelector.getSelectedScanId()) || null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async function postPinScan(chatSessionId, scanId) {
+        try {
+            if (scanId) {
+                await fetch(`/api/v1/chat/sessions/${encodeURIComponent(chatSessionId)}/pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scan_id: scanId }),
+                });
+            } else {
+                await fetch(`/api/v1/chat/sessions/${encodeURIComponent(chatSessionId)}/pin`, {
+                    method: 'DELETE',
+                });
+            }
+        } catch (_) {
+            // Pin is best-effort; proactive events fall back to broadcast.
+        }
+    }
+
     // ─── DOM Setup ──────────────────────────────────────────────
 
     function injectChatDOM() {
@@ -85,8 +136,17 @@
         if (panelOpen) {
             panel.classList.add('open');
             toggle.style.display = 'none';
+            const sid = getChatSessionId();
+            postPinScan(sid, currentScanIdOrNull());
             loadHistory();
         }
+
+        // Sync pin when the user picks a different scan.
+        window.addEventListener('chainsmith:selected-scan-changed', (e) => {
+            const id = localStorage.getItem(CHAT_SESSION_KEY);
+            if (!id) return; // drawer never opened; nothing to pin yet
+            postPinScan(id, (e.detail && e.detail.scanId) || null);
+        });
     }
 
     // ─── Panel Controls ─────────────────────────────────────────
@@ -102,6 +162,9 @@
         if (panelOpen) {
             unreadCount = 0;
             updateUnreadBadge();
+            // Lazy-mint chat session on first drawer open (Phase F).
+            const sid = getChatSessionId();
+            postPinScan(sid, currentScanIdOrNull());
             loadHistory();
             document.getElementById('chat-input').focus();
         }
@@ -121,7 +184,8 @@
     function connectSSE() {
         if (sseConnection) return;
 
-        sseConnection = new EventSource('/api/v1/chat/stream');
+        const sid = getChatSessionId();
+        sseConnection = new EventSource(`/api/v1/chat/stream?session=${encodeURIComponent(sid)}`);
 
         sseConnection.addEventListener('chat_response', (e) => {
             const data = JSON.parse(e.data);
@@ -193,6 +257,8 @@
                 body: JSON.stringify({
                     text: text,
                     ui_context: getUIContext(),
+                    session_id: getChatSessionId(),
+                    scan_id: currentScanIdOrNull(),
                 }),
             });
 
@@ -235,7 +301,6 @@
         else if (path.includes('scan')) page = 'scan';
         else if (path.includes('observations')) page = 'observations';
         else if (path.includes('reports')) page = 'reports';
-        else if (path.includes('engagements')) page = 'engagements';
         else if (path.includes('trend')) page = 'trend';
         else if (path.includes('settings')) page = 'settings';
         else if (path.includes('profiles')) page = 'profiles';
@@ -369,7 +434,8 @@
 
     async function loadHistory() {
         try {
-            const res = await fetch('/api/v1/chat/history?limit=50');
+            const sid = getChatSessionId();
+            const res = await fetch(`/api/v1/chat/history?limit=50&session=${encodeURIComponent(sid)}`);
             if (!res.ok) return;
             const data = await res.json();
             const messages = data.messages || [];
@@ -402,15 +468,20 @@
     // ─── Clear Chat ─────────────────────────────────────────────
 
     async function clearChat() {
+        const oldSessionId = getChatSessionId();
         try {
             await fetch('/api/v1/chat/clear', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
+                body: JSON.stringify({ session_id: oldSessionId }),
             });
         } catch (err) {
             // Continue with UI clear even if API fails
         }
+
+        // Drop server-side scan pin for the old session, then rotate identity.
+        await postPinScan(oldSessionId, null);
+        resetChatSessionId();
 
         const container = document.getElementById('chat-messages');
         container.querySelectorAll('.chat-msg, .chat-redirect, .chat-typing').forEach(

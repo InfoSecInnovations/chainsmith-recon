@@ -205,7 +205,7 @@ class TestAISuiteSuggestion:
 # ═══════════════════════════════════════════════════════════════════
 
 
-class TestEngagementWindow:
+class TestScanWindow:
     def test_flags_when_no_window(self):
         advisor = _make_advisor(in_scope=["example.com"])
         recs = advisor.analyze()
