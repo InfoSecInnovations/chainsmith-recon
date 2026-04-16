@@ -9,8 +9,8 @@ from app.guardian import Guardian
 from app.proof_of_scope import (
     ComplianceReport,
     ComplianceReporter,
-    ScanWindow,
     ProofOfScopeSettings,
+    ScanWindow,
     ScopeStatus,
     TrafficEntryType,
     TrafficLogger,

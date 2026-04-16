@@ -110,8 +110,7 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     )
 
     logger.info(
-        f"Scan queued (id={scan_id}, checks={body.checks or 'all'}, "
-        f"suites={body.suites or 'all'})"
+        f"Scan queued (id={scan_id}, checks={body.checks or 'all'}, suites={body.suites or 'all'})"
     )
     return {
         "status": "accepted",
@@ -228,13 +227,17 @@ async def get_scan_status_scoped(scan_id: str):
 
 
 @router.post("/api/v1/scan/pause", status_code=202)
-async def pause_scan(scan_id: str | None = Query(None, description="Scan ID (defaults to current)")):
+async def pause_scan(
+    scan_id: str | None = Query(None, description="Scan ID (defaults to current)"),
+):
     """Pause the running scan at the next check boundary."""
     return _do_pause(resolve_session(scan_id))
 
 
 @router.post("/api/v1/scan/resume", status_code=202)
-async def resume_scan(scan_id: str | None = Query(None, description="Scan ID (defaults to current)")):
+async def resume_scan(
+    scan_id: str | None = Query(None, description="Scan ID (defaults to current)"),
+):
     """Resume a paused scan."""
     return _do_resume(resolve_session(scan_id))
 
@@ -246,7 +249,9 @@ async def stop_scan(scan_id: str | None = Query(None, description="Scan ID (defa
 
 
 @router.get("/api/v1/scan")
-async def get_scan_status(scan_id: str | None = Query(None, description="Scan ID (defaults to current)")):
+async def get_scan_status(
+    scan_id: str | None = Query(None, description="Scan ID (defaults to current)"),
+):
     """Get scan status with progress."""
     return _status_payload(resolve_session(scan_id))
 
@@ -301,7 +306,9 @@ async def get_check_statuses(
 
 
 @router.get("/api/v1/scan/log")
-async def get_check_log(scan_id: str | None = Query(None, description="Scan ID (defaults to current)")):
+async def get_check_log(
+    scan_id: str | None = Query(None, description="Scan ID (defaults to current)"),
+):
     """Get history of check executions from the database."""
     session = resolve_session(scan_id)
     sid = session.id if session is not None else None

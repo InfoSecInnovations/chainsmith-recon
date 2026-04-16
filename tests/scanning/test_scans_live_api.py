@@ -28,7 +28,9 @@ def clean_registry():
     reg._reset()
 
 
-def _session(id_: str, *, target: str = "example.com", started_at: float | None = None, **overrides) -> ScanSession:
+def _session(
+    id_: str, *, target: str = "example.com", started_at: float | None = None, **overrides
+) -> ScanSession:
     kwargs = {
         "id": id_,
         "target": target,

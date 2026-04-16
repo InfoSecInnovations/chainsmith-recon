@@ -37,7 +37,9 @@ class ChatMessageRequest(BaseModel):
     agent: str | None = None  # Optional: route directly to a specific agent
     ui_context: dict | None = None
     scan_id: str | None = None  # Optional: scope context to a specific scan
-    session_id: str | None = None  # Per-browser chat session (Phase F); falls back to state.session_id
+    session_id: str | None = (
+        None  # Per-browser chat session (Phase F); falls back to state.session_id
+    )
 
 
 class ClearChatRequest(BaseModel):

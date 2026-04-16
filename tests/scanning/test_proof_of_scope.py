@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.proof_of_scope import (
-    ScanWindow,
     ProofOfScopeSettings,
+    ScanWindow,
     ScopeStatus,
     TrafficEntry,
     TrafficEntryType,

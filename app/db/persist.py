@@ -85,7 +85,7 @@ async def on_scan_start(
 
 
 async def on_scan_complete(
-    session: "ScanSession | None",
+    session: ScanSession | None,
     scan_id: str | None,
     started_at: float,
     db: Database | None = None,

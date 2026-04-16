@@ -394,13 +394,15 @@ class ChatDispatcher:
     # Agents that require an in-registry or recent scan to function.
     # When none is available, we hand off to Coach instead of returning
     # a dead-end "no scan data" response.
-    SCAN_DEPENDENT_AGENTS = frozenset({
-        ComponentType.TRIAGE,
-        ComponentType.ADJUDICATOR,
-        ComponentType.VERIFIER,
-        ComponentType.CHECK_PROOF_ADVISOR,
-        ComponentType.SCAN_ANALYSIS_ADVISOR,
-    })
+    SCAN_DEPENDENT_AGENTS = frozenset(
+        {
+            ComponentType.TRIAGE,
+            ComponentType.ADJUDICATOR,
+            ComponentType.VERIFIER,
+            ComponentType.CHECK_PROOF_ADVISOR,
+            ComponentType.SCAN_ANALYSIS_ADVISOR,
+        }
+    )
 
     async def _dispatch_to_agent(
         self,
@@ -508,8 +510,6 @@ class ChatDispatcher:
     async def _handle_triage(self, text: str, session_id: str, bridge) -> dict:
         """Summarize triage plan or answer triage questions."""
         from app.db.repositories import TriageRepository
-        from app.state import state
-
         from app.scan_context import resolve_session
 
         _s = resolve_session()
@@ -572,8 +572,6 @@ class ChatDispatcher:
     async def _handle_adjudicator(self, text: str, session_id: str, bridge) -> dict:
         """Summarize adjudication results or answer questions."""
         from app.db.repositories import AdjudicationRepository
-        from app.state import state
-
         from app.scan_context import resolve_session
 
         _s = resolve_session()
@@ -634,8 +632,6 @@ class ChatDispatcher:
     async def _handle_verifier(self, text: str, session_id: str, bridge) -> dict:
         """Summarize verification status."""
         from app.db.repositories import ObservationRepository
-        from app.state import state
-
         from app.scan_context import resolve_session
 
         _s = resolve_session()
@@ -847,8 +843,6 @@ class ChatDispatcher:
 
         from app.advisors.check_proof import CheckProofAdvisor
         from app.db.repositories import ObservationRepository
-        from app.state import state
-
         from app.scan_context import resolve_session
 
         _s = resolve_session()
@@ -961,8 +955,6 @@ class ChatDispatcher:
     async def _handle_scan_analysis_advisor(self, text: str, session_id: str, bridge) -> dict:
         """Route to ScanAnalysisAdvisor for coverage and recommendation queries."""
         from app.db.repositories import AdvisorRepository
-        from app.state import state
-
         from app.scan_context import resolve_session
 
         _s = resolve_session()
@@ -1062,7 +1054,6 @@ class ChatDispatcher:
 
     async def _handle_researcher(self, text: str, session_id: str, bridge) -> dict:
         """Route to Researcher agent for enrichment (summary in chat)."""
-        from app.state import state
 
         from app.scan_context import resolve_session
 

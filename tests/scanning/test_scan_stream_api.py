@@ -41,7 +41,7 @@ async def _drain(session, gen, *, max_frames: int = 20, timeout: float = 1.0):
     while len(frames) < max_frames and time.time() < deadline:
         try:
             chunk = await asyncio.wait_for(gen.__anext__(), timeout=0.2)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             continue
         except StopAsyncIteration:
             break
@@ -165,10 +165,8 @@ async def test_db_replay_fills_observation_events(monkeypatch, clean_registry):
         assert upper_seq == 5
         # Ring contained seq 1; DB supplies observation_added at seq 2 & 4.
         return [
-            (2, "observation_added", {"id": "o2", "severity": "low",
-                                      "host": "h", "check": "c"}),
-            (4, "observation_added", {"id": "o4", "severity": "high",
-                                      "host": "h", "check": "c"}),
+            (2, "observation_added", {"id": "o2", "severity": "low", "host": "h", "check": "c"}),
+            (4, "observation_added", {"id": "o4", "severity": "high", "host": "h", "check": "c"}),
         ]
 
     monkeypatch.setattr(scan_stream_module, "_db_replay_events", fake_db_replay)
@@ -193,8 +191,13 @@ def test_merge_replay_ring_wins_on_seq_collision():
     from app.scan_events import ScanEvent
 
     ring = [
-        ScanEvent(seq=3, type="check_started", scan_id="s", ts_ns=99,
-                  payload={"scan_id": "s", "name": "ring"}),
+        ScanEvent(
+            seq=3,
+            type="check_started",
+            scan_id="s",
+            ts_ns=99,
+            payload={"scan_id": "s", "name": "ring"},
+        ),
     ]
     db = [
         (2, "observation_added", {"id": "o"}),
@@ -227,7 +230,7 @@ async def test_heartbeat_is_sse_comment(monkeypatch, clean_registry):
     for _ in range(5):
         try:
             chunk = await asyncio.wait_for(gen.__anext__(), timeout=0.3)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             break
         if chunk.startswith(b": keepalive"):
             keepalives.append(chunk)

@@ -59,8 +59,8 @@ class ScanSession:
     phase: str = "scanning"
     error_message: str | None = None
 
-    runner: "CheckLauncher | None" = None
-    guardian: "Guardian | None" = None
+    runner: CheckLauncher | None = None
+    guardian: Guardian | None = None
 
     checks_total: int = 0
     checks_completed: int = 0
@@ -79,7 +79,7 @@ class ScanSession:
     stop_requested: bool = False
 
     settings: dict = field(default_factory=dict)
-    proof_settings: "ProofOfScopeSettings | None" = None
+    proof_settings: ProofOfScopeSettings | None = None
 
     started_at: float = field(default_factory=time.time)
     completed_at: float | None = None
@@ -89,7 +89,7 @@ class ScanSession:
     # powers both so the hot ring and DB share one id space. Bus is lazy —
     # only constructed when a publisher or subscriber first needs it.
     event_seq: int = 0
-    event_bus: "ScanEventBus | None" = None
+    event_bus: ScanEventBus | None = None
 
     def __post_init__(self) -> None:
         if self.pause_event is None:
@@ -111,7 +111,7 @@ class ScanSession:
         self.event_seq += 1
         return self.event_seq
 
-    def ensure_event_bus(self) -> "ScanEventBus":
+    def ensure_event_bus(self) -> ScanEventBus:
         """Lazily construct the per-session event bus."""
         if self.event_bus is None:
             from app.scan_events import ScanEventBus
@@ -153,11 +153,7 @@ class ScanSession:
             self.completed_at = time.time()
         # Phase 51.1c: final event on the bus. Subscribers use this to
         # close cleanly; the bus itself is torn down later (51.2b TTL).
-        duration_s = (
-            self.completed_at - self.started_at
-            if self.started_at is not None
-            else None
-        )
+        duration_s = self.completed_at - self.started_at if self.started_at is not None else None
         self.publish_event(
             "scan_complete",
             {

@@ -249,10 +249,15 @@ class TestObservationRepository:
         await observation_repo.bulk_create(
             "scan-001",
             [
-                {"id": "a", "title": "x", "severity": "info", "check_name": "c",
-                 "host": "h", "event_seq": 42},
-                {"id": "b", "title": "y", "severity": "info", "check_name": "c",
-                 "host": "h"},
+                {
+                    "id": "a",
+                    "title": "x",
+                    "severity": "info",
+                    "check_name": "c",
+                    "host": "h",
+                    "event_seq": 42,
+                },
+                {"id": "b", "title": "y", "severity": "info", "check_name": "c", "host": "h"},
             ],
         )
         async with db.session() as session:
@@ -563,8 +568,7 @@ class TestCheckLogRepository:
                 {"check": "a", "event": "started", "event_seq": 1},
                 {"check": "a", "event": "completed", "event_seq": 4, "observations": 2},
                 {"check": "b", "event": "started", "event_seq": 5},
-                {"check": "b", "event": "skipped", "event_seq": 9,
-                 "error_message": "precond"},
+                {"check": "b", "event": "skipped", "event_seq": 9, "error_message": "precond"},
                 {"check": "c", "event": "started"},  # NULL seq — excluded
             ],
         )
@@ -586,19 +590,40 @@ class TestObservationRepositoryReplay:
         await observation_repo.bulk_create(
             "scan-OR",
             [
-                {"id": "a", "title": "x", "severity": "low", "check_name": "c1",
-                 "host": "h1", "event_seq": 2},
-                {"id": "b", "title": "y", "severity": "high", "check_name": "c2",
-                 "host": "h2", "event_seq": 6},
-                {"id": "c", "title": "z", "severity": "info", "check_name": "c3",
-                 "host": "h3", "event_seq": 11},
-                {"id": "d", "title": "w", "severity": "info", "check_name": "c4",
-                 "host": "h4"},  # NULL seq — excluded
+                {
+                    "id": "a",
+                    "title": "x",
+                    "severity": "low",
+                    "check_name": "c1",
+                    "host": "h1",
+                    "event_seq": 2,
+                },
+                {
+                    "id": "b",
+                    "title": "y",
+                    "severity": "high",
+                    "check_name": "c2",
+                    "host": "h2",
+                    "event_seq": 6,
+                },
+                {
+                    "id": "c",
+                    "title": "z",
+                    "severity": "info",
+                    "check_name": "c3",
+                    "host": "h3",
+                    "event_seq": 11,
+                },
+                {
+                    "id": "d",
+                    "title": "w",
+                    "severity": "info",
+                    "check_name": "c4",
+                    "host": "h4",
+                },  # NULL seq — excluded
             ],
         )
-        events = await observation_repo.get_events_since(
-            "scan-OR", last_seq=2, upper_seq=10
-        )
+        events = await observation_repo.get_events_since("scan-OR", last_seq=2, upper_seq=10)
         assert [seq for seq, _ in events] == [6]
         assert events[0][1]["severity"] == "high"
         assert events[0][1]["host"] == "h2"

@@ -221,9 +221,7 @@ class TestWriterPublishers:
         session = ScanSession(id="scan-1", target="example.com")
         sub = session.ensure_event_bus().subscribe()
 
-        writer = ObservationWriter(
-            "scan-1", repo=mock_obs_repo, batch_size=5, session=session
-        )
+        writer = ObservationWriter("scan-1", repo=mock_obs_repo, batch_size=5, session=session)
         obs = _make_obs("A", "high")
         await writer.write(obs)
 
@@ -244,12 +242,8 @@ class TestWriterPublishers:
 
         writer = CheckLogWriter("scan-1", repo=mock_log_repo, session=session)
         await writer.log_event({"check": "a", "event": "started"})
-        await writer.log_event(
-            {"check": "a", "event": "completed", "observations": 3}
-        )
-        await writer.log_event(
-            {"check": "b", "event": "skipped", "error": "precondition"}
-        )
+        await writer.log_event({"check": "a", "event": "completed", "observations": 3})
+        await writer.log_event({"check": "b", "event": "skipped", "error": "precondition"})
 
         e1 = await sub.get()
         e2 = await sub.get()

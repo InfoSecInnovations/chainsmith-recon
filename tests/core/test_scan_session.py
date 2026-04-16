@@ -65,7 +65,7 @@ def test_mark_terminal_preserves_first_completion():
 
 
 def test_terminal_statuses_const():
-    assert TERMINAL_STATUSES == frozenset({"complete", "error", "cancelled"})
+    assert frozenset({"complete", "error", "cancelled"}) == TERMINAL_STATUSES
 
 
 def test_shared_container_refs_flow_through():

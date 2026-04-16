@@ -46,7 +46,7 @@ class ObservationWriter:
         db: Database | None = None,
         batch_size: int = 10,
         scratch_dir: Path | None = None,
-        session: "ScanSession | None" = None,
+        session: ScanSession | None = None,
     ):
         self.scan_id = scan_id
         self._repo = repo or ObservationRepository(db)
@@ -163,7 +163,7 @@ class CheckLogWriter:
         scan_id: str,
         repo: CheckLogRepository | None = None,
         db: Database | None = None,
-        session: "ScanSession | None" = None,
+        session: ScanSession | None = None,
     ):
         self.scan_id = scan_id
         self._repo = repo or CheckLogRepository(db)
@@ -176,9 +176,7 @@ class CheckLogWriter:
         if self._session is not None:
             from app.db.models import CheckLog
 
-            event_type = CheckLog._SSE_EVENT_TYPE.get(
-                entry.get("event", ""), "check_started"
-            )
+            event_type = CheckLog._SSE_EVENT_TYPE.get(entry.get("event", ""), "check_started")
             payload: dict = {
                 "name": entry.get("check"),
                 "suite": entry.get("suite"),

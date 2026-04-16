@@ -1639,9 +1639,7 @@ class ChatRepository(_RepositoryBase):
             await session.commit()
             return len(rows)
 
-    async def export_chat_session(
-        self, session_id: str, scan_id: str | None = None
-    ) -> list[dict]:
+    async def export_chat_session(self, session_id: str, scan_id: str | None = None) -> list[dict]:
         """Export all messages for a chat session (including cleared).
 
         Optionally narrow to a specific scan_id within the session.

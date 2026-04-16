@@ -11,8 +11,6 @@ Covers pure infrastructure only — no publishers, no HTTP route:
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from app.scan_events import ScanEvent, ScanEventBus, SubscriberClosed

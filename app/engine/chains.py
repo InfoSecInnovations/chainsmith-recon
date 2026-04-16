@@ -913,9 +913,7 @@ async def run_chain_analysis(session: "ScanSession", llm_only: bool = False):
             else:
                 chains.append(chain)
 
-        if result.llm_status == "success":
-            session.chain_status = "complete"
-        elif result.llm_status == "not_configured":
+        if result.llm_status == "success" or result.llm_status == "not_configured":
             session.chain_status = "complete"
         elif chains:
             session.chain_status = "partial"
@@ -1059,7 +1057,7 @@ Only include chains that represent genuine combined attack opportunities. If no 
 
 
 async def detect_llm_chains(
-    state: "AppState",
+    state: "ScanSession",
     observations: list[dict],
     existing_chain_count: int = 0,
 ) -> ChainAnalysisResult:

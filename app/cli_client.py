@@ -208,9 +208,7 @@ class ChainsmithClient:
 
     # ─── Scan History ────────────────────────────────────────
 
-    def list_scans(
-        self, target: str = None, status: str = None, limit: int = 50
-    ) -> dict:
+    def list_scans(self, target: str = None, status: str = None, limit: int = 50) -> dict:
         params = {"limit": limit}
         if target:
             params["target"] = target

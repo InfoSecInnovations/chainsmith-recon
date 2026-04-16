@@ -130,7 +130,7 @@ class SwarmCoordinator:
 
     def create_tasks_from_plan(
         self,
-        session: "ScanSession",
+        session: ScanSession,
         checks: list,
         context: dict,
     ):
@@ -172,9 +172,7 @@ class SwarmCoordinator:
                 task_id = str(uuid.uuid4())
                 ps = session.proof_settings
                 window = (
-                    ps.scan_window.model_dump()
-                    if ps and ps.scan_window.is_configured()
-                    else None
+                    ps.scan_window.model_dump() if ps and ps.scan_window.is_configured() else None
                 )
                 task = SwarmTask(
                     task_id=task_id,

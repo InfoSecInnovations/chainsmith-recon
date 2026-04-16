@@ -293,9 +293,7 @@ async def run_scan(
             )
 
         # Scan advisor (local CheckLauncher only).
-        local_launcher = (
-            session.runner if session is not None and not cfg.swarm.enabled else None
-        )
+        local_launcher = session.runner if session is not None and not cfg.swarm.enabled else None
         await _run_scan_advisor(local_launcher, scan_id)
 
         # Guided Mode proactive message.

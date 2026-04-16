@@ -63,10 +63,8 @@ def _snapshot_payload(session) -> dict:
 def _format_sse(event: ScanEvent) -> bytes:
     """Encode a ScanEvent as a single SSE frame."""
     return (
-        f"id: {event.seq}\n"
-        f"event: {event.type}\n"
-        f"data: {json.dumps(event.payload, default=str)}\n\n"
-    ).encode("utf-8")
+        f"id: {event.seq}\nevent: {event.type}\ndata: {json.dumps(event.payload, default=str)}\n\n"
+    ).encode()
 
 
 def _parse_last_event_id(raw: str | None) -> int | None:
@@ -144,9 +142,7 @@ def _merge_replay(
     return [by_seq[s] for s in sorted(by_seq)]
 
 
-async def _stream(
-    session, last_event_id: int | None = None
-) -> "asyncio.AsyncIterator[bytes]":
+async def _stream(session, last_event_id: int | None = None) -> asyncio.AsyncIterator[bytes]:
     """Generator that yields SSE-framed bytes for one subscriber.
 
     On connect: emit `snapshot`, then replay any events with
@@ -171,9 +167,7 @@ async def _stream(
     db_events: list[tuple[int, str, dict]] = []
     if last_event_id is not None:
         ring_events = bus.events_since(last_event_id)
-        db_events = await _db_replay_events(
-            session.id, last_event_id, upper_seq, ring_events
-        )
+        db_events = await _db_replay_events(session.id, last_event_id, upper_seq, ring_events)
     # Initial snapshot — seq 0 so it sorts before any live events.
     snapshot = ScanEvent(
         seq=0,
@@ -196,7 +190,7 @@ async def _stream(
         while True:
             try:
                 event = await asyncio.wait_for(sub.get(), timeout=HEARTBEAT_INTERVAL_S)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Heartbeat keeps the TCP connection alive through proxies.
                 yield b": keepalive\n\n"
                 continue

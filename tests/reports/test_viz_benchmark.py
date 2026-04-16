@@ -142,7 +142,7 @@ class TestBenchmarkDataLogic:
         per_host = {}
         for host in hosts:
             obs = host_map[host]
-            counts = {s: 0 for s in cls.SEV_ORDER}
+            counts = dict.fromkeys(cls.SEV_ORDER, 0)
             checks = set()
             for f in obs:
                 sev = f.get("severity")
@@ -154,7 +154,7 @@ class TestBenchmarkDataLogic:
 
         # Weighted average
         total_weight = 0
-        weighted_sums = {s: 0 for s in cls.SEV_ORDER}
+        weighted_sums = dict.fromkeys(cls.SEV_ORDER, 0)
         for host in hosts:
             w = per_host[host]["check_count"]
             total_weight += w
@@ -176,7 +176,7 @@ class TestBenchmarkDataLogic:
     @classmethod
     def compute_historical_baseline(cls, data_points):
         """Python mirror of JS computeHistoricalBaseline."""
-        baseline = {s: 0 for s in cls.SEV_ORDER}
+        baseline = dict.fromkeys(cls.SEV_ORDER, 0)
         if not data_points:
             return baseline
         for dp in data_points:

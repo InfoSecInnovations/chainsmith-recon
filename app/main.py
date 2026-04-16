@@ -9,7 +9,7 @@ Modular web reconnaissance tool with:
 """
 
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -104,10 +104,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         reaper_task.cancel()
-        try:
+        with suppress(_asyncio.CancelledError, Exception):
             await reaper_task
-        except (_asyncio.CancelledError, Exception):
-            pass
         await close_db()
 
 

@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 DEFAULT_SUBSCRIBER_QUEUE_SIZE = 1000
@@ -73,7 +73,7 @@ class SubscriberClosed(Exception):
 class Subscription:
     """One subscriber's view of the bus. Async-iterable."""
 
-    def __init__(self, bus: "ScanEventBus", queue_size: int) -> None:
+    def __init__(self, bus: ScanEventBus, queue_size: int) -> None:
         self._bus = bus
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=queue_size)
         self._close_event = asyncio.Event()
@@ -106,14 +106,14 @@ class Subscription:
         self._closed = True
         raise SubscriberClosed()
 
-    def __aiter__(self) -> "Subscription":
+    def __aiter__(self) -> Subscription:
         return self
 
     async def __anext__(self) -> ScanEvent:
         try:
             return await self.get()
         except SubscriberClosed:
-            raise StopAsyncIteration
+            raise StopAsyncIteration from None
 
     def close(self) -> None:
         """Unsubscribe and signal end-of-stream to any waiter."""
