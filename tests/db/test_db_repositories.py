@@ -444,6 +444,37 @@ class TestChainRepository:
             c = result.scalar_one()
             assert c.observation_ids == ["a", "b"]
 
+    @pytest.mark.asyncio
+    async def test_chain_ids_are_scan_scoped(self, db, chain_repo, sample_chains):
+        """Two scans reusing the same per-scan ids ("C-001") must not collide.
+
+        Regression: chain display ids are sequential per scan, but chains.id is
+        a global primary key. Persisting a second scan's "C-001" used to raise
+        an IntegrityError that was swallowed, silently dropping every chain.
+        """
+        ided = [dict(c, id="C-001") if i == 0 else dict(c, id="C-002") for i, c in enumerate(sample_chains)]
+
+        n_a = await chain_repo.bulk_create("scan-A", ided)
+        n_b = await chain_repo.bulk_create("scan-B", ided)
+        assert n_a == 2
+        assert n_b == 2
+
+        chains_a = await chain_repo.get_chains("scan-A")
+        chains_b = await chain_repo.get_chains("scan-B")
+        # Both scans keep their own chains, exposed with the per-scan display id.
+        assert {c["id"] for c in chains_a} == {"C-001", "C-002"}
+        assert {c["id"] for c in chains_b} == {"C-001", "C-002"}
+
+    @pytest.mark.asyncio
+    async def test_bulk_create_is_idempotent(self, db, chain_repo, sample_chains):
+        """Re-running analysis for a scan replaces, not duplicates, its chains."""
+        ided = [dict(c, id=f"C-{i + 1:03d}") for i, c in enumerate(sample_chains)]
+        await chain_repo.bulk_create("scan-001", ided)
+        await chain_repo.bulk_create("scan-001", ided)
+
+        chains = await chain_repo.get_chains("scan-001")
+        assert len(chains) == 2
+
 
 # ─── CheckLogRepository Tests ───────────────────────────────────────────────
 

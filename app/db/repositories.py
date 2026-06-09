@@ -480,26 +480,37 @@ class ChainRepository(_RepositoryBase):
     """Persist attack chains."""
 
     async def bulk_create(self, scan_id: str, chains: list[dict]) -> int:
-        """Insert chains from a completed scan. Returns count inserted."""
-        if not chains:
-            return 0
+        """Insert chains from a completed scan. Returns count inserted.
 
-        rows = []
-        for c in chains:
-            chain_id = c.get("id") or uuid.uuid4().hex[:12]
-            rows.append(
-                Chain(
-                    id=chain_id,
-                    scan_id=scan_id,
-                    title=c.get("title", "Untitled Chain"),
-                    description=c.get("description"),
-                    severity=c.get("severity", "info"),
-                    source=c.get("source", "rule-based"),
-                    observation_ids=c.get("observation_ids") or c.get("observations"),
-                )
-            )
+        The row primary key is namespaced with ``scan_id`` because chain
+        display ids ("C-001", "C-002", ...) are only unique *within* a scan.
+        Without namespacing, the second scan to ever run chain analysis would
+        collide with the first scan's "C-001" on the global ``chains.id`` PK,
+        fail the whole insert, and silently persist zero chains.
+        ``_chain_to_dict`` strips the prefix so the API still returns "C-001".
 
+        Idempotent: existing chains for this scan are cleared first so
+        re-running analysis (e.g. the LLM retry path) does not collide.
+        """
         async with self._session() as session:
+            # Clear any prior chains for this scan so re-runs are idempotent.
+            await session.execute(delete(Chain).where(Chain.scan_id == scan_id))
+
+            rows = []
+            for c in chains:
+                chain_id = c.get("id") or uuid.uuid4().hex[:12]
+                rows.append(
+                    Chain(
+                        id=f"{scan_id}:{chain_id}",
+                        scan_id=scan_id,
+                        title=c.get("title", "Untitled Chain"),
+                        description=c.get("description"),
+                        severity=c.get("severity", "info"),
+                        source=c.get("source", "rule-based"),
+                        observation_ids=c.get("observation_ids") or c.get("observations"),
+                    )
+                )
+
             session.add_all(rows)
             await session.commit()
 
@@ -514,9 +525,19 @@ class ChainRepository(_RepositoryBase):
 
 
 def _chain_to_dict(c: Chain) -> dict:
-    """Convert a Chain ORM object to a JSON-safe dict."""
+    """Convert a Chain ORM object to a JSON-safe dict.
+
+    The stored primary key is namespaced as ``{scan_id}:{display_id}`` (see
+    ChainRepository.bulk_create). Strip the prefix so callers see the
+    per-scan display id ("C-001"). Legacy rows without the prefix pass
+    through unchanged.
+    """
+    display_id = c.id
+    prefix = f"{c.scan_id}:"
+    if display_id and display_id.startswith(prefix):
+        display_id = display_id[len(prefix):]
     return {
-        "id": c.id,
+        "id": display_id,
         "scan_id": c.scan_id,
         "title": c.title,
         "description": c.description,

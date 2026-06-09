@@ -848,15 +848,19 @@ async def _load_observations_for_chains(scan_id: str | None) -> list[dict]:
 
 
 async def _persist_chains(scan_id: str | None, chains: list[dict]) -> None:
-    """Persist chains to the database (best-effort)."""
+    """Persist chains to the database.
+
+    Errors are NOT swallowed: a persistence failure here must surface so the
+    scan's chain_status reflects it. Swallowing previously hid a primary-key
+    collision that silently dropped every scan's chains while still reporting
+    "complete". The sole caller (run_chain_analysis) wraps this in a handler
+    that records the failure as chain_status="error".
+    """
     if not scan_id or not chains:
         return
-    try:
-        from app.db.repositories import ChainRepository
+    from app.db.repositories import ChainRepository
 
-        await ChainRepository().bulk_create(scan_id, chains)
-    except Exception:
-        logger.warning("Failed to persist chains to DB", exc_info=True)
+    await ChainRepository().bulk_create(scan_id, chains)
 
 
 async def run_chain_analysis(session: "ScanSession", llm_only: bool = False):
