@@ -139,3 +139,56 @@ Phase 51 advertises streaming support via a `capabilities` field on
 `GET /api/v1/scan`. Once a second feature flag needs advertisement, lift
 this into a standalone `/api/v1/capabilities` endpoint so clients fetch
 flags once at page load instead of reading them off a scan response.
+
+---
+
+## Phase 56 — Component Modularization (deferred items)
+
+Phase 56 is complete (see `completed/phase56-component-modularization.md`).
+These items were explicitly deferred out of the phase and are not yet
+scheduled.
+
+### Swarm `on_critical` parity
+The launcher enforces per-check `on_critical` (check value wins, prefs
+suite-level fallback only), but the **swarm execution path was never
+wired** for this. Distributed check execution still uses the old coarse
+behavior. Bring the swarm path to parity with the launcher's per-check
+`on_critical` + transitive `skip_downstream` DAG handling.
+
+### `parameters.wordlist_file` config override
+Phase-17 Wave 2 externalized payload/wordlist data files (DNS wordlist,
+endpoint/injection lists) with an inline fallback, but Waves 1/3 never
+added a **config override** to point a check at an alternate data file.
+Add `parameters.wordlist_file` (and peers) so operators can swap data
+files via `config.yaml`/env without code changes.
+
+### Strict env for agent/advisor/gate params
+Strict env validation (`CHAINSMITH__<CHECK>__<PARAM>`, hard startup error
+on unknown/uncoercible) is **check-root-only** today — checks are the lone
+`ConfigResolver`/knob consumer. Extend to a future
+`CHAINSMITH__<AGENT>__<PARAM>` scheme if agents/advisors/gates gain an
+env-overridable knob layer.
+
+### `verifier` agent
+A dedicated verifier agent type was scoped but not built. Revisit when
+there's a concrete need for an automated observation/finding verification
+component beyond the existing advisors.
+
+### Advisor YAML/env back-compat shim
+Advisors moved their sub-config into per-advisor `config.yaml` (Phase
+56.11). If any external/legacy consumers depended on the old advisor
+config location/env vars, add a back-compat shim. Not needed unless such
+a consumer surfaces.
+
+### Comment-preserving `config.yaml` writes (ruamel)
+The save-as-default write path (`PUT /api/v1/checks/{name}/config`,
+56.17) uses PyYAML, which **does not preserve header comments** in
+`config.yaml`. If comment churn from save-as-default becomes a pain,
+switch the write path to `ruamel.yaml` for round-trip comment
+preservation.
+
+### Re-enable a disabled check from the WebUI
+The 56.15/56.17 "Show disabled checks" toggle is **display-only by
+design** — it surfaces disabled checks but cannot re-enable them. Adding a
+write path to flip `enabled: true` from the launcher UI is deferred (it
+would write `config.yaml`, same caveats as save-as-default).
