@@ -1,21 +1,27 @@
 # Module System Design
 
-> **STATUS: PARTIALLY SUPERSEDED by [`phase56-component-modularization.md`](phase56-component-modularization.md).**
+**Status:** Ready. The in-tree component shape landed in phase 56, and the concurrent-scans prerequisite is satisfied.
+**Track:** Modules
+**Depends on:** nothing open
+**Purpose:** define how Chainsmith gains capabilities, both core components and community or paid add-ins, through drop-in directories that are fully self-contained (code + config + tests + contract).
+**Size:** L
+**Last reviewed:** 2026-10-11
+
+> **What phase 56 already delivered:** the component folder shape and per-component `contract.yaml` + `config.yaml`
+> (§3, §5, §6 below) for every in-tree check, agent, advisor and gate. See
+> [`completed/phase56-component-modularization.md`](completed/phase56-component-modularization.md). Promoting an in-tree
+> component to an external module is therefore a folder move.
 >
-> The **component folder shape** and **per-component `contract.yaml` + `config.yaml`** from §3, §5, §6 have been absorbed into phase 56, which modularizes all in-tree components (checks, agents, advisors, gates) using the shape described there. Phase 56 keeps the generic role-based filenames this doc originally proposed (`check.py`, `contract.yaml`, `config.yaml` — Next.js App Router style), with the folder name as the canonical slug.
->
-> **Still future work (not in phase 56):**
+> **Remaining scope:**
 > - External `modules/` discovery root (§4.2, §4.3)
 > - UUID-based override resolution between roots (§4.1)
 > - Multi-component extension points: routes, DB models + migrations, UI slots, CLI groups, enrichers (§7, §9.1, §9.2)
-> - Manifest + lifecycle + cached index (§5, §8)
-> - Licensing and paid-tier validation (§9.3, §11 phases 2, 5)
-> - Engagements port as reference implementation (§10)
+> - Manifest, lifecycle and cached index (§5, §8)
+> - Licensing and paid-tier validation (§9.3, §11 phases 2 and 5)
 >
-> Phase 56's in-tree restructure is the foundation for this broader system — when this module system lands, in-tree components are already in the right shape, so promoting one to an external module is a folder move.
-
-**Status:** Partially superseded (see banner above). Remaining scope is future work.
-**Purpose:** Define how Chainsmith gains capabilities — core components and community/paid add-ins alike — via fine-grained, drop-in directories that are fully self-contained (code + config + tests + contract).
+> **§10 is obsolete.** It used Engagements as the reference implementation. Engagements were removed in phase 52 and
+> workspaces (phase 57 §5.4) replaced them. Pick a new reference module, e.g. [`module-scan-reporter.md`](module-scan-reporter.md),
+> which is small and touches routes, CLI and storage.
 
 ---
 
@@ -335,7 +341,7 @@ class EngagementsModule(Module):
 | **DB migrations** | `core.db.register_migrations(pkg, path)` | Each module has its own migration lineage. |
 | **Reports** | `core.reports.register_section(name, render)` | Named section renderers; templates opt in via `{% section "engagement" %}`. |
 | **UI slots** | `core.ui.contribute(slot, ...)` | See §9 for the slot model. |
-| **Scan hooks** | `core.scan.on_create/on_complete(...)` | Take `scan_id`; concurrent-aware per `concurrent-scans-design.md`. Fired in registration order; exceptions isolated. |
+| **Scan hooks** | `core.scan.on_create/on_complete(...)` | Take `scan_id`; concurrent-aware (see `concurrent-scans.md`). Fired in registration order; exceptions isolated. |
 | **Enrichers** | `core.scan.register_enricher(fn)` | Batch enrichment for list views. Avoids N+1. Generalizes beyond scans to observations, checks, chains. |
 
 **Contract philosophy:** extension points are **additive, not subtractive**. A module can add a nav item; it cannot remove one. A module can register a new adjudicator alongside the core one; replacing a core component requires an explicit `overrides:` declaration. This keeps modules composable.
@@ -463,9 +469,9 @@ Engagements is the motivating case and the reference multi-component module. It'
 
 ## 11. Phased rollout
 
-**Prerequisite:** `concurrent-scans-design.md` Phases A–C must land before Phase 1. Module API contracts are concurrent-aware (take `scan_id`) regardless. UI Phase D of concurrent-scans can run in parallel with module system Phase 1.
+**Prerequisite:** satisfied. The concurrent-scans runtime has landed (see `concurrent-scans.md`). Module API contracts take `scan_id` regardless.
 
-**POC coverage gap.** The three community POC modules (`terminal-dashboard`, `scan-reporter`, `scope-wizard`) are all CLI-only. They exercise manifest, lifecycle, CLI extension, dependency-dedup paths — but **not** routers, DB models/migrations, UI slots, scan hooks, enrichers, or the agent/gate/advisor contracts. Declaring Module API v1.0 stable requires additional modules exercising DB + UI + enricher + agent contracts (engagements, when it ports, covers much of this).
+**POC coverage gap.** The three community POC modules (`terminal-dashboard`, `scan-reporter`, `scope-wizard`) are all CLI-only. They exercise manifest, lifecycle, CLI extension, dependency-dedup paths — but **not** routers, DB models/migrations, UI slots, scan hooks, enrichers, or the agent/gate/advisor contracts. Declaring Module API v1.0 stable requires additional modules exercising DB + UI + enricher + agent contracts (engagements were originally meant to cover this; they were removed in phase 52, so another module must).
 
 1. **Phase 1 — Foundation.** Build `chainsmith.module_api`, loader, manifest+contract parsers, cached index, lazy import, failure isolation, `/api/v1/modules` endpoint. Core refactored so existing checks/agents/advisors/gates carry manifest+contract files in place (dogfooding). No external modules yet.
 2. **Phase 2 — Engagements port.** Engagements becomes `modules/engagements/`, shipped as a **pro-tier module** (not in OSS distribution). Remove engagement references from core. Requires license-validator hook to exist at least minimally (placeholder accepting any non-empty key, harden later).

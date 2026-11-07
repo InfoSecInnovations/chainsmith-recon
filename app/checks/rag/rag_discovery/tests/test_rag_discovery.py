@@ -1,6 +1,11 @@
-"""Co-located tests (Phase 56 §3) — split from test_rag.py."""
+"""Tests for rag_discovery.
+
+This check is split into probe + grade; tests route through
+`probe_and_grade()` and keep their original assertions.
+"""
 
 import json
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -58,15 +63,41 @@ def make_response(
     )
 
 
+def _stamp(response: HttpResponse, url: str | None) -> HttpResponse:
+    """Report the response as coming from the URL it was requested from, so the
+    probe records each exchange's `request_url` correctly and grade can attribute
+    it by path (§0.13)."""
+    return replace(response, url=url) if url else response
+
+
 def _build_mock_client(get_fn=None, post_fn=None):
-    """Build a mock async HTTP client with optional custom get/post handlers."""
+    """Build a mock async HTTP client with optional custom get/post handlers.
+
+    `__aexit__` returns False so a probe exception is not suppressed (§0.14), and
+    every response is stamped with the requested URL.
+    """
     mock_client = AsyncMock()
-    default_404 = make_response(status_code=404)
-    mock_client.get = get_fn or AsyncMock(return_value=default_404)
-    mock_client.post = post_fn or AsyncMock(return_value=default_404)
+
+    def _dispatch(fn):
+        async def _call(url=None, **kw):
+            resp = (await fn(url, **kw)) if fn else make_response(status_code=404)
+            return _stamp(resp, url)
+
+        return AsyncMock(side_effect=_call)
+
+    mock_client.get = _dispatch(get_fn)
+    mock_client.post = _dispatch(post_fn)
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock()
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     return mock_client
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 class TestRAGDiscoveryCheck:
@@ -129,7 +160,7 @@ class TestRAGDiscoveryCheck:
         mock_client = _build_mock_client(get_fn=mock_get)
 
         with patch("app.checks.rag.rag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         # Vector store output
@@ -176,7 +207,7 @@ class TestRAGDiscoveryCheck:
         mock_client = _build_mock_client(get_fn=mock_get)
 
         with patch("app.checks.rag.rag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         # The path matches chroma signature AND status is 200, so it is detected,
@@ -225,7 +256,7 @@ class TestRAGDiscoveryCheck:
         mock_client = _build_mock_client(get_fn=mock_get)
 
         with patch("app.checks.rag.rag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         stores = result.outputs.get("vector_stores", [])
@@ -269,7 +300,7 @@ class TestRAGDiscoveryCheck:
         mock_client = _build_mock_client(get_fn=mock_get)
 
         with patch("app.checks.rag.rag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         # The path is a pinecone signature path and status 200, so detection
@@ -316,7 +347,7 @@ class TestRAGDiscoveryCheck:
         mock_client = _build_mock_client(get_fn=mock_get, post_fn=mock_post)
 
         with patch("app.checks.rag.rag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         endpoints = result.outputs.get("rag_endpoints", [])
@@ -358,7 +389,7 @@ class TestRAGDiscoveryCheck:
         mock_client = _build_mock_client(get_fn=mock_get)
 
         with patch("app.checks.rag.rag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         # 401 endpoints should be flagged with auth_required
@@ -381,7 +412,7 @@ class TestRAGDiscoveryCheck:
         mock_client = _build_mock_client()
 
         with patch("app.checks.rag.rag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         assert len(result.outputs.get("rag_endpoints", [])) == 0

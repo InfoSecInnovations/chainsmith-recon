@@ -1,5 +1,11 @@
 # Phase 48 — Oversight: No Dark Code
 
+**Status:** Partial. Workstream C (component contracts) was delivered by the phase 56 `contract.yaml` work and `dev verify-contracts`. A, B and D remain.
+**Track:** Ops / maintainability
+**Depends on:** nothing
+**Size:** L
+**Last reviewed:** 2026-10-11
+
 ## Goal
 
 Eliminate "dark" code — modules, checks, agents, or scripts whose behavior is

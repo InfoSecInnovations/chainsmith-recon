@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp_controls.py."""
+"""Tests for mcp_shadow_tool_detection."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -7,6 +7,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_shadow_tool_detection import ShadowToolDetectionCheck
 from app.lib.http import HttpResponse
+
+
+async def run_and_grade(check, context):
+    """Run the check, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -118,7 +126,7 @@ def mock_client_factory():
     """Create a properly configured mock client with context manager."""
     mock = AsyncMock()
     mock.__aenter__ = AsyncMock(return_value=mock)
-    mock.__aexit__ = AsyncMock()
+    mock.__aexit__ = AsyncMock(return_value=False)
     return mock
 
 
@@ -134,7 +142,7 @@ class TestShadowToolDetectionCheck:
     @pytest.mark.asyncio
     async def test_flat_names_flagged(self, check, mcp_tools_context):
         """Flat tool names should be flagged as medium severity."""
-        result = await check.run(mcp_tools_context)
+        result = await run_and_grade(check, mcp_tools_context)
         assert result.success
         flat_observations = [f for f in result.observations if "flat naming" in f.title.lower()]
         assert len(flat_observations) == 1
@@ -151,7 +159,7 @@ class TestShadowToolDetectionCheck:
             ],
             "mcp_servers": [],
         }
-        result = await check.run(ctx)
+        result = await run_and_grade(check, ctx)
         info = [f for f in result.observations if f.severity == "info"]
         assert len(info) >= 1
         assert any("namespaced" in f.title.lower() for f in info)
@@ -166,7 +174,7 @@ class TestShadowToolDetectionCheck:
     @pytest.mark.asyncio
     async def test_collision_candidates_detected(self, check, mcp_tools_context):
         """read_file, send_email match common names and should appear in collision_candidates."""
-        result = await check.run(mcp_tools_context)
+        result = await run_and_grade(check, mcp_tools_context)
         shadow_risk = result.outputs.get("mcp_shadow_tool_risk", {})
         collisions = shadow_risk.get("collision_candidates", [])
         assert "read_file" in collisions
@@ -186,7 +194,7 @@ class TestShadowToolDetectionCheck:
             ],
             "mcp_servers": [],
         }
-        result = await check.run(ctx)
+        result = await run_and_grade(check, ctx)
         shadow_risk = result.outputs.get("mcp_shadow_tool_risk", {})
         collisions = shadow_risk.get("collision_candidates", [])
         assert len(collisions) == 0
@@ -202,7 +210,7 @@ class TestShadowToolDetectionCheck:
         with patch(
             "app.checks.mcp.mcp_shadow_tool_detection.check.AsyncHttpClient", return_value=mock
         ):
-            result = await check.run(mcp_tools_context)
+            result = await run_and_grade(check, mcp_tools_context)
 
         high = [f for f in result.observations if f.severity == "high"]
         assert any("list_changed" in f.title.lower() for f in high)

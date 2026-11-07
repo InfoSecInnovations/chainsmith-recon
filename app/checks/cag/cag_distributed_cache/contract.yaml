@@ -29,3 +29,14 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Inconsistent cache replication means poisoning is harder to detect and only
   affects some users
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`. One candidate per endpoint and the
+  # discriminator embeds the path (`dist-cache-<path>`), an unbounded set, so
+  # there is no `observations:` map — `grade()` places `medium` (inconsistent
+  # replication across nodes), `low` (multiple consistent nodes) or `info`;
+  # `info` is the floor.
+  default: info

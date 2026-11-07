@@ -2,7 +2,7 @@
 Advisors — deterministic, rule-based analysis components.
 
 Advisors read results and produce recommendations without LLM calls.
-See docs/future-ideas/completed/component-taxonomy.md for the taxonomy.
+See docs/component-taxonomy.md for the taxonomy.
 """
 
 __all__ = ["CheckProofAdvisor", "ScanAnalysisAdvisor", "ScanPlannerAdvisor"]

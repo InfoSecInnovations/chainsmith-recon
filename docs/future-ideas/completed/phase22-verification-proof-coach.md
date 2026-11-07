@@ -58,7 +58,7 @@ about this thing" responsibility.
 
 **Component type: Agent.** Researcher uses LLM reasoning to decide what
 additional context is useful and how to interpret results from external
-sources. See [component-taxonomy.md](completed/component-taxonomy.md) for
+sources. See [component-taxonomy.md](../../component-taxonomy.md) for
 the taxonomy.
 
 ### Core responsibilities
@@ -127,7 +127,7 @@ operator independently confirm them and build report-quality evidence.
 **Component type: Advisor.** CheckProofAdvisor generates templated
 reproduction steps from check metadata, observation evidence, and
 verification notes. It does not use LLM calls — its output is deterministic
-and rule-based. See [component-taxonomy.md](completed/component-taxonomy.md)
+and rule-based. See [component-taxonomy.md](../../component-taxonomy.md)
 for the taxonomy.
 
 ### Core responsibilities
@@ -230,7 +230,7 @@ context.
 **Component type: Agent.** Coach uses LLM reasoning to generate contextual
 explanations. Despite having no tools, it requires LLM calls and its outputs
 carry the uncertainty inherent to all agents. See
-[component-taxonomy.md](completed/component-taxonomy.md) for the taxonomy.
+[component-taxonomy.md](../../component-taxonomy.md) for the taxonomy.
 
 ### What it answers
 
@@ -340,7 +340,7 @@ The CLI wraps API calls. Pattern:
 
 ## New model entries
 
-Per the [component taxonomy](completed/component-taxonomy.md), these components
+Per the [component taxonomy](../../component-taxonomy.md), these components
 should be registered under their correct type. If Phase 26 lands
 `ComponentType`:
 

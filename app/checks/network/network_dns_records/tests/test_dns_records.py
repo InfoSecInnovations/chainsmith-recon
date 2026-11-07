@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_network_dns.py."""
+"""Tests for network_dns_records."""
 
 from unittest.mock import MagicMock, patch
 
@@ -23,6 +23,20 @@ def _resolver_side_effect(records: dict):
         raise _dns_resolver.NoAnswer()
 
     return _resolve
+
+
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 class TestDnsRecordCheckInit:
@@ -64,7 +78,7 @@ class TestDnsRecordCheckRun:
         mock_resolver.resolve.side_effect = _resolver_side_effect({"MX": [mx_rdata]})
 
         check = DnsRecordCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         assert result.success is True
         assert "mail.example.com" in result.outputs["dns_extra_hosts"]
@@ -86,7 +100,7 @@ class TestDnsRecordCheckRun:
         mock_resolver.resolve.side_effect = _resolver_side_effect({"TXT": [txt_rdata]})
 
         check = DnsRecordCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -106,7 +120,7 @@ class TestDnsRecordCheckRun:
         mock_resolver.resolve.side_effect = _resolver_side_effect({"TXT": [txt_rdata]})
 
         check = DnsRecordCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -126,7 +140,7 @@ class TestDnsRecordCheckRun:
         mock_resolver.resolve.side_effect = _resolver_side_effect({"NS": [ns_rdata]})
 
         check = DnsRecordCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -146,7 +160,7 @@ class TestDnsRecordCheckRun:
         mock_resolver.resolve.side_effect = _resolver_side_effect({"CNAME": [cname_rdata]})
 
         check = DnsRecordCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         assert "cdn.cloudfront.net" in result.outputs["dns_extra_hosts"]
         assert len(result.observations) == 1
@@ -167,7 +181,7 @@ class TestDnsRecordCheckRun:
         mock_resolver.resolve.side_effect = _resolver_side_effect({"AAAA": [aaaa_rdata]})
 
         check = DnsRecordCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -188,7 +202,7 @@ class TestDnsRecordCheckRun:
         mock_resolver.resolve.side_effect = _resolver_side_effect({"SOA": [soa_rdata]})
 
         check = DnsRecordCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -216,7 +230,7 @@ class TestDnsRecordCheckRun:
     async def test_missing_dnspython(self):
         """Check fails gracefully without dnspython."""
         check = DnsRecordCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
         assert result.success is False
         assert any("dnspython" in e for e in result.errors)
 
@@ -237,7 +251,7 @@ class TestDnsRecordCheckRun:
         )
 
         check = DnsRecordCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         assert "MX" in result.outputs["dns_extra_records"]
         assert "NS" in result.outputs["dns_extra_records"]

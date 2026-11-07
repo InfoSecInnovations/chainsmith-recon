@@ -13,19 +13,28 @@ Port scanning (port_scan) determines what's open, and service probing
 
 Real implementation: uses stdlib asyncio DNS resolution.
 For simulated environments, use SimulatedCheck with a network/*.yaml config.
+
+**Probe/grade.** `run()` resolves and records one exchange
+per candidate label; `grade()` reads the answer back off the exchange and states
+that the host exists. Like `network_wildcard_dns` this is a probe that parses
+twice (§0.11) — `target_hosts` and `dns_records` are what the rest of the
+pipeline runs on, so the probe cannot defer reading the address until a grader
+gets to it.
 """
 
 import asyncio
 import socket
 from typing import Any
 
+from app import capture
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckResult
+from app.grading import Evidence, GradeContext, Verdict
 from app.lib.datafiles import load_wordlist
-from app.lib.observations import build_observation
 
 # Common subdomain wordlist for active enumeration. The shipped list lives in
 # app/data/wordlists/subdomains.txt (operator-editable, per-engagement); this
-# inline copy is the fallback if that file is missing (Phase 56.13 / Wave 2).
+# inline copy is the fallback if that file is missing.
 _FALLBACK_WORDLIST = [
     "www",
     "api",
@@ -127,28 +136,19 @@ class DnsEnumerationCheck(BaseCheck):
             batch_results = await asyncio.gather(*tasks, return_exceptions=True)
 
             for hostname, res in zip(batch, batch_results):
-                if isinstance(res, Exception):
+                if isinstance(res, Exception) or res is None:
                     # Resolution failed — host doesn't exist or unreachable
                     continue
-                if res is None:
+                if res.error is not None or not res.response_body:
                     continue
 
-                ip = res
                 resolved_hosts.append(hostname)
-                dns_records[hostname] = ip
+                dns_records[hostname] = res.response_body
 
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
-                        title=f"Host discovered: {hostname}",
-                        description=f"DNS resolved {hostname} to {ip}",
-                        severity="info",
-                        evidence=f"Host: {hostname} | IP: {ip}",
-                        host=hostname,
-                        target=None,
-                        target_url=None,
-                    )
-                )
+                # One candidate per host, with no discriminator: the observation
+                # id stays `network_dns_enumeration-<hostname>`, which is what
+                # downstream consumers already key on.
+                result.candidates.append(self.create_candidate(host=hostname).attach(res))
 
             await asyncio.sleep(0.05)  # brief pause between batches
 
@@ -159,20 +159,55 @@ class DnsEnumerationCheck(BaseCheck):
 
         return result
 
-    async def _resolve_host(self, hostname: str) -> str | None:
+    async def _resolve_host(self, hostname: str) -> Exchange | None:
         """
-        Attempt to resolve a hostname. Returns IP address or None.
+        Attempt to resolve a hostname. Returns the recorded exchange, or None.
 
         Uses getaddrinfo via asyncio executor to avoid blocking the event loop.
+
+        The address is the exchange's `response_body` rather than a return value
+        (57.4 wave 2): the probe reads it for `dns_records` and `grade()` reads
+        the same field off the corpus, so there is one representation of the
+        resolver's answer instead of two.
         """
         loop = asyncio.get_event_loop()
+        prb = None
         try:
-            infos = await loop.run_in_executor(
-                None, lambda: socket.getaddrinfo(hostname, None, socket.AF_INET)
-            )
-            if infos:
-                ip = infos[0][4][0]
-                return ip
+            # This check runs its resolution in an executor, so it
+            # records its own evidence rather than going through the HTTP
+            # interceptor. `dns` is opt-in per protocol — see settings.py.
+            async with capture.probe("dns", hostname, request_body="A", qtype="A") as prb:
+                infos = await loop.run_in_executor(
+                    None, lambda: socket.getaddrinfo(hostname, None, socket.AF_INET)
+                )
+                if infos:
+                    prb.responded(infos[0][4][0])
         except (socket.gaierror, OSError):
             pass
-        return None
+        return prb.exchange if prb is not None else None
+
+    # ══ Grade ════════════════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """State that one host exists, from the recorded resolver answer."""
+        exchange = next((e for e in evidence if e.error is None and e.response_body), None)
+        if exchange is None:
+            return []
+
+        hostname = ctx.host
+        ip = exchange.response_body
+        return [
+            Verdict(
+                severity="info",
+                # An A record that answered is the least ambiguous evidence in
+                # the suite: either the resolver returned an address or it did
+                # not.
+                confidence=0.99,
+                title=f"Host discovered: {hostname}",
+                description=f"DNS resolved {hostname} to {ip}",
+                evidence=f"Host: {hostname} | IP: {ip}",
+                reasoning="A record returned an address for a wordlist candidate",
+                signals={"ip": ip},
+                evidence_ids=[exchange.id],
+            )
+        ]

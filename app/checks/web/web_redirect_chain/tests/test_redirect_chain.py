@@ -1,5 +1,6 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_redirect.py."""
+"""Tests for web_redirect_chain."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -48,11 +49,13 @@ def mock_client_multi(response_map=None, default=None):
     mock.__aexit__ = AsyncMock()
 
     def _lookup(method, url):
+        # The real client stamps the requested URL onto the response, and a
+        # migrated check records that URL on the exchange its grader reads.
         if response_map:
             for (m, pattern), response in response_map.items():
                 if m == method and pattern in url:
-                    return response
-        return default
+                    return replace(response, url=url)
+        return replace(default, url=url)
 
     async def dispatch_get(url, **kwargs):
         return _lookup("GET", url)
@@ -66,6 +69,20 @@ def mock_client_multi(response_map=None, default=None):
     mock._request = AsyncMock(side_effect=lambda m, url, **kw: _lookup(m, url))
 
     return mock
+
+
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
 
 
 class TestRedirectChainCheck:
@@ -85,7 +102,7 @@ class TestRedirectChainCheck:
                 default=resp(200, body="<html>Hello</html>"),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         no_https = [f for f in result.observations if "no-https-redirect" in (f.id or "")]
         assert len(no_https) == 1
@@ -110,7 +127,7 @@ class TestRedirectChainCheck:
                 default=resp(200, body="<html>Welcome</html>"),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         ok = [f for f in result.observations if "https-redirect-ok" in (f.id or "")]
         assert len(ok) == 1
@@ -130,7 +147,7 @@ class TestRedirectChainCheck:
                 default=resp(200, body="<html>Secure</html>"),
             ),
         ):
-            result = await check.check_service(https_service, {})
+            result = await probe_and_grade(check, https_service)
 
         no_https = [f for f in result.observations if "no-https-redirect" in (f.id or "")]
         assert len(no_https) == 0
@@ -147,8 +164,11 @@ class TestRedirectChainCheck:
             nonlocal call_count
             call_count += 1
             if call_count <= 4:
-                return resp(302, headers={"location": f"http://target.com:80/step{call_count}"})
-            return resp(200, body="<html>Final destination</html>")
+                return replace(
+                    resp(302, headers={"location": f"http://target.com:80/step{call_count}"}),
+                    url=url,
+                )
+            return replace(resp(200, body="<html>Final destination</html>"), url=url)
 
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
@@ -157,7 +177,7 @@ class TestRedirectChainCheck:
         mock.post = AsyncMock(return_value=resp(200))
 
         with patch("app.checks.web.web_redirect_chain.check.AsyncHttpClient", return_value=mock):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         long_chain = [f for f in result.observations if "long-chain" in (f.id or "")]
         assert len(long_chain) == 1
@@ -175,13 +195,14 @@ class TestRedirectChainCheck:
         async def short_chain(url, **kwargs):
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
-                # HTTPS redirect check
-                return resp(200, body="<html>OK</html>")
-            if call_count == 2:
-                # Chain follow - first hop
-                return resp(302, headers={"location": "http://target.com:80/final"})
-            return resp(200, body="<html>Final</html>")
+            # The root redirects once; everything else is a destination. Keyed on
+            # the URL rather than the call count, because the probe no longer
+            # fetches the root twice.
+            if url == "http://target.com:80":
+                return replace(
+                    resp(302, headers={"location": "http://target.com:80/final"}), url=url
+                )
+            return replace(resp(200, body="<html>Final</html>"), url=url)
 
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
@@ -190,7 +211,7 @@ class TestRedirectChainCheck:
         mock.post = AsyncMock(return_value=resp(200))
 
         with patch("app.checks.web.web_redirect_chain.check.AsyncHttpClient", return_value=mock):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         long_chain = [f for f in result.observations if "long-chain" in (f.id or "")]
         assert len(long_chain) == 0
@@ -215,7 +236,7 @@ class TestRedirectChainCheck:
                 default=resp(200, body="<html><body>Normal page</body></html>"),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         open_redir = [f for f in result.observations if "open-redirect" in (f.id or "")]
         assert len(open_redir) == 1
@@ -236,7 +257,7 @@ class TestRedirectChainCheck:
                 default=resp(200, body="<html><body>Page not found</body></html>"),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         open_redir = [f for f in result.observations if "open-redirect" in (f.id or "")]
         assert len(open_redir) == 0
@@ -253,7 +274,7 @@ class TestRedirectChainCheck:
                 default=resp(404, body="Not Found"),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         open_redir = [f for f in result.observations if "open-redirect" in (f.id or "")]
         assert len(open_redir) == 0
@@ -277,7 +298,7 @@ class TestRedirectChainCheck:
                 default=resp(200, body="<html><body>Home</body></html>"),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         open_redir = [f for f in result.observations if "open-redirect" in (f.id or "")]
         assert len(open_redir) == 0
@@ -291,13 +312,14 @@ class TestRedirectChainCheck:
         async def cross_domain(url, **kwargs):
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
-                # First call: HTTPS redirect check
-                return resp(200, body="<html>OK</html>")
-            if call_count == 2:
-                # Second call: chain follow - root
-                return resp(302, headers={"location": "http://cdn.target-assets.com/"})
-            return resp(200, body="<html>CDN content</html>")
+            # The root redirects off to a CDN host; everything else answers 200.
+            # Keyed on the URL rather than the call count, because the probe no
+            # longer fetches the root twice.
+            if url == "http://target.com:80":
+                return replace(
+                    resp(302, headers={"location": "http://cdn.target-assets.com/"}), url=url
+                )
+            return replace(resp(200, body="<html>CDN content</html>"), url=url)
 
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
@@ -306,7 +328,7 @@ class TestRedirectChainCheck:
         mock.post = AsyncMock(return_value=resp(200))
 
         with patch("app.checks.web.web_redirect_chain.check.AsyncHttpClient", return_value=mock):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         cross = [f for f in result.observations if "cross-domain" in (f.id or "")]
         assert len(cross) == 1
@@ -325,7 +347,7 @@ class TestRedirectChainCheck:
                 default=resp(0, error="Connection refused"),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.success
         # Connection errors should not produce redirect/open-redirect observations
@@ -345,7 +367,7 @@ class TestRedirectChainCheck:
         mock.get = AsyncMock(side_effect=OSError("Network unreachable"))
 
         with patch("app.checks.web.web_redirect_chain.check.AsyncHttpClient", return_value=mock):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert len(result.errors) >= 1
         assert "Redirect chain error" in result.errors[0]

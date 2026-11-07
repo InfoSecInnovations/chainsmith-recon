@@ -1,5 +1,12 @@
-"""Co-located tests (Phase 56 §3) — split from test_agent.py."""
+"""Tests for agent_discovery.
 
+This check is split into probe + grade; tests route through
+`probe_and_grade()` and assert on the graded observations. The mock must stamp
+the requested URL onto each response, because a migrated check attributes every
+recorded exchange to its path by that URL (an exact path match).
+"""
+
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -45,16 +52,49 @@ def make_response(
     headers: dict = None,
     body: str = "",
     error: str = None,
+    url: str = "http://agent.example.com:8080",
 ) -> HttpResponse:
     """Create a mock HTTP response."""
     return HttpResponse(
-        url="http://agent.example.com:8080",
+        url=url,
         status_code=status_code,
         headers=headers or {},
         body=body,
         elapsed_ms=100.0,
         error=error,
     )
+
+
+def _stamp(response: HttpResponse, url: str | None) -> HttpResponse:
+    return replace(response, url=url) if url else response
+
+
+def _client(get_fn=None, post_fn=None):
+    """Mock AsyncHttpClient that stamps the requested URL onto each response and
+    whose `__aexit__` returns False (so probe exceptions are not suppressed)."""
+    client = AsyncMock()
+
+    async def _get(url=None, **kw):
+        resp = (await get_fn(url, **kw)) if get_fn else make_response(status_code=404)
+        return _stamp(resp, url)
+
+    async def _post(url=None, **kw):
+        resp = (await post_fn(url, **kw)) if post_fn else make_response(status_code=404)
+        return _stamp(resp, url)
+
+    client.get = AsyncMock(side_effect=_get)
+    client.post = AsyncMock(side_effect=_post)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    return client
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 def _use_fallback_payloads():
@@ -75,7 +115,6 @@ class TestAgentDiscoveryCheck:
     @pytest.mark.asyncio
     async def test_discovers_langserve(self, check, sample_service):
         """Test LangServe agent discovery via header fingerprint."""
-        mock_client = AsyncMock()
 
         async def mock_get(url, **kwargs):
             if "/invoke" in url:
@@ -91,15 +130,10 @@ class TestAgentDiscoveryCheck:
                 )
             return make_response(status_code=404)
 
-        mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        client = _client(get_fn=mock_get)
 
-        with patch(
-            "app.checks.agent.agent_discovery.check.AsyncHttpClient", return_value=mock_client
-        ):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+        with patch("app.checks.agent.agent_discovery.check.AsyncHttpClient", return_value=client):
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         endpoints = result.outputs["agent_endpoints"]
@@ -125,7 +159,6 @@ class TestAgentDiscoveryCheck:
     @pytest.mark.asyncio
     async def test_discovers_langgraph(self, check, sample_service):
         """Test LangGraph agent discovery via header fingerprint."""
-        mock_client = AsyncMock()
 
         async def mock_get(url, **kwargs):
             if "/state" in url:
@@ -141,15 +174,10 @@ class TestAgentDiscoveryCheck:
                 )
             return make_response(status_code=404)
 
-        mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        client = _client(get_fn=mock_get)
 
-        with patch(
-            "app.checks.agent.agent_discovery.check.AsyncHttpClient", return_value=mock_client
-        ):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+        with patch("app.checks.agent.agent_discovery.check.AsyncHttpClient", return_value=client):
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         frameworks = result.outputs["agent_frameworks"]
@@ -158,7 +186,6 @@ class TestAgentDiscoveryCheck:
     @pytest.mark.asyncio
     async def test_detects_capabilities(self, check, sample_service):
         """Test capability detection (memory, tools, streaming)."""
-        mock_client = AsyncMock()
 
         async def mock_get(url, **kwargs):
             if "/invoke" in url:
@@ -173,15 +200,10 @@ class TestAgentDiscoveryCheck:
                 )
             return make_response(status_code=404)
 
-        mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        client = _client(get_fn=mock_get)
 
-        with patch(
-            "app.checks.agent.agent_discovery.check.AsyncHttpClient", return_value=mock_client
-        ):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+        with patch("app.checks.agent.agent_discovery.check.AsyncHttpClient", return_value=client):
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         endpoints = result.outputs["agent_endpoints"]
@@ -190,22 +212,16 @@ class TestAgentDiscoveryCheck:
     @pytest.mark.asyncio
     async def test_detects_auth_required(self, check, sample_service):
         """Test auth requirement detection produces endpoint with auth_required=True."""
-        mock_client = AsyncMock()
 
         async def mock_get(url, **kwargs):
             if "/invoke" in url:
                 return make_response(status_code=401, body='{"detail": "Not authenticated"}')
             return make_response(status_code=404)
 
-        mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        client = _client(get_fn=mock_get)
 
-        with patch(
-            "app.checks.agent.agent_discovery.check.AsyncHttpClient", return_value=mock_client
-        ):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+        with patch("app.checks.agent.agent_discovery.check.AsyncHttpClient", return_value=client):
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         endpoints = result.outputs.get("agent_endpoints", [])
@@ -216,16 +232,10 @@ class TestAgentDiscoveryCheck:
     @pytest.mark.asyncio
     async def test_no_agents_found(self, check, sample_service):
         """Test when no agent endpoints found."""
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=make_response(status_code=404))
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        client = _client()
 
-        with patch(
-            "app.checks.agent.agent_discovery.check.AsyncHttpClient", return_value=mock_client
-        ):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+        with patch("app.checks.agent.agent_discovery.check.AsyncHttpClient", return_value=client):
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         assert len(result.outputs.get("agent_endpoints", [])) == 0

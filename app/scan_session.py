@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 TERMINAL_STATUSES = frozenset({"complete", "error", "cancelled"})
 
-# Phase 51.2b: how long the per-scan event bus stays alive after a terminal
+# How long the per-scan event bus stays alive after a terminal
 # status. Late reconnects within this window still get `snapshot` + (once
 # 51.3's ring replay lands) the trailing `scan_complete` frame. After the
 # window, the bus is closed and reconnects fall back to REST for final state.
@@ -81,10 +81,15 @@ class ScanSession:
     settings: dict = field(default_factory=dict)
     proof_settings: ProofOfScopeSettings | None = None
 
+    # The operator's chat/session identifier, snapshotted from AppState when
+    # the scan is launched. Kept here so nothing downstream has to reach back
+    # into the global state to attribute a scan.
+    operator_session_id: str = ""
+
     started_at: float = field(default_factory=time.time)
     completed_at: float | None = None
 
-    # Phase 51.1a: monotonic per-session sequence stamped on every published
+    # Monotonic per-session sequence stamped on every published
     # event and on event_seq columns for DB-backed replay. Same counter
     # powers both so the hot ring and DB share one id space. Bus is lazy —
     # only constructed when a publisher or subscriber first needs it.
@@ -122,7 +127,7 @@ class ScanSession:
     def publish_event(self, event_type: str, payload: dict) -> int:
         """Allocate a sequence number and publish an event on the bus.
 
-        Phase 51.1c: single seam for publishers (ObservationWriter,
+        Single seam for publishers (ObservationWriter,
         CheckLogWriter, mark_terminal, etc.). Returns the stamped seq so
         callers can also write it onto DB rows (observations.event_seq,
         check_log.event_seq) — same counter, one id space.
@@ -151,7 +156,7 @@ class ScanSession:
             self.error_message = error_message
         if self.completed_at is None:
             self.completed_at = time.time()
-        # Phase 51.1c: final event on the bus. Subscribers use this to
+        # Final event on the bus. Subscribers use this to
         # close cleanly; the bus itself is torn down later (51.2b TTL).
         duration_s = self.completed_at - self.started_at if self.started_at is not None else None
         self.publish_event(

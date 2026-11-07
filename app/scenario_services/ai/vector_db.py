@@ -23,8 +23,8 @@ Usage in docker-compose.yml:
       - BRAND_NAME=Fakobanko
 """
 
+import hashlib
 import os
-import random
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
@@ -178,6 +178,12 @@ async def list_namespaces():
     return {"namespaces": ["default"]}
 
 
+def _similarity(query: str, doc_id: str) -> float:
+    """A stable pseudo-similarity in [0.7, 1.0] for one query and document."""
+    digest = hashlib.sha256(f"{query}\x00{doc_id}".encode()).digest()
+    return round(0.7 + 0.3 * int.from_bytes(digest[:4], "big") / 0xFFFFFFFF, 4)
+
+
 @app.post("/search")
 async def search(request: SearchRequest):
     """
@@ -193,13 +199,15 @@ async def search(request: SearchRequest):
 
     docs = DOCUMENTS.get(namespace, [])
 
-    # Simulate semantic search with random scores
+    # Simulate semantic search. Scores are derived from the query and document,
+    # not drawn at random, so an unchanged range answers the same question the
+    # same way — Chainsmith's reproducibility checks compare two scans of it.
     results = [
         {
             "id": d.id,
             "content": d.content,
             "metadata": d.metadata,
-            "score": round(random.uniform(0.7, 1.0), 4),
+            "score": _similarity(request.query, d.id),
         }
         for d in docs[: request.top_k]
     ]

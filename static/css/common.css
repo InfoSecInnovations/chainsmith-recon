@@ -1663,7 +1663,7 @@ input[type="datetime-local"]:focus {
     font-style: italic;
 }
 
-/* ─── Check config section in the detail modal (Phase 56.17) ───────── */
+/* ─── Check config section in the detail modal ───────── */
 .cfg-row {
     display: flex;
     align-items: center;

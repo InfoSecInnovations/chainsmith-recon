@@ -99,19 +99,18 @@ class TestPathsConfig:
         paths = PathsConfig()
         # On all platforms, these paths should have multiple components
         # (not just a bare filename)
-        assert len(paths.db_path.parts) > 1
         assert len(paths.attack_patterns.parts) > 1
+        assert len(paths.hallucinations.parts) > 1
 
-    def test_default_db_path_has_sqlite_extension(self):
-        """Default DB path uses .sqlite extension."""
-        paths = PathsConfig()
-        assert paths.db_path.suffix == ".sqlite"
+    def test_no_db_path(self):
+        """PathsConfig carries no db_path — 57.1a removed the duplicate."""
+        assert not hasattr(PathsConfig(), "db_path")
 
     def test_custom_values(self):
         """Custom values override defaults."""
-        paths = PathsConfig(db_path=Path("/custom/db.sqlite"))
+        paths = PathsConfig(attack_patterns=Path("/custom/patterns.json"))
 
-        assert paths.db_path == Path("/custom/db.sqlite")
+        assert paths.attack_patterns == Path("/custom/patterns.json")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -262,7 +261,10 @@ class TestApplyYaml:
             },
         )
 
-        assert cfg.paths.db_path == Path("/custom/db.sqlite")
+        # 57.1a: the legacy `paths.db_path` key still parses, but it now feeds
+        # the live setting rather than a second field of its own. Workspace
+        # rooting in load_config() overrides it; _apply_yaml alone does not.
+        assert cfg.storage.db_path == Path("/custom/db.sqlite")
 
     def test_apply_partial_keeps_defaults(self):
         """Partial config keeps other defaults."""
@@ -354,7 +356,7 @@ class TestApplyEnv:
         cfg = ChainsmithConfig()
         _apply_env(cfg)
 
-        assert cfg.paths.db_path == Path("/env/db.sqlite")
+        assert cfg.storage.db_path == Path("/env/db.sqlite")
 
     def test_apply_db_path_chainsmith_prefixed(self, monkeypatch):
         """CHAINSMITH_DB_PATH also works."""
@@ -363,7 +365,7 @@ class TestApplyEnv:
         cfg = ChainsmithConfig()
         _apply_env(cfg)
 
-        assert cfg.paths.db_path == Path("/chainsmith/db.sqlite")
+        assert cfg.storage.db_path == Path("/chainsmith/db.sqlite")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -482,16 +484,21 @@ class TestBackwardCompat:
         assert url == "http://localhost:4000/v1"
 
     def test_recon_db_path_attr(self, clean_env, tmp_path: Path, monkeypatch):
-        """RECON_DB_PATH module attribute works."""
+        """RECON_DB_PATH module attribute reports the live database path."""
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("CHAINSMITH_WORKSPACE", str(tmp_path / "ws"))
 
         import app.config
+        from app import workspace as ws
 
         app.config._config = None
+        ws.reset_workspace()
 
         path = app.config.RECON_DB_PATH
 
-        assert path == Path("/data/recon.sqlite")
+        # 57.1a: the shim used to read a dead `paths.db_path` default; it now
+        # reads `storage.db_path`, which the workspace roots.
+        assert path == (tmp_path / "ws" / "chainsmith.db")
 
     def test_invalid_attr_raises(self, clean_env, tmp_path: Path, monkeypatch):
         """Invalid attribute raises AttributeError."""

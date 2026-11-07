@@ -11,6 +11,7 @@ Endpoints:
 - GET    /api/scans/{id}/observations Get scan's observations
 - GET    /api/scans/{id}/chains       Get scan's chains
 - GET    /api/scans/{id}/log          Get scan's check log
+- GET    /api/scans/{id}/check-io     Get scan's captured raw I/O
 - DELETE /api/scans/{id}              Delete a scan and its data
 - GET    /api/scans/{id}/compare/{id2} Compare two scans
 - GET    /api/observations/{fp}/history Observation history across scans
@@ -28,6 +29,7 @@ from app.db.repositories import (
     ChainRepository,
     CheckLogRepository,
     ComparisonRepository,
+    EvidenceRepository,
     ObservationOverrideRepository,
     ObservationRepository,
     ScanRepository,
@@ -48,9 +50,15 @@ _scan_repo = ScanRepository()
 _observation_repo = ObservationRepository()
 _chain_repo = ChainRepository()
 _check_log_repo = CheckLogRepository()
+_evidence_repo = EvidenceRepository()
 _comparison_repo = ComparisonRepository()
 _override_repo = ObservationOverrideRepository()
 _trend_repo = TrendRepository()
+
+_INCLUDE_SUPERSEDED = (
+    "Also return rows an offline re-grade superseded. Off by default: each has a "
+    "successor row, so counting both counts one subject twice."
+)
 
 
 @router.get("/api/v1/scans")
@@ -121,13 +129,16 @@ async def get_scan_observations(
     scan_id: str,
     severity: str | None = Query(None, description="Filter by severity"),
     host: str | None = Query(None, description="Filter by host"),
+    include_superseded: bool = Query(False, description=_INCLUDE_SUPERSEDED),
 ):
     """Get observations from a historical scan."""
     scan = await _scan_repo.get_scan(scan_id)
     if scan is None:
         raise HTTPException(404, f"Scan '{scan_id}' not found")
 
-    observations = await _observation_repo.get_observations(scan_id, severity=severity, host=host)
+    observations = await _observation_repo.get_observations(
+        scan_id, severity=severity, host=host, include_superseded=include_superseded
+    )
     return {"total": len(observations), "observations": observations}
 
 
@@ -136,6 +147,7 @@ async def export_scan_observations_csv(
     scan_id: str,
     severity: str | None = Query(None, description="Filter by severity"),
     host: str | None = Query(None, description="Filter by host"),
+    include_superseded: bool = Query(False, description=_INCLUDE_SUPERSEDED),
 ):
     """Export observations from a historical scan as CSV."""
     from app.cli_formatters import observations_to_csv
@@ -144,7 +156,9 @@ async def export_scan_observations_csv(
     if scan is None:
         raise HTTPException(404, f"Scan '{scan_id}' not found")
 
-    observations = await _observation_repo.get_observations(scan_id, severity=severity, host=host)
+    observations = await _observation_repo.get_observations(
+        scan_id, severity=severity, host=host, include_superseded=include_superseded
+    )
     csv_content = observations_to_csv(observations)
     return Response(
         content=csv_content,
@@ -156,13 +170,18 @@ async def export_scan_observations_csv(
 
 
 @router.get("/api/v1/scans/{scan_id}/observations/by-host")
-async def get_scan_observations_by_host(scan_id: str):
+async def get_scan_observations_by_host(
+    scan_id: str,
+    include_superseded: bool = Query(False, description=_INCLUDE_SUPERSEDED),
+):
     """Get observations from a historical scan grouped by host."""
     scan = await _scan_repo.get_scan(scan_id)
     if scan is None:
         raise HTTPException(404, f"Scan '{scan_id}' not found")
 
-    hosts = await _observation_repo.get_observations_by_host(scan_id)
+    hosts = await _observation_repo.get_observations_by_host(
+        scan_id, include_superseded=include_superseded
+    )
     return {"target": scan["target_domain"], "hosts": hosts}
 
 
@@ -193,6 +212,77 @@ async def get_scan_log(scan_id: str):
 
     log = await _check_log_repo.get_log(scan_id)
     return {"log": log}
+
+
+@router.get("/api/v1/scans/{scan_id}/check-io")
+async def get_scan_check_io(
+    scan_id: str,
+    check: str | None = Query(None, description="Filter to one check"),
+    protocol: str | None = Query(None, description="Filter to one protocol"),
+    limit: int = Query(200, ge=1, le=2000, description="Maximum exchanges to return"),
+    unredacted: bool = Query(
+        False,
+        description="Return secrets in the clear. Privileged, and logged.",
+    ),
+):
+    """
+    Raw captured I/O for one scan — the phase-47 read surface, on phase-57 data.
+
+    This is the first place evidence reaches a human, so it is the first place
+    redaction earns its keep: `Authorization`, `Cookie`, known token shapes and
+    detected secrets are masked unless `unredacted=true` is asked for
+    explicitly, which is a privileged action and is logged as one (design §5.3).
+
+    The index is queried for ordering and filtering; the bodies come from the
+    documents on disk. A corpus whose index write failed is still readable —
+    the documents are the evidence and the table is an index over them — so an
+    empty index falls back to the store directory.
+    """
+    from app.capture.curl import to_curl
+    from app.capture.redaction import redact
+    from app.capture.store import EvidenceStore
+
+    scan = await _scan_repo.get_scan(scan_id)
+    if scan is None:
+        raise HTTPException(404, f"Scan '{scan_id}' not found")
+
+    store = EvidenceStore()
+    rows = await _evidence_repo.get_for_scan(
+        scan_id, check_name=check, protocol=protocol, limit=limit
+    )
+
+    if rows:
+        exchanges = [
+            loaded for row in rows if (loaded := store.read(scan_id, row["id"])) is not None
+        ]
+    else:
+        # Files-only corpus: filter in Python rather than pretend there is none.
+        exchanges = [
+            e
+            for e in store.read_scan(scan_id)
+            if (check is None or e.check_name == check)
+            and (protocol is None or e.protocol == protocol)
+        ][:limit]
+
+    if unredacted:
+        # §5.3(3): unredacted access is an explicit privileged action, and is
+        # itself logged. Recorded at warning so it survives a default log level.
+        logger.warning(
+            "Unredacted evidence read for scan %s (check=%s, protocol=%s, %d exchanges)",
+            scan_id,
+            check or "*",
+            protocol or "*",
+            len(exchanges),
+        )
+    else:
+        exchanges = [redact(e) for e in exchanges]
+
+    return {
+        "scan_id": scan_id,
+        "redacted": not unredacted,
+        "count": len(exchanges),
+        "exchanges": [{**e.to_dict(), "curl": to_curl(e)} for e in exchanges],
+    }
 
 
 @router.delete("/api/v1/scans/{scan_id}")

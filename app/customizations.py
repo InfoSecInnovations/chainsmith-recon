@@ -1,7 +1,7 @@
 """
 app/customizations.py - User Severity Override System
 
-Manages severity overrides stored in ~/.chainsmith/customizations/:
+Manages severity overrides stored in the active workspace's `customizations/`:
   - severity_overrides.yaml: pre-run policy overrides (check-level, check+title-level)
   - scan_overrides/<scan_id>.yaml: post-run per-scan adjustments
 
@@ -42,14 +42,23 @@ logger = logging.getLogger(__name__)
 
 
 def _customizations_dir() -> Path:
-    """Return ~/.chainsmith/customizations/, creating it on first access."""
-    d = Path.home() / ".chainsmith" / "customizations"
+    """
+    Return the active workspace's `customizations/`, creating it on first access.
+
+    Phase 57.1a moved this out of `~/.chainsmith/`. A severity override is a
+    statement about one engagement — "this client accepts missing HSTS" — so it
+    belongs to the workspace, not to the machine. Two workspaces holding
+    contradictory overrides is correct behaviour, not a conflict.
+    """
+    from app.workspace import get_workspace
+
+    d = get_workspace().customizations_dir
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def _scan_overrides_dir() -> Path:
-    """Return ~/.chainsmith/customizations/scan_overrides/, creating it on first access."""
+    """Return the workspace's `customizations/scan_overrides/`, creating it on first access."""
     d = _customizations_dir() / "scan_overrides"
     d.mkdir(parents=True, exist_ok=True)
     return d

@@ -7,13 +7,13 @@ LLM and ML endpoint discovery, analysis, and attack surface mapping.
 
 ## Phase 1 — Service-level (no chat endpoint dependency)
 
-### llm_endpoint_discovery
+### ai_llm_endpoint_discovery
 
 **Discover LLM chat/completion endpoints.**
 
 | Property | Value |
 |----------|-------|
-| Conditions | `services is truthy` |
+| Conditions | `services is truthy` and `services_probed is truthy` |
 | Produces | `chat_endpoints`, `completion_endpoints` |
 
 Probes for OpenAI-compatible, Anthropic, and custom LLM endpoints.
@@ -25,13 +25,13 @@ Probes for OpenAI-compatible, Anthropic, and custom LLM endpoints.
 
 ---
 
-### embedding_endpoint_discovery
+### ai_embedding_endpoint_discovery
 
 **Discover embedding API endpoints.**
 
 | Property | Value |
 |----------|-------|
-| Conditions | `services is truthy` |
+| Conditions | `services is truthy` and `services_probed is truthy` |
 | Produces | `embedding_endpoints` |
 
 #### Observations
@@ -40,13 +40,13 @@ Probes for OpenAI-compatible, Anthropic, and custom LLM endpoints.
 
 ---
 
-### model_info_check
+### ai_model_info_check
 
 **Extract model information from endpoints.**
 
 | Property | Value |
 |----------|-------|
-| Conditions | `services is truthy` |
+| Conditions | `services is truthy` and `services_probed is truthy` |
 | Produces | `model_info` |
 
 Identifies model names, versions, and capabilities.
@@ -64,7 +64,7 @@ Identifies model names, versions, and capabilities.
 
 | Property | Value |
 |----------|-------|
-| Conditions | `services is truthy` |
+| Conditions | `services is truthy` and `services_probed is truthy` |
 | Produces | `ai_framework_{port}` |
 
 Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
@@ -93,7 +93,7 @@ Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
 
 ---
 
-### content_filter_check
+### ai_content_filter_check
 
 **Test content filtering and safety guardrails.**
 
@@ -109,7 +109,7 @@ Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
 
 ---
 
-### rate_limit_check
+### ai_rate_limit_check
 
 **Test rate limiting on LLM endpoints.**
 
@@ -125,7 +125,7 @@ Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
 
 ---
 
-### context_window_check
+### ai_context_window_check
 
 **Probe context window limits.**
 
@@ -140,7 +140,7 @@ Detects LangChain, LlamaIndex, Hugging Face, vLLM, Ollama, etc.
 
 ---
 
-### auth_bypass
+### ai_auth_bypass
 
 **Test AI endpoint authentication for bypass vulnerabilities.**
 
@@ -160,7 +160,7 @@ Tests no-auth, empty bearer, default API keys (sk-test, demo, EMPTY, test-key), 
 
 ---
 
-### model_enumeration
+### ai_model_enumeration
 
 **Enumerate available models via the model parameter.**
 
@@ -179,7 +179,7 @@ Tests provider-specific model names (OpenAI, Anthropic, Meta, Mistral) plus gene
 
 ---
 
-### api_parameter_injection
+### ai_api_parameter_injection
 
 **Test for mass assignment via extra API parameters.**
 
@@ -200,7 +200,7 @@ Tests temperature, max_tokens, tools, logprobs, user, system, response_format, s
 
 ---
 
-### streaming_analysis
+### ai_streaming_analysis
 
 **Test streaming support and filter bypass via SSE.**
 
@@ -219,7 +219,7 @@ Checks if stream=true produces SSE responses, then tests whether streaming bypas
 
 ---
 
-### system_prompt_injection
+### ai_system_prompt_injection
 
 **Test if client-supplied system messages override service prompts.**
 
@@ -237,7 +237,7 @@ Checks if stream=true produces SSE responses, then tests whether streaming bypas
 
 ---
 
-### response_caching
+### ai_response_caching
 
 **Detect response caching by comparing identical requests.**
 
@@ -258,7 +258,7 @@ Sends identical requests, compares content and timing, checks cache headers, tes
 
 ## Phase 2E — Embedding endpoint-level
 
-### embedding_extraction
+### ai_embedding_extraction
 
 **Analyze embedding endpoints for model identification and metadata leakage.**
 
@@ -280,7 +280,7 @@ Captures vectors, maps dimensionality to known models (ada-002=1536, BERT=768, M
 
 ## Phase 3 — Depends on Phase 2 results
 
-### tool_discovery
+### ai_tool_discovery
 
 **Enumerate tools/functions available to LLM.**
 
@@ -296,7 +296,7 @@ Captures vectors, maps dimensionality to known models (ada-002=1536, BERT=768, M
 
 ---
 
-### prompt_leakage
+### ai_prompt_leakage
 
 **Test for system prompt leakage.**
 
@@ -315,7 +315,7 @@ Uses various techniques to extract system prompts.
 
 ---
 
-### model_behavior_fingerprint
+### ai_model_behavior_fingerprint
 
 **Identify the actual underlying model via behavioral signatures.**
 
@@ -334,7 +334,7 @@ Tests self-identification, knowledge cutoff, strawberry counting, creator attrib
 
 ---
 
-### output_format_manipulation
+### ai_output_format_manipulation
 
 **Test if model output format can be controlled for downstream injection.**
 
@@ -351,7 +351,7 @@ Tests self-identification, knowledge cutoff, strawberry counting, creator attrib
 
 ---
 
-### conversation_history_leak
+### ai_conversation_history_leak
 
 **Test for cross-session conversation history leakage.**
 
@@ -370,7 +370,7 @@ Plants a canary string, then probes for it from a "different session". Also chec
 
 ---
 
-### training_data_extraction
+### ai_training_data_extraction
 
 **Test for memorization by probing with known text prefixes and repetition attacks.**
 
@@ -389,7 +389,7 @@ Completion probes with public domain text, repetition attacks that may trigger d
 
 ---
 
-### adversarial_input
+### ai_adversarial_input
 
 **Test input handling with adversarial formatting and unicode attacks.**
 
@@ -410,7 +410,7 @@ Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null by
 
 ## Phase 4 — Depends on Phase 2-3, uses filter/tool knowledge
 
-### jailbreak_testing
+### ai_jailbreak_testing
 
 **Test content filter bypass techniques.**
 
@@ -429,7 +429,7 @@ Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null by
 
 ---
 
-### multi_turn_injection
+### ai_multi_turn_injection
 
 **Multi-message prompt extraction via graduated trust-building.**
 
@@ -449,7 +449,7 @@ Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null by
 
 ---
 
-### input_format_injection
+### ai_input_format_injection
 
 **Test if format markers in user input are interpreted as role boundaries.**
 
@@ -468,7 +468,7 @@ Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null by
 
 ---
 
-### guardrail_consistency
+### ai_guardrail_consistency
 
 **Test content filter consistency across languages, encodings, and phrasings.**
 
@@ -488,13 +488,13 @@ Tests homoglyphs (Cyrillic a), zero-width spaces/joiners, RTL overrides, null by
 
 ---
 
-### function_calling_abuse
+### ai_function_calling_abuse
 
 **Probe discovered tools for invocation, parameter injection, and privilege escalation.**
 
 | Property | Value |
 |----------|-------|
-| Conditions | `chat_endpoints is truthy`, `discovered_tools is truthy` |
+| Conditions | `chat_endpoints is truthy` and `discovered_tools is truthy` |
 | Produces | `function_abuse_{port}` |
 
 Tests direct invocation, SQL-injection-style parameter injection, permission escalation, tool chaining, and probes for undocumented tools.
@@ -508,7 +508,7 @@ Tests direct invocation, SQL-injection-style parameter injection, permission esc
 
 ---
 
-### token_cost_exhaustion
+### ai_token_cost_exhaustion
 
 **Test if expensive operations can be triggered beyond rate limiting.**
 

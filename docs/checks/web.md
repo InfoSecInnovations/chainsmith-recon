@@ -7,7 +7,7 @@ HTTP analysis, technology fingerprinting, and web vulnerability detection.
 
 ## Phase 1 — Passive Analysis (depends on services)
 
-### header_analysis
+### web_header_analysis
 
 **Analyze HTTP headers for technology disclosure and security misconfigurations.**
 
@@ -31,7 +31,7 @@ Checks for missing security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-
 
 ---
 
-### cookie_security
+### web_cookie_security
 
 **Check cookies for missing Secure, HttpOnly, SameSite attributes.**
 
@@ -53,7 +53,7 @@ Parses Set-Cookie headers and flags missing security attributes on session and a
 
 ---
 
-### cors_check
+### web_cors
 
 **Test for overly permissive CORS configurations.**
 
@@ -74,7 +74,7 @@ Sends OPTIONS requests with attacker-controlled Origin headers (evil.attacker.co
 
 ---
 
-### robots_txt
+### web_robots_txt
 
 **Retrieve robots.txt and identify potentially sensitive paths.**
 
@@ -92,7 +92,7 @@ Fetches robots.txt and searches disallowed paths for sensitive patterns: admin, 
 
 ---
 
-### waf_detection
+### web_waf_detection
 
 **Detect WAF/CDN from headers, cookies, and error page signatures.**
 
@@ -110,7 +110,7 @@ Multi-method detection via response headers, cookie signatures, server header pa
 
 ---
 
-### auth_detection
+### web_auth_detection
 
 **Detect authentication mechanisms (Basic, Bearer, OAuth, login forms).**
 
@@ -131,7 +131,7 @@ Probes for WWW-Authenticate headers, OAuth/OIDC endpoints, login forms, and unau
 
 ---
 
-### favicon
+### web_favicon
 
 **Download favicon and fingerprint framework via MD5 hash comparison.**
 
@@ -148,7 +148,7 @@ Downloads /favicon.ico and extracts favicon URLs from HTML link tags. Matches MD
 
 ---
 
-### http2_detection
+### web_http2_detection
 
 **Check for HTTP/2 (ALPN) and HTTP/3 (Alt-Svc) protocol support.**
 
@@ -167,7 +167,7 @@ Detects HTTP/2 via TLS ALPN negotiation, HTTP/3 via Alt-Svc header, and HTTP/2c 
 
 ## Phase 2 — Active Probing (depends on Phase 1)
 
-### path_probe
+### web_path_probe
 
 **Check for common admin panels, config files, and sensitive endpoints.**
 
@@ -187,7 +187,7 @@ Probes 50+ common paths including admin endpoints, config files, VCS files, back
 
 ---
 
-### sitemap
+### web_sitemap
 
 **Parse sitemap.xml to discover paths missed by wordlist probing.**
 
@@ -206,7 +206,7 @@ Fetches and parses XML sitemaps, follows sitemap index files (up to 10 sub-sitem
 
 ---
 
-### error_page
+### web_error_page
 
 **Trigger error responses and fingerprint framework from error pages.**
 
@@ -227,7 +227,7 @@ Triggers 404, 405, and 500 errors and matches against 20+ framework signatures: 
 
 ---
 
-### openapi_discovery
+### web_openapi_discovery
 
 **Find exposed API documentation and extract endpoint information.**
 
@@ -246,9 +246,9 @@ Searches 13+ common paths for OpenAPI/Swagger specs. Parses JSON specs to extrac
 
 ---
 
-## Phase 3 — Critical Observations (depends on services, uses path_probe output)
+## Phase 3 — Critical Observations (depends on services, uses web_path_probe output)
 
-### webdav_check
+### web_webdav
 
 **Probe for WebDAV methods that allow file upload or directory listing.**
 
@@ -267,7 +267,7 @@ Tests PROPFIND, MKCOL, and PUT methods. Creates test file on PUT success and cle
 
 ---
 
-### vcs_exposure
+### web_vcs_exposure
 
 **Assess depth of exposed .git/.svn/.hg repositories.**
 
@@ -287,7 +287,7 @@ Deep check for VCS metadata. Probes .git/config, .git/HEAD, .git/COMMIT_EDITMSG,
 
 ---
 
-### config_exposure
+### web_config_exposure
 
 **Parse accessible config files (.env, config.json, etc.) for secrets.**
 
@@ -305,7 +305,7 @@ Analyzes config files for 16+ secret patterns: LLM provider keys (OpenAI, Anthro
 
 ---
 
-### directory_listing
+### web_directory_listing
 
 **Check for enabled directory listing (autoindex) on discovered paths.**
 
@@ -314,7 +314,7 @@ Analyzes config files for 16+ secret patterns: LLM provider keys (OpenAI, Anthro
 | Conditions | `services is truthy` |
 | Produces | `directory_listing_observations` |
 
-Detects Apache, nginx, IIS, and Python autoindex signatures. Checks root and common paths plus path_probe results. Identifies sensitive file extensions (.py, .env, .json, .key, .pem, .sql, .db, .pt, .onnx, .pkl).
+Detects Apache, nginx, IIS, and Python autoindex signatures. Checks root and common paths plus web_path_probe results. Identifies sensitive file extensions (.py, .env, .json, .key, .pem, .sql, .db, .pt, .onnx, .pkl).
 
 #### Observations
 
@@ -323,7 +323,7 @@ Detects Apache, nginx, IIS, and Python autoindex signatures. Checks root and com
 
 ---
 
-### default_creds
+### web_default_creds
 
 **Test admin panels for default credentials and unauthenticated access.**
 
@@ -342,7 +342,7 @@ Tests discovered admin panels for unauthenticated access and 6 default credentia
 
 ---
 
-### debug_endpoints
+### web_debug_endpoints
 
 **Analyze exposed debug/actuator/status endpoints for sensitive data.**
 
@@ -365,7 +365,7 @@ Probes /debug, /\_\_debug\_\_/, /actuator and sub-endpoints, /server-status, /ph
 
 ## Phase 4 — Advanced Analysis (depends on Phase 2-3)
 
-### redirect_chain
+### web_redirect_chain
 
 **Follow redirect chains and check for HTTP->HTTPS, open redirects, excessive hops.**
 
@@ -386,7 +386,7 @@ Follows up to 10 redirect hops. Tests 8 common redirect parameter paths for open
 
 ---
 
-### ssrf_indicator
+### web_ssrf_indicator
 
 **Detect parameters that accept URLs — potential SSRF vectors.**
 
@@ -405,7 +405,7 @@ Identifies URL-accepting parameters via OpenAPI spec analysis, discovered path q
 
 ---
 
-### mass_assignment
+### web_mass_assignment
 
 **Test REST APIs for mass assignment by sending extra fields in requests.**
 
@@ -425,7 +425,7 @@ Tests up to 5 endpoints with 21 injection fields across privilege (is_admin, rol
 
 ---
 
-### hsts_preload
+### web_hsts_preload
 
 **Check if domain is on the HSTS preload list (Chromium).**
 
@@ -444,7 +444,7 @@ Verifies HSTS preload status via hstspreload.org API. Checks for preload directi
 
 ---
 
-### sri_check
+### web_sri
 
 **Verify external resources use Subresource Integrity (SRI) hashes.**
 

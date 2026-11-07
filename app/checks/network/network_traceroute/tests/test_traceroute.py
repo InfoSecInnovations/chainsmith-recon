@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_network_traceroute.py."""
+"""Tests for network_traceroute."""
 
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +11,20 @@ from app.checks.network.network_traceroute.check import CDN_PATTERNS, MAX_TARGET
 def _hop(ttl, ip=None, hostname=None, rtt_ms=None):
     """Build a hop-info dict matching _probe_hop's return shape."""
     return {"hop": ttl, "ip": ip, "hostname": hostname, "rtt_ms": rtt_ms}
+
+
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 class TestTracerouteCheckInit:
@@ -49,14 +63,14 @@ class TestTracerouteCheckRun:
     @pytest.mark.asyncio
     async def test_no_dns_records_fails(self):
         check = TracerouteCheck()
-        result = await check.run({"dns_records": {}})
+        result = await probe_and_grade(check, {"dns_records": {}})
         assert result.success is False
         assert any("dns_records" in e.lower() for e in result.errors)
 
     @pytest.mark.asyncio
     async def test_empty_context_fails(self):
         check = TracerouteCheck()
-        result = await check.run({})
+        result = await probe_and_grade(check, {})
         assert result.success is False
 
     @pytest.mark.asyncio
@@ -81,7 +95,7 @@ class TestTracerouteCheckRun:
             patch("app.checks.network.network_traceroute.check.asyncio.sleep", return_value=None),
         ):
             context = {"dns_records": {"www.example.com": target_ip}}
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.success is True
 
@@ -128,7 +142,7 @@ class TestTracerouteCheckRun:
                     "api.example.com": target_ip,  # same IP
                 },
             }
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.success is True
         td = result.outputs["traceroute_data"]
@@ -150,7 +164,7 @@ class TestTracerouteCheckRun:
             patch("app.checks.network.network_traceroute.check.asyncio.sleep", return_value=None),
         ):
             dns_records = {f"host{i}.example.com": f"10.0.0.{i}" for i in range(20)}
-            result = await check.run({"dns_records": dns_records})
+            result = await probe_and_grade(check, {"dns_records": dns_records})
 
         assert result.success is True
         assert len(result.outputs["traceroute_data"]) <= MAX_TARGETS
@@ -169,7 +183,9 @@ class TestTracerouteCheckRun:
             patch.object(check, "_probe_hop", side_effect=fake_probe_hop),
             patch("app.checks.network.network_traceroute.check.asyncio.sleep", return_value=None),
         ):
-            result = await check.run({"dns_records": {"blocked.example.com": target_ip}})
+            result = await probe_and_grade(
+                check, {"dns_records": {"blocked.example.com": target_ip}}
+            )
 
         assert result.success is True
         td = result.outputs["traceroute_data"]
@@ -232,7 +248,7 @@ class TestTracerouteObservations:
             patch.object(check, "_probe_hop", side_effect=fake_probe_hop),
             patch("app.checks.network.network_traceroute.check.asyncio.sleep", return_value=None),
         ):
-            result = await check.run({"dns_records": {"www.example.com": target_ip}})
+            result = await probe_and_grade(check, {"dns_records": {"www.example.com": target_ip}})
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -264,7 +280,9 @@ class TestTracerouteObservations:
             patch.object(check, "_probe_hop", side_effect=fake_probe_hop),
             patch("app.checks.network.network_traceroute.check.asyncio.sleep", return_value=None),
         ):
-            result = await check.run({"dns_records": {"cdn-site.example.com": target_ip}})
+            result = await probe_and_grade(
+                check, {"dns_records": {"cdn-site.example.com": target_ip}}
+            )
 
         # Two observations: route summary + CDN
         assert len(result.observations) == 2
@@ -289,7 +307,7 @@ class TestTracerouteObservations:
             patch.object(check, "_sync_trace_route", side_effect=Exception("boom")),
             patch("app.checks.network.network_traceroute.check.asyncio.sleep", return_value=None),
         ):
-            result = await check.run({"dns_records": {"fail.example.com": "10.0.0.1"}})
+            result = await probe_and_grade(check, {"dns_records": {"fail.example.com": "10.0.0.1"}})
 
         assert result.success is True
         assert len(result.observations) == 0
@@ -313,7 +331,7 @@ class TestTracerouteEdgeCases:
             patch.object(check, "_probe_hop", side_effect=fake_probe_hop),
             patch("app.checks.network.network_traceroute.check.asyncio.sleep", return_value=None),
         ):
-            result = await check.run({"dns_records": {"local-server": target_ip}})
+            result = await probe_and_grade(check, {"dns_records": {"local-server": target_ip}})
 
         assert result.success is True
         td = result.outputs["traceroute_data"]

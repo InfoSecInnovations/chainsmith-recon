@@ -28,3 +28,18 @@ references:
 - OWASP LLM Top 10 - LLM01 Prompt Injection
 - OWASP LLM Top 10 - LLM07 Insecure Plugin Design
 reason: Tools often execute with the AI service's permissions rather than the user's
+severity:
+  model: contextual
+  # Attack-compliance: whether a tool was actually INVOKED or ABUSED (not merely
+  # described) is a judgement the evidence places, so this stays `model: contextual`
+  # and is in phase 58's grading scope (§7.2). Migrated to probe/grade in 57.4
+  # wave 3: rule logic runs inside grade() at GradingTier.RULE; grade() reads the
+  # discovered_tools list from GradeContext.context to reconstruct which (tool,
+  # probe) each recorded prompt was.
+  #
+  # Confidence is low across the board (0.4-0.45) and says why: the invocation and
+  # boundary signals are phrase lists, and a model NARRATING "I would run this as
+  # administrator" or "result: ..." matches the same words as one that actually
+  # executed a tool. Only the LLM tier (phase 58) can tell narration from execution.
+  default: medium
+  range: [info, critical]

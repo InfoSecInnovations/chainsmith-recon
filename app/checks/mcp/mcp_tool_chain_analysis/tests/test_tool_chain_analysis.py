@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp_controls.py."""
+"""Tests for mcp_tool_chain_analysis."""
 
 from unittest.mock import AsyncMock
 
@@ -7,6 +7,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_tool_chain_analysis import ToolChainAnalysisCheck
 from app.lib.http import HttpResponse
+
+
+async def run_and_grade(check, context):
+    """Run the check, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -118,7 +126,7 @@ def mock_client_factory():
     """Create a properly configured mock client with context manager."""
     mock = AsyncMock()
     mock.__aenter__ = AsyncMock(return_value=mock)
-    mock.__aexit__ = AsyncMock()
+    mock.__aexit__ = AsyncMock(return_value=False)
     return mock
 
 
@@ -134,7 +142,7 @@ class TestToolChainAnalysisCheck:
     @pytest.mark.asyncio
     async def test_detects_data_exfil_chain(self, check, mcp_tools_context):
         """read_file + send_email = data exfil chain."""
-        result = await check.run(mcp_tools_context)
+        result = await run_and_grade(check, mcp_tools_context)
         assert result.success
         assert "mcp_dangerous_chains" in result.outputs
         chains = result.outputs["mcp_dangerous_chains"]
@@ -150,7 +158,7 @@ class TestToolChainAnalysisCheck:
     @pytest.mark.asyncio
     async def test_detects_rce_chain(self, check, mcp_tools_context):
         """read_file + execute_command = file access + code exec chain."""
-        result = await check.run(mcp_tools_context)
+        result = await run_and_grade(check, mcp_tools_context)
         critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) >= 1
         chain_titles = [f.title for f in critical]
@@ -165,7 +173,7 @@ class TestToolChainAnalysisCheck:
                 {"name": "format_text", "description": "Format text", "service_host": "test"},
             ]
         }
-        result = await check.run(ctx)
+        result = await run_and_grade(check, ctx)
         assert result.success
         # Should get the "no dangerous chains" info observation
         info = [f for f in result.observations if f.severity == "info"]

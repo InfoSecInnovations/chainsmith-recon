@@ -1,5 +1,5 @@
 """
-app/scan_events.py - Per-scan event bus for SSE streaming (Phase 51.1a).
+app/scan_events.py - Per-scan event bus for SSE streaming.
 
 Pure infrastructure: defines the ScanEvent payload and a ScanEventBus that
 per-session publishers push to and HTTP stream handlers subscribe to.
@@ -30,7 +30,7 @@ from typing import Any
 
 DEFAULT_SUBSCRIBER_QUEUE_SIZE = 1000
 
-# Phase 51.3a: hot ring buffer size for status/check events. Observation
+# Hot ring buffer size for status/check events. Observation
 # events are never stored here — they replay from the DB (design §4) so
 # ring memory stays bounded regardless of scan size.
 DEFAULT_RING_SIZE = 50

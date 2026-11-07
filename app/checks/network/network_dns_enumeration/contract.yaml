@@ -26,3 +26,12 @@ references:
 - https://attack.mitre.org/techniques/T1590/002/
 reason: DNS enumeration reveals subdomains and services in the target's infrastructure,
   expanding attack surface visibility.
+severity:
+  model: fixed
+  # Categorical: either the resolver returned an address or it did not, so no
+  # grader above the rule tier is ever called. Migrated to probe/grade in 57.4
+  # wave 2 with no `observations:` map — one undiscriminated observation per
+  # resolved host, so `default` *is* its per-observation severity. A host existing
+  # is a fact about the attack surface, not a weakness: `info` is floor and
+  # ceiling both.
+  default: info

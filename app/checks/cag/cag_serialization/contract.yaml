@@ -30,3 +30,15 @@ references:
 - 'CWE-502: Deserialization of Untrusted Data'
 reason: Pickle deserialization in cache backends enables arbitrary code execution;
   direct backend access enables cache manipulation
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`. The `serial-format-<path>` discriminator
+  # embeds the endpoint path (an unbounded set), so there is no `observations:`
+  # map — `grade()` places the severity per test: redis backend
+  # info→medium→high→critical (no-auth escalates when redis_cache is already
+  # fingerprinted, read from scan context), serialization format
+  # medium→high→critical, path traversal high. `info` is the floor.
+  default: info

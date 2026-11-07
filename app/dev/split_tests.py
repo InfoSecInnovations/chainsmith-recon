@@ -1,5 +1,5 @@
 """
-app/dev/split_tests.py - Co-locate tests into component folders (Phase 56 §3/§9).
+app/dev/split_tests.py - Co-locate tests into component folders.
 
 Splits a shared test file (e.g. tests/checks/test_web_api.py) so each test class
 moves next to the check it exercises (app/checks/<suite>/<check>/tests/). A class
@@ -120,8 +120,8 @@ def plan_split(source: Path, checks_root: Path = Path("app/checks")) -> SplitPla
 
 
 def apply_split(plan: SplitPlan, dry_run: bool = False) -> SplitPlan:
-    header = f'"""Co-located tests (Phase 56 §3) — split from {plan.source.name}."""\n\n'
     for folder, classes in plan.per_check.items():
+        header = f'"""Tests for {folder.name}."""\n\n'
         tests_dir = folder / "tests"
         out = tests_dir / f"test_{folder.name}.py"
         # Collision: a co-located file already exists because another source file

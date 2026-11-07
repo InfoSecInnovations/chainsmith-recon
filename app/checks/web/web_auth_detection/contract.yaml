@@ -28,3 +28,33 @@ references:
 - OWASP WSTG-ATHN-01
 - CWE-287
 reason: Understanding authentication informs downstream AI/agent check interpretation
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # Every mechanism is a separate judgement over one service, so the probe emits
+  # one undiscriminated candidate and `grade()` names each. Three of the four
+  # discriminators carry the path they were found at (`www-auth-basic--`,
+  # `login-form--login`, `no-auth--api-v1-data`); those sets are unbounded, so
+  # the map records one entry per *family* and `provisional_for` falls to
+  # `default`.
+  #
+  # `www-auth` is 0.99 — the challenge names its scheme verbatim, and the
+  # transport is known, so the `low` for Bearer over plain HTTP is as factual as
+  # the `info`. `oidc-discovery` is 0.95 and `login-form` 0.9 (a password input
+  # is unambiguous; that the page is a *login* page is the inference).
+  #
+  # `no-auth` is the weak one and now says so. It claims an endpoint requires no
+  # authentication from one unauthenticated 200, which a deliberately public
+  # endpoint also returns, and it fires when the content type is JSON *or* when
+  # the path merely contains `api`. JSON carries 0.7; path-only carries 0.45.
+  default: info
+  observations:
+    www-auth: info
+    oidc-discovery: info
+    login-form: info
+    no-auth: medium

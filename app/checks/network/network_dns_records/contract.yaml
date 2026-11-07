@@ -25,3 +25,27 @@ references:
 - RFC 7208 — SPF
 reason: DNS records reveal mail infrastructure, DNS hosting, cloud providers, and
   service relationships. TXT records frequently leak verification tokens and SPF configurations.
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Almost everything here is the resolver
+  # quoted back: a record is a record, so no grader above the rule tier is called.
+  #
+  # The discriminators carry the record's own value (`mx-mail.example.com`,
+  # `ns-ns1.example.com`, `aaaa-2001:db8::1`, `txt-<first 20 chars>`) so several
+  # records of one type stay distinct observations. That set is unbounded, so the map
+  # below records one entry per *family*; `provisional_for` falls to `default` and
+  # `grade()` places every value anyway.
+  #
+  # `txt-<label>` and `txt-spf` are the two families worth `low` rather than `info`,
+  # and only when they name a third party: a verification token or an SPF include
+  # discloses which vendors the target has a relationship with, which is a fact about
+  # the organisation and not just the zone. A bare SPF record is `info`.
+  default: info
+  observations:
+    mx: info
+    ns: info
+    cname: info
+    soa: info
+    aaaa: info
+    txt: info
+    txt-spf: info

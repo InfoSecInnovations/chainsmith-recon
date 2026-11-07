@@ -41,6 +41,11 @@ class SwarmTask:
     suite: str
     phase_number: int
     target: dict  # {url, domains, ports}
+    #: The coordinator's scan id. Explicit rather than left to ride along in
+    #: `upstream_context`, which is a snapshot of whatever the scan context
+    #: happens to hold: the agent's capture attribution, grading and window
+    #: violations all key on it, so it is part of the task, not a side effect.
+    scan_id: str | None = None
     upstream_context: dict = field(default_factory=dict)
     rate_limit: float = 10.0  # requests per second
     timeout_seconds: int = 300
@@ -120,6 +125,9 @@ class TaskPayload(BaseModel):
     suite: str
     check_config: dict = Field(default_factory=dict)
     target: TaskTarget
+    #: Optional so an agent can still read a payload from an older coordinator;
+    #: the agent falls back to `upstream_context["scan_id"]` in that case.
+    scan_id: str | None = None
     upstream_context: dict = Field(default_factory=dict)
     rate_limit: float = 10.0
     timeout_seconds: int = 300
@@ -133,6 +141,7 @@ class TaskPayload(BaseModel):
             check_name=task.check_name,
             suite=task.suite,
             target=TaskTarget(**task.target),
+            scan_id=task.scan_id,
             upstream_context=task.upstream_context,
             rate_limit=task.rate_limit,
             timeout_seconds=task.timeout_seconds,

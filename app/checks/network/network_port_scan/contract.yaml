@@ -25,3 +25,14 @@ references:
 - NIST SP 800-115
 - PTES - Vulnerability Analysis
 reason: Port scanning identifies what services are accessible on target hosts
+severity:
+  model: fixed
+  # Categorical: a completed TCP handshake is not open to interpretation, so no
+  # grader above the rule tier is ever called. Migrated to probe/grade in 57.4
+  # wave 2. There is no `observations:` map on purpose — the discriminator here is
+  # the port (`port-443`), which exists to keep two open ports on one host from
+  # colliding on one observation id rather than to select a severity. The set is
+  # unbounded, so a map could not enumerate it and `provisional_for` falls to
+  # `default`, which is correct: every open port is worth exactly `info`. What the
+  # port is *running* is `network_service_probe`'s and the web suite's question.
+  default: info

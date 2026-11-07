@@ -1,6 +1,10 @@
-"""Co-located tests (Phase 56 §3) — split from test_cag_security.py."""
+"""Tests for cag_stale_context.
 
-import time
+This check is split into probe + grade; tests route through
+`probe_and_grade()` and keep their original assertions.
+"""
+
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -46,30 +50,80 @@ def make_response(
     headers: dict = None,
     body: str = "",
     error: str = None,
+    elapsed_ms: float = 50.0,
 ) -> HttpResponse:
-    """Create a mock HTTP response."""
+    """Create a mock HTTP response.
+
+    `elapsed_ms` is faithful: the TTL test reads request latency back off the
+    recorded exchange (§0.15), so a test drives the cold/hot distinction through
+    this value rather than by patching `time.time`.
+    """
     return HttpResponse(
         url="http://cag.example.com:8080/test",
         status_code=status_code,
         headers=headers or {},
         body=body,
-        elapsed_ms=50.0,
+        elapsed_ms=elapsed_ms,
         error=error,
     )
 
 
+def _stamp(response: HttpResponse, url: str | None) -> HttpResponse:
+    """Report the response as coming from the URL it was requested from.
+
+    A probe records `HttpResponse.url` as the exchange's `request_url`, and a
+    grader attributes each exchange back to its endpoint from there. A mock
+    that stamps one fixed url onto every response makes every exchange look
+    like the same request (§0.13).
+    """
+    return replace(response, url=url) if url else response
+
+
+def _stamped(fn):
+    """Wrap a client method so whatever it returns is stamped with its URL.
+
+    Finds the URL as the `url=` keyword or the first positional string that
+    looks like one, which covers both `post(url, ...)` and
+    `_request("DELETE", url)`.
+    """
+
+    async def _call(*args, **kwargs):
+        url = kwargs.get("url")
+        if url is None:
+            url = next((a for a in args if isinstance(a, str) and "://" in a), None)
+        response = await fn(*args, **kwargs)
+        return _stamp(response, url) if isinstance(response, HttpResponse) else response
+
+    return AsyncMock(side_effect=_call)
+
+
 def make_mock_client(**overrides):
-    """Create a standard mock HTTP client."""
+    """Create a standard mock HTTP client.
+
+    Every method stamps the requested URL onto its response, and `__aexit__`
+    returns False: a bare `AsyncMock()` returns a truthy MagicMock, which
+    suppresses every exception raised inside the `async with` (§0.14).
+    """
     client = AsyncMock()
-    client.get = AsyncMock(return_value=make_response(status_code=404))
-    client.post = AsyncMock(return_value=make_response(status_code=200, body='{"answer": "ok"}'))
-    client.head = AsyncMock(return_value=make_response(status_code=404))
-    client._request = AsyncMock(return_value=make_response(status_code=404))
+    client.get = _stamped(AsyncMock(return_value=make_response(status_code=404)))
+    client.post = _stamped(
+        AsyncMock(return_value=make_response(status_code=200, body='{"answer": "ok"}'))
+    )
+    client.head = _stamped(AsyncMock(return_value=make_response(status_code=404)))
+    client._request = _stamped(AsyncMock(return_value=make_response(status_code=404)))
     client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock()
+    client.__aexit__ = AsyncMock(return_value=False)
     for k, v in overrides.items():
-        setattr(client, k, v)
+        setattr(client, k, _stamped(v) if callable(v) else v)
     return client
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 class TestStaleContextCheck:
@@ -81,6 +135,11 @@ class TestStaleContextCheck:
     async def test_detects_stale_role_context(self, check, sample_service, cag_endpoint_context):
         """When fresh-session response contains admin keywords, stale context is flagged."""
 
+        # Faithful latency across the five posts: role(admin, fresh) ignore
+        # timing; the three TTL requests are cold=500ms, then two fast (cache
+        # confirmed, still cached past TTL) so the TTL test also flags stale.
+        elapsed = iter([50.0, 50.0, 500.0, 50.0, 50.0])
+
         async def mock_post(url, **kwargs):
             # Both admin and fresh session queries return admin-ish content
             # (simulating stale cached admin context leaking into fresh session)
@@ -91,41 +150,15 @@ class TestStaleContextCheck:
                     "management functions: user provisioning, system configure, audit logs, "
                     'and elevated security settings.", "context": "enterprise"}'
                 ),
+                elapsed_ms=next(elapsed, 50.0),
             )
-
-        # Timing for _test_ttl_staleness: first request slow, second fast (caching), third fast (still cached)
-        original_time = time.time
-        time_values = [
-            # _test_role_context: resp_admin, then asyncio.sleep, then resp_fresh
-            200.0,  # various time.time calls
-            200.5,
-            201.0,
-            201.5,
-            # _test_ttl_staleness: first request
-            202.0,
-            202.5,  # 500ms (uncached)
-            # second request
-            203.0,
-            203.05,  # 50ms (cached) -> 50 < 500*0.7=350 -> caching confirmed
-            # post-TTL request
-            204.0,
-            204.05,  # 50ms (still cached -> stale)
-        ]
-        times = iter(time_values)
-
-        def mock_time():
-            try:
-                return next(times)
-            except StopIteration:
-                return original_time()
 
         client = make_mock_client(post=mock_post)
         with (
             patch("app.checks.cag.cag_stale_context.check.AsyncHttpClient", return_value=client),
-            patch("app.checks.cag.cag_stale_context.check.time.time", side_effect=mock_time),
             patch("asyncio.sleep", return_value=None),
         ):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         # role_context test should find "administrator", "management", "configure" as stale indicators
@@ -157,28 +190,14 @@ class TestStaleContextCheck:
                 body=f'{{"response": "Welcome, standard user. You can view reports and submit tickets.", "call": {call_count}}}',
             )
 
-        # Timing: no caching detected for TTL test
-        original_time = time.time
-        time_values = []
-        t = 200.0
-        for _ in range(20):
-            time_values.append(t)
-            t += 0.5
-        times = iter(time_values)
-
-        def mock_time():
-            try:
-                return next(times)
-            except StopIteration:
-                return original_time()
-
+        # Uniform latency: the TTL test never confirms a cache hit (hot is not
+        # faster than cold), so it produces nothing and only the role test runs.
         client = make_mock_client(post=mock_post)
         with (
             patch("app.checks.cag.cag_stale_context.check.AsyncHttpClient", return_value=client),
-            patch("app.checks.cag.cag_stale_context.check.time.time", side_effect=mock_time),
             patch("asyncio.sleep", return_value=None),
         ):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         # No high/critical observations expected
@@ -187,6 +206,6 @@ class TestStaleContextCheck:
 
     @pytest.mark.asyncio
     async def test_no_endpoints_skips(self, check, sample_service):
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service, {})
         assert result.success
         assert len(result.observations) == 0

@@ -29,3 +29,29 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Model info endpoints reveal architecture, version, and configuration details
   useful for targeted attacks
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: disclosure is read off
+  # the recorded response, so no grader above the rule tier is ever called.
+  # `default` is the pre-grade value a candidate carries (§6.1) and the LOWEST of
+  # the two this check emits, so a deferred or failed grade cannot present an
+  # ungraded candidate as the `high` one.
+  #
+  # No `observations:` map, and for a sharper reason than the unbounded path
+  # list: this check never had a plain discriminator at all. It used
+  # `make_observation_id_hashed(name, host, "info-endpoint", path)`, so its
+  # discriminator is `info-endpoint-<4 hex digest>` — one per path, digest and
+  # all. A map cannot enumerate a digest, `provisional_for()` falls through to
+  # `default`, and `grade()` places the real severity the way it always did:
+  # `medium`, raised to `high` by an internal/admin/debug path name or by any of
+  # the twelve `SENSITIVE_FIELDS` appearing in the body.
+  #
+  # Confidence is where the split pays here, because that sensitive-field scan is
+  # much weaker than the severity it triggers. It lowercases `str(data)` — keys
+  # and values together — and substring-matches twelve words, so `token` hits
+  # `max_tokens`, `cost` hits a field name, `instruction` hits
+  # `instruction_format`. Any of them escalates to `high`. A verdict resting only
+  # on those weak hits carries 0.4 and says so; one with genuine model fields
+  # alongside them carries 0.9. A 200 on `/health`, `/version` or `/info` with
+  # nothing model-shaped in the body is 0.35, and a non-JSON body 0.3.
+  default: medium

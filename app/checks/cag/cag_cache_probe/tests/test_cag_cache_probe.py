@@ -1,4 +1,11 @@
-"""Co-located tests (Phase 56 §3) — split from test_cag.py."""
+"""Tests for cag_cache_probe.
+
+This check is split into probe + grade; tests route through
+`probe_and_grade()` and keep their original assertions. `__aexit__` returns
+False so a probe exception is not suppressed (§0.14). The grader recovers each
+sub-test from the request headers/body the probe records, so the mock's fixed
+response URL is immaterial here — no URL stamping is needed.
+"""
 
 from unittest.mock import AsyncMock, patch
 
@@ -7,6 +14,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.cag.cag_cache_probe import CAGCacheProbeCheck
 from app.lib.http import HttpResponse
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -101,12 +116,12 @@ class TestCAGCacheProbeCheck:
         mock_client.post = mock_post
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
             "app.checks.cag.cag_cache_probe.check.AsyncHttpClient", return_value=mock_client
         ):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
 
@@ -138,12 +153,12 @@ class TestCAGCacheProbeCheck:
         )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
             "app.checks.cag.cag_cache_probe.check.AsyncHttpClient", return_value=mock_client
         ):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         timing_results = result.outputs.get("cache_timing_results", [])
@@ -186,12 +201,12 @@ class TestCAGCacheProbeCheck:
             return_value=make_response(status_code=200, body='{"answer": "ok"}')
         )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
             "app.checks.cag.cag_cache_probe.check.AsyncHttpClient", return_value=mock_client
         ):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
 
@@ -218,12 +233,12 @@ class TestCAGCacheProbeCheck:
         )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
             "app.checks.cag.cag_cache_probe.check.AsyncHttpClient", return_value=mock_client
         ):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         vulns = result.outputs.get("cache_vulnerabilities", [])
@@ -235,7 +250,7 @@ class TestCAGCacheProbeCheck:
     @pytest.mark.asyncio
     async def test_no_cag_endpoints_skips(self, check, sample_service):
         """Test check returns immediately when no CAG endpoints in context."""
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service, {})
 
         assert result.success
         assert len(result.observations) == 0
@@ -254,12 +269,12 @@ class TestCAGCacheProbeCheck:
         )
         mock_client.get = AsyncMock(return_value=make_response(status_code=500))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
             "app.checks.cag.cag_cache_probe.check.AsyncHttpClient", return_value=mock_client
         ):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         # No vulnerabilities from error responses

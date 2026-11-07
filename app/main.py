@@ -51,6 +51,27 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Initialize database on startup, close on shutdown."""
     cfg = get_config()
+
+    # get_config() has already resolved and installed the
+    # workspace; announce it before anything writes into it. Scanning into the
+    # wrong workspace is a stated risk, so the active root is logged at startup
+    # and carried into the report header.
+    from app import workspace as ws
+
+    active_workspace = ws.get_workspace()
+    logger.info("Workspace: %s", active_workspace.root)
+    try:
+        ws.load_workspace_config(active_workspace)
+    except ws.WorkspaceConfigError as exc:
+        # Refuse to start rather than run with config the operator wrote and we
+        # ignored — the whole point of layer 5 is that it is not silently dropped.
+        logger.error("%s", exc)
+        raise
+    for conflict in ws.legacy_conflicts(active_workspace):
+        logger.warning("%s", conflict)
+    if notice := ws.legacy_db_notice(active_workspace):
+        logger.warning("%s", notice)
+
     try:
         await init_db(
             backend=cfg.storage.backend,

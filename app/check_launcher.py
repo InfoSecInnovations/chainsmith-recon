@@ -4,7 +4,7 @@ app/check_launcher.py - Simple Check Execution Engine
 Dead simple check execution with dependency resolution.
 No scenario logic here — that happens before checks reach the launcher.
 
-Supports on_critical behavior (Phase 56.15 — per-check, wired end-to-end):
+Supports on_critical behavior:
 - When a check produces a critical observation, the launcher resolves that
   check's on_critical policy (per-check `check.on_critical` from its config.yaml,
   falling back to the legacy suite-level preference only when the check is at the
@@ -260,6 +260,16 @@ class CheckLauncher:
             # Run the check through execute() for timeout protection
             result = await check.execute(self.context)
 
+            # Grading stage. Deliberately here and not inside
+            # `execute()`: grading is its own pass over recorded evidence, and
+            # the function called here is the same one that will grade a stored
+            # corpus offline. Running it before the severity scan below means
+            # `on_critical` acts on a graded severity when a grader ran, and on
+            # the candidate's provisional one when none did (§6.1).
+            from app.grading import grade_result
+
+            await grade_result(check, result, self.context)
+
             self.completed.add(name)
 
             # Extract outputs and update context
@@ -395,7 +405,7 @@ class CheckLauncher:
         logger.info(f"  Critical observation recorded: {host} from {suite}/{check_name}")
 
         # Resolve the policy for THIS check (per-check first, suite preference
-        # fallback) and act on it (Phase 56.15).
+        # fallback) and act on it.
         on_critical = self._resolve_check_on_critical(check_name, suite)
 
         if on_critical == "stop":
@@ -424,7 +434,7 @@ class CheckLauncher:
         )
 
     def _resolve_check_on_critical(self, check_name: str, suite: str) -> str:
-        """Resolve on_critical for a single check (Phase 56.15).
+        """Resolve on_critical for a single check.
 
         Per-check `check.on_critical` (resolved from its config.yaml via the
         ConfigResolver — §5.3) wins. When the check is at the default "annotate",

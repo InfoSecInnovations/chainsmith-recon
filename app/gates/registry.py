@@ -1,4 +1,4 @@
-"""app/gates/registry.py - Gate discovery + config accessor (Phase 56 §6, 56.12).
+"""app/gates/registry.py - Gate discovery + config accessor.
 
 Gates are deterministic and caller-constructed (see `app/gates/base.py`), so —
 exactly like `app/advisors/registry.py` — this is NOT a factory like

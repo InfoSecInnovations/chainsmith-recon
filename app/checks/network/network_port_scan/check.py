@@ -2,14 +2,26 @@
 Port Scanning Checks
 
 TCP port scanning to discover open services.
+
+**Probe/grade.** `run()` connects, records one `tcp`
+exchange per *open* port, and emits a candidate; `grade()` reads the recorded
+transport outcome and states that the port is open. Closed and filtered ports
+are deliberately not recorded: this is the one check in the suite whose negative
+count is unbounded — a `full` profile against a quiet host is thousands of
+refused connects — and a corpus of refusals is volume without evidence. The
+absence of a row is what "closed" looks like here, which is the same rule
+`capture: observations_only` applies elsewhere.
 """
 
 import asyncio
+import time
 from typing import Any
 
+from app import capture
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
 from app.checks.network.port_profiles import resolve_ports
 from app.config import get_config
+from app.grading import Evidence, GradeContext, Verdict
 
 
 class PortScanCheck(BaseCheck):
@@ -85,6 +97,7 @@ class PortScanCheck(BaseCheck):
             for port in ports:
                 await self._rate_limit()
 
+                started = time.perf_counter()
                 try:
                     # TCP connect scan
                     reader, writer = await asyncio.wait_for(
@@ -106,18 +119,28 @@ class PortScanCheck(BaseCheck):
                         )
                         result.services.append(service)
 
-                        result.observations.append(
-                            self.create_observation(
-                                title=f"Open port: {host}:{port}",
-                                description=f"TCP port {port} is accepting connections",
-                                severity="info",
-                                evidence=f"TCP connect to {host}:{port} succeeded",
+                        # A connect scan reads no bytes, so the exchange has no
+                        # body — the protocol-native answer to "did the handshake
+                        # complete" is transport metadata, and that is what
+                        # `responded()`'s keyword arguments are for.
+                        exchange = capture.record_exchange(
+                            "tcp",
+                            host,
+                            request_body=f"connect {host}:{port}",
+                            request_headers={"port": str(port)},
+                            response_headers={"state": "open", "port": str(port)},
+                            elapsed_ms=(time.perf_counter() - started) * 1000,
+                        )
+                        result.candidates.append(
+                            self.create_candidate(
+                                host=host,
+                                discriminator=f"port-{port}",
                                 target=service,
-                            )
+                            ).attach(exchange)
                         )
 
                 except (TimeoutError, ConnectionRefusedError, OSError):
-                    # Port closed or filtered - not an error
+                    # Port closed or filtered - not an error, and not recorded
                     pass
                 except Exception as e:
                     result.errors.append(f"Error scanning {host}:{port}: {e}")
@@ -126,3 +149,30 @@ class PortScanCheck(BaseCheck):
         result.targets_checked = len(hosts) * len(ports)
 
         return result
+
+    # ══ Grade ════════════════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """State that one port is open, from the recorded transport outcome."""
+        exchange = next(
+            (e for e in evidence if e.error is None and e.response_headers.get("state") == "open"),
+            None,
+        )
+        if exchange is None:
+            return []
+
+        host = ctx.host
+        port = exchange.response_headers.get("port", "")
+        return [
+            Verdict(
+                severity="info",
+                # A completed TCP handshake is not open to interpretation.
+                confidence=0.99,
+                title=f"Open port: {host}:{port}",
+                description=f"TCP port {port} is accepting connections",
+                evidence=f"TCP connect to {host}:{port} succeeded",
+                reasoning="TCP handshake completed",
+                signals={"port": port, "elapsed_ms": exchange.elapsed_ms},
+                evidence_ids=[exchange.id],
+            )
+        ]

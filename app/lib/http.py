@@ -7,6 +7,17 @@ Wrapper around httpx with:
 - Structured request/response logging
 - Scope validation hooks
 - Connection pooling via shared AsyncClient
+- Evidence capture
+
+**Capture.** Every check that speaks HTTP goes through `_request`, so one
+interceptor here records the 231 check modules that route through this client
+without touching any of them. Attribution — which scan, which check — comes from
+the ambient capture context set in `BaseCheck.execute()`; see
+`app/capture/context.py` for why it is ambient rather than a parameter.
+
+This is one producer, not the only one. The socket and resolver checks, the
+agent LLM path, and any future local check call `app.capture.record()` directly
+with their own protocol.
 """
 
 import asyncio
@@ -182,6 +193,7 @@ class AsyncHttpClient:
                     final_url=str(resp.url),
                 )
                 logger.debug(f"{method} {url} -> {resp.status_code} ({elapsed_ms:.0f}ms)")
+                self._capture(method, url, headers, json, data, result)
                 return result
 
             except httpx.TimeoutException as e:
@@ -198,7 +210,7 @@ class AsyncHttpClient:
                 logger.debug(f"{method} {url} request error (attempt {attempt + 1})")
 
         elapsed_ms = (time.monotonic() - start) * 1000
-        return HttpResponse(
+        failed = HttpResponse(
             url=url,
             status_code=0,
             headers={},
@@ -206,6 +218,53 @@ class AsyncHttpClient:
             elapsed_ms=elapsed_ms,
             error=last_error,
         )
+        # Recorded only when `capture_failures` is on; the writer decides.
+        self._capture(method, url, headers, json, data, failed)
+        return failed
+
+    @staticmethod
+    def _capture(
+        method: str,
+        url: str,
+        headers: dict | None,
+        json_body: Any | None,
+        data: Any | None,
+        response: HttpResponse,
+    ) -> None:
+        """Hand one exchange to the evidence writer.
+
+        Imported inside the function to keep `app.lib.http` importable without
+        the capture package — it is used by tooling that has no workspace.
+        The writer swallows its own failures, so this cannot break a request.
+        """
+        try:
+            from urllib.parse import urlparse
+
+            from app.capture.writer import record
+
+            body = ""
+            if json_body is not None:
+                import json as _json
+
+                body = _json.dumps(json_body, ensure_ascii=False)
+            elif data is not None:
+                body = data if isinstance(data, str) else str(data)
+
+            record(
+                "http",
+                urlparse(url).hostname or url,
+                request_method=method,
+                request_url=url,
+                request_headers=dict(headers or {}),
+                request_body=body,
+                response_status=response.status_code or None,
+                response_headers=response.headers,
+                response_body=response.body,
+                elapsed_ms=response.elapsed_ms,
+                error=response.error,
+            )
+        except Exception:  # pragma: no cover - capture must never break a request
+            logger.debug("Evidence capture skipped for %s %s", method, url, exc_info=True)
 
     async def get(
         self, url: str, *, headers: dict | None = None, params: dict | None = None

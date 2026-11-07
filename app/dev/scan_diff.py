@@ -1,5 +1,5 @@
 """
-app/dev/scan_diff.py - Scenario scan observation baseline + diff (Phase 56 §9 anchor #2).
+app/dev/scan_diff.py - Scenario scan observation baseline + diff.
 
 The behavior anchor that complements `registry_diff` (identity) with *observable
 output*: run a scenario scan and capture the multiset of observation identities,

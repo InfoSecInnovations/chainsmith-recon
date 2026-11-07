@@ -1,5 +1,5 @@
 """
-app/agents/registry.py - Agent discovery + factory (Phase 56 §6, sub-phase 56.10).
+app/agents/registry.py - Agent discovery + factory.
 
 The check loader (`discover_components`) builds no-arg startup singletons and
 returns *instances*. Agents can't use that path: they need a runtime

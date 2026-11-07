@@ -24,3 +24,24 @@ techniques:
 references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Knowing the exact model helps prioritize attack techniques and reveals misrepresentation
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: identity is read out of
+  # recorded behavioural answers, so no grader above the rule tier is ever
+  # called. `default` is the pre-grade value a candidate carries (§6.1) and the
+  # lowest of the three judgements.
+  #
+  # Confidence is low throughout, and honestly so, because every signal here is
+  # the model talking about itself. Self-identification is 0.5 — a wrapper's
+  # system prompt can make a model claim to be anything, which is the very reason
+  # this check exists (to compare claim against behaviour). The mismatch verdict
+  # is 0.55 — a behavioural contradiction is a stronger signal than the self-
+  # report it contradicts, but the strawberry and last-letter tokenisation tests
+  # are individually noisy and a wrapper's own creator line trips the creator
+  # check. Knowledge-cutoff is 0.6 — a strict regex parsed a date, but models
+  # routinely misstate or hallucinate their cutoff.
+  default: info
+  observations:
+    model-identity: info
+    model-mismatch: low
+    model-cutoff: info

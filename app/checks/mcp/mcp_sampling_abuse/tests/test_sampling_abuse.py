@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp_injection.py."""
+"""Tests for mcp_sampling_abuse."""
 
 import json
 from unittest.mock import AsyncMock, patch
@@ -8,6 +8,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_sampling_abuse import MCPSamplingAbuseCheck
 from app.lib.http import HttpResponse
+
+
+async def run_and_grade(check, context):
+    """Run the check, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -95,7 +103,7 @@ class TestMCPSamplingAbuseCheck:
         """Accessible sampling endpoint with LLM response triggers high-severity open-proxy finding."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
 
         mock.post = AsyncMock(
             return_value=_jsonrpc_result(
@@ -109,7 +117,7 @@ class TestMCPSamplingAbuseCheck:
         )
 
         with patch("app.checks.mcp.mcp_sampling_abuse.check.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_server_context)
+            result = await run_and_grade(check, mcp_server_context)
 
         assert result.success
         high = [o for o in result.observations if o.severity == "high"]
@@ -125,11 +133,11 @@ class TestMCPSamplingAbuseCheck:
         """404 on sampling produces info-level 'not exposed' and no high findings."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
         mock.post = AsyncMock(return_value=_resp(status_code=404))
 
         with patch("app.checks.mcp.mcp_sampling_abuse.check.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_server_context)
+            result = await run_and_grade(check, mcp_server_context)
 
         assert result.success
         high = [o for o in result.observations if o.severity == "high"]
@@ -143,7 +151,7 @@ class TestMCPSamplingAbuseCheck:
         """JSON-RPC error on sampling means the endpoint is not accessible -- no high findings."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
         mock.post = AsyncMock(
             return_value=_jsonrpc_error(
                 code=-32601,
@@ -152,7 +160,7 @@ class TestMCPSamplingAbuseCheck:
         )
 
         with patch("app.checks.mcp.mcp_sampling_abuse.check.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_server_context)
+            result = await run_and_grade(check, mcp_server_context)
 
         assert result.success
         high = [o for o in result.observations if o.severity in ("high", "critical")]

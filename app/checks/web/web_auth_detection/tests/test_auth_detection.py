@@ -1,5 +1,6 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_security_detection.py."""
+"""Tests for web_auth_detection."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -48,11 +49,13 @@ def mock_client_multi(response_map=None, default=None):
     mock.__aexit__ = AsyncMock()
 
     def _lookup(method, url):
+        # The real client stamps the requested URL onto the response, and a
+        # migrated check records that URL on the exchange its grader reads.
         if response_map:
             for (m, pattern), response in response_map.items():
                 if m == method and pattern in url:
-                    return response
-        return default
+                    return replace(response, url=url)
+        return replace(default, url=url)
 
     async def dispatch_get(url, **kwargs):
         return _lookup("GET", url)
@@ -66,6 +69,20 @@ def mock_client_multi(response_map=None, default=None):
     mock._request = AsyncMock(side_effect=lambda m, url, **kw: _lookup(m, url))
 
     return mock
+
+
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
 
 
 class TestAuthDetectionCheck:
@@ -101,7 +118,7 @@ class TestAuthDetectionCheck:
             "app.checks.web.web_auth_detection.check.AsyncHttpClient",
             return_value=mock,
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         auth_observations = [f for f in result.observations if "basic" in f.title.lower()]
         assert len(auth_observations) == 1
         assert auth_observations[0].title == "Basic auth required: target.com/"
@@ -133,7 +150,7 @@ class TestAuthDetectionCheck:
             "app.checks.web.web_auth_detection.check.AsyncHttpClient",
             return_value=mock,
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         assert result.outputs["auth_mechanisms"]["bearer"] == ["/"]
 
     @pytest.mark.asyncio
@@ -153,7 +170,7 @@ class TestAuthDetectionCheck:
             "app.checks.web.web_auth_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(responses),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         bearer_observations = [f for f in result.observations if "bearer" in f.title.lower()]
         assert len(bearer_observations) >= 1
         # Bearer over plain HTTP is severity "low" because tokens leak
@@ -171,7 +188,7 @@ class TestAuthDetectionCheck:
             "app.checks.web.web_auth_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(responses),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         oidc_observations = [
             f
             for f in result.observations
@@ -194,7 +211,7 @@ class TestAuthDetectionCheck:
             "app.checks.web.web_auth_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(responses),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         login_observations = [f for f in result.observations if "login" in f.title.lower()]
         assert len(login_observations) >= 1
         assert "Login page detected" in login_observations[0].title
@@ -217,7 +234,7 @@ class TestAuthDetectionCheck:
             "app.checks.web.web_auth_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(responses),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
         noauth = [f for f in result.observations if "no authentication" in f.title.lower()]
         assert len(noauth) == 1
         assert noauth[0].severity == "medium"
@@ -230,7 +247,7 @@ class TestAuthDetectionCheck:
             "app.checks.web.web_auth_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         assert result.success is True
         assert "auth_mechanisms" in result.outputs
         # With no auth signals, mechanisms should be empty

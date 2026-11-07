@@ -29,3 +29,11 @@ references:
 - OWASP LLM Top 10 - LLM07 Insecure Plugin Design
 reason: Local dev MCP servers often have no auth. Testing enforcement reveals unauthenticated
   tool access.
+severity:
+  model: fixed
+  # Categorical: the answer is in each test's recorded response, so no grader
+  # above the rule tier is ever called. Some discriminators embed a key value
+  # (`default-key-<key>`), an unbounded set, so there is no `observations:` map
+  # (§0.12): `default` is the floor — `info`, the auth-enforced answer — and
+  # grade() places the real severity (57.4 wave 7).
+  default: info

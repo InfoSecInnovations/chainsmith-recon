@@ -29,3 +29,30 @@ references:
 - CWE-1392
 reason: Admin panels with default credentials supersede all AI-specific observations
   on the same host
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # One candidate per admin path; the credential POSTs (side effects a grader
+  # must never perform) ride on the same candidate, their username/password in
+  # each POST's recorded request body. Every discriminator carries the path
+  # (`default-creds--admin`, `login-form--console`), so those sets are unbounded
+  # and the map records one entry per *family*. `default` is `high` — the lowest
+  # of the three — so a deferred grade can never present an ungraded candidate
+  # as one of the criticals.
+  #
+  # Every judgement is a heuristic over a body. `default-creds` ("login
+  # succeeded") is inferred from a success word and no failure word — 0.7 when a
+  # 3xx redirect backs it, 0.55 for a bare content match, since a re-served
+  # login page saying "Welcome" satisfies it. `no-auth` is 0.6 (an admin word
+  # with no password field, which a docs page also shows). `login-form`
+  # (creds tested and rejected) is the sure one at 0.9.
+  default: high
+  observations:
+    no-auth: critical
+    default-creds: critical
+    login-form: high

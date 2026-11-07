@@ -1,6 +1,5 @@
 """
-app/advisors/scan_analysis/advisor.py - Post-Scan Analysis Advisor (Phase 20,
-renamed Phase 41, foldered Phase 56.11)
+app/advisors/scan_analysis/advisor.py - Post-Scan Analysis Advisor
 
 Optional, rule-based advisor that analyzes completed scan results and
 recommends follow-up actions. Disabled by default. Never runs checks —

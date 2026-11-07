@@ -24,3 +24,30 @@ techniques:
 references:
 - OWASP API4:2023 - Unrestricted Resource Consumption
 reason: Understanding rate limits helps plan attacks and identify DoS vectors
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: a 429 is not open to
+  # interpretation, so no grader above the rule tier is ever called. `default` is
+  # the pre-grade value a candidate carries (§6.1) and the LOWEST of the two
+  # severities emitted, so a deferred or failed grade can never present an
+  # ungraded candidate as the `medium` no-rate-limit finding.
+  #
+  # Note which judgement is the severe one: finding a limiter is `info`, and
+  # finding NONE is `medium` — an unthrottled model endpoint is a bill someone
+  # else can run up.
+  #
+  # Confidence tracks that asymmetry. `rate-limit-detected` is 0.95 with
+  # corroborating headers and 0.85 without (a bare 429 can come from a shared
+  # gateway or WAF rather than this endpoint's quota); the threshold is always
+  # just the request count this burst reached, not a configured value.
+  # `rate-limit-headers` is 0.9 — the endpoint advertises a limiter, and the
+  # headers are the claim rather than the test. `no-rate-limit` is the weakest
+  # at 0.5, and it is the one that escalates: twelve requests 80 ms apart is
+  # under two seconds of traffic from one address, so a per-minute, per-hour or
+  # per-key quota would not have fired either. It bounds the limit; it does not
+  # disprove one. A burst that did not complete drops to 0.3.
+  default: info
+  observations:
+    rate-limit-detected: info
+    rate-limit-headers: info
+    no-rate-limit: medium

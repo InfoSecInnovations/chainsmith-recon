@@ -1,5 +1,5 @@
 """
-app/dev/migrate.py - `migrate-check` / `migrate-suite` (Phase 56 §8.1-§8.5).
+app/dev/migrate.py - `migrate-check` / `migrate-suite`.
 
 Takes a flat check file (e.g. `app/checks/web/robots.py`) and produces a
 component folder (`app/checks/web/robots_txt/` with check.py, contract.yaml,

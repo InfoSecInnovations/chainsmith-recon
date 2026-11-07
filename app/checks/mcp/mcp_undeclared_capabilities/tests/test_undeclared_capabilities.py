@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp_controls.py."""
+"""Tests for mcp_undeclared_capabilities."""
 
 import json
 from unittest.mock import AsyncMock, patch
@@ -8,6 +8,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_undeclared_capabilities import UndeclaredCapabilityCheck
 from app.lib.http import HttpResponse
+
+
+async def run_and_grade(check, context):
+    """Run the check, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -119,7 +127,7 @@ def mock_client_factory():
     """Create a properly configured mock client with context manager."""
     mock = AsyncMock()
     mock.__aenter__ = AsyncMock(return_value=mock)
-    mock.__aexit__ = AsyncMock()
+    mock.__aexit__ = AsyncMock(return_value=False)
     return mock
 
 
@@ -201,7 +209,7 @@ class TestUndeclaredCapabilityCheck:
         with patch(
             "app.checks.mcp.mcp_undeclared_capabilities.check.AsyncHttpClient", return_value=mock
         ):
-            result = await check.run(ctx)
+            result = await run_and_grade(check, ctx)
 
         assert result.success
         high = [f for f in result.observations if f.severity == "high"]
@@ -229,7 +237,7 @@ class TestUndeclaredCapabilityCheck:
         with patch(
             "app.checks.mcp.mcp_undeclared_capabilities.check.AsyncHttpClient", return_value=mock
         ):
-            result = await check.run(mcp_server_context)
+            result = await run_and_grade(check, mcp_server_context)
 
         assert result.success
         info = [f for f in result.observations if f.severity == "info"]
@@ -278,7 +286,7 @@ class TestUndeclaredCapabilityCheck:
         with patch(
             "app.checks.mcp.mcp_undeclared_capabilities.check.AsyncHttpClient", return_value=mock
         ):
-            result = await check.run(ctx)
+            result = await run_and_grade(check, ctx)
 
         assert result.success
         # tools/list, resources/list, prompts/list should NOT be probed since they are declared

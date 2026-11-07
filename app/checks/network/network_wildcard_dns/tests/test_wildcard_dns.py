@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_network_dns.py."""
+"""Tests for network_wildcard_dns."""
 
 import socket
 from unittest.mock import patch
@@ -22,6 +22,20 @@ def _resolver_side_effect(records: dict):
         raise _dns_resolver.NoAnswer()
 
     return _resolve
+
+
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 class TestWildcardDnsCheckInit:
@@ -59,7 +73,7 @@ class TestWildcardDnsCheckRun:
         """
         mock_getaddrinfo.side_effect = socket.gaierror("Name or service not known")
         check = WildcardDnsCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         assert result.success is True
         assert result.outputs["wildcard_dns"]["detected"] is False
@@ -77,7 +91,7 @@ class TestWildcardDnsCheckRun:
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.2.3.4", 0)),
         ]
         check = WildcardDnsCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         assert result.success is True
         wc = result.outputs["wildcard_dns"]
@@ -105,7 +119,7 @@ class TestWildcardDnsCheckRun:
 
         mock_getaddrinfo.side_effect = _getaddrinfo
         check = WildcardDnsCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         wc = result.outputs["wildcard_dns"]
         assert wc["detected"] is True
@@ -134,7 +148,7 @@ class TestWildcardDnsCheckRun:
 
         mock_getaddrinfo.side_effect = _getaddrinfo
         check = WildcardDnsCheck()
-        result = await check.run({"base_domain": "example.com"})
+        result = await probe_and_grade(check, {"base_domain": "example.com"})
 
         wc = result.outputs["wildcard_dns"]
         assert wc["detected"] is True
@@ -150,7 +164,7 @@ class TestWildcardDnsCheckRun:
         """
         mock_getaddrinfo.side_effect = socket.gaierror("Name or service not known")
         check = WildcardDnsCheck()
-        result = await check.run({"base_domain": "legit-no-wildcard.com"})
+        result = await probe_and_grade(check, {"base_domain": "legit-no-wildcard.com"})
 
         assert result.success is True
         wc = result.outputs["wildcard_dns"]

@@ -1,5 +1,6 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_error_page.py."""
+"""Tests for web_error_page."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -37,11 +38,13 @@ def mock_client_multi(response_map=None, default=None):
     mock.__aexit__ = AsyncMock()
 
     def _lookup(method, url):
+        # The real client stamps the requested URL onto the response, and a
+        # migrated check records that URL on the exchange its grader reads.
         if response_map:
             for (m, pattern), response in response_map.items():
                 if m == method and pattern in url:
-                    return response
-        return default
+                    return replace(response, url=url)
+        return replace(default, url=url)
 
     async def dispatch_get(url, **kwargs):
         return _lookup("GET", url)
@@ -55,6 +58,20 @@ def mock_client_multi(response_map=None, default=None):
     mock._request = AsyncMock(side_effect=lambda m, url, **kw: _lookup(m, url))
 
     return mock
+
+
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
 
 
 DJANGO_DEBUG_PAGE = """<!DOCTYPE html>
@@ -295,7 +312,7 @@ class TestErrorPageCheck:
                 default=resp(404, body=DJANGO_DEBUG_PAGE),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         django = [o for o in result.observations if "django" in (o.id or "")]
         assert len(django) == 1
@@ -315,7 +332,7 @@ class TestErrorPageCheck:
                 default=resp(500, body=WERKZEUG_DEBUGGER_PAGE),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         werkzeug = [o for o in result.observations if "werkzeug" in (o.id or "")]
         assert len(werkzeug) == 1
@@ -335,7 +352,7 @@ class TestErrorPageCheck:
                 default=resp(404, body=SPRING_BOOT_ERROR_PAGE),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         spring = [o for o in result.observations if "spring-boot" in (o.id or "")]
         assert len(spring) == 1
@@ -355,7 +372,7 @@ class TestErrorPageCheck:
                 default=resp(404, body=EXPRESS_ERROR_PAGE),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         express = [o for o in result.observations if "express" in (o.id or "")]
         assert len(express) == 1
@@ -374,7 +391,7 @@ class TestErrorPageCheck:
                 default=resp(404, body=FASTAPI_ERROR_RESPONSE),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         fastapi = [o for o in result.observations if "fastapi" in (o.id or "")]
         assert len(fastapi) == 1
@@ -393,7 +410,7 @@ class TestErrorPageCheck:
                 default=resp(500, body=ASPNET_ERROR_PAGE),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         asp = [o for o in result.observations if "asp.net" in (o.id or "")]
         assert len(asp) == 1
@@ -412,7 +429,7 @@ class TestErrorPageCheck:
                 default=resp(404, body=STACK_TRACE_IN_HTML),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         stack = [o for o in result.observations if "stack-trace" in (o.id or "")]
         assert len(stack) == 1
@@ -431,7 +448,7 @@ class TestErrorPageCheck:
                 default=resp(404, body=GENERIC_404_PAGE),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         custom = [o for o in result.observations if "custom-errors" in (o.id or "")]
         assert len(custom) == 1
@@ -449,7 +466,7 @@ class TestErrorPageCheck:
                 default=resp(404, body=SPRING_BOOT_ERROR_PAGE),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert "error_page_info" in result.outputs
         info = result.outputs["error_page_info"]
@@ -471,7 +488,7 @@ class TestErrorPageCheck:
                 default=resp(500, body=GENERIC_500_PAGE),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.success
         # Should only have the custom-errors info observation
@@ -495,7 +512,7 @@ class TestErrorPageCheck:
                 default=resp(200, body=BENIGN_PAGE_WITH_DEBUG_WORD),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.success
         # No framework-specific or debug-mode observations should fire
@@ -522,7 +539,7 @@ class TestErrorPageCheck:
                 default=resp(404, body=GENERIC_404_PAGE),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.success
         info = result.outputs["error_page_info"]
@@ -540,7 +557,7 @@ class TestErrorPageCheck:
                 default=resp(0, error="Connection refused"),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.success
         # No framework-specific observations on connection error

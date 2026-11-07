@@ -9,6 +9,26 @@ Attack vectors:
 - Cross-user prefix sharing inference
 - Provider caching metadata leakage
 
+**Probe/grade.** The probe sends the fixed payload matrix
+(three OpenAI-style, two Anthropic-style, two generic) to each endpoint, records
+every exchange, and hands them over as one candidate per endpoint — each
+observation carries that endpoint's `target_url`, so it cannot be one candidate
+per service (§0.15). `grade()` re-reads the recorded bytes; `_reading()` is the
+one parser both halves call (§0.12).
+
+`grade()` never sees which payload produced which response (§0.16). It recovers
+that by matching each recorded *request body* back to the payload matrix
+(`_match`), so `test_index` and `provider_style` are reconstructed from the
+record rather than a remembered loop index.
+
+**Fixed**: the discriminator embeds the endpoint path, an
+unbounded value, so the contract declares no `observations:` map and `grade()`
+places the real severity (the `ai_model_info_check` pattern). Confidence is
+where the split pays: a `cached_tokens` field is the *provider's own* usage
+self-report — a proxy can fabricate it — and a shared prefix is inferred from
+similar cached-token counts, which also occur when unrelated prompts happen to
+be the same length.
+
 References:
   https://www.anthropic.com/news/prompt-caching
   https://platform.openai.com/docs/guides/prompt-caching
@@ -18,9 +38,62 @@ References:
 import json
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
+
+_OPENAI_PAYLOADS = [
+    {
+        "model": "gpt-4",
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is 2+2?"},
+        ],
+    },
+    {
+        "model": "gpt-4",
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is the capital of Spain?"},
+        ],
+    },
+    {
+        "model": "gpt-4",
+        "messages": [
+            {"role": "system", "content": "You are a coding expert."},
+            {"role": "user", "content": "What is 2+2?"},
+        ],
+    },
+]
+
+_ANTHROPIC_PAYLOADS = [
+    {
+        "model": "claude-3-sonnet-20240229",
+        "messages": [{"role": "user", "content": "What is 2+2?"}],
+        "system": "You are a helpful assistant.",
+    },
+    {
+        "model": "claude-3-sonnet-20240229",
+        "messages": [{"role": "user", "content": "What is the capital of Spain?"}],
+        "system": "You are a helpful assistant.",
+    },
+]
+
+_GENERIC_PAYLOADS = [
+    {"input": "What is 2+2?", "query": "What is 2+2?"},
+    {"input": "What is the capital of Spain?", "query": "capital"},
+]
+
+# The full matrix in send order, each paired with the provider style the
+# original assigned it. `test_index` is the position in this list.
+ALL_PAYLOADS: list[tuple[dict, str]] = (
+    [(p, "openai") for p in _OPENAI_PAYLOADS]
+    + [(p, "anthropic") for p in _ANTHROPIC_PAYLOADS]
+    + [(p, "generic") for p in _GENERIC_PAYLOADS]
+)
 
 
 class ProviderCachingCheck(ServiceIteratingCheck):
@@ -47,8 +120,11 @@ class ProviderCachingCheck(ServiceIteratingCheck):
     ]
     techniques = ["token analysis", "prompt caching detection", "usage metadata inspection"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
@@ -65,27 +141,32 @@ class ProviderCachingCheck(ServiceIteratingCheck):
             async with AsyncHttpClient(cfg) as client:
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
-                    cache_info = await self._analyze_provider_caching(client, url, service)
+                    path = endpoint.get("path", "unknown").strip("/").replace("/", "-")
+                    candidate = self.create_candidate(
+                        host=service.host,
+                        discriminator=f"provider-cache-{path}",
+                        target=service,
+                        target_url=url,
+                    )
 
-                    if cache_info:
-                        provider_results.append(cache_info)
-
-                        severity = self._determine_severity(cache_info)
-                        result.observations.append(
-                            build_observation(
+                    for payload, _style in ALL_PAYLOADS:
+                        resp = await client.post(url, json=payload, headers=JSON_HEADERS)
+                        candidate.attach(
+                            exchange_from_response(
+                                resp,
                                 check_name=self.name,
-                                title=self._build_title(cache_info),
-                                description=self._build_description(cache_info),
-                                severity=severity,
-                                evidence=self._build_evidence(cache_info),
+                                scan_id=scan_id,
                                 host=service.host,
-                                discriminator=f"provider-cache-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                                target=service,
-                                target_url=url,
-                                raw_data=cache_info,
-                                references=self.references,
+                                method="POST",
+                                request_headers=JSON_HEADERS,
+                                request_json=payload,
                             )
                         )
+
+                    reading = self._reading(candidate.exchanges, url)
+                    if reading:
+                        provider_results.append(reading)
+                        result.candidates.append(candidate)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -95,148 +176,140 @@ class ProviderCachingCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _analyze_provider_caching(
-        self, client: AsyncHttpClient, url: str, service: Service
-    ) -> dict | None:
-        """Analyze provider caching via usage metadata."""
-        cached_tokens_results = []
+    # ══ Grade (rule tier) ════════════════════════════════════════════
 
-        # Test 1: OpenAI-style request with system message
-        openai_payloads = [
-            {
-                "model": "gpt-4",
-                "messages": [
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": "What is 2+2?"},
-                ],
-            },
-            {
-                "model": "gpt-4",
-                "messages": [
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": "What is the capital of Spain?"},
-                ],
-            },
-            {
-                "model": "gpt-4",
-                "messages": [
-                    {"role": "system", "content": "You are a coding expert."},
-                    {"role": "user", "content": "What is 2+2?"},
-                ],
-            },
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        reading = self._reading(list(evidence), ctx.target_url or "")
+        if not reading:
+            return []
+
+        severity = self._determine_severity(reading)
+        confidence, why = self._confidence(reading)
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                title=self._build_title(reading),
+                description=self._build_description(reading),
+                evidence=self._build_evidence(reading),
+                reasoning=why,
+                signals={
+                    "caching_detected": reading["caching_detected"],
+                    "shared_prefix_detected": reading["shared_prefix_detected"],
+                    "tests_run": reading["tests_run"],
+                },
+                references=self.references,
+                raw_data=reading,
+                tier=ctx.tier,
+                evidence_ids=evidence.ids(),
+            )
         ]
 
-        for i, payload in enumerate(openai_payloads):
-            token_info = await self._send_and_check_tokens(client, url, payload)
-            if token_info:
-                token_info["test_index"] = i
-                cached_tokens_results.append(token_info)
+    @staticmethod
+    def _confidence(reading: dict) -> tuple[float, str]:
+        if reading.get("shared_prefix_detected"):
+            return 0.5, (
+                "inferred from several queries reporting near-identical `cached_tokens` "
+                "counts, but the same counts arise whenever unrelated prompts happen to share "
+                "a length, and the usage block is the provider's own self-report"
+            )
+        if reading.get("caching_detected"):
+            return 0.6, (
+                "a non-zero `cached_tokens` appears in the usage metadata, which is the "
+                "provider's self-report — a gateway or proxy can populate that field without "
+                "any real cross-request cache"
+            )
+        return 0.5, (
+            "no usage metadata reported a cache; a provider that caches silently, or reports "
+            "it under a field name not in the checked set, would look identical"
+        )
 
-        # Test 2: Anthropic-style request
-        anthropic_payloads = [
-            {
-                "model": "claude-3-sonnet-20240229",
-                "messages": [{"role": "user", "content": "What is 2+2?"}],
-                "system": "You are a helpful assistant.",
-            },
-            {
-                "model": "claude-3-sonnet-20240229",
-                "messages": [{"role": "user", "content": "What is the capital of Spain?"}],
-                "system": "You are a helpful assistant.",
-            },
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _reading(self, exchanges: list[Exchange], url: str) -> dict | None:
+        """Rebuild the provider-caching analysis off the recorded exchanges."""
+        url_exchanges = [
+            e for e in exchanges if e.request_url == url and e.request_method == "POST"
         ]
 
-        for i, payload in enumerate(anthropic_payloads):
-            token_info = await self._send_and_check_tokens(client, url, payload)
-            if token_info:
-                token_info["test_index"] = len(openai_payloads) + i
-                token_info["provider_style"] = "anthropic"
-                cached_tokens_results.append(token_info)
+        results = []
+        for index, (payload, style) in enumerate(ALL_PAYLOADS):
+            exchange = self._match(url_exchanges, payload)
+            if exchange is None:
+                continue
+            token_info = self._token_info(exchange)
+            if token_info is None:
+                continue
+            token_info["test_index"] = index
+            token_info["provider_style"] = style
+            results.append(token_info)
 
-        # Also try generic endpoints
-        generic_payloads = [
-            {"input": "What is 2+2?", "query": "What is 2+2?"},
-            {"input": "What is the capital of Spain?", "query": "capital"},
-        ]
-
-        for i, payload in enumerate(generic_payloads):
-            token_info = await self._send_and_check_tokens(client, url, payload)
-            if token_info:
-                token_info["test_index"] = len(openai_payloads) + len(anthropic_payloads) + i
-                token_info["provider_style"] = "generic"
-                cached_tokens_results.append(token_info)
-
-        if not cached_tokens_results:
+        if not results:
             return None
 
-        # Analyze results
-        has_cached_tokens = any(r.get("cached_tokens", 0) > 0 for r in cached_tokens_results)
-        shared_prefix = self._detect_shared_prefix(cached_tokens_results)
+        has_cached_tokens = any(r.get("cached_tokens", 0) > 0 for r in results)
+        shared_prefix = self._detect_shared_prefix(results)
 
         return {
             "url": url,
-            "tests_run": len(cached_tokens_results),
+            "tests_run": len(results),
             "caching_detected": has_cached_tokens,
             "shared_prefix_detected": shared_prefix,
-            "results": cached_tokens_results,
+            "results": results,
         }
 
-    async def _send_and_check_tokens(
-        self, client: AsyncHttpClient, url: str, payload: dict
-    ) -> dict | None:
-        """Send a request and extract cached token information."""
-        try:
-            resp = await client.post(
-                url,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-            )
-
-            if resp.error or resp.status_code >= 400:
-                return None
-
+    @staticmethod
+    def _match(exchanges: list[Exchange], payload: dict) -> Exchange | None:
+        """The exchange whose recorded request body is this payload."""
+        for exchange in exchanges:
             try:
-                data = json.loads(resp.body)
+                body = json.loads(exchange.request_body or "{}")
             except (json.JSONDecodeError, TypeError):
-                return None
+                continue
+            if body == payload:
+                return exchange
+        return None
 
-            if not isinstance(data, dict):
-                return None
-
-            # Extract usage metadata
-            usage = data.get("usage", {})
-            if not isinstance(usage, dict):
-                return None
-
-            cached_tokens = (
-                usage.get("cached_tokens")
-                or usage.get("prompt_tokens_cached")
-                or usage.get("cache_read_input_tokens")
-                or 0
-            )
-
-            total_tokens = (
-                usage.get("prompt_tokens")
-                or usage.get("input_tokens")
-                or usage.get("total_tokens")
-                or 0
-            )
-
-            if cached_tokens == 0 and total_tokens == 0:
-                # Check for cache fields outside usage
-                if "cached" not in data and "cache_hit" not in data:
-                    return None
-
-            return {
-                "cached_tokens": cached_tokens,
-                "total_tokens": total_tokens,
-                "cache_ratio": (round(cached_tokens / total_tokens, 2) if total_tokens > 0 else 0),
-                "provider_style": "openai",
-                "raw_usage": usage,
-            }
-
-        except Exception:
+    @staticmethod
+    def _token_info(exchange: Exchange) -> dict | None:
+        """Extract cached-token information off one recorded response."""
+        if exchange.error or (exchange.response_status or 0) >= 400:
             return None
+        try:
+            data = json.loads(exchange.response_body or "")
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if not isinstance(data, dict):
+            return None
+
+        usage = data.get("usage", {})
+        if not isinstance(usage, dict):
+            return None
+
+        cached_tokens = (
+            usage.get("cached_tokens")
+            or usage.get("prompt_tokens_cached")
+            or usage.get("cache_read_input_tokens")
+            or 0
+        )
+        total_tokens = (
+            usage.get("prompt_tokens")
+            or usage.get("input_tokens")
+            or usage.get("total_tokens")
+            or 0
+        )
+
+        if cached_tokens == 0 and total_tokens == 0:
+            if "cached" not in data and "cache_hit" not in data:
+                return None
+
+        return {
+            "cached_tokens": cached_tokens,
+            "total_tokens": total_tokens,
+            "cache_ratio": (round(cached_tokens / total_tokens, 2) if total_tokens > 0 else 0),
+            "provider_style": "openai",
+            "raw_usage": usage,
+        }
 
     def _detect_shared_prefix(self, results: list[dict]) -> bool:
         """Detect if cached tokens suggest shared system prompt prefix."""
@@ -246,8 +319,6 @@ class ProviderCachingCheck(ServiceIteratingCheck):
         if len(cached_counts) < 2:
             return False
 
-        # If multiple different queries have similar cached token counts,
-        # they likely share a system prompt prefix
         if max(cached_counts) > 0 and min(cached_counts) > 0:
             ratio = min(cached_counts) / max(cached_counts)
             return ratio > 0.8

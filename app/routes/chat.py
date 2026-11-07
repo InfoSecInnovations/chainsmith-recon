@@ -1,5 +1,5 @@
 """
-app/routes/chat.py - Operator Chat Routes (Phase 35)
+app/routes/chat.py - Operator Chat Routes
 
 Endpoints:
 - POST /api/v1/chat/message   Send operator message

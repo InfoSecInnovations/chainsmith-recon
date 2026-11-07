@@ -84,6 +84,28 @@ class CheckOverride(BaseModel):
     retry_count: int | None = Field(default=None, ge=0)
     delay_between_targets: float | None = Field(default=None, ge=0)
     on_critical: Literal["annotate", "skip_downstream", "stop", "inherit"] | None = None
+    # How much of this check's traffic is recorded. Same
+    # inherit caveat as on_critical — valid layer-3 config, ignored at scan time.
+    capture: Literal["all", "observations_only", "none", "inherit"] | None = None
+
+
+class CaptureInput(BaseModel):
+    """Per-scan evidence-capture posture.
+
+    Off by default and deliberately so: the machinery is complete, but nothing
+    writes a byte of evidence until an operator asks for it and the growth
+    number from §9 is understood. Turning it on is one flag.
+    """
+
+    enabled: bool = False
+    #: Protocols to record. Empty means the defaults (http + llm); the socket
+    #: and resolver protocols are opt-in because a `dns` row on a wide
+    #: enumeration is cheap to write and rarely what a grader reads.
+    protocols: list[str] = Field(default_factory=list)
+    #: Record everything, overriding each check's own `capture:` policy.
+    full_capture: bool = False
+    #: Record probes that never completed, with `error` set and no response.
+    capture_failures: bool = False
 
 
 class ScanStartInput(BaseModel):
@@ -97,6 +119,7 @@ class ScanStartInput(BaseModel):
     # after the preset's knob layer so an explicit edit beats a preset bundle.
     check_overrides: dict[str, CheckOverride] = Field(default_factory=dict)
     acknowledge_outside_window: bool = False  # Per-scan override for scan-window gate
+    capture: CaptureInput | None = None  # Evidence capture posture (57.2); off unless asked
 
 
 # ─── Settings Models ──────────────────────────────────────────
@@ -124,7 +147,7 @@ class ScanStatus(BaseModel):
     current_check: str | None = None
     observations_count: int = 0
     error: str | None = None
-    # Phase 51.2: advertise SSE stream availability. UI opens an EventSource
+    # Advertise SSE stream availability. UI opens an EventSource
     # only when {"stream": true} is present. Absence means fall back to polling.
     capabilities: dict[str, bool] = {}
 

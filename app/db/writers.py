@@ -18,9 +18,13 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from app.db.repositories import CheckLogRepository, ObservationRepository
+from app.db.repositories import (
+    CheckLogRepository,
+    EvidenceRepository,
+    ObservationRepository,
+)
 
 if TYPE_CHECKING:
     from app.db.engine import Database
@@ -28,7 +32,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SCRATCH_DIR = Path("~/.chainsmith/scratch").expanduser()
+
+def scratch_dir() -> Path:
+    """
+    Where observations land when the database is unreachable mid-scan.
+
+    Phase 57.1a rooted this in the workspace. Resolved on call rather than at
+    import: this module is imported long before an entry point selects a
+    workspace, so a constant here would freeze the pre-workspace path.
+    """
+    from app.workspace import get_workspace
+
+    return get_workspace().scratch_dir
 
 
 class ObservationWriter:
@@ -54,12 +69,17 @@ class ObservationWriter:
         self._buffer: list[dict] = []
         self._count = 0
         self._db_failed = False
-        self._scratch_dir = scratch_dir or SCRATCH_DIR
+        self._collisions = 0
+        self._explicit_scratch_dir = scratch_dir
         self._scratch_path: Path | None = None
         self._scratch_seq = 0
-        # Phase 51.1c: when present, each observation gets an event_seq and
+        # When present, each observation gets an event_seq and
         # an `observation_added` event is pushed onto the session's bus.
         self._session = session
+
+    @property
+    def _scratch_dir(self) -> Path:
+        return self._explicit_scratch_dir or scratch_dir()
 
     @property
     def count(self) -> int:
@@ -68,8 +88,13 @@ class ObservationWriter:
 
     @property
     def db_failed(self) -> bool:
-        """True if the writer has fallen back to scratch space."""
+        """True once the database is unusable and every later observation goes to scratch."""
         return self._db_failed
+
+    @property
+    def collisions(self) -> int:
+        """Observations kept in scratch because their id was already stored for this scan."""
+        return self._collisions
 
     async def write(self, observation: dict) -> None:
         """
@@ -109,14 +134,42 @@ class ObservationWriter:
 
         try:
             await self._repo.bulk_create(self.scan_id, batch)
+        except IntegrityError:
+            # A row whose id is already stored is a check minting one observation
+            # id twice, not the database going away. Retry row by row so only the
+            # colliding rows leave the database; everything else still lands.
+            await self._write_rows(batch)
         except SQLAlchemyError:
-            logger.warning(
-                "DB write failed — switching to scratch-space fallback for scan %s",
-                self.scan_id,
-                exc_info=True,
-            )
-            self._db_failed = True
-            self._write_scratch(batch)
+            self._fall_back(batch)
+
+    async def _write_rows(self, batch: list[dict]) -> None:
+        """Insert one row at a time after a collision; only colliding rows go to scratch."""
+        for index, obs in enumerate(batch):
+            try:
+                await self._repo.bulk_create(self.scan_id, [obs])
+            except IntegrityError:
+                self._collisions += 1
+                logger.error(
+                    "Observation id %s from %s is already stored for scan %s; kept in scratch "
+                    "space instead of the database (a check minted the same id twice)",
+                    obs.get("id"),
+                    obs.get("check_name") or obs.get("check"),
+                    self.scan_id,
+                )
+                self._write_scratch([obs])
+            except SQLAlchemyError:
+                self._fall_back(batch[index:])
+                return
+
+    def _fall_back(self, batch: list[dict]) -> None:
+        """The database is unusable: this batch and every later one go to scratch."""
+        logger.warning(
+            "DB write failed — switching to scratch-space fallback for scan %s",
+            self.scan_id,
+            exc_info=True,
+        )
+        self._db_failed = True
+        self._write_scratch(batch)
 
     def _write_scratch(self, observations: list[dict]) -> None:
         """Write observations to scratch directory as JSON files."""
@@ -167,7 +220,7 @@ class CheckLogWriter:
     ):
         self.scan_id = scan_id
         self._repo = repo or CheckLogRepository(db)
-        # Phase 51.1c: when present, each log event also goes onto the bus
+        # When present, each log event also goes onto the bus
         # as a check_started/check_completed/check_skipped SSE event.
         self._session = session
 
@@ -199,3 +252,40 @@ class CheckLogWriter:
                 entry.get("check", "unknown"),
                 exc_info=True,
             )
+
+
+class EvidenceIndexWriter:
+    """
+    Indexes captured exchanges in the database.
+
+    Unlike ObservationWriter there is no scratch-space fallback, because there
+    is nothing to rescue: by the time this runs the exchange document is already
+    on disk under the workspace's ``evidence/``, and that document is the
+    durable copy. The database half is an index over it and can be rebuilt from
+    the store. So a failure here is logged and swallowed — the corpus survives,
+    and only queryability is lost until it is reindexed.
+    """
+
+    def __init__(
+        self,
+        repo: EvidenceRepository | None = None,
+        db: Database | None = None,
+    ):
+        self._repo = repo or EvidenceRepository(db)
+
+    async def write(self, exchanges: list) -> int:
+        """Index a batch. Returns how many rows landed."""
+        if not exchanges:
+            return 0
+        try:
+            return await self._repo.bulk_create(exchanges)
+        except (SQLAlchemyError, RuntimeError):
+            # RuntimeError covers "database not initialized" — a CLI run with
+            # persistence off still captures to disk, and should not be told
+            # about it once per check.
+            logger.warning(
+                "Failed to index %d captured exchanges; documents are on disk",
+                len(exchanges),
+                exc_info=True,
+            )
+            return 0

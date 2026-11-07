@@ -69,7 +69,7 @@ def resolve_checks(
 
 
 def get_real_checks() -> list:
-    """Get all real check instances via auto-discovery (Phase 56).
+    """Get all real check instances via auto-discovery.
 
     Every check now lives in the folder shape (``contract.yaml`` + ``config.yaml``)
     and is discovered by ``component_loader``; the old hand-maintained import list
@@ -195,7 +195,7 @@ def get_check_by_name(name: str):
 
 
 def get_all_check_metadata() -> list:
-    """Import-free metadata for ALL checks, INCLUDING disabled ones (Phase 56.15).
+    """Import-free metadata for ALL checks, INCLUDING disabled ones.
 
     Unlike `get_real_checks()` (which the loader builds from enabled components
     only), this surfaces disabled checks too so the API/WebUI can show an

@@ -1,5 +1,7 @@
 # Third-Party API & AI Authentication
 
+> **Status — proposal, not implemented.** This is a design plan for third-party credential management and auth-barrier handling. Today Chainsmith authenticates to LLM providers only with the API keys in `.env` (see [QUICKSTART.md](../QUICKSTART.md)); the credential framework, barrier detection, and authenticated scanning described here are not built; the "Phase" headings are a proposed rollout order, not releases. Some sections predate the replacement of engagements by [workspaces](vocabulary.md#workspace).
+
 Plan for managing credentials to external services and handling
 authentication barriers encountered during security checks.
 

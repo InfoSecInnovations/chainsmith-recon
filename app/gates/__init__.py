@@ -7,7 +7,7 @@ enforcement — and is the single point where a scan is allowed or blocked
 never call an LLM and never merely recommend (that's an advisor).
 
 The `Guardian` is re-exported here so the historical import surface resolves to
-the folder-shape component (Phase 56 §3.3, 56.12).
+the folder-shape component.
 """
 
 __all__ = ["Guardian"]

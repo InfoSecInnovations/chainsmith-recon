@@ -12,16 +12,30 @@ Feeds: CDN/WAF detection, network topology understanding
 Note: This check is inherently less reliable than others — firewalls
 may block probes, and results vary by network path. It is treated as
 optional/best-effort.
+
+**Probe/grade.** `run()` traces and records; `grade()` reads
+the path back and places severity. The split is nearly free here because 57.2
+already recorded the whole trace as one exchange with the path serialised as JSON
+in `response_body` — so `grade()` re-reads exactly the structure the probe built,
+and `traceroute_data` is that same structure parsed back. One row per trace
+rather than one per hop, as 57.2 decided: the path is what a grader reads.
+
+The unreliability the note above describes is now *stated* rather than implied. A
+trace that never reached its target has a hop count that is a floor rather than a
+length, and `grade()` carries 0.7 instead of 0.95 for exactly that.
 """
 
 import asyncio
+import json
 import logging
 import socket
 import time
 from typing import Any
 
+from app import capture
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.observations import build_observation
+from app.grading import Evidence, GradeContext, Verdict
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +130,11 @@ class TracerouteCheck(BaseCheck):
             hostnames = ip_to_hosts[ip]
             host_label = hostnames[0]
 
-            trace_result = await self._trace_route(ip)
+            exchange = await self._trace_route(ip)
+            trace_result = _trace_from(exchange)
             if trace_result:
                 traceroute_data[host_label] = trace_result
-                self._generate_observations(result, host_label, ip, trace_result)
+                result.candidates.append(self.create_candidate(host=host_label).attach(exchange))
 
             result.targets_checked += 1
 
@@ -129,17 +144,30 @@ class TracerouteCheck(BaseCheck):
         result.outputs["traceroute_data"] = traceroute_data
         return result
 
-    async def _trace_route(self, target_ip: str) -> dict[str, Any] | None:
-        """Trace the network path to target_ip using TCP probes."""
+    async def _trace_route(self, target_ip: str) -> Exchange | None:
+        """Trace the network path to target_ip using TCP probes.
+
+        Returns the recorded exchange (57.4 wave 2). The path is its
+        `response_body`, as JSON — which is what 57.2 already wrote there, so the
+        probe and `grade()` read one representation rather than two.
+        """
         loop = asyncio.get_event_loop()
+        prb = None
         try:
-            return await asyncio.wait_for(
-                loop.run_in_executor(None, self._sync_trace_route, target_ip),
-                timeout=self.timeout_seconds / 2,  # Per-target timeout
-            )
+            # One row for the whole trace rather than one per hop: the path is
+            # the exchange a grader reads, and per-hop rows would multiply the
+            # corpus by MAX_HOPS for no added meaning.
+            async with capture.probe(
+                "icmp", target_ip, request_body=f"traceroute max_hops={MAX_HOPS}"
+            ) as prb:
+                trace = await asyncio.wait_for(
+                    loop.run_in_executor(None, self._sync_trace_route, target_ip),
+                    timeout=self.timeout_seconds / 2,  # Per-target timeout
+                )
+                prb.responded(json.dumps(trace, default=str) if trace else "")
         except (TimeoutError, Exception) as exc:
             logger.debug(f"Traceroute failed for {target_ip}: {exc}")
-            return None
+        return prb.exchange if prb is not None else None
 
     def _sync_trace_route(self, target_ip: str) -> dict[str, Any] | None:
         """Synchronous TCP traceroute implementation."""
@@ -243,43 +271,59 @@ class TracerouteCheck(BaseCheck):
                     return provider
         return None
 
-    def _generate_observations(
-        self,
-        result: CheckResult,
-        host: str,
-        target_ip: str,
-        trace: dict[str, Any],
-    ) -> None:
-        """Generate observations from traceroute results."""
+    # ══ Grade ════════════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Place severity on one recorded network path."""
+        exchange = next((e for e in evidence if _trace_from(e)), None)
+        if exchange is None:
+            return []
+
+        trace = _trace_from(exchange)
+        host = ctx.host
+        target_ip = trace.get("target_ip", "")
         total_hops = trace["total_hops"]
         avg_rtt = trace.get("avg_rtt_ms")
         cdn = trace.get("cdn_detected")
         reached = trace.get("reached_target", False)
 
         rtt_str = f"{avg_rtt}ms avg" if avg_rtt else "unknown"
+        evidence_ids = [exchange.id]
+        verdicts: list[Verdict] = []
 
-        # Info: route summary
-        result.observations.append(
-            build_observation(
-                check_name=self.name,
+        # ── The path itself ───────────────────────────────
+        verdicts.append(
+            Verdict(
+                severity="info",
+                # The hop count is the path length only if the trace got there.
+                # A filtered path stops on three silent TTLs, so its count is a
+                # floor — the same number, meaning something weaker.
+                confidence=0.95 if reached else 0.7,
+                discriminator="route",
                 title=f"Route to {host}: {total_hops} hops, {rtt_str}",
                 description=(
                     f"Network path to {host} ({target_ip}): {total_hops} hops, "
                     f"average latency {rtt_str}. "
                     f"Target {'reached' if reached else 'not reached (blocked/filtered)'}."
                 ),
-                severity="info",
                 evidence=(
                     f"Target: {host} ({target_ip}) | Hops: {total_hops} | "
                     f"Avg RTT: {rtt_str} | Reached: {reached}"
                 ),
-                host=host,
-                discriminator="route",
+                reasoning=(
+                    f"{total_hops} TTL probes, target {'reached' if reached else 'never answered'}"
+                ),
+                signals={
+                    "total_hops": total_hops,
+                    "avg_rtt_ms": avg_rtt,
+                    "reached_target": reached,
+                },
                 raw_data=trace,
+                evidence_ids=evidence_ids,
             )
         )
 
-        # Info: CDN/WAF detected in path
+        # ── A CDN or WAF in the path ──────────────────────
         if cdn:
             # Find the hop where CDN was detected
             cdn_hop = None
@@ -289,18 +333,43 @@ class TracerouteCheck(BaseCheck):
                     break
 
             hop_str = f" (hop {cdn_hop})" if cdn_hop else ""
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            verdicts.append(
+                Verdict(
+                    severity="info",
+                    # A substring of a PTR name. `CDN_PATTERNS` holds entries as
+                    # short as "cf-" and as generic as "google", which match
+                    # plenty of hosts that front nothing.
+                    confidence=0.8,
+                    discriminator=f"cdn-{cdn.lower().replace('/', '-').replace(' ', '-')}",
                     title=f"CDN detected in path to {host}: {cdn}{hop_str}",
                     description=(
                         f"Traffic to {host} ({target_ip}) passes through {cdn} "
                         f"infrastructure{hop_str}. This means service_probe and "
                         f"web check results may reflect the CDN, not the origin server."
                     ),
-                    severity="info",
                     evidence=(f"Target: {host} | CDN: {cdn} | Hop: {cdn_hop or 'unknown'}"),
-                    host=host,
-                    discriminator=f"cdn-{cdn.lower().replace('/', '-').replace(' ', '-')}",
+                    reasoning=f"A hop's PTR name matches a known {cdn} pattern",
+                    signals={"cdn": cdn, "hop": cdn_hop},
+                    evidence_ids=evidence_ids,
                 )
             )
+
+        return verdicts
+
+
+def _trace_from(exchange: Exchange | None) -> dict[str, Any] | None:
+    """The path one recorded trace came back with.
+
+    57.2 wrote the whole trace into `response_body` as JSON, so reading it back
+    is a `json.loads` rather than a re-derivation. A trace that failed or found
+    nothing has an empty body, and `None` here is what the probe's old `None`
+    return meant.
+    """
+    if exchange is None or exchange.error is not None or not exchange.response_body:
+        return None
+    try:
+        trace = json.loads(exchange.response_body)
+    except (ValueError, TypeError):
+        logger.debug("Could not read trace from exchange %s", exchange.id)
+        return None
+    return trace if isinstance(trace, dict) and trace.get("hops") is not None else None

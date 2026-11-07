@@ -12,16 +12,38 @@ Per-store tests:
   Pinecone: index stats, query, vector listing
   Milvus:   collection listing, entity query
 
+**Probe/grade.** For each detected store the probe discovers
+collection names, then probes the store's operations, recording every exchange
+onto one candidate per store; `grade()` re-reads them, rebuilds the store result,
+and emits one verdict. `_reading()` is the one parser both halves call (§0.12):
+each operation's exchange is found by its recorded request URL (and body, for the
+POST probes), and which store the evidence belongs to is recovered from those
+same request paths — no probe-time flag survives to grade.
+
+**Fixed**: the discriminator embeds the store type
+(`store-access-chroma`), so — like `ai_model_info_check` — the contract declares
+**no `observations:` map**, `provisional_for()` falls to `default: info`, and
+`grade()` places the real severity. Confidence is where the split pays: a 200 to
+a dump/scroll operation is direct, unauthenticated data access — near-certain —
+whereas a 200 that returns an empty body or an error document is
+`accessible`-shaped without actually exposing anything, and the doc-count is a
+best effort over shapes that vary by store.
+
 References:
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 """
 
+import contextlib
 import json
 from typing import Any
+from urllib.parse import urlparse
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 # Per-store probes: (path, method, body_or_none, description)
 STORE_PROBES = {
@@ -68,6 +90,15 @@ STORE_PROBES = {
     ],
 }
 
+# Discovery request per store: (path, how-to-parse). Used both to send (probe)
+# and to find + parse the recorded exchange (grade).
+DISCOVERY = {
+    "chroma": "/api/v1/collections",
+    "qdrant": "/collections",
+    "weaviate": "/v1/schema",
+    "milvus": "/api/v1/collections",
+}
+
 
 class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
     """
@@ -92,8 +123,11 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
     ]
     techniques = ["vector store enumeration", "direct data access", "API probing"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
         detected_stores = context.get("vector_stores", [])
         rag_endpoints = context.get("rag_endpoints", [])
 
@@ -117,44 +151,44 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
                         continue
 
                     base_url = store_urls.get(store_type, service.url)
-                    # Strip any trailing path from the base
                     if "://" in base_url:
-                        parts = base_url.split("/")
-                        base_url = "/".join(parts[:3])
+                        base_url = "/".join(base_url.split("/")[:3])
 
-                    # First, discover collection names for template paths
-                    collections = await self._discover_collections(client, store_type, base_url)
-
-                    store_result = await self._probe_store(
-                        client, store_type, base_url, probes, collections
+                    candidate = self.create_candidate(
+                        host=service.host, target=service, target_url=base_url
                     )
 
-                    if store_result["accessible_ops"]:
-                        accessible.append(store_result)
-                        severity = self._determine_severity(store_result)
-
-                        result.observations.append(
-                            build_observation(
+                    def record(resp, method: str, body: dict | None, _c=candidate) -> None:
+                        kwargs: dict[str, Any] = {"method": method}
+                        if method == "POST":
+                            kwargs["request_headers"] = JSON_HEADERS
+                            kwargs["request_json"] = body or {}
+                        _c.attach(
+                            exchange_from_response(
+                                resp,
                                 check_name=self.name,
-                                title=f"Vector store directly accessible: {store_type}",
-                                description=self._build_description(store_result),
-                                severity=severity,
-                                evidence=self._build_evidence(store_result),
+                                scan_id=scan_id,
                                 host=service.host,
-                                discriminator=f"store-access-{store_type}",
-                                target=service,
-                                target_url=base_url,
-                                raw_data=store_result,
-                                references=self.references,
+                                **kwargs,
                             )
                         )
+
+                    await self._run_discovery(client, record, store_type, base_url)
+                    collections = self._discover_collections(
+                        candidate.exchanges, store_type, base_url
+                    )
+                    await self._run_probes(client, record, base_url, probes, collections)
+
+                    result.candidates.append(candidate)
+                    store_result = self._reading(candidate.exchanges, store_type, base_url)
+                    if store_result["accessible_ops"]:
+                        accessible.append(store_result)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
         if accessible:
             result.outputs["accessible_stores"] = accessible
-            # Aggregate collections
             all_collections = []
             for s in accessible:
                 all_collections.extend(s.get("collections", []))
@@ -163,100 +197,132 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _discover_collections(
-        self,
-        client: AsyncHttpClient,
-        store_type: str,
-        base_url: str,
-    ) -> list[str]:
-        """Try to list collection/index names for template substitution."""
-        names: list[str] = []
-        try:
-            if store_type == "chroma":
-                resp = await client.get(f"{base_url}/api/v1/collections")
-                if not resp.error and resp.status_code == 200:
-                    data = json.loads(resp.body or "[]")
-                    if isinstance(data, list):
-                        names = [
-                            c.get("name", c.get("id", "")) for c in data[:10] if isinstance(c, dict)
-                        ]
-            elif store_type == "qdrant":
-                resp = await client.get(f"{base_url}/collections")
-                if not resp.error and resp.status_code == 200:
-                    data = json.loads(resp.body or "{}")
-                    colls = data.get("result", {}).get("collections", [])
-                    names = [c.get("name", "") for c in colls[:10]]
-            elif store_type == "weaviate":
-                resp = await client.get(f"{base_url}/v1/schema")
-                if not resp.error and resp.status_code == 200:
-                    data = json.loads(resp.body or "{}")
-                    classes = data.get("classes", [])
-                    names = [c.get("class", "") for c in classes[:10]]
-            elif store_type == "milvus":
-                resp = await client.get(f"{base_url}/api/v1/collections")
-                if not resp.error and resp.status_code == 200:
-                    data = json.loads(resp.body or "{}")
-                    names = data.get("collection_names", [])[:10]
-        except Exception:
-            pass
-        return [n for n in names if n]
+    async def _run_discovery(self, client, record, store_type: str, base_url: str) -> None:
+        path = DISCOVERY.get(store_type)
+        if path:
+            with contextlib.suppress(Exception):
+                record(await client.get(f"{base_url}{path}"), "GET", None)
 
-    async def _probe_store(
-        self,
-        client: AsyncHttpClient,
-        store_type: str,
-        base_url: str,
-        probes: list[tuple],
-        collections: list[str],
-    ) -> dict:
-        """Probe a store with its specific endpoints."""
-        accessible_ops: list[dict] = []
-        doc_count = 0
-
-        for path_tmpl, method, body, op_name in probes:
-            # Resolve template placeholders
-            paths_to_try = self._resolve_paths(path_tmpl, collections, store_type)
-
-            for path in paths_to_try:
+    async def _run_probes(self, client, record, base_url, probes, collections) -> None:
+        """Send each store probe, breaking on the first success per probe type —
+        the same control flow as before, deciding on the exchange just recorded."""
+        for path_tmpl, method, body, _op_name in probes:
+            for path in self._resolve_paths(path_tmpl, collections):
                 url = f"{base_url}{path}"
                 try:
                     if method == "GET":
                         resp = await client.get(url)
+                        record(resp, "GET", None)
                     else:
-                        resp = await client.post(
-                            url,
-                            json=body or {},
-                            headers={"Content-Type": "application/json"},
-                        )
-
-                    if resp.error or resp.status_code in (404, 405, 502, 503):
-                        continue
-
-                    if resp.status_code in (200, 201):
-                        preview = (resp.body or "")[:500]
-                        accessible_ops.append(
-                            {
-                                "operation": op_name,
-                                "path": path,
-                                "status": resp.status_code,
-                                "preview": preview,
-                            }
-                        )
-                        # Try to count documents
-                        doc_count += self._extract_count(resp.body, op_name)
-                        break  # One success per probe type
-                    elif resp.status_code == 401:
-                        accessible_ops.append(
-                            {
-                                "operation": op_name,
-                                "path": path,
-                                "status": 401,
-                                "auth_required": True,
-                            }
-                        )
-                        break
+                        resp = await client.post(url, json=body or {}, headers=JSON_HEADERS)
+                        record(resp, "POST", body or {})
                 except Exception:
                     continue
+                if resp.error or resp.status_code in (404, 405, 502, 503):
+                    continue
+                if resp.status_code in (200, 201) or resp.status_code == 401:
+                    break  # One recorded outcome per probe type.
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        exchanges = list(evidence)
+        base_url = ctx.target_url or ""
+        store_type = self._infer_store_type(exchanges)
+        if not store_type or not base_url:
+            return []
+
+        store_result = self._reading(exchanges, store_type, base_url)
+        if not store_result["accessible_ops"]:
+            return []
+
+        severity = self._determine_severity(store_result)
+        confidence, why = self._confidence(store_result)
+
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                discriminator=f"store-access-{store_type}",
+                title=f"Vector store directly accessible: {store_type}",
+                description=self._build_description(store_result),
+                evidence=self._build_evidence(store_result),
+                reasoning=why,
+                signals={
+                    "store_type": store_type,
+                    "operations": [o["operation"] for o in store_result["accessible_ops"]],
+                    "doc_count": store_result["doc_count"],
+                },
+                references=self.references,
+                raw_data=store_result,
+                tier=ctx.tier,
+                evidence_ids=evidence.ids(),
+            )
+        ]
+
+    def _confidence(self, store_result: dict) -> tuple[float, str]:
+        ops = store_result["accessible_ops"]
+        success_ops = [o for o in ops if o.get("status") in (200, 201)]
+        auth_ops = [o for o in ops if o.get("auth_required")]
+        if not success_ops and auth_ops:
+            return 0.75, (
+                "the store answered 401 — it is reachable and enforcing auth, which is the finding, "
+                "but no data was exposed, so this is access-controlled rather than open"
+            )
+        dump_ops = {"dump_documents", "enumerate_points", "list_objects"} & {
+            o["operation"] for o in success_ops
+        }
+        if dump_ops:
+            return 0.85, (
+                f"a bulk-read operation ({', '.join(sorted(dump_ops))}) returned 200 without auth — "
+                "direct access to raw chunks. Held below certainty only because a 200 with an empty "
+                "or error-shaped body would read the same, and the doc-count is inferred from "
+                "store-specific fields that may be absent"
+            )
+        return 0.7, (
+            "an operation returned 200 without auth, so the endpoint is reachable and answering; "
+            "whether it exposed real content or an empty/permission-shaped 200 is not distinguished "
+            "beyond the status code"
+        )
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _reading(self, exchanges: list[Exchange], store_type: str, base_url: str) -> dict:
+        """Rebuild one store's access result off the recorded exchanges."""
+        collections = self._discover_collections(exchanges, store_type, base_url)
+        probes = STORE_PROBES.get(store_type, [])
+        accessible_ops: list[dict] = []
+        doc_count = 0
+
+        for path_tmpl, method, body, op_name in probes:
+            for path in self._resolve_paths(path_tmpl, collections):
+                url = f"{base_url}{path}"
+                ex = self._find(exchanges, method, url, body)
+                if ex is None:
+                    continue
+                if ex.error or ex.response_status in (404, 405, 502, 503):
+                    continue
+                if ex.response_status in (200, 201):
+                    accessible_ops.append(
+                        {
+                            "operation": op_name,
+                            "path": path,
+                            "status": ex.response_status,
+                            "preview": (ex.response_body or "")[:500],
+                        }
+                    )
+                    doc_count += self._extract_count(ex.response_body, op_name)
+                    break
+                if ex.response_status == 401:
+                    accessible_ops.append(
+                        {
+                            "operation": op_name,
+                            "path": path,
+                            "status": 401,
+                            "auth_required": True,
+                        }
+                    )
+                    break
 
         return {
             "store_type": store_type,
@@ -265,23 +331,92 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
             "doc_count": doc_count,
         }
 
-    def _resolve_paths(
-        self,
-        path_tmpl: str,
-        collections: list[str],
-        store_type: str,
+    def _discover_collections(
+        self, exchanges: list[Exchange], store_type: str, base_url: str
     ) -> list[str]:
+        """Collection/index names, off the recorded discovery response."""
+        path = DISCOVERY.get(store_type)
+        if not path:
+            return []
+        ex = self._find(exchanges, "GET", f"{base_url}{path}", None)
+        if ex is None or ex.error or ex.response_status != 200:
+            return []
+        names: list[str] = []
+        try:
+            if store_type == "chroma":
+                data = json.loads(ex.response_body or "[]")
+                if isinstance(data, list):
+                    names = [
+                        c.get("name", c.get("id", "")) for c in data[:10] if isinstance(c, dict)
+                    ]
+            elif store_type == "qdrant":
+                data = json.loads(ex.response_body or "{}")
+                colls = data.get("result", {}).get("collections", [])
+                names = [c.get("name", "") for c in colls[:10]]
+            elif store_type == "weaviate":
+                data = json.loads(ex.response_body or "{}")
+                classes = data.get("classes", [])
+                names = [c.get("class", "") for c in classes[:10]]
+            elif store_type == "milvus":
+                data = json.loads(ex.response_body or "{}")
+                names = data.get("collection_names", [])[:10]
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            return []
+        return [n for n in names if n]
+
+    def _resolve_paths(self, path_tmpl: str, collections: list[str]) -> list[str]:
         """Expand template paths with discovered collection names."""
         if "{id}" not in path_tmpl and "{name}" not in path_tmpl:
             return [path_tmpl]
-
         paths = []
         for coll in collections[:3]:
             paths.append(path_tmpl.replace("{id}", coll).replace("{name}", coll))
-        # Fallback: try "default" or index 0
         if not paths:
             paths.append(path_tmpl.replace("{id}", "default").replace("{name}", "default"))
         return paths
+
+    @staticmethod
+    def _infer_store_type(exchanges: list[Exchange]) -> str:
+        """Which store these exchanges probed, from their signature request paths.
+
+        chroma and milvus share `/api/v1/collections`, so milvus is recognised
+        first by its `/api/v1/entities/query`, and chroma by its
+        `/api/v1/collections/{id}/...` operations.
+        """
+        paths = [urlparse(e.request_url or "").path for e in exchanges]
+        joined = " ".join(paths)
+        if "/api/v1/entities/query" in joined:
+            return "milvus"
+        if "/describe_index_stats" in joined or "/vectors/list" in joined:
+            return "pinecone"
+        if "/v1/schema" in joined or "/v1/graphql" in joined or "/v1/objects" in joined:
+            return "weaviate"
+        if "/api/v1/collections" in joined:
+            return "chroma"
+        if "/collections" in joined:
+            return "qdrant"
+        return ""
+
+    @staticmethod
+    def _find(
+        exchanges: list[Exchange], method: str, url: str, body: dict | None
+    ) -> Exchange | None:
+        """The recorded exchange for method+path, matching the POST body too."""
+        want_path = urlparse(url).path
+        for exchange in exchanges:
+            if exchange.request_method != method:
+                continue
+            if urlparse(exchange.request_url or "").path != want_path:
+                continue
+            if method == "POST":
+                try:
+                    got = json.loads(exchange.request_body or "{}")
+                except (ValueError, TypeError):
+                    got = None
+                if got != (body or {}):
+                    continue
+            return exchange
+        return None
 
     def _extract_count(self, body: str | None, op_name: str) -> int:
         """Try to extract document/vector count from response."""
@@ -293,7 +428,6 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
                 for key in ("count", "total", "totalVectorCount", "vectors_count", "point_count"):
                     if key in data:
                         return int(data[key])
-                # Nested result
                 result = data.get("result", {})
                 if isinstance(result, dict):
                     for key in ("vectors_count", "points_count"):
@@ -317,7 +451,6 @@ class RAGVectorStoreAccessCheck(ServiceIteratingCheck):
 
         op_names = {o["operation"] for o in success_ops}
 
-        # Full dump = critical
         if (
             "dump_documents" in op_names
             or "enumerate_points" in op_names

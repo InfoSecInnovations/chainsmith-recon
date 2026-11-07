@@ -1,6 +1,7 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_api.py."""
+"""Tests for web_openapi_discovery."""
 
 import json
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -50,17 +51,34 @@ def mock_client(responses: list[HttpResponse] | HttpResponse):
     mock.__aenter__ = AsyncMock(return_value=mock)
     mock.__aexit__ = AsyncMock()
 
-    async def get_response(*args, **kwargs):
+    async def get_response(url=None, *args, **kwargs):
         try:
-            return next(response_iter)
+            response = next(response_iter)
         except StopIteration:
-            return responses[-1]  # Repeat last response
+            response = responses[-1]  # Repeat last response
+        # The real client stamps the requested URL onto the response, and a
+        # migrated check records that URL on the exchange its grader reads.
+        return replace(response, url=url) if url else response
 
     mock.get = AsyncMock(side_effect=get_response)
     mock.options = AsyncMock(side_effect=get_response)
     mock.head = AsyncMock(side_effect=get_response)
 
     return mock
+
+
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
 
 
 class TestOpenAPICheckInit:
@@ -103,7 +121,7 @@ class TestOpenAPICheckService:
             "app.checks.web.web_openapi_discovery.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         spec_observations = [f for f in result.observations if "OpenAPI" in f.title]
         assert len(spec_observations) == 1
@@ -133,7 +151,7 @@ class TestOpenAPICheckService:
             "app.checks.web.web_openapi_discovery.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -164,7 +182,7 @@ class TestOpenAPICheckService:
             "app.checks.web.web_openapi_discovery.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -207,7 +225,7 @@ class TestOpenAPICheckService:
             "app.checks.web.web_openapi_discovery.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         ui_observations = [f for f in result.observations if "UI" in f.title]
         assert len(ui_observations) == 1
@@ -238,7 +256,7 @@ class TestOpenAPICheckService:
             "app.checks.web.web_openapi_discovery.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 0
 
@@ -261,7 +279,7 @@ class TestOpenAPICheckService:
             "app.checks.web.web_openapi_discovery.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         key = f"openapi_{sample_service.port}"
         assert key in result.outputs

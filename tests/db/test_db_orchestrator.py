@@ -30,6 +30,10 @@ def mock_state():
     """Create a mock AppState with realistic data."""
     state = MagicMock()
     state.session_id = "test-session"
+    # on_scan_start now reads the scan's own snapshot rather than AppState,
+    # so this fixture doubles as a ScanSession stand-in (as it already did
+    # for on_scan_complete).
+    state.operator_session_id = "test-session"
     state.target = "example.com"
     state.settings = {"parallel": False, "rate_limit": 10.0}
     state.status = "complete"

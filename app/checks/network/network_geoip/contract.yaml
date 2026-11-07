@@ -27,3 +27,22 @@ references:
 - https://attack.mitre.org/techniques/T1590/
 reason: IP geolocation and ASN data reveal hosting providers, geographic distribution,
   and unexpected infrastructure (e.g., residential IPs hosting production services).
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2, and the first check to record the
+  # `local` protocol: a GeoLite2 row is evidence, and a corpus copy pins *which* row
+  # answered, which matters because these databases are reissued weekly and an ASN's
+  # classification moves between releases.
+  #
+  # Confidence is doing real work here, in two places worth knowing about. The `geo`
+  # verdict is *less* confident when it has a city (0.75) than when it only has a
+  # country (0.9) — GeoLite2 is good at the coarse claim and frequently wrong at the
+  # specific one, and anycast makes any single location partly fictional.
+  # `other-hosting` carries 0.5 because it is the absence of a match against two
+  # hand-maintained lists totalling about forty ASNs, and most of the internet is
+  # "not in the list"; that is also why it stays `low` rather than rising.
+  default: info
+  observations:
+    geo: info
+    residential: medium
+    other-hosting: low

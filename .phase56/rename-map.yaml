@@ -1,0 +1,93 @@
+# Category-A cleanup renames (Phase 56 §8.7) — ONLY checks already migrated.
+# Adding a future rename here causes false diff-registry/scan drift (the
+# unmigrated check still emits its old name). Append per sub-phase as they land.
+#
+# 56.2 web (updated in 56.7): the registry/scan baselines predate 56.2 and carry
+# the original `*_check` names. The rename-map is applied SINGLE-PASS (no chaining,
+# registry_diff._apply_rename / scan_diff), so these must map the BASELINE name
+# DIRECTLY to the current live name — `web_*` after the 56.7 prefix sweep — not to
+# the intermediate 56.2 `cors`/`sri`/`webdav`. (No separate `cors: web_cors` entry
+# is needed: no baseline carries the bare `cors`/`sri`/`webdav` key.)
+cors_check: web_cors
+sri_check: web_sri
+webdav_check: web_webdav
+#
+# 56.3 network (migrated): folder renamed ports→port_scan; the registered name was
+# already `port_scan` so this is a no-op for diff-registry, but the *scan* baseline
+# predates the rename and emits `ports`. After 56.7 the live name is
+# `network_port_scan`, so the scan-baseline compare maps ports→network_port_scan
+# directly (still a no-op for diff-registry, whose baseline key is `port_scan`,
+# handled by the 56.7 `port_scan: network_port_scan` entry below).
+ports: network_port_scan
+#
+# 56.7 mcp (RESTORE `mcp_`): the 56.5 strip is reverted — every MCP check is back
+# to its `mcp_*` name. The registry baseline predates 56.5 and ALREADY carries the
+# `mcp_*` names, and the live registry now emits `mcp_*` again, so the baseline maps
+# to itself (identity) → NO mcp entries are needed. The 56.5 `mcp_*: <bare>` strip
+# entries that used to live here are DELETED (with the prefix restored they would
+# mis-rename the baseline `mcp_*` down to bare and manufacture drift — single-pass
+# apply, the chain-collapse lesson). `dev rename-suite` auto-appended the inverse
+# `<bare>: mcp_*` lines; those are harmless no-ops (no baseline carries a bare MCP
+# key) but were removed too, so this section nets to nothing.
+#
+# 56.7 network: add the uniform `network_` suite prefix (§14) to every check.
+# Applied to the registry baseline (which carries the bare names) → diff-registry CLEAN.
+banner_grab: network_banner_grab
+dns_enumeration: network_dns_enumeration
+dns_records: network_dns_records
+geoip: network_geoip
+http_method_enum: network_http_method_enum
+ipv6_discovery: network_ipv6_discovery
+port_scan: network_port_scan
+reverse_dns: network_reverse_dns
+service_probe: network_service_probe
+tls_analysis: network_tls_analysis
+traceroute: network_traceroute
+whois_lookup: network_whois_lookup
+wildcard_dns: network_wildcard_dns
+auth_detection: web_auth_detection
+config_exposure: web_config_exposure
+cookie_security: web_cookie_security
+debug_endpoints: web_debug_endpoints
+default_creds: web_default_creds
+directory_listing: web_directory_listing
+error_page: web_error_page
+favicon: web_favicon
+header_analysis: web_header_analysis
+hsts_preload: web_hsts_preload
+http2_detection: web_http2_detection
+mass_assignment: web_mass_assignment
+openapi_discovery: web_openapi_discovery
+path_probe: web_path_probe
+redirect_chain: web_redirect_chain
+robots_txt: web_robots_txt
+sitemap: web_sitemap
+ssrf_indicator: web_ssrf_indicator
+vcs_exposure: web_vcs_exposure
+waf_detection: web_waf_detection
+adversarial_input: ai_adversarial_input
+api_parameter_injection: ai_api_parameter_injection
+auth_bypass: ai_auth_bypass
+content_filter_check: ai_content_filter_check
+context_window_check: ai_context_window_check
+conversation_history_leak: ai_conversation_history_leak
+embedding_endpoint_discovery: ai_embedding_endpoint_discovery
+embedding_extraction: ai_embedding_extraction
+function_calling_abuse: ai_function_calling_abuse
+guardrail_consistency: ai_guardrail_consistency
+input_format_injection: ai_input_format_injection
+jailbreak_testing: ai_jailbreak_testing
+llm_endpoint_discovery: ai_llm_endpoint_discovery
+model_behavior_fingerprint: ai_model_behavior_fingerprint
+model_enumeration: ai_model_enumeration
+model_info_check: ai_model_info_check
+multi_turn_injection: ai_multi_turn_injection
+output_format_manipulation: ai_output_format_manipulation
+prompt_leakage: ai_prompt_leakage
+rate_limit_check: ai_rate_limit_check
+response_caching: ai_response_caching
+streaming_analysis: ai_streaming_analysis
+system_prompt_injection: ai_system_prompt_injection
+token_cost_exhaustion: ai_token_cost_exhaustion
+tool_discovery: ai_tool_discovery
+training_data_extraction: ai_training_data_extraction

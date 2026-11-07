@@ -31,3 +31,11 @@ references:
 - OWASP LLM Top 10 - LLM07 Insecure Plugin Design
 reason: MCP servers expose tool-calling interfaces that may allow command execution,
   file access, or data exfiltration
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. The discriminator embeds the path (`mcp-<path>`), an
+  # unbounded set, so there is no `observations:` map (§0.12): `default` is the
+  # floor — `info`, the no-capabilities answer — and grade() places the real
+  # severity (medium with capabilities) (57.4 wave 7).
+  default: info

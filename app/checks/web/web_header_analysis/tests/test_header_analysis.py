@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_web.py."""
+"""Tests for web_header_analysis."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -62,6 +62,20 @@ def mock_client(responses: list[HttpResponse] | HttpResponse):
     return mock
 
 
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
+
+
 class TestHeaderAnalysisCheckInit:
     """Tests for HeaderAnalysisCheck initialization."""
 
@@ -94,7 +108,7 @@ class TestHeaderAnalysisCheckService:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         missing_observations = [f for f in result.observations if "Missing security" in f.title]
         assert len(missing_observations) == 1
@@ -119,7 +133,7 @@ class TestHeaderAnalysisCheckService:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         missing_observations = [f for f in result.observations if "Missing security" in f.title]
         assert len(missing_observations) == 0
@@ -138,7 +152,7 @@ class TestHeaderAnalysisCheckService:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         cors_observations = [f for f in result.observations if "CORS" in f.title]
         assert len(cors_observations) == 1
@@ -159,7 +173,7 @@ class TestHeaderAnalysisCheckService:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         cors_observations = [f for f in result.observations if "CORS" in f.title]
         assert len(cors_observations) == 1
@@ -179,7 +193,7 @@ class TestHeaderAnalysisCheckService:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         server_observations = [f for f in result.observations if "Server version" in f.title]
         assert len(server_observations) == 1
@@ -193,6 +207,6 @@ class TestHeaderAnalysisCheckService:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.errors) > 0

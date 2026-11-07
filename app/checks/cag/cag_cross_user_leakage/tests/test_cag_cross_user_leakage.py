@@ -1,5 +1,10 @@
-"""Co-located tests (Phase 56 §3) — split from test_cag_security.py."""
+"""Tests for cag_cross_user_leakage.
 
+This check is split into probe + grade; tests route through
+`probe_and_grade()` and keep their original assertions.
+"""
+
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -57,18 +62,62 @@ def make_response(
     )
 
 
+def _stamp(response: HttpResponse, url: str | None) -> HttpResponse:
+    """Report the response as coming from the URL it was requested from.
+
+    A probe records `HttpResponse.url` as the exchange's `request_url`, and a
+    grader attributes each exchange back to its endpoint from there. A mock
+    that stamps one fixed url onto every response makes every exchange look
+    like the same request (§0.13).
+    """
+    return replace(response, url=url) if url else response
+
+
+def _stamped(fn):
+    """Wrap a client method so whatever it returns is stamped with its URL.
+
+    Finds the URL as the `url=` keyword or the first positional string that
+    looks like one, which covers both `post(url, ...)` and
+    `_request("DELETE", url)`.
+    """
+
+    async def _call(*args, **kwargs):
+        url = kwargs.get("url")
+        if url is None:
+            url = next((a for a in args if isinstance(a, str) and "://" in a), None)
+        response = await fn(*args, **kwargs)
+        return _stamp(response, url) if isinstance(response, HttpResponse) else response
+
+    return AsyncMock(side_effect=_call)
+
+
 def make_mock_client(**overrides):
-    """Create a standard mock HTTP client."""
+    """Create a standard mock HTTP client.
+
+    Every method stamps the requested URL onto its response, and `__aexit__`
+    returns False: a bare `AsyncMock()` returns a truthy MagicMock, which
+    suppresses every exception raised inside the `async with` (§0.14).
+    """
     client = AsyncMock()
-    client.get = AsyncMock(return_value=make_response(status_code=404))
-    client.post = AsyncMock(return_value=make_response(status_code=200, body='{"answer": "ok"}'))
-    client.head = AsyncMock(return_value=make_response(status_code=404))
-    client._request = AsyncMock(return_value=make_response(status_code=404))
+    client.get = _stamped(AsyncMock(return_value=make_response(status_code=404)))
+    client.post = _stamped(
+        AsyncMock(return_value=make_response(status_code=200, body='{"answer": "ok"}'))
+    )
+    client.head = _stamped(AsyncMock(return_value=make_response(status_code=404)))
+    client._request = _stamped(AsyncMock(return_value=make_response(status_code=404)))
     client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock()
+    client.__aexit__ = AsyncMock(return_value=False)
     for k, v in overrides.items():
-        setattr(client, k, v)
+        setattr(client, k, _stamped(v) if callable(v) else v)
     return client
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 class TestCrossUserLeakageCheck:
@@ -100,7 +149,7 @@ class TestCrossUserLeakageCheck:
         with patch(
             "app.checks.cag.cag_cross_user_leakage.check.AsyncHttpClient", return_value=client
         ):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         critical_obs = [o for o in result.observations if o.severity == "critical"]
@@ -126,7 +175,7 @@ class TestCrossUserLeakageCheck:
         with patch(
             "app.checks.cag.cag_cross_user_leakage.check.AsyncHttpClient", return_value=client
         ):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         info_obs = [o for o in result.observations if o.severity == "info"]
@@ -135,6 +184,6 @@ class TestCrossUserLeakageCheck:
 
     @pytest.mark.asyncio
     async def test_no_endpoints_skips(self, check, sample_service):
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service, {})
         assert result.success
         assert len(result.observations) == 0

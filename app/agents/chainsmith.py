@@ -1,5 +1,5 @@
 """
-Chainsmith Agent (Phase 23, consolidated Phase 39)
+Chainsmith Agent
 
 Maintains, curates, and validates an organization's check ecosystem.
 Guides operators on crafting custom checks and attack chain patterns.

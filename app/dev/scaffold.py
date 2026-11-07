@@ -1,5 +1,5 @@
 """
-app/dev/scaffold.py - `chainsmith dev new-check` (Phase 56 §8.1).
+app/dev/scaffold.py - `chainsmith dev new-check`.
 
 Generates a fresh component folder (check.py, contract.yaml with a stubbed UUID,
 config.yaml, tests/test_<name>.py, __init__.py re-export) so contributors never

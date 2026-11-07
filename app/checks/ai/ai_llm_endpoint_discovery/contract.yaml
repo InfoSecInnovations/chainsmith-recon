@@ -30,3 +30,25 @@ references:
 - OWASP LLM Top 10 - LLM01 Prompt Injection
 reason: Chat/completion endpoints are the primary interface for prompt injection and
   other AI attacks
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: a path either accepted
+  # the chat payload or answered 404/405, so no grader above the rule tier is
+  # ever called. This is the PRE-grade value a candidate carries (§6.1) —
+  # `grade()` places the real one — and it is the lowest, and here the only,
+  # severity this check emits, so a deferred grade cannot over-escalate
+  # `on_critical`.
+  #
+  # There is no `observations:` map on purpose, for `network_port_scan`'s reason:
+  # the discriminator is path-derived (`chat-v1-chat-completions`) over an
+  # operator-editable path list, so the set is unbounded and a map could not
+  # enumerate it. `provisional_for()` falls through to `default`, which is
+  # correct — every discovered endpoint is worth exactly `info`. An endpoint
+  # existing is not a finding; it is the surface the rest of the suite attacks.
+  #
+  # All of the judgement here therefore went into confidence. The check keys on a
+  # status code and a catch-all route answers every path, so `grade()` reads the
+  # body: 401 is 0.9 (only something that meant to handle the payload rejects it
+  # that way), a named dialect answering JSON 0.85, a named dialect answering
+  # non-JSON 0.6, an unrecognised path with a non-JSON body 0.3.
+  default: info

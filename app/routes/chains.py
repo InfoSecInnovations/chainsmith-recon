@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.db.repositories import ChainRepository, ObservationRepository, ScanRepository
 from app.engine.chains import run_chain_analysis
+from app.lib.observations import partition_by_grading, resolve_superseded_ids
 from app.scan_context import resolve_session
 
 logger = logging.getLogger(__name__)
@@ -153,15 +154,22 @@ async def get_chain_detail(
     if not chain:
         raise HTTPException(404, f"Chain '{chain_id}' not found")
 
-    # Include the actual observation objects
+    # Include the actual observation objects. The chain row is left as built;
+    # an id an offline re-grade superseded is rendered through to its
+    # successors, and named so the substitution is visible.
     chain_with_observations = chain.copy()
-    obs_ids = chain.get("observation_ids", [])
+    obs_ids = chain.get("observation_ids") or []
+    chain_with_observations["observations"] = []
+    chain_with_observations["superseded_observation_ids"] = []
     if obs_ids:
-        all_observations = await _observation_repo.get_observations(sid)
-        chain_with_observations["observations"] = [
-            f for f in all_observations if f.get("id") in obs_ids
+        current, superseded = partition_by_grading(
+            await _observation_repo.get_observations(sid, include_superseded=True)
+        )
+        resolved = resolve_superseded_ids(obs_ids, superseded)
+        chain_with_observations["observations"] = [f for f in current if f.get("id") in resolved]
+        superseded_ids = {f.get("id") for f in superseded}
+        chain_with_observations["superseded_observation_ids"] = [
+            oid for oid in obs_ids if oid in superseded_ids
         ]
-    else:
-        chain_with_observations["observations"] = []
 
     return chain_with_observations

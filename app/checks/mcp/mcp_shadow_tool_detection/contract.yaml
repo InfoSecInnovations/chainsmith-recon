@@ -29,3 +29,17 @@ references:
 - MITRE ATLAS - AML.T0051 LLM Plugin Compromise
 reason: In multi-server MCP setups, tool name collisions allow attackers to shadow
   legitimate tools with malicious replacements
+severity:
+  model: fixed
+  # Categorical: namespace/collision analysis reads the enumerated tool names
+  # (recorded as a `local` exchange) and the protocol verdicts read recorded
+  # POST responses, so no grader above the rule tier is ever called. The
+  # discriminators are a closed five-value set, so the map below carries each at
+  # the severity it emits; `default` is the floor — `info` (57.4 wave 7).
+  default: info
+  observations:
+    namespace-safe: info
+    namespace-flat: medium
+    name-collision: low
+    list-changed-accepted: high
+    reinitialize-accepted: low

@@ -1,5 +1,6 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_default_debug.py."""
+"""Tests for web_default_creds."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -41,11 +42,13 @@ def mock_client_multi(response_map=None, default=None):
     mock.__aexit__ = AsyncMock()
 
     def _lookup(method, url):
+        # The real client stamps the requested URL onto the response, and a
+        # migrated check records that URL on the exchange its grader reads.
         if response_map:
             for (m, pattern), response in response_map.items():
                 if m == method and pattern in url:
-                    return response
-        return default
+                    return replace(response, url=url)
+        return replace(default, url=url)
 
     async def dispatch_get(url, **kwargs):
         return _lookup("GET", url)
@@ -62,6 +65,20 @@ def mock_client_multi(response_map=None, default=None):
     mock._request = AsyncMock(side_effect=dispatch_request)
 
     return mock
+
+
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
 
 
 def _mock_preferences(intrusive_web=False):
@@ -295,7 +312,7 @@ class TestDefaultCredsCheck:
     async def test_skips_when_intrusive_disabled(self, service):
         check = DefaultCredsCheck()
         with patch("app.preferences.get_preferences", _mock_preferences(intrusive_web=False)):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         assert result.observations == []
         assert result.outputs.get("default_creds_skipped") is True
 
@@ -314,7 +331,7 @@ class TestDefaultCredsCheck:
                 return_value=mock_client_multi(responses),
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         no_auth = [o for o in result.observations if "no authentication" in o.title.lower()]
         assert len(no_auth) == 1
@@ -338,7 +355,7 @@ class TestDefaultCredsCheck:
                 return_value=mock_client_multi(responses),
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         login_obs = [o for o in result.observations if "Login form" in o.title]
         assert len(login_obs) == 1
@@ -351,7 +368,7 @@ class TestDefaultCredsCheck:
         context = {f"paths_{service.port}": {"accessible": ["/api", "/health"]}}
 
         with patch("app.preferences.get_preferences", _mock_preferences(intrusive_web=True)):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert result.observations == []
 
@@ -372,7 +389,7 @@ class TestDefaultCredsCheck:
                 return_value=mock_client_multi(responses),
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         no_auth = [o for o in result.observations if "no authentication" in o.title.lower()]
         assert no_auth == [], "Generic page without admin indicators should not be flagged"

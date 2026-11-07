@@ -1,78 +1,56 @@
 # Quick Start
 
+To get a running instance (Docker, `.env`, `./chainsmith.sh start`), follow the
+canonical [QUICKSTART.md](../../QUICKSTART.md) at the repository root. This page
+picks up from there and walks through your first scans from the CLI.
+
+The `chainsmith` CLI is a client: it talks to a running Chainsmith server. With
+the Docker stack from QUICKSTART.md, the server is published on port **8100**, so
+pass `--server 127.0.0.1:8100` (the examples below omit it for brevity). If you
+run the server natively with `chainsmith serve`, it listens on `127.0.0.1:8000`,
+which is the CLI's default. See [CLI Overview](../cli/overview.md#server-address).
+
 ## Your First Scan
 
 ```bash
-chainsmith scan example.com
+chainsmith --server 127.0.0.1:8100 scan example.com
 ```
 
-This runs all 25 checks in dependency order:
+This runs all 133 checks in dependency order across the seven suites:
 
-1. **Network**: DNS enumeration → service probe
-2. **Web**: Headers, robots.txt, CORS, OpenAPI, paths
-3. **AI**: LLM endpoints, embeddings, prompts, tools, filters
-4. **MCP/Agent/RAG/CAG**: Specialized AI infrastructure checks
+1. **Network**: DNS enumeration → port scan → service probe, plus TLS, banners, WHOIS
+2. **Web**: Headers, robots.txt, CORS, OpenAPI, paths, exposed configs
+3. **AI**: LLM endpoints, embeddings, prompt leakage, jailbreaks, filters
+4. **MCP / Agent / RAG / CAG**: Specialized AI infrastructure checks
+
+Checks whose prerequisites never appear (for example, no chat endpoint was found)
+are skipped automatically.
 
 ## View the Execution Plan
-
-Before running, see what will happen:
 
 ```bash
 chainsmith scan example.com --plan
 ```
 
-Output:
-```
-=== Execution Plan ===
-Suite order: network → web → ai → mcp → agent → rag → cag
+Shows which checks would run, in what order, without sending any traffic.
 
-Phase 1 [network] → sequential
-  • dns_enumeration → ['services', 'target_hosts']
-
-Phase 2 [network] → sequential
-  • service_probe ← ['dns_enumeration'] → ['services']
-
-Phase 3 [web] → sequential
-  • header_analysis ← ['dns_enumeration', 'service_probe']
-  ...
-```
-
-## Run Specific Suites
+## Narrow the Scan
 
 ```bash
 # Just network and web
 chainsmith scan example.com --suite network --suite web
 
-# Just AI checks
-chainsmith scan example.com --suite ai
-```
+# Specific checks
+chainsmith scan example.com -c network_dns_enumeration -c ai_llm_endpoint_discovery
 
-## Run Specific Checks
-
-```bash
-chainsmith scan example.com -c dns_enumeration -c llm_endpoint_discovery
-```
-
-## Dry Run (Validate Without Running)
-
-```bash
-chainsmith scan example.com --dry-run
+# A named preset (quick, thorough, passive, ai-focused)
+chainsmith scan example.com --preset passive
 ```
 
 ## Export Observations
 
 ```bash
-# JSON
-chainsmith scan example.com -o report.json -f json
-
-# YAML
-chainsmith scan example.com -o report.yaml -f yaml
-
-# Markdown
-chainsmith scan example.com -o report.md -f md
-
-# SARIF (for CI/CD)
-chainsmith scan example.com -o report.sarif -f sarif
+chainsmith scan example.com -o report.json -f json     # also: yaml, md, sarif, csv, text
 ```
 
 ## Use a Scenario (Simulated Target)
@@ -83,50 +61,17 @@ For training or testing without live targets:
 chainsmith scan fakobanko.local --scenario fakobanko
 ```
 
-## Verbose Output
+## Explore Checks
 
 ```bash
-chainsmith scan example.com -v
+chainsmith suites                         # suites and execution order
+chainsmith list-checks --suite mcp -v     # checks in one suite, with detail
+chainsmith list-checks --deps             # with dependencies
 ```
 
-Shows per-check progress:
-```
-Phase 1 [network]
-  Running: dns_enumeration
-  ✓ dns_enumeration: 1 observations
-  Running: service_probe
-  ✓ service_probe
-...
-```
+## Next Steps
 
-## List Available Checks
-
-```bash
-chainsmith list-checks
-
-# With dependencies
-chainsmith list-checks --deps
-
-# Filter by suite
-chainsmith list-checks --suite mcp --verbose
-```
-
-## List Suites
-
-```bash
-chainsmith suites
-```
-
-Output:
-```
-Check Suites
-Execution order: network → web → ai → mcp → agent → rag → cag
-
-network (2 checks)
-  Checks: dns_enumeration, service_probe
-
-mcp (2 checks)
-  Runs after: network
-  Checks: mcp_discovery, mcp_tool_enumeration
-...
-```
+- [CLI Reference](../cli/commands.md) — every command and option
+- [Configuration](configuration.md) — scope, profiles, presets
+- [Check Reference](../checks/overview.md) — what each check does
+- [Working with Saved Scans](../working-with-saved-scans.md) — history, comparison, reports

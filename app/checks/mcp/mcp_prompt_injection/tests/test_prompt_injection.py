@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp_injection.py."""
+"""Tests for mcp_prompt_injection."""
 
 import json
 from unittest.mock import AsyncMock, patch
@@ -8,6 +8,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_prompt_injection import MCPPromptInjectionCheck
 from app.lib.http import HttpResponse
+
+
+async def run_and_grade(check, context):
+    """Run the check, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -104,7 +112,7 @@ class TestMCPPromptInjectionCheck:
             ],
             "mcp_servers": [{"url": "http://test/mcp", "service": {"host": "test"}}],
         }
-        result = await check.run(ctx)
+        result = await run_and_grade(check, ctx)
         assert result.success
         info = [o for o in result.observations if o.severity == "info"]
         assert len(info) == 1
@@ -115,7 +123,7 @@ class TestMCPPromptInjectionCheck:
         """Tool returning raw HTML triggers a high-severity unfiltered-content observation."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
 
         html_payload = (
             "<html><head><title>Example</title></head>"
@@ -130,7 +138,7 @@ class TestMCPPromptInjectionCheck:
         )
 
         with patch("app.checks.mcp.mcp_prompt_injection.check.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_tools_context)
+            result = await run_and_grade(check, mcp_tools_context)
 
         assert result.success
         high = [o for o in result.observations if o.severity == "high"]
@@ -144,7 +152,7 @@ class TestMCPPromptInjectionCheck:
         """Tool returning short plain text (no HTML markers) is not flagged as unfiltered."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
 
         # Short content with no HTML/URL indicators -- _test_unfiltered_content returns False
         mock.post = AsyncMock(
@@ -156,7 +164,7 @@ class TestMCPPromptInjectionCheck:
         )
 
         with patch("app.checks.mcp.mcp_prompt_injection.check.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_tools_context)
+            result = await run_and_grade(check, mcp_tools_context)
 
         assert result.success
         high = [o for o in result.observations if o.severity == "high"]
@@ -171,11 +179,11 @@ class TestMCPPromptInjectionCheck:
         """Tool that returns an HTTP error does not produce high/critical observations."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
         mock.post = AsyncMock(return_value=_resp(status_code=500, body="Internal Server Error"))
 
         with patch("app.checks.mcp.mcp_prompt_injection.check.AsyncHttpClient", return_value=mock):
-            result = await check.run(mcp_tools_context)
+            result = await run_and_grade(check, mcp_tools_context)
 
         assert result.success
         dangerous = [o for o in result.observations if o.severity in ("high", "critical")]

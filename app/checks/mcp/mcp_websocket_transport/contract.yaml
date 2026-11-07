@@ -28,3 +28,11 @@ references:
 - MCP Specification - Transports - https://spec.modelcontextprotocol.io/specification/basic/transports/
 - RFC 6455 - The WebSocket Protocol
 reason: MCP may be accessible via WebSocket with different auth than HTTP endpoints
+severity:
+  model: fixed
+  # Categorical: the answer is the upgrade status on the recorded response, so no
+  # grader above the rule tier is ever called. Every discriminator embeds a path
+  # (`ws-<path>` / `ws-partial-<path>`), an unbounded set, so there is no
+  # `observations:` map (§0.12): `default` is the floor — `info`, the not-found
+  # answer — and grade() places the real severity (57.4 wave 7).
+  default: info

@@ -22,12 +22,15 @@ Usage:
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from typing import Any
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +292,6 @@ class LLMClient(ABC):
         """Check if this provider is configured and available."""
         pass
 
-    @abstractmethod
     async def chat(
         self,
         prompt: str,
@@ -297,8 +299,96 @@ class LLMClient(ABC):
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> LLMResponse:
-        """Send a chat message and get a response."""
+        """
+        Send a chat message and get a response, recording the exchange.
+
+        This is the `llm` producer. Providers implement `_chat`;
+        capture lives here so that a client added later is covered without its
+        author having to know capture exists — the same reasoning that put the
+        HTTP producer in `AsyncHttpClient` rather than in 231 check modules.
+
+        These rows are the corpus phase 58 actually needs, and they are what
+        lets an operator answer *"why did triage say that"* six months later.
+        """
+        started = time.perf_counter()
+        response = await self._chat(
+            prompt, system=system, temperature=temperature, max_tokens=max_tokens
+        )
+        self._capture(
+            prompt,
+            system=system,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response=response,
+            elapsed_ms=(time.perf_counter() - started) * 1000,
+        )
+        return response
+
+    @abstractmethod
+    async def _chat(
+        self,
+        prompt: str,
+        system: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMResponse:
+        """Provider implementation. Called by `chat`, which records the result."""
         pass
+
+    def _capture(
+        self,
+        prompt: str,
+        *,
+        system: str | None,
+        temperature: float | None,
+        max_tokens: int | None,
+        response: LLMResponse,
+        elapsed_ms: float,
+    ) -> None:
+        """Record one model exchange. Never raises — capture cannot break a call."""
+        from app import capture
+
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        capture.record(
+            "llm",
+            self.capture_host,
+            request_body=json.dumps(
+                {
+                    "model": self.capture_model,
+                    "messages": messages,
+                    "temperature": temperature
+                    if temperature is not None
+                    else self.config.temperature,
+                    "max_tokens": max_tokens or self.config.max_tokens,
+                },
+                ensure_ascii=False,
+            ),
+            request_headers={"provider": self.provider_name},
+            response_body=response.content,
+            response_headers={
+                "model": response.model,
+                # Token counts are per-call bookkeeping, kept out of the hashed
+                # headers by `protocols.VOLATILE_HEADERS["llm"]` but worth
+                # having on the row: they are how the corpus is costed.
+                **{f"usage-{k}": str(v) for k, v in (response.usage or {}).items()},
+            },
+            elapsed_ms=elapsed_ms,
+            error=None if response.success else (response.error or "llm call failed"),
+        )
+
+    @property
+    def capture_host(self) -> str:
+        """The endpoint this client talks to, for the evidence row's `host`."""
+        return self.provider_name
+
+    @property
+    def capture_model(self) -> str:
+        """The model this client was asked for, before the API echoes one back."""
+        return self.provider_name
 
     @property
     @abstractmethod
@@ -318,7 +408,7 @@ class NoLLMClient(LLMClient):
     def is_available(self) -> bool:
         return False
 
-    async def chat(self, prompt: str, **kwargs) -> LLMResponse:
+    async def _chat(self, prompt: str, **kwargs) -> LLMResponse:
         return LLMResponse(
             content="",
             model="none",
@@ -340,7 +430,7 @@ class OpenAIClient(LLMClient):
     def is_available(self) -> bool:
         return bool(self.config.openai_api_key)
 
-    async def chat(
+    async def _chat(
         self,
         prompt: str,
         system: str | None = None,
@@ -415,6 +505,14 @@ class OpenAIClient(LLMClient):
             )
 
     @property
+    def capture_host(self) -> str:
+        return urlparse(self.config.openai_base_url).hostname or "openai"
+
+    @property
+    def capture_model(self) -> str:
+        return self.config.openai_model
+
+    @property
     def provider_name(self) -> str:
         return "openai"
 
@@ -425,7 +523,7 @@ class AnthropicClient(LLMClient):
     def is_available(self) -> bool:
         return bool(self.config.anthropic_api_key)
 
-    async def chat(
+    async def _chat(
         self,
         prompt: str,
         system: str | None = None,
@@ -512,6 +610,14 @@ class AnthropicClient(LLMClient):
             )
 
     @property
+    def capture_host(self) -> str:
+        return "api.anthropic.com"
+
+    @property
+    def capture_model(self) -> str:
+        return self.config.anthropic_model
+
+    @property
     def provider_name(self) -> str:
         return "anthropic"
 
@@ -522,7 +628,7 @@ class LiteLLMClient(LLMClient):
     def is_available(self) -> bool:
         return bool(self.config.litellm_base_url)
 
-    async def chat(
+    async def _chat(
         self,
         prompt: str,
         system: str | None = None,
@@ -601,6 +707,14 @@ class LiteLLMClient(LLMClient):
                 error_type=error_type,
                 retryable=retryable,
             )
+
+    @property
+    def capture_host(self) -> str:
+        return urlparse(self.config.litellm_base_url).hostname or "litellm"
+
+    @property
+    def capture_model(self) -> str:
+        return self.config.litellm_model
 
     @property
     def provider_name(self) -> str:

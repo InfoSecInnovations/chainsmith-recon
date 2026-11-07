@@ -1,0 +1,316 @@
+ARCHIVED 2026-10-11. Replaced by docs/future-ideas/README.md (tracks, order,
+dependencies) and docs/future-ideas/open-issues.md (bugs, decisions).
+
+NEXT STEPS — Planning doc
+=========================
+Snapshot of open work in docs/future-ideas/ (excluding completed/).
+Last reconciled: 2026-09-10, against docs/future-ideas/doc-status-audit-2026-09-10.md.
+Phase 57 entries updated 2026-09-15 (see WHAT CHANGED 2026-09-15 and the
+REPRODUCIBILITY TRACK section).
+
+READ THAT AUDIT FIRST. It supersedes any status header in this file or in the
+individual docs, several of which are stale.
+
+
+===========================================================
+BUGS / ISSUES TO FIX FIRST
+===========================================================
+
+- [OPEN, decision needed] Concurrent scans can still be created with the wrong
+  scope. See audit F-3.
+    Fix (1) landed 2026-09-10: run_scan() reads scope from the ScanSession, not
+    the global AppState; DB scan row, proof_settings copy, and the compliance
+    report are all scan-scoped now. Tests in
+    tests/scanning/test_scan_scope_isolation.py.
+    Fix (2) NOT done: scope must move inline onto POST /api/v1/scan and
+    POST /api/v1/scope must go (concurrent-scans-design.md §5). Until then the
+    CLI's two-step set_scope-then-scan flow can create a mis-scoped session at
+    request time.
+    INTERIM MITIGATION: set max_concurrent_scans: 1 (currently defaults to 4).
+    OPERATOR DECISION PENDING: apply the mitigation, or accept the residual.
+
+- [OPEN] Compliance statistics still aggregate across concurrent scans.
+    violation_logger / traffic_logger are process singletons writing one
+    violations_log.jsonl / traffic_log.jsonl with no scan_id per record. The
+    scope half of the compliance report is correct as of fix (1); the counts are
+    not. Tracked in phase57-evidence-and-capture.md 57.2.
+
+- [OPEN] 56.17 WebUI param editing never got an operator live-smoke.
+    JS was syntax-checked only. Detail modal, preset selector, include_disabled
+    toggle, save-as-default.
+
+- [OPEN, decision needed] ~36 checks can still mint duplicate observation ids.
+    Found 2026-09-15 by an audit after the fakobanko duplicate-id bug (below,
+    FIXED). None fires on live fakobanko. Shapes: (A) one candidate per endpoint
+    with a discriminator that does not name the endpoint; (B) one grade() call
+    emitting two verdicts with the same discriminator. Affected: every
+    per-chat-endpoint ai_* check (e.g. ai_prompt_leakage always uses
+    `prompt-leaked`; fires when a host has >=2 chat endpoints — the
+    llm_endpoint_fakobanko.yaml simulation does this), ai_embedding_extraction,
+    cag_cache_probe / cache_key_reverse / cache_poisoning / cross_user_leakage /
+    injection_persistence / stale_context / serialization / discovery,
+    agent_callback_injection / tool_abuse / streaming_injection /
+    state_manipulation, web_debug_endpoints, web_redirect_chain, web_sri,
+    web_mass_assignment (schema-leak), network_dns_records (TXT),
+    network_reverse_dns. Also: the same hostname on two ports collides, because
+    Service.host carries no port.
+    Damage is now bounded: ObservationWriter keeps only the colliding row out of
+    the database (logged, scanner warns) instead of dropping the rest of the scan.
+    OPERATOR DECISION: (1) one guard in the grading stage that gives colliding
+    ids a stable suffix and warns [recommended], (2) per-check fixes like the
+    three already done, or (3) rely on the writer.
+
+- [OPEN] ServiceIteratingCheck.run drops list outputs from all but the last
+  service. app/checks/base.py:694 does `result.outputs.update(...)`, so
+  chat_endpoints, rag_endpoints, cag_endpoints and mcp_servers keep only the
+  last service's list; downstream checks never see the others. Confirmed by
+  reading the code 2026-09-15; not yet reproduced in a scan.
+
+- [OPEN] web_favicon grader crashes on non-latin-1 bodies.
+    `_md5_of` does `body.encode("latin-1")`; fakobanko pages carry emoji, so 4
+    observations per full scan are `grading_failed`, at scan time and on re-grade.
+    Small fix.
+
+- [OPEN] `chainsmith.sh start` exits 1 after `up` for every non-ollama profile.
+    The trailing `[ ... = "ollama" ] && pull_ollama_model` is false under
+    `set -e`; the container starts but the health wait never runs.
+
+
+===========================================================
+WHAT CHANGED 2026-09-15
+===========================================================
+
+- Phase 57 measured and verified against the full fakobanko range on the dev VM:
+    --capture-failures pair (e9703d1a56cf4b8b / aa4da2b1aa0041e4): criterion 6
+    HOLDS, both as written and over completed probes. Caveat: no transient
+    failure occurred, so the random-failure case was not re-exercised.
+    Criterion 2 VERIFIED on a real corpus: `dev regrade` in a container with
+    --network none gave 158 unchanged, 0 changed, 0 not_reproduced.
+- FIXED: duplicate observation ids dropped 69 rag/mcp observations from every
+  full scan (and from the 2026-09-12 scans). A duplicate primary key flipped
+  ObservationWriter into its scratch fallback for the rest of the scan.
+    mcp_resource_traversal: one verdict per discriminator (ids and contract
+    unchanged). rag_indirect_injection and agent_goal_injection: endpoint path
+    slug in the discriminator (ids change shape; status history keys on title +
+    evidence, so it does not reset). ObservationWriter: row-by-row retry on
+    IntegrityError, `collisions` counter, scanner warning; only a non-integrity
+    DB error trips the permanent fallback. Validated on VM scan
+    92beeb1e107d44ad: 294 counted = 294 stored = 294 in check_log, no scratch.
+    pytest 2853 passed / 5 skipped; ruff check and verify-contracts clean.
+    UNCOMMITTED.
+- Three hash mismatches root-caused (not fixed; see the phase57 list).
+- The audit above found the wider duplicate-id exposure and the outputs.update
+  bug.
+
+
+===========================================================
+REPRODUCIBILITY TRACK  (new, self-contained)
+===========================================================
+
+- phase57-evidence-and-capture.md
+    57.1a, 57.1b, 57.2, 57.3, 57.4 DONE (doc §0 is the live status). All 133
+    checks split into probe/grade; `dev regrade` built; superseded rows handled;
+    D-21 measured (~9.7 MB per full fakobanko scan). Capture is still OFF by
+    default. O-3 is resolved as sequencing: encryption is 57.5 (below).
+
+    Decisions needed:
+    - Duplicate-id exposure in ~36 checks: grading-stage guard, per-check fixes,
+      or rely on the writer. (See BUGS.)
+    - Hash mismatches that make three checks unreproducible from the corpus:
+        rag_corpus_poisoning (14 of 70 exchanges) and rag_multimodal_injection
+        (4 of 6): the http interceptor records a bytes body as `str(data)` —
+        literally "b'--…'" — while the check's in-memory copy holds decoded
+        text and omits the multipart Content-Type header. Proposed fix
+        (mechanical, ready): one shared bytes-decoding rule for the interceptor
+        and exchange_from_response, and pass the headers actually sent. Stored
+        bodies become readable; old corpora keep the repr text.
+        web_mass_assignment (30 of 30): the in-memory exchange carries an
+        `x-chainsmith-injected-field` header that is never sent, and grade()
+        depends on it, so a corpus copy would grade to zero attempts.
+          A [recommended]: drop the fake header; read the injected field back
+            from the recorded body (always the last key the probe adds).
+          B: actually send the header (the target sees a Chainsmith-named
+            header).
+    - Criterion 6: accept "holds with --capture-failures" as closed, or wait
+      for a pair that includes a transient failure.
+
+    To do:
+    - Fix the hash mismatches (after the decision above) and the web_favicon
+      grader crash (see BUGS). These decide which checks can be re-graded.
+    - Write the 2026-09-15 results into doc §0.22 (addendum) and §10.
+    - Retention: designed, not implemented. EvidenceStore.delete_scan and
+      EvidenceRepository.delete_scan exist; nothing schedules them. Capture
+      stays off by default until this lands (operator decision, D-21).
+    - Criterion 7 unverified: no scan has recorded an `llm` exchange Chainsmith
+      itself made, so an agent verdict has not been traced to its prompt and
+      completion from the workspace.
+    - Grading records do not save check config, so a re-grade uses today's
+      config values rather than the scan's.
+    - Exchange documents are still written with indent=2; compacting them is the
+      next size saving (not measured).
+    - mcp_sampling_abuse: 1 of 2 exchanges not in the corpus. Not investigated.
+      (mcp_server_fingerprint's `local` exchange and the network dns/tcp/whois
+      skips are expected: those protocols are not captured by default.)
+    - The scratch import's superseded-row dedupe has no test.
+    - WebUI not live-smoked for superseded rows (the fix is the API default).
+    - TrafficLogger.log_request has no callers.
+    - docs/vocabulary.md still documents Engagement (phase-52 drift).
+    - test_run_with_latency timing flake (0.0892 s against a 0.09 s floor).
+
+    Deferred on purpose (not part of the 57.1-57.4 exit condition):
+    - 57.5 evidence encryption (one key per workspace; floats, blocks nothing).
+    - Criterion 3: workspace.yaml rejects `scope:`, so a workspace does not
+      bound a scan's scope.
+    - O-4 swarm: coordinator capture posture does not reach agents; remote
+      evidence stays in the worker's store. Per-check on_critical not enforced
+      on the swarm path (56.15).
+    - O-5 severity declarations for custom checks (parked).
+    - O-7 workspace lock / in-use marker.
+
+    Suggested order: hash-mismatch fixes + web_favicon -> §0.22 write-up ->
+    retention.
+
+- phase58-ai-grading.md
+    Large, 6 sub-phases. Grader agent, contextual migration (AI suite pilot),
+    sampling, grade cache, Adjudicator relocation. Absorbs phase38.
+    HARD PREREQUISITE: phase57. Meaningless without a corpus.
+
+- lab-edition.md
+    Medium. SEC536 generated build target. Depends only on 56.14 presets, which
+    LANDED — so this is startable now. Was being held behind the capture work
+    for no technical reason.
+
+
+===========================================================
+MODULAR REBUILD TRACK
+===========================================================
+
+Foundation
+----------
+- phase56-component-modularization.md  ***COMPLETE*** (in completed/)
+    In-tree folder-shape refactor. Was the gateway; it has landed.
+
+- concurrent-scans  (design + overhaul docs)
+    SUBSTANTIALLY LANDED by capability — see audit F-2. Both docs still claim
+    pre-implementation; both are stale. Three incompatible phase letterings
+    exist across the two docs and the code comments (audit F-1).
+    TODO: merge the two docs, retire the letters, track by capability.
+    Remaining real gaps: fix (2) above, and Phase D (UI) which was never
+    started and has no D0 design doc.
+
+- module-system-design.md
+    Large. Partially superseded by phase56 (folder shape absorbed).
+    Remaining: external modules/ root, UUID override resolution, extension
+    points, manifest/lifecycle, licensing.
+    ITS PREREQUISITE GATE IS OPEN (audit F-4) — this is startable.
+    NOTE: its banner still lists "Engagements port as reference implementation"
+    as future work. Engagements were removed in phase52 and are NOT returning;
+    workspaces (phase57 §5.4) replace them. Pick a new reference implementation.
+
+Module deliverables (after foundation)
+--------------------------------------
+- phase55-terminal-dashboard-stream-client.md
+    Small. Hard prerequisite of module-phase-1 (SSE client lib).
+    Best-maintained status header in the folder — trust it.
+
+- module-phase-1-terminal-dashboard.md
+    Medium. Full-screen Textual dashboard CLI.
+
+- module-phase-2-scan-reporter.md
+    Medium. Markdown notebook generator for completed scans.
+
+- module-phase-3-scope-wizard.md
+    Medium. Interactive scope-builder CLI wizard.
+    NOTE: its --apply rework depends on fix (2) above (inline scope).
+
+
+===========================================================
+SMALL / BUG-FIX-ADJACENT CANDIDATES  (warm-up work)
+===========================================================
+
+- phase46-fakobanko-semantic-cache.md
+    Small. Add CAG service container to fakobanko scenario.
+    Test-infra fix.
+
+- guardian-interactive-approval.md
+    Small. Interactive scope-violation approval flow.
+    Optional feature. Premise (phase42 hard gate) still holds.
+
+- performance-tuning.md
+    Small. Advisory doc only. No implementation required.
+
+- schema-migration-tooling.md
+    Deferred. Premise VERIFIED: Alembic is gone, Base.metadata.create_all is
+    the authority. Becomes more pressing once phase57 adds the evidence table.
+
+
+===========================================================
+LARGER FEATURE / ARCHITECTURE WORK  (NOT on the modular path)
+===========================================================
+
+- phase32-nist-cui-hardening.md
+    Large. CUI compliance: encryption, auth, audit, retention. Six sub-phases.
+    Touches phase57 57.5 (evidence encryption), which will implement its own
+    envelope encryption (one key per workspace) and align with this later.
+
+- compliance-framework-selector.md
+    Medium. Framework-filtered compliance reports.
+    NEEDS RE-CHECK (audit F-5): its co-implementation pair,
+    compliance-framework-badges.md, is already in completed/.
+
+- phase54-swarm-enhancements.md
+    Medium. Umbrella of 5 deferred swarm improvements.
+    Its phase51 prerequisite IS MET (phase51 is in completed/).
+    Swarm prerequisite still open.
+
+- concurrent-scans-swarm.md
+    Medium. Make swarm coordinator session-scoped.
+    Prerequisite met in substance (session-scoped reads exist). Genuinely
+    pending. Re-express its dependency without phase letters.
+
+- phase48-oversight.md
+    Large. "Eliminate dark code." RE-SCOPE against what phase56 already
+    delivered (contracts, config validation, provenance).
+
+- phase49-observability.md
+    Large. Structured logging, metrics, telemetry, health endpoints.
+    RE-SCOPE against phase51 (streaming) and phase58 §7 (provenance).
+
+
+===========================================================
+AMBIGUOUS / NEEDS DECISION
+===========================================================
+
+- future-improvements.md
+    Unscoped backlog. Phase57 O-4 adds swarm evidence capture to it.
+
+
+===========================================================
+KEY DEPENDENCIES
+===========================================================
+
+1. phase57 (evidence capture) must land before phase58 (grading).
+2. lab-edition depends only on 56.14 presets, which landed. Startable now.
+3. phase55 (SSE client) is a HARD prerequisite of module-phase-1.
+4. module-system's concurrent-scans gate is OPEN (audit F-4).
+5. phase32 is a parallel track; phase57 57.5 aligns with it later.
+6. module-phase-3 (scope wizard) needs fix (2).
+7. Enabling capture by default (phase57) waits on retention.
+
+
+===========================================================
+OPEN QUESTIONS BEFORE STARTING
+===========================================================
+
+- Apply the max_concurrent_scans: 1 mitigation, or accept the residual F-3
+  exposure until fix (2) lands?
+- Merge the two concurrent-scans docs, and does fix (2) live there or in its
+  own doc?
+- Duplicate observation ids in ~36 checks: grading-stage guard, per-check
+  fixes, or rely on the writer?
+- web_mass_assignment reproducibility: read the injected field from the body
+  (A), or send the header (B)?
+- Criterion 6: close it on the --capture-failures pair, or wait for a pair with
+  a transient failure?
+- What comes first — finishing phase57 (retention, reproducibility fixes), the
+  module track (now unblocked), or lab-edition (smallest, startable today)?

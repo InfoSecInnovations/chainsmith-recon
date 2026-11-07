@@ -17,11 +17,16 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from app.components.base import BaseComponent
 from app.lib.timeutils import now_utc
+
+if TYPE_CHECKING:
+    # Imported for typing only: `app.grading` reads `Observation`
+    # from here, and a runtime import in both directions would be a cycle.
+    from app.grading.models import Candidate
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +130,27 @@ class Observation:
     raw_data: dict | None = None  # Full raw data for deep inspection
     references: list[str] = field(default_factory=list)  # CVE, OWASP, etc.
 
+    # ── Grading ──────────────────────────────────
+    # An Observation is a graded Candidate. Grading state lives here and never
+    # on the scan (§6.3): a scan that could not grade something still finishes,
+    # and the gap is visible on the observation rather than in a scan status.
+    #
+    # `severity` above is always the *effective* one — the graded value once a
+    # grader has placed it, the provisional one until then. `provisional_severity`
+    # keeps the pre-grade value alongside it, so "provisional critical, graded
+    # medium" is inspectable rather than a silent overwrite (§6.1).
+    provisional_severity: str | None = None
+    confidence: float | None = None
+    grading_state: str = "ungraded"  # ungraded | graded | grading_failed
+    grading_tier: str | None = None  # rule | llm | none
+    grading_reasoning: str | None = None
+    #: Exchange ids this verdict was derived from — the candidate binding (D-22).
+    evidence_ids: list[str] = field(default_factory=list)
+    #: Where those bytes came from: corpus (reproducible) | memory | empty.
+    evidence_source: str | None = None
+    #: What the grader weighed, for the record and for the planned LLM tier's escalation.
+    signals: dict | None = None
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -139,6 +165,14 @@ class Observation:
             "host": self.target_host,
             "check_name": self.check_name,
             "references": self.references,
+            "provisional_severity": self.provisional_severity,
+            "confidence": self.confidence,
+            "grading_state": self.grading_state,
+            "grading_tier": self.grading_tier,
+            "grading_reasoning": self.grading_reasoning,
+            "evidence_ids": self.evidence_ids,
+            "evidence_source": self.evidence_source,
+            "signals": self.signals,
         }
 
 
@@ -156,6 +190,11 @@ class CheckResult:
 
     # Security observations
     observations: list[Observation] = field(default_factory=list)
+
+    # Ungraded subjects a probe emitted. The grading stage turns
+    # these into observations after the check returns; a check written before
+    # 57.4 leaves the list empty and is unaffected.
+    candidates: list["Candidate"] = field(default_factory=list)
 
     # Problems encountered (non-fatal)
     errors: list[str] = field(default_factory=list)
@@ -229,10 +268,10 @@ class BaseCheck(BaseComponent, ABC):
     # ─── Identity ───────────────────────────────────────────────
     name: str = "base_check"
     description: str = "Base check - override this"
-    component_type: str = "check"  # BaseComponent identity (Phase 56 §6)
+    component_type: str = "check"  # BaseComponent identity
 
-    # ─── Critical-observation policy (Phase 56 §5; enforced per-check by the
-    #     CheckLauncher as of 56.15 — stop / skip_downstream / annotate) ──
+    # ─── Critical-observation policy (enforced per-check by the
+    #     CheckLauncher — stop / skip_downstream / annotate) ──
     on_critical: str = "annotate"
     enabled: bool = True
 
@@ -262,6 +301,28 @@ class BaseCheck(BaseComponent, ABC):
     # ─── Intrusiveness ──────────────────────────────────────────
     intrusive: bool = False  # Active probing (writes, injection, auth attempts)
 
+    # ─── Evidence capture ────────────────────
+    # How much of what this check sends is recorded: "all", "observations_only"
+    # (held until the run finishes, then kept only if it found something), or
+    # "none". Set from `config.yaml` by `from_config`; the class default records
+    # everything, because a check that should not be in the corpus says so.
+    capture: str = "all"
+
+    # ─── Probe / grade ─────────
+    # The severity a candidate carries before a grader places one. It is what
+    # the launcher reads if grading is deferred or fails, and it is never
+    # presented as a verdict.
+    #
+    # As of 57.4 the authored home is `contract.yaml`'s `severity:` block and
+    # `from_config` fills both attributes from it: `severity` is the whole
+    # declared block (model, observations, range, rubric, signals) and
+    # `provisional_severity` is the single value `create_candidate` falls back
+    # to. The class attributes remain the default for a check whose contract
+    # has not declared a block yet — the migration is incremental, so both
+    # states have to work.
+    severity: dict[str, Any] = {}
+    provisional_severity: str = "info"
+
     # ─── Educational Metadata ───────────────────────────────────
     reason: str = ""  # Why a pentester would run this
     references: list[str] = []  # OWASP, RFC, CVE references
@@ -274,6 +335,7 @@ class BaseCheck(BaseComponent, ABC):
         self.service_types = list(self.__class__.service_types)
         self.references = list(self.__class__.references)
         self.techniques = list(self.__class__.techniques)
+        self.severity = dict(self.__class__.severity)
 
         self.status = CheckStatus.PENDING
         self.result: CheckResult | None = None
@@ -305,6 +367,15 @@ class BaseCheck(BaseComponent, ABC):
         inst.id = str(contract.id)
         inst.name = contract.name
         inst.component_type = contract.type
+        # Severity model — contract, not config (§7). Authored: the block states
+        # what compliance means for this check's payload, which is not an
+        # operator knob. A contract that has not declared one leaves the class
+        # attributes in place, so a half-migrated tree runs.
+        declared = getattr(contract, "severity", None)
+        if declared is not None:
+            inst.severity = declared.model_dump()
+            if declared.default:
+                inst.provisional_severity = declared.default
         # Load-time config baseline (tunables).
         inst.timeout_seconds = config.timeout_seconds
         inst.requests_per_second = config.requests_per_second
@@ -312,6 +383,7 @@ class BaseCheck(BaseComponent, ABC):
         inst.delay_between_targets = config.delay_between_targets
         inst.enabled = config.enabled
         inst.on_critical = config.on_critical
+        inst.capture = config.capture
         # Per-value layer attribution (56.16) — surfaced read-only by get_check_info.
         inst.config_provenance = dict(config.provenance)
         return inst
@@ -365,9 +437,26 @@ class BaseCheck(BaseComponent, ABC):
 
         result = CheckResult(success=False, check_name=self.name, started_at=started)
 
+        # Attribute every exchange this check records. `execute` is
+        # the one wrapper every check passes through and it already knows
+        # `self.name` — note the loop below that stamps the same name onto
+        # finished observations. This is that association made *before* the
+        # fact, so a request can be recorded as it happens.
+        from app.capture.context import capture_context
+
+        scan_id = context.get("scan_id") or ""
+        from app.check_resolver import infer_suite
+
         try:
             # Run with timeout
-            result = await asyncio.wait_for(self.run(context), timeout=self.timeout_seconds)
+            with capture_context(
+                scan_id=scan_id,
+                check_name=self.name,
+                policy=self.capture,
+                suite=infer_suite(self.name),
+                settings=context.get("capture_settings"),
+            ):
+                result = await asyncio.wait_for(self.run(context), timeout=self.timeout_seconds)
             result.check_name = self.name
             result.started_at = started
             self.status = CheckStatus.COMPLETED
@@ -382,6 +471,26 @@ class BaseCheck(BaseComponent, ABC):
 
         result.completed_at = now_utc()
         result.duration_ms = (result.completed_at - started).total_seconds() * 1000
+
+        # Resolve `capture: observations_only` (D-20). This is the first moment
+        # "did the run produce anything" can be answered, which is why the
+        # decision lives here rather than in the writer. A check that timed out
+        # or raised still gets its buffer resolved on whatever it managed to
+        # produce — those exchanges are often the interesting ones.
+        from app import capture
+
+        # Candidates count as "the run produced something" (57.3): a migrated
+        # check returns candidates and gets its observations from the grading
+        # stage afterwards, so keying this on observations alone would throw
+        # away the evidence of every check that probe/grade touched.
+        capture.commit_check(
+            scan_id, self.name, keep=bool(result.observations or result.candidates)
+        )
+
+        # Index whatever this check captured. `record()` is synchronous and
+        # buffers; this is the async boundary where the buffer can reach the
+        # database.
+        await capture.flush_index()
 
         # Tag observations with check name
         for observation in result.observations:
@@ -419,7 +528,7 @@ class BaseCheck(BaseComponent, ABC):
     ) -> Observation:
         """Helper to create a properly formatted observation.
 
-        Host precedence (Phase 45): explicit `host=` wins, then
+        Host precedence: explicit `host=` wins, then
         `target.host` when a Service is passed, then parsed from the
         effective target URL. Network-layer checks that know the host
         before a URL exists should pass `host=` directly.
@@ -452,6 +561,55 @@ class BaseCheck(BaseComponent, ABC):
             check_name=self.name,
             raw_data=raw_data,
             references=references or [],
+        )
+
+    def provisional_for(self, discriminator: str | None = None) -> str:
+        """The severity to assume for one subject before a grader places one.
+
+        This is what §6.1 means by *"for `model: fixed` the provisional severity
+        is free"*: the contract's `observations:` map already states what each
+        discriminator is worth, so a fixed check's probe names its subject and
+        the answer comes out of the contract rather than out of a guess. A
+        contextual check has no such map and falls to its declared `default:`,
+        which is exactly why `verify_contracts` requires one.
+        """
+        declared = self.severity or {}
+        by_discriminator = declared.get("observations") or {}
+        if discriminator and discriminator in by_discriminator:
+            return by_discriminator[discriminator]
+        return declared.get("default") or self.provisional_severity
+
+    def create_candidate(
+        self,
+        host: str,
+        *,
+        discriminator: str | None = None,
+        severity: str | None = None,
+        target: Service | None = None,
+        target_url: str | None = None,
+        raw_data: dict | None = None,
+    ) -> "Candidate":
+        """Helper to create a candidate for the grading stage.
+
+        The probe's half of `create_observation`: it names the subject and the
+        severity to assume until a grader places one, and deliberately offers no
+        way to state a title, a description or a verdict. Those are the grader's
+        to write, from the evidence.
+
+        `severity` is resolved by `provisional_for(discriminator)` when the
+        caller does not name one: the contract's `severity.observations` map
+        first, then its `default:`, then the class attribute (§6.1, §7).
+        """
+        from app.grading.models import Candidate
+
+        return Candidate(
+            check_name=self.name,
+            host=host,
+            provisional_severity=severity or self.provisional_for(discriminator),
+            discriminator=discriminator,
+            target=target,
+            target_url=target_url or (target.url if target else None),
+            raw_data=raw_data,
         )
 
     def to_dict(self) -> dict:
@@ -528,6 +686,10 @@ class ServiceIteratingCheck(BaseCheck):
 
                 # Accumulate results
                 result.observations.extend(service_result.observations)
+                # Candidates accumulate alongside observations (57.3): a probe
+                # iterating services emits one per service, and the grading
+                # stage sees them all at once after the check returns.
+                result.candidates.extend(service_result.candidates)
                 result.services.extend(service_result.services)
                 result.outputs.update(service_result.outputs)
                 result.errors.extend(service_result.errors)

@@ -2,6 +2,21 @@
 
 Design guidance for securing Chainsmith across deployment scenarios.
 
+> **Status — mostly a design proposal.** What is implemented today:
+>
+> - **Swarm agent API keys** — `chainsmith swarm generate-key` / `list-keys` /
+>   `revoke-key`; keys are stored as SHA-256 hashes and checked when agents
+>   connect to a coordinator.
+>
+> Not yet implemented: user accounts, JWT/OIDC login, roles (RBAC), CLI
+> login, API keys for the API/UI, audit-log commands, and mTLS for swarm
+> agents. **The API server and web UI are unauthenticated.** Keep the default
+> localhost binding (the Docker stack publishes on `127.0.0.1` only), or put
+> the server behind an authenticating reverse proxy before exposing it.
+>
+> The "Implementation Phases" below are a proposed rollout order, not
+> releases.
+
 ## Problem Statement
 
 Chainsmith has three distinct authentication needs with different trust
@@ -12,7 +27,7 @@ models and friction tolerances:
 2. **CLI-to-server authentication** — The CLI talks to the API server.
    Currently unauthenticated. Matters when the server is shared.
 3. **Swarm agent authentication** — Distributed agents connecting to the
-   coordinator. Implemented with API keys; mTLS planned for Phase 3 (see
+   coordinator. Implemented with API keys; mTLS is planned but not yet built (see
    [swarm-architecture.md](swarm-architecture.md) for design,
    [swarm-usage.md](swarm-usage.md) for setup).
 

@@ -28,3 +28,31 @@ references:
 - CWE-538
 reason: Exposed .git allows full source code recovery including API keys, model configs,
   and credentials
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # Three independent judgements over one service (git, svn, mercurial), so the
+  # probe emits one undiscriminated candidate and `grade()` names each.
+  # `default` is `high` — the lowest of the four — so a deferred grade can never
+  # present an ungraded candidate as one of the two criticals.
+  #
+  # This is the check where confidence earns the most in this suite: every
+  # judgement here is `high` or `critical` and every one rests on a 200. A
+  # catch-all route answers 200 with its index page for any path, which makes
+  # six git files look accessible on a site with no repository — the check's own
+  # tests name that case. So `grade()` reads the bodies: git config syntax in
+  # `.git/config` is 0.9, HTML everywhere is 0.4, and a 200 with neither is 0.7.
+  # `svn-exposed` and `hg-exposed` split the same way (0.9/0.85 against 0.4).
+  # `git-config-credentials` is 0.95 for a remote URL carrying `user:pass@` and
+  # 0.75 for a bare `token =`, which a placeholder also satisfies.
+  default: high
+  observations:
+    git-exposed: high
+    git-config-credentials: critical
+    svn-exposed: high
+    hg-exposed: high

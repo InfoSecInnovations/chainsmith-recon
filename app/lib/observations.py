@@ -149,9 +149,23 @@ def check_to_model_observation(obs: CheckObservation) -> ModelObservation:
         check_name=obs.check_name,
         discovered_at=now_utc(),
         target_url=obs.target_url,
+        target_host=obs.target_host,
         target_service=obs.target.url if obs.target else None,
         evidence_summary=obs.evidence,
         references=obs.references or [],
+        # Grading travels with the observation across the layer boundary.
+        # Without it an agent reading a model-layer observation
+        # cannot tell a graded verdict from a probe's provisional guess.
+        confidence=obs.confidence if obs.confidence is not None else 0.5,
+        provisional_severity=(
+            ObservationSeverity(obs.provisional_severity) if obs.provisional_severity else None
+        ),
+        grading_state=obs.grading_state,
+        grading_tier=obs.grading_tier,
+        grading_reasoning=obs.grading_reasoning,
+        evidence_ids=list(obs.evidence_ids or []),
+        evidence_source=obs.evidence_source,
+        signals=dict(obs.signals or {}),
     )
 
 
@@ -164,8 +178,17 @@ def model_to_check_observation(obs: ModelObservation) -> CheckObservation:
         severity=str(obs.severity),
         evidence=obs.evidence_summary or "",
         target_url=obs.target_url,
+        target_host=obs.target_host,
         check_name=obs.check_name,
         references=obs.references or [],
+        provisional_severity=(str(obs.provisional_severity) if obs.provisional_severity else None),
+        confidence=obs.confidence,
+        grading_state=obs.grading_state,
+        grading_tier=obs.grading_tier,
+        grading_reasoning=obs.grading_reasoning,
+        evidence_ids=list(obs.evidence_ids or []),
+        evidence_source=obs.evidence_source,
+        signals=dict(obs.signals) if obs.signals else None,
     )
 
 
@@ -185,3 +208,133 @@ def validate_severity(severity: str) -> str:
             f"Invalid severity '{severity}'. Must be one of: {sorted(VALID_SEVERITIES)}"
         )
     return normalized
+
+
+# ── Suppression, not subtraction ──────────
+#
+# "AI never subtracts." A verifier's rejection is a verdict *attached to* an
+# observation, never a reason to remove it from the record. Every consumer that
+# narrows to verified observations does so through here, so the narrowing is
+# counted and can be reported instead of happening silently.
+
+#: Verdicts that keep an observation out of a default report view. It is still
+#: stored, still returned by the API, and still listed when the operator asks.
+SUPPRESSED_STATUSES = frozenset({"rejected", "hallucination"})
+
+
+def _status_of(observation) -> str:
+    """Read a verdict off either observation shape, dict or object."""
+    if isinstance(observation, dict):
+        raw = observation.get("verification_status") or observation.get("status") or "pending"
+    else:
+        raw = getattr(observation, "verification_status", None) or getattr(
+            observation, "status", "pending"
+        )
+    return str(raw).lower()
+
+
+def partition_by_verdict(observations: list) -> tuple[list, list]:
+    """
+    Split observations into (carried, suppressed) by verification verdict.
+
+    Nothing is dropped here — the caller gets both halves and is expected to
+    account for the second one. A report says "3 observations suppressed by
+    Verifier"; an agent stage logs how many it is not being shown.
+    """
+    carried, suppressed = [], []
+    for observation in observations:
+        (suppressed if _status_of(observation) in SUPPRESSED_STATUSES else carried).append(
+            observation
+        )
+    return carried, suppressed
+
+
+def suppression_note(suppressed: list) -> str:
+    """The operator-facing sentence for a suppressed set, or "" if none."""
+    if not suppressed:
+        return ""
+    count = len(suppressed)
+    return f"{count} observation{'s' if count != 1 else ''} suppressed by Verifier"
+
+
+# ── Supersession, not double counting ───────
+#
+# `regrade --apply` marks a placeholder `superseded` when its candidate now
+# grades under different ids. Borrow suppression's *stated, not silent* half and
+# not its counting half: a suppressed row is the only copy of its finding, but a
+# superseded row always has a successor (or a re-grade that produced no verdict),
+# so counting it counts one subject twice. It is excluded from counts and
+# default views, and a report says how many it set aside.
+
+
+def _grading_state_of(observation) -> str:
+    """Read a grading state off either observation shape. A missing state (rows
+    from before 57.3) reads as `ungraded`, as the repository serialises it."""
+    if isinstance(observation, dict):
+        raw = observation.get("grading_state")
+    else:
+        raw = getattr(observation, "grading_state", None)
+    return str(raw or "ungraded").lower()
+
+
+def is_superseded(observation) -> bool:
+    from app.grading.models import GradingState
+
+    return _grading_state_of(observation) == GradingState.SUPERSEDED
+
+
+def is_placeholder(observation) -> bool:
+    """Does this row stand in for a candidate, at its provisional severity?"""
+    from app.grading.models import PLACEHOLDER_STATES
+
+    return _grading_state_of(observation) in PLACEHOLDER_STATES
+
+
+def partition_by_grading(observations: list) -> tuple[list, list]:
+    """
+    Split observations into (current, superseded).
+
+    Counts and listings read the first half. The second is stated — a note, and
+    in the technical report an appendix — never folded into a total: each row in
+    it already has its successor in the first half.
+    """
+    current, superseded = [], []
+    for observation in observations:
+        (superseded if is_superseded(observation) else current).append(observation)
+    return current, superseded
+
+
+def supersession_note(superseded: list) -> str:
+    """The operator-facing sentence for a superseded set, or "" if none."""
+    if not superseded:
+        return ""
+    count = len(superseded)
+    return f"{count} observation{'s' if count != 1 else ''} superseded by re-grade"
+
+
+def superseded_by(observation) -> list[str]:
+    """The stored ids that replaced a superseded row — empty when the re-grade
+    produced no verdict for its candidate. `regrade --apply` records them in
+    `raw_data["superseded_by"]`."""
+    if isinstance(observation, dict):
+        raw = observation.get("raw_data")
+    else:
+        raw = getattr(observation, "raw_data", None)
+    return list((raw or {}).get("superseded_by") or [])
+
+
+def resolve_superseded_ids(observation_ids: list, superseded: list[dict]) -> list:
+    """
+    A chain's observation ids, each superseded id replaced by its successors.
+
+    Chain rows are never rewritten; this is for rendering one. An id superseded
+    into no verdict is kept, so the chain still names what it was built on.
+    Order is preserved and a successor named twice appears once.
+    """
+    successors = {row.get("id"): superseded_by(row) for row in superseded}
+    resolved: list = []
+    for observation_id in observation_ids or []:
+        for replacement in successors.get(observation_id) or [observation_id]:
+            if replacement not in resolved:
+                resolved.append(replacement)
+    return resolved

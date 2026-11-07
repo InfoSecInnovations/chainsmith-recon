@@ -31,3 +31,21 @@ references:
 - CIS Benchmarks
 - OWASP Secure Headers Project
 reason: HTTP headers often reveal server software, frameworks, and security misconfigurations
+severity:
+  model: fixed
+  # Every judgement here is categorical — the answer is in the headers, not in a
+  # reading of them — so no grader above the rule tier will ever be called.
+  # These are the PRE-grade values a candidate carries (§6.1); `grade()` places
+  # the real one, and may place it higher (cors-wildcard reaches `high` when
+  # credentials are allowed). `default` is what the probe assumes when it emits
+  # one candidate for a response it has not parsed yet.
+  default: low
+  observations:
+    missing-security-headers: low
+    csp-weak: medium
+    hsts-weak: low
+    xfo-allow-from: medium
+    referrer-policy-weak: low
+    permissions-policy-permissive: low
+    cors-wildcard: medium
+    server-version-disclosure: low

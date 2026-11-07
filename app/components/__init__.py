@@ -1,5 +1,5 @@
 """
-app/components/ - Component model layer (Phase 56).
+app/components/ - Component model layer.
 
 Houses the cross-cutting machinery that the auto-discovery loader
 (`app/component_loader.py`) builds on:

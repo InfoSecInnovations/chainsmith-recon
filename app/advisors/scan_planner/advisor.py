@@ -1,6 +1,5 @@
 """
-app/advisors/scan_planner/advisor.py - Pre-Scan Planning Advisor (Phase 41,
-foldered Phase 56.11)
+app/advisors/scan_planner/advisor.py - Pre-Scan Planning Advisor
 
 Rule-based advisor that analyzes the current scope, target characteristics,
 and available checks to produce planning recommendations BEFORE the operator

@@ -1,5 +1,5 @@
 """
-app/dev/rename.py - `rename-check` / `rename-suite` (Phase 56 §14).
+app/dev/rename.py - `rename-check` / `rename-suite`.
 
 56.7 renames an *already-migrated* component folder so every check name becomes
 `<suite>_<name>` (collision-proof by construction; §14.1). This is NOT the

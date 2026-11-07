@@ -25,3 +25,19 @@ references:
 - OWASP LLM Top 10 - LLM01 Prompt Injection
 reason: AI proxy/gateway setups often forward client system messages to the provider,
   allowing instruction override
+severity:
+  model: contextual
+  # Attack-compliance: whether a client system prompt TOOK EFFECT is a judgement the evidence places, not a fact read off
+  # the response, so this stays `model: contextual` and is in phase 58's grading
+  # scope (§7.2). Migrated to probe/grade in 57.4 wave 3: the rule logic runs
+  # inside grade() at GradingTier.RULE, and phase 58 adds the LLM tier behind the
+  # same seam. `default` is what on_critical reads before a grader runs; `range`
+  # is the span a grader may place within; `rubric:`/`signals:` stay inert until 58.
+  #
+  # The rule tier's confidence states its own weakness in each verdict: the
+  # bypass/persona/override signals are substring and phrase matches, and several
+  # payloads instruct the model to emit the very keyword the detector looks for,
+  # so a benign compliance and a genuine failure can look alike. That gap is what
+  # phase 58's grader closes.
+  default: medium
+  range: [info, critical]

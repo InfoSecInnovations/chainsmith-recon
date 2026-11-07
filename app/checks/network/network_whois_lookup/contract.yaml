@@ -29,3 +29,26 @@ references:
 reason: WHOIS data reveals domain registration details (registrar, age, nameservers)
   and IP network ownership. Recently-registered domains hosting services may indicate
   phishing or shadow IT. ASN data complements GeoIP with network-level ownership context.
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. This check grades **two kinds of
+  # subject** — one domain and one per resolved IP — so it emits one candidate per
+  # subject and the single `grade()` tells them apart by the request it is looking at:
+  # a bare domain for WHOIS, `RDAP <ip>` for the network lookup.
+  #
+  # `registration` carries 0.9 because WHOIS text has no schema: the parser matches
+  # about thirty field-name spellings and still leaves fields null on a TLD it has not
+  # seen. `redacted` carries 0.85 because it is a substring match — "gdpr" anywhere in
+  # the response counts, including a registry's boilerplate footer.
+  #
+  # **`recent-registration` is not reproducible from the corpus alone**, like TLS
+  # expiry: the age is measured against *now*, so the same stored record grades
+  # differently in four months. Its 0.85 is about something else — the creation field
+  # is sometimes a transfer or re-registration date rather than the domain's first.
+  default: info
+  observations:
+    registration: info
+    recent-registration: low
+    redacted: info
+    asn: info
+    private: info

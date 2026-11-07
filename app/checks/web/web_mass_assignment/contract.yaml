@@ -28,3 +28,35 @@ references:
 - CWE-915
 reason: REST APIs that bind request bodies without field whitelisting allow privilege
   escalation and data manipulation
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # The injection POST/PUT/PATCH requests are side effects and stay in the
+  # probe; one candidate for the service carries them all, the injected field
+  # name stamped into a request header so `grade()` can tell it from the base
+  # body. `grade()` returns one verdict per attempt plus the summary
+  # judgements. Four discriminators carry the path and field
+  # (`mass-assign--api-users-is_admin`), so those sets are unbounded and the map
+  # records one entry per *family*; `provisional_for` falls to `default`, the
+  # lowest severity, so a deferred grade never presents an ungraded candidate
+  # as one of the criticals.
+  #
+  # The two that over-claimed now say so. `mass-assign` (a privilege/billing/
+  # identity field reflected) is 0.7, not certainty: an echo endpoint reflects
+  # any field whether or not it was bound. `blind-mass-assign` (2xx, not
+  # reflected) is 0.35 — servers routinely ignore unknown fields and still
+  # return 200. `schema-leak` is 0.5 (a validation body containing schema-hint
+  # words), `not-vulnerable` 0.6 (absence over a capped test), `no-endpoints`
+  # 0.9. No severity changed.
+  default: info
+  observations:
+    mass-assign: critical
+    blind-mass-assign: medium
+    schema-leak: low
+    not-vulnerable: info
+    no-endpoints: info

@@ -180,6 +180,7 @@ class SwarmCoordinator:
                     suite=phase.suite,
                     phase_number=phase.phase_number,
                     target=target_info,
+                    scan_id=self.scan_id,
                     rate_limit=cfg.swarm.default_rate_limit,
                     timeout_seconds=check.timeout_seconds or cfg.swarm.task_timeout_seconds,
                     scan_window=window,

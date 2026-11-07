@@ -28,3 +28,14 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Knowing the embedding model enables targeted adversarial embedding attacks
   and helps estimate chunk sizes for boundary exploitation
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`.
+  default: info
+  observations:
+    # A closed two-value set; the check emits exactly one per service.
+    embedding-model: low
+    embedding-unknown: info

@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp_vulnerabilities.py."""
+"""Tests for mcp_schema_leakage."""
 
 from unittest.mock import AsyncMock
 
@@ -7,6 +7,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_schema_leakage import ToolSchemaLeakageCheck
 from app.lib.http import HttpResponse
+
+
+async def run_and_grade(check, context):
+    """Run the check, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -70,7 +78,7 @@ def mock_client_factory():
     """Create a properly configured mock client with context manager."""
     mock = AsyncMock()
     mock.__aenter__ = AsyncMock(return_value=mock)
-    mock.__aexit__ = AsyncMock()
+    mock.__aexit__ = AsyncMock(return_value=False)
     return mock
 
 
@@ -100,7 +108,7 @@ class TestToolSchemaLeakageCheck:
                 }
             ]
         }
-        result = await check.run(ctx)
+        result = await run_and_grade(check, ctx)
         assert result.success
         assert "mcp_schema_leaks" in result.outputs
 
@@ -136,7 +144,7 @@ class TestToolSchemaLeakageCheck:
                 }
             ]
         }
-        result = await check.run(ctx)
+        result = await run_and_grade(check, ctx)
         low = [f for f in result.observations if f.severity == "low"]
         assert len(low) == 2
         param_names = {f.raw_data["param"] for f in low}
@@ -159,7 +167,7 @@ class TestToolSchemaLeakageCheck:
                 }
             ]
         }
-        result = await check.run(ctx)
+        result = await run_and_grade(check, ctx)
         assert result.success
         assert "mcp_schema_leaks" not in result.outputs
         info = [f for f in result.observations if f.severity == "info"]

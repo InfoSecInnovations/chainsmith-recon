@@ -31,3 +31,11 @@ references:
 - MITRE ATLAS - AML.T0051 LLM Plugin Compromise
 reason: MCP tools can execute commands, access files, and perform privileged operations.
   Enumerating tools reveals the attack surface for injection and abuse.
+severity:
+  model: fixed
+  # Categorical: the risk tier is read off the listed tool's own name,
+  # description and schema, so no grader above the rule tier is ever called.
+  # Every discriminator embeds a tool name (`tool-<name>`), an unbounded set, so
+  # there is no `observations:` map (§0.12): `default` is the floor — `info`, a
+  # tool no pattern matched — and grade() places the real tier (57.4 wave 7).
+  default: info

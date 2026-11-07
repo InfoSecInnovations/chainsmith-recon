@@ -76,11 +76,13 @@ output:
       auth_required: false
       ...
 
-observations:
+findings:
   - title: "MCP server discovered"
     severity: "medium"
     ...
 ```
+
+`emulates` must be the check's current, suite-prefixed name (for example `network_dns_enumeration`, not `dns_enumeration`); a simulation replaces only the real check whose name matches exactly.
 
 ## Custom Scenarios
 

@@ -23,7 +23,7 @@ running in coordinator mode. Agents are the same binary running in agent mode.
 chainsmith serve --coordinator --host 0.0.0.0
 
 # Agents (lightweight workers that poll for tasks)
-chainsmith agent --server coordinator.internal:8000 --key <api-key>
+chainsmith swarm agent --coordinator http://coordinator.internal:8000 --key <api-key>
 ```
 
 When no agents are connected, the server behaves exactly as it does today
@@ -213,7 +213,7 @@ The task payload sent to an agent looks like:
 ```json
 {
   "task_id": "uuid",
-  "check_name": "dns_enumeration",
+  "check_name": "network_dns_enumeration",
   "check_config": { },
   "target": {
     "url": "https://example.com",
@@ -288,8 +288,8 @@ Future enhancement: batched result submission for high-latency links.
 ## Duplicate Work
 
 The coordinator does not assign the same check to multiple agents. Each check
-is assigned to exactly one agent at a time. If that agent fails (heartbeat
-timeout), the check is reassigned to a different agent.
+is assigned to exactly one agent at a time. If that agent deregisters, the check is re-queued for another
+agent (reassignment on heartbeat timeout is planned).
 
 This means duplicate observations from concurrent scans of the same endpoint
 should not occur under normal operation. The only edge case is a network
@@ -303,26 +303,25 @@ receiving late results.
 
 ```bash
 # Start coordinator mode
-chainsmith serve --coordinator [--host HOST] [--port PORT] [--no-local]
+chainsmith serve --coordinator [--host HOST] [--port PORT]
 
 # Agent key management
-chainsmith swarm add-key --name NAME
+chainsmith swarm generate-key --name NAME
 chainsmith swarm list-keys
-chainsmith swarm revoke-key --name NAME
+chainsmith swarm revoke-key KEY_ID
 
-# Status
+# Status (connected agents and task counts)
 chainsmith swarm status
-chainsmith swarm agents
 ```
 
 ### Agent Commands
 
 ```bash
 # Start an agent
-chainsmith agent --server HOST:PORT --key KEY [--name NAME] [--tls-cert CERT] [--tls-key KEY]
+chainsmith swarm agent --coordinator URL --key KEY [--name NAME] [--suites SUITE ...] [--max-concurrent N]
 
 # Agent with custom name
-chainsmith agent --server coordinator.internal:8000 --key abc123 --name "dmz-scanner-01"
+chainsmith swarm agent --coordinator http://coordinator.internal:8000 --key abc123 --name "dmz-scanner-01"
 ```
 
 ## Module Structure
@@ -380,11 +379,16 @@ The following questions were resolved during design review:
 | 7 | Scan lifecycle integration? | `SwarmRunner` replaces `CheckLauncher` when `swarm.enabled`. Same scan API surface, different backend. Coordinator *is* the runner. |
 | 8 | Rate limiting? | Built from scratch. Coordinator-assigned, agent-enforced. |
 | 9 | Agent-side scope validation? | **MVP:** Agent validates outbound requests against task payload domains/ports. **Future:** Defense-in-depth — agent independently fetches/validates full scope. |
-| 10 | Phase 1 MVP definition? | One coordinator + one remote agent. Agent executes a single suite's checks. Observations appear in coordinator UI. |
+| 10 | MVP definition? | One coordinator + one remote agent. Agent executes a single suite's checks. Observations appear in coordinator UI. |
 
-## Implementation Phases
+## Implementation Stages
 
-### Phase 1: Foundation
+Status: the **Foundation** stage is implemented, along with the key management
+commands (`swarm generate-key`, `list-keys`, `revoke-key`) and `swarm status`.
+Heartbeat-timeout task reassignment, `--no-local`, mTLS, and everything under
+**Distribution** are not yet built.
+
+### Foundation
 
 - Agent registration and heartbeat endpoints
 - Task queueing from existing check dependency graph
@@ -392,7 +396,7 @@ The following questions were resolved during design review:
 - API key authentication
 - Basic coordinator status endpoint
 
-### Phase 2: Robustness
+### Robustness
 
 - Heartbeat timeout and task reassignment
 - Coordinator-assigned rate limiting with rebalancing
@@ -400,14 +404,14 @@ The following questions were resolved during design review:
 - `--no-local` toggle
 - `chainsmith swarm status` CLI command
 
-### Phase 3: Security & Observability
+### Security & Observability
 
 - mTLS support
 - Agent key management CLI commands
 - Web UI: agent status panel, task distribution view
 - Logging and audit trail for agent actions
 
-### Phase 4: Distribution (target architecture)
+### Distribution (target architecture)
 
 - Separate `chainsmith-agent` package (Option B)
 - Stub installer with role-based module pull (Option D)

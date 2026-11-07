@@ -9,15 +9,33 @@ Analyzes MCP tool inputSchema definitions for sensitive information:
 
 Operates entirely on already-enumerated data — no HTTP requests.
 
+**Probe/grade.** There is no request to record, so `run()`
+records the one thing its verdicts are derived from: the `mcp_tools` it was
+handed, as a `local` exchange (the `network_geoip` precedent, §0.12). A grader
+reads evidence and nothing else, and a re-grade of a stored corpus has no scan
+context to fetch `mcp_tools` from — so the analysed schemas go on the record.
+Only the fields the analysis reads are kept (`_ANALYSED_FIELDS`). `_tools_from()`
+reads them back and `_leaks_from()` is the one analysis both halves call: the
+probe for its `mcp_schema_leaks` output, `grade()` for one verdict per leak.
+
+**Fixed**: every leak discriminator embeds a tool and
+parameter name, an unbounded set, so the contract declares no `observations:`
+map. Confidence is where the split pays: a parameter *named* `token` or `region`
+is the ordinary shape of an API, not a leak, while a default *value* of
+`prod-db.internal:5432` is the disclosure itself.
+
 References:
   OWASP LLM Top 10 - LLM07 Insecure Plugin Design
 """
 
+import json
 import re
 from typing import Any
 
+from app import capture
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.observations import build_observation
+from app.grading import Evidence, GradeContext, Verdict
 
 # Patterns that indicate sensitive defaults
 SENSITIVE_DEFAULT_PATTERNS = [
@@ -80,6 +98,12 @@ SENSITIVE_DESC_PATTERNS = [
     (r"azure\s+(subscription|resource)", "Azure infrastructure"),
 ]
 
+# The tool fields the analysis reads — all that goes on the record.
+_ANALYSED_FIELDS = ("name", "description", "input_schema", "service_host")
+
+# Defaults that name the server's own host rather than internal topology.
+_SELF_ADDRESSES = ("127.", "0.0.0.0", "localhost")
+
 
 class ToolSchemaLeakageCheck(BaseCheck):
     """
@@ -103,6 +127,8 @@ class ToolSchemaLeakageCheck(BaseCheck):
     ]
     techniques = ["schema analysis", "information disclosure", "reconnaissance"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def run(self, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
         mcp_tools = context.get("mcp_tools", [])
@@ -110,8 +136,131 @@ class ToolSchemaLeakageCheck(BaseCheck):
         if not mcp_tools:
             return result
 
-        all_leaks = []
         host = mcp_tools[0].get("service_host", "unknown")
+        analysed = [{k: tool[k] for k in _ANALYSED_FIELDS if k in tool} for tool in mcp_tools]
+
+        exchange = capture.record_exchange(
+            "local",
+            host,
+            request_body="mcp_schema_leakage mcp_tools",
+            request_headers={"source": "mcp_tools"},
+            response_body=json.dumps(analysed, default=str),
+        )
+        candidate = self.create_candidate(host=host)
+        candidate.attach(exchange)
+        result.candidates.append(candidate)
+
+        tools = self._tools_from(exchange)
+        all_leaks = self._leaks_from(tools) if tools is not None else []
+        if all_leaks:
+            result.outputs["mcp_schema_leaks"] = all_leaks
+
+        return result
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        for exchange in evidence:
+            tools = self._tools_from(exchange)
+            if tools is None:
+                continue
+
+            leaks = self._leaks_from(tools)
+            if not leaks:
+                return [
+                    Verdict(
+                        severity="info",
+                        confidence=0.6,
+                        discriminator="no-leaks",
+                        title="Tool schemas contain no sensitive information",
+                        description="No information leakage detected in MCP tool schemas.",
+                        evidence=f"Tools analyzed: {len(tools)}",
+                        reasoning=(
+                            "no parameter name, default, enum or description matched; the "
+                            "absence is bounded by fixed name tables and patterns, so a leak "
+                            "phrased any other way reads as clean"
+                        ),
+                        tier=ctx.tier,
+                        evidence_ids=[exchange.id],
+                    )
+                ]
+
+            verdicts: list[Verdict] = []
+            for leak in leaks:
+                severity, title, desc_text, evidence_text = self._leak_to_observation(leak)
+                confidence, why = self._confidence(leak)
+                verdicts.append(
+                    Verdict(
+                        severity=severity,
+                        confidence=confidence,
+                        discriminator=f"leak-{leak['tool']}-{leak['type']}-{leak.get('param', 'desc')}",
+                        title=title,
+                        description=desc_text,
+                        evidence=evidence_text,
+                        reasoning=why,
+                        signals={"leak_type": leak["type"], "detail": leak.get("detail")},
+                        raw_data=leak,
+                        tier=ctx.tier,
+                        evidence_ids=[exchange.id],
+                    )
+                )
+            return verdicts
+        return []
+
+    @staticmethod
+    def _confidence(leak: dict) -> tuple[float, str]:
+        leak_type = leak["type"]
+        if leak_type == "sensitive_default":
+            default = str(leak.get("default", ""))
+            if default.startswith(_SELF_ADDRESSES):
+                return 0.35, (
+                    f"the default '{default}' matched the {leak['detail']} pattern, but a "
+                    "loopback or unspecified address describes the server's own host, not "
+                    "internal topology"
+                )
+            return 0.7, (
+                f"a concrete value the server published as a default matched the "
+                f"{leak['detail']} pattern, so the disclosure is in the bytes; a placeholder "
+                "or example default matches the same pattern"
+            )
+        if leak_type == "sensitive_enum":
+            return 0.5, (
+                f"enum options contain internal-sounding keywords ({', '.join(leak['hints'][:3])}); "
+                "an enum is an interface the tool deliberately offers, so naming a table it "
+                "exposes discloses little beyond the tool's own purpose"
+            )
+        if leak_type == "sensitive_param":
+            return 0.4, (
+                f"a parameter is named '{leak['param']}'; that is the ordinary shape of an API "
+                "and names a concept, not a value"
+            )
+        if leak.get("detail") == "privileged access hint":
+            return 0.4, (
+                "a description contains the bare word admin/root/superuser, which reads the "
+                "same in 'requires admin rights' as in a disclosure"
+            )
+        return 0.6, (
+            f"a description matched the {leak.get('detail')} phrase pattern; free text "
+            "paraphrases, so a generic mention and a real infrastructure detail look alike"
+        )
+
+    # ── The analysis both halves share ───────────────────────────────
+
+    @staticmethod
+    def _tools_from(exchange: Exchange) -> list[dict] | None:
+        """The analysed tools, read back off the recorded `local` exchange."""
+        if exchange.protocol != "local" or not exchange.response_body:
+            return None
+        try:
+            tools = json.loads(exchange.response_body)
+        except json.JSONDecodeError:
+            return None
+        return tools if isinstance(tools, list) else None
+
+    @staticmethod
+    def _leaks_from(mcp_tools: list[dict]) -> list[dict]:
+        """Every leak across the tool set, in the order the original loop found them."""
+        all_leaks = []
 
         for tool in mcp_tools:
             tool_name = tool.get("name", "unknown")
@@ -216,41 +365,9 @@ class ToolSchemaLeakageCheck(BaseCheck):
                             }
                         )
 
-            # Generate observations for this tool's leaks
-            for leak in leaks:
-                all_leaks.append(leak)
-                severity, title, desc_text, evidence = self._leak_to_observation(leak)
+            all_leaks.extend(leaks)
 
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
-                        title=title,
-                        description=desc_text,
-                        severity=severity,
-                        evidence=evidence,
-                        host=host,
-                        discriminator=f"leak-{tool_name}-{leak['type']}-{leak.get('param', 'desc')}",
-                        raw_data=leak,
-                    )
-                )
-
-        if not all_leaks:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title="Tool schemas contain no sensitive information",
-                    description="No information leakage detected in MCP tool schemas.",
-                    severity="info",
-                    evidence=f"Tools analyzed: {len(mcp_tools)}",
-                    host=host,
-                    discriminator="no-leaks",
-                )
-            )
-
-        if all_leaks:
-            result.outputs["mcp_schema_leaks"] = all_leaks
-
-        return result
+        return all_leaks
 
     def _leak_to_observation(self, leak: dict) -> tuple[str, str, str, str]:
         """Convert a leak dict to (severity, title, description, evidence)."""

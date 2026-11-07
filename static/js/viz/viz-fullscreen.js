@@ -104,7 +104,7 @@
             '</style>' +
             '</head><body class="' + theme + '">' +
             clone.outerHTML +
-            '<script src="https://d3js.org/d3.v7.min.js"><\/script>' +
+            '<script src="/static/js/vendor/d3.v7.min.js"><\/script>' +
             '</body></html>'
         );
         popup.document.close();

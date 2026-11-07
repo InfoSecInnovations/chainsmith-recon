@@ -1,6 +1,7 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_mass_assignment.py."""
+"""Tests for web_mass_assignment."""
 
 import json
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -82,11 +83,13 @@ def _make_request_handler(response_map=None, default=None):
         default = resp(404)
 
     async def handler(method, url, **kwargs):
+        # The real client stamps the requested URL onto the response, and a
+        # migrated check reads each attempt's path back off the recorded exchange.
         if response_map:
             for (m, pattern), response in response_map.items():
                 if m == method and pattern in url:
-                    return response
-        return default
+                    return replace(response, url=url)
+        return replace(default, url=url)
 
     return handler
 
@@ -98,6 +101,19 @@ def mock_client(response_map=None, default=None):
     client.__aexit__ = AsyncMock()
     client._request = AsyncMock(side_effect=_make_request_handler(response_map, default))
     return client
+
+
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
 
 
 class TestMassAssignmentCheck:
@@ -119,7 +135,7 @@ class TestMassAssignmentCheck:
 
         with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.success
         critical = [o for o in result.observations if o.severity == "critical"]
@@ -177,7 +193,7 @@ class TestMassAssignmentCheck:
 
         with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         high = [o for o in result.observations if o.severity == "high"]
         assert len(high) >= 1
@@ -196,7 +212,7 @@ class TestMassAssignmentCheck:
 
         with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         critical = [o for o in result.observations if o.severity == "critical"]
         assert len(critical) >= 1
@@ -212,7 +228,7 @@ class TestMassAssignmentCheck:
 
         with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         blind = [o for o in result.observations if o.severity == "medium"]
         assert len(blind) >= 1
@@ -235,7 +251,7 @@ class TestMassAssignmentCheck:
 
         with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.success
         # No critical/high/medium observations
@@ -254,7 +270,7 @@ class TestMassAssignmentCheck:
 
         with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.success
         not_vuln = [o for o in result.observations if "not detected" in o.title]
@@ -283,7 +299,7 @@ class TestMassAssignmentCheck:
 
         with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         schema_leak = [o for o in result.observations if o.severity == "low"]
         assert len(schema_leak) >= 1
@@ -305,7 +321,7 @@ class TestMassAssignmentCheck:
             patch.object(MassAssignmentCheck, "_gather_endpoints", return_value=[]),
         ):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         info = [o for o in result.observations if "No testable API endpoints" in o.title]
         assert len(info) == 1
@@ -346,7 +362,7 @@ class TestMassAssignmentCheck:
 
         with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         api_obs = [o for o in result.observations if "/api/users" in (o.evidence or "")]
         assert len(api_obs) >= 1
@@ -385,7 +401,7 @@ class TestMassAssignmentCheck:
 
         with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         # "role" is in the schema so must NOT appear as a reflected-field observation
         role_obs = [o for o in result.observations if "'role' accepted and reflected" in o.title]
@@ -400,7 +416,7 @@ class TestMassAssignmentCheck:
 
         with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
             check = MassAssignmentCheck()
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.success
         # With errors on every request, no vulnerabilities should be reported

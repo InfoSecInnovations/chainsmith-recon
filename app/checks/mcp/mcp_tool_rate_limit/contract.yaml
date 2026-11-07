@@ -29,3 +29,12 @@ references:
 - OWASP API4:2023 Unrestricted Resource Consumption
 - MCP Specification - https://modelcontextprotocol.io/specification
 reason: Unrestricted tool invocations enable SSRF proxy abuse and resource exhaustion
+severity:
+  model: fixed
+  # Categorical: the answer is the burst's status codes on the recorded
+  # responses, so no grader above the rule tier is ever called. Both
+  # discriminators embed the tool name (`ratelimit-<tool>` /
+  # `no-ratelimit-<tool>`), an unbounded set, so there is no `observations:` map
+  # (§0.12): `default` is the floor — `info`, the rate-limited answer — and
+  # grade() places the real severity (57.4 wave 7).
+  default: info

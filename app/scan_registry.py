@@ -1,12 +1,12 @@
 """
 app/scan_registry.py - Process-Scoped Scan Registry
 
-Introduced in Phase A of the concurrent-scans overhaul. ScanRegistry is a
-dict of live (and recently-terminal) ScanSession objects keyed by scan id.
-
-Phase A wires the registry in alongside AppState — scans are registered
-but routes still read state. Phase B flips route reads. Phase C enforces
-the max_concurrent_scans cap. Until then the registry is observational.
+ScanRegistry is a dict of live (and recently-terminal) ScanSession objects
+keyed by scan id. It is the authoritative source of per-scan runtime state:
+routes read scan status, progress and control (pause/stop) from the
+sessions held here, and the scan-start route enforces the
+`max_concurrent_scans` cap against `active_count()`. Operator-scope prep
+(target, exclusions, settings) stays on AppState.
 
 Singleton access: get_registry(). Kept singleton for pragmatic reasons
 (§11.2 of the design doc); dependency-inject later if testing requires.
@@ -54,7 +54,7 @@ class ScanRegistry:
         """
         Most-recently-started non-terminal session.
 
-        Back-compat escape hatch for single-scan routes during Phase A/B —
+        Back-compat escape hatch for single-scan routes —
         those routes keep reading a "current" scan. Returns None if no
         active scan exists; callers should fall back to the most recent
         terminal session only if they care about scan-complete polls.

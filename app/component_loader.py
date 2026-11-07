@@ -1,5 +1,5 @@
 """
-app/component_loader.py - Auto-discovery loader (Phase 56 §6).
+app/component_loader.py - Auto-discovery loader.
 
 Replaces the hand-maintained import list in `check_resolver.get_real_checks()`.
 Discovery is mechanical: walk a type root recursively for folders containing
@@ -262,6 +262,12 @@ def verify_contracts(
                 )
         if model is not None:
             violations.extend(_verify_entry_constructible(comp_dir, model.entry, component_type))
+            if component_type == "check":
+                violations.extend(
+                    _verify_severity(
+                        comp_dir, getattr(model, "severity", None), getattr(model, "suite", None)
+                    )
+                )
 
     # ── Pass 3 (cont.): test-placement guard (§10 risk 2) ──
     for test_file in sorted(root.rglob("test_*.py")):
@@ -293,6 +299,130 @@ def verify_contracts(
         active_env = os.environ if env is None else env
         for _key, code, message in detect_env_problems(component_names, active_env):
             violations.append(Violation(root, code, message))
+
+    return violations
+
+
+def _verify_severity(
+    comp_dir: Path, severity: object | None, suite: str | None = None
+) -> list[Violation]:
+    """Cross-field rules on a `contract.yaml` `severity:` block.
+
+    **`severity-undeclared`** comes first: since §8's exit condition every
+    built-in check declares a block, because without one `on_critical` has no
+    provisional severity and a grader no model to honour. `custom`-suite checks
+    are exempt — the Chainsmith agent scaffolds them without one (O-5, parked),
+    and `discover_components` raises on *any* violation, so one scaffolded
+    folder would otherwise fail discovery for every check. A custom check that
+    does declare a block gets the same cross-field rules as any other.
+
+    The *shape* is pydantic's job — unknown model, unknown level, stray key all
+    surface as `contract-schema` during pass 1. What is left are the rules that
+    span fields, and the one that matters is
+    **`severity-contextual-without-default`**: a contextual check with no
+    declared default has no answer for `on_critical`, which reads severity the
+    moment the check finishes and long before a grader has placed one (§6.1).
+    Phase 56.15 made that enforcement real, so letting a contextual check ship
+    without a default would take `on_critical`'s input away exactly where it is
+    used.
+
+    The rest are anti-drift rules. `rubric`/`signals`/`range` on a `fixed`
+    check are inert forever — not "inert until 58" — so an author who wrote one
+    has misunderstood which model they picked, and silence would let that sit
+    in the tree looking load-bearing.
+    """
+    if severity is None:
+        if suite == "custom":
+            return []
+        return [
+            Violation(
+                comp_dir,
+                "severity-undeclared",
+                "a built-in check must declare a `severity:` block (model + default "
+                "or observations) — on_critical reads it before any grader runs "
+                "(§6.1, §8 exit condition)",
+            )
+        ]
+
+    from app.components.contracts import SEVERITY_ORDER
+
+    violations: list[Violation] = []
+    model = getattr(severity, "model", None)
+    default = getattr(severity, "default", None)
+    observations = dict(getattr(severity, "observations", {}) or {})
+    rng = list(getattr(severity, "range", []) or [])
+    rubric = (getattr(severity, "rubric", "") or "").strip()
+    signals = list(getattr(severity, "signals", []) or [])
+
+    if model == "contextual":
+        if not default:
+            violations.append(
+                Violation(
+                    comp_dir,
+                    "severity-contextual-without-default",
+                    "model: contextual requires `default:` — on_critical reads "
+                    "severity before a grader has placed one (§6.1)",
+                )
+            )
+        if observations:
+            violations.append(
+                Violation(
+                    comp_dir,
+                    "severity-observations-on-contextual",
+                    "`observations:` is a fixed-model map; a contextual check "
+                    "declares `range:` and `rubric:` instead",
+                )
+            )
+        if rng:
+            if len(rng) != 2:
+                violations.append(
+                    Violation(
+                        comp_dir,
+                        "severity-range-malformed",
+                        f"`range:` must be [weakest, strongest]; got {rng}",
+                    )
+                )
+            elif SEVERITY_ORDER.index(rng[0]) > SEVERITY_ORDER.index(rng[1]):
+                violations.append(
+                    Violation(
+                        comp_dir,
+                        "severity-range-malformed",
+                        f"`range: {rng}` is inverted; weakest comes first",
+                    )
+                )
+            elif default and not (
+                SEVERITY_ORDER.index(rng[0])
+                <= SEVERITY_ORDER.index(default)
+                <= SEVERITY_ORDER.index(rng[1])
+            ):
+                violations.append(
+                    Violation(
+                        comp_dir,
+                        "severity-default-outside-range",
+                        f"`default: {default}` is outside `range: {rng}`",
+                    )
+                )
+
+    elif model == "fixed":
+        if not observations and not default:
+            violations.append(
+                Violation(
+                    comp_dir,
+                    "severity-fixed-without-severities",
+                    "model: fixed needs an `observations:` map (or a `default:`) "
+                    "— otherwise it declares no severity at all",
+                )
+            )
+        for field, value in (("rubric", rubric), ("signals", signals), ("range", rng)):
+            if value:
+                violations.append(
+                    Violation(
+                        comp_dir,
+                        "severity-contextual-field-on-fixed",
+                        f"`{field}:` applies to model: contextual; a fixed check "
+                        "never calls a grader that would read it",
+                    )
+                )
 
     return violations
 
@@ -414,7 +544,7 @@ def _load_suite_config(root: Path, suite: str) -> SuiteConfig | None:
 
 @dataclass(frozen=True)
 class ComponentMeta:
-    """Lightweight, import-free metadata for one component (Phase 56.15).
+    """Lightweight, import-free metadata for one component.
 
     Unlike `discover_components`, this surfaces DISABLED components too (and never
     imports an entry module), so the API/WebUI can list every check with an
@@ -429,6 +559,8 @@ class ComponentMeta:
     reason: str  # config.yaml `reason` (e.g. why disabled), "" if unset
     on_critical: str  # resolved against suite.yaml (no class default — import-free)
     description: str
+    # The contract's declared `severity:` block, {} when undeclared (57.4, §7).
+    severity: dict
 
 
 def discover_component_metadata(
@@ -477,6 +609,11 @@ def discover_component_metadata(
                 reason=comp_cfg.reason,
                 on_critical=ConfigResolver._resolve_on_critical(comp_cfg.on_critical, suite_cfg),
                 description=getattr(contract, "description", "") or "",
+                severity=(
+                    declared.model_dump()
+                    if (declared := getattr(contract, "severity", None)) is not None
+                    else {}
+                ),
             )
         )
 
@@ -497,7 +634,13 @@ def discover_components(root: Path, component_type: ComponentType = "check") -> 
         raise ComponentLoadError(violations)
 
     model_cls = contract_model_for(component_type)
-    resolver = ConfigResolver()
+
+    # Layer 5 (57.1b): the active workspace's `workspace.yaml`, if it has one.
+    # A malformed file raises rather than being skipped — a config the operator
+    # wrote and Chainsmith ignored is the failure this layer exists to prevent.
+    from app.workspace import load_workspace_config
+
+    resolver = ConfigResolver(workspace_config=load_workspace_config())
     built: list[tuple[str, str, object]] = []
 
     for contract_path in sorted(root.rglob("contract.yaml")):

@@ -474,6 +474,8 @@
                 }
                 const oc = document.getElementById('cfg-on_critical');
                 if (oc && oc.value) ov.on_critical = oc.value;
+                const cap = document.getElementById('cfg-capture');
+                if (cap && cap.value) ov.capture = cap.value;
                 return ov;
             },
             applyForScan(name) {
@@ -492,6 +494,7 @@
                     const el = document.getElementById('cfg-' + k); if (el) el.value = '';
                 });
                 const oc = document.getElementById('cfg-on_critical'); if (oc) oc.value = '';
+                const cap = document.getElementById('cfg-capture'); if (cap) cap.value = '';
                 this._status('Per-scan override cleared.');
             },
             async saveDefault(name) {

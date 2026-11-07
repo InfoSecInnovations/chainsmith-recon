@@ -29,3 +29,24 @@ references:
 - CWE-22 Path Traversal
 - CWE-918 Server-Side Request Forgery
 reason: MCP resources accessed by URI may be vulnerable to path traversal and SSRF
+severity:
+  model: fixed
+  # Categorical: the traversal/SSRF/protocol answer is read off each recorded
+  # resources/read response, so no grader above the rule tier is ever called.
+  # The discriminators are a closed set — the payload category crossed with the
+  # attack type — so the map below carries each at the severity it emits;
+  # `default` is the floor — `info`, the resource-safe answer (57.4 wave 7).
+  default: info
+  observations:
+    traversal-path_traversal: critical
+    traversal-absolute_file: critical
+    traversal-encoded_traversal: critical
+    traversal-null_byte: critical
+    traversal-leak-path_traversal: medium
+    traversal-leak-absolute_file: medium
+    traversal-leak-encoded_traversal: medium
+    traversal-leak-null_byte: medium
+    ssrf-cloud_metadata: critical
+    ssrf-internal_service: critical
+    protocol-protocol_smuggle: high
+    resource-safe: info

@@ -7,16 +7,36 @@ known dangerous chain categories (data exfil, RCE + persistence, etc.).
 
 Operates entirely on already-enumerated tool data — no HTTP requests.
 
+**Probe/grade.** There is no request to record, so `run()`
+records the one thing its verdicts are derived from: the `mcp_tools` it was
+handed, as a `local` exchange (the `network_geoip` precedent, §0.12). A grader
+reads evidence and nothing else, and a re-grade of a stored corpus has no scan
+context to fetch `mcp_tools` from — so the analysed tools go on the record. Only
+the fields the analysis reads are kept (`_ANALYSED_FIELDS`: name + description).
+`_tools_from()` reads them back and `_analyze()` is the one analysis both halves
+call: the probe for its `mcp_dangerous_chains` output, `grade()` for one verdict
+per detected chain (or the partial / no-chains fallback).
+
+**Fixed**: the discriminators are a closed set — six chain
+categories drawn from `DANGEROUS_CHAINS`, plus `partial-chain-source` and
+`no-chains` — so the contract carries the full `observations:` map at each
+entry's severity. Confidence is where the split pays: every capability is
+inferred from a tool's name/description keyword and nothing was invoked, so a
+chain is *possible by declaration*, not shown reachable.
+
 References:
   OWASP LLM Top 10 - LLM07 Insecure Plugin Design
   MITRE ATLAS - AML.T0051 LLM Plugin Compromise
 """
 
+import json
 import re
 from typing import Any
 
+from app import capture
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.observations import build_observation
+from app.grading import Evidence, GradeContext, Verdict
 
 # ── Capability tags ─────────────────────────────────────────────────
 # Maps tool name/description patterns to capability tags.
@@ -181,6 +201,9 @@ DANGEROUS_CHAINS: list[tuple[str, str, list[list[str]], str]] = [
     ),
 ]
 
+# The tool fields the analysis reads — all that goes on the record.
+_ANALYSED_FIELDS = ("name", "description", "service_host")
+
 
 class ToolChainAnalysisCheck(BaseCheck):
     """
@@ -205,6 +228,8 @@ class ToolChainAnalysisCheck(BaseCheck):
     ]
     techniques = ["capability mapping", "attack chain analysis", "risk assessment"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def run(self, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
         mcp_tools = context.get("mcp_tools", [])
@@ -212,6 +237,99 @@ class ToolChainAnalysisCheck(BaseCheck):
         if not mcp_tools:
             return result
 
+        host = mcp_tools[0].get("service_host", "unknown")
+        analysed = [{k: tool[k] for k in _ANALYSED_FIELDS if k in tool} for tool in mcp_tools]
+
+        exchange = capture.record_exchange(
+            "local",
+            host,
+            request_body="mcp_tool_chain_analysis mcp_tools",
+            request_headers={"source": "mcp_tools"},
+            response_body=json.dumps(analysed, default=str),
+        )
+        candidate = self.create_candidate(host=host)
+        candidate.attach(exchange)
+        result.candidates.append(candidate)
+
+        tools = self._tools_from(exchange)
+        detected_chains, _ = self._analyze(tools) if tools is not None else ([], [])
+        if detected_chains:
+            result.outputs["mcp_dangerous_chains"] = detected_chains
+
+        return result
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        for exchange in evidence:
+            tools = self._tools_from(exchange)
+            if tools is None:
+                continue
+
+            _, findings = self._analyze(tools)
+            verdicts: list[Verdict] = []
+            for finding in findings:
+                confidence, why = self._confidence(finding)
+                verdicts.append(
+                    Verdict(
+                        severity=finding["severity"],
+                        confidence=confidence,
+                        discriminator=finding["discriminator"],
+                        title=finding["title"],
+                        description=finding["description"],
+                        evidence=finding["evidence"],
+                        reasoning=why,
+                        signals={"kind": finding["kind"]},
+                        references=self.references,
+                        raw_data=finding.get("raw_data"),
+                        tier=ctx.tier,
+                        evidence_ids=[exchange.id],
+                    )
+                )
+            return verdicts
+        return []
+
+    @staticmethod
+    def _confidence(finding: dict) -> tuple[float, str]:
+        kind = finding["kind"]
+        inferred = (
+            "every capability is inferred from a tool's name or description keyword and "
+            "no tool was invoked, so the chain is possible by declaration, not shown reachable"
+        )
+        if kind == "chain":
+            return 0.55, (
+                f"both ends of the chain are present in the tool set, but {inferred}; a tool "
+                "named for a capability it does not actually expose inflates the match"
+            )
+        if kind == "partial":
+            return 0.45, (
+                f"only one end of a chain is present and {inferred}; whether the missing end "
+                "could be added is a guess about future tool registration"
+            )
+        return 0.6, (
+            "no dangerous chain was formed; the absence is bounded by fixed capability "
+            "pattern tables, so a dangerous tool whose name matches none of them reads as benign"
+        )
+
+    # ── The analysis both halves share ───────────────────────────────
+
+    @staticmethod
+    def _tools_from(exchange: Exchange) -> list[dict] | None:
+        """The analysed tools, read back off the recorded `local` exchange."""
+        if exchange.protocol != "local" or not exchange.response_body:
+            return None
+        try:
+            tools = json.loads(exchange.response_body)
+        except json.JSONDecodeError:
+            return None
+        return tools if isinstance(tools, list) else None
+
+    def _analyze(self, mcp_tools: list[dict]) -> tuple[list[dict], list[dict]]:
+        """Return (detected_chains output, findings) — the deterministic core.
+
+        `findings` are the observation-shaped dicts in the exact order and with
+        the exact discriminators/severities the pre-split loop emitted.
+        """
         # Step 1: Tag each tool with capabilities
         tool_capabilities: dict[str, list[str]] = {}
         capability_to_tools: dict[str, list[str]] = {}
@@ -230,7 +348,8 @@ class ToolChainAnalysisCheck(BaseCheck):
         for caps in tool_capabilities.values():
             all_caps.update(caps)
 
-        detected_chains = []
+        detected_chains: list[dict] = []
+        findings: list[dict] = []
         host = mcp_tools[0].get("service_host", "unknown") if mcp_tools else "unknown"
 
         for chain_name, severity, required_groups, desc_template in DANGEROUS_CHAINS:
@@ -263,42 +382,36 @@ class ToolChainAnalysisCheck(BaseCheck):
                 }
                 detected_chains.append(chain_info)
 
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
-                        title=f"Dangerous tool chain: {chain_name}",
-                        description=description,
-                        severity=severity,
-                        evidence=self._build_chain_evidence(chain_info, tool_capabilities),
-                        host=host,
-                        discriminator=f"chain-{chain_name.lower().replace(' ', '-').replace('+', '')}",
-                        raw_data=chain_info,
-                    )
+                findings.append(
+                    {
+                        "kind": "chain",
+                        "severity": severity,
+                        "discriminator": f"chain-{chain_name.lower().replace(' ', '-').replace('+', '')}",
+                        "title": f"Dangerous tool chain: {chain_name}",
+                        "description": description,
+                        "evidence": self._build_chain_evidence(chain_info, tool_capabilities),
+                        "raw_data": chain_info,
+                    }
                 )
 
         if not detected_chains:
-            # Check for partial chains
             partial = self._check_partial_chains(all_caps, capability_to_tools, host)
             if partial:
-                for observation in partial:
-                    result.observations.append(observation)
+                findings.extend(partial)
             else:
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
-                        title="No dangerous tool chain categories detected",
-                        description="The discovered tool set does not form any known dangerous capability combinations.",
-                        severity="info",
-                        evidence=f"Tools analyzed: {len(mcp_tools)}\nCapabilities: {', '.join(sorted(all_caps)) or 'none'}",
-                        host=host,
-                        discriminator="no-chains",
-                    )
+                findings.append(
+                    {
+                        "kind": "none",
+                        "severity": "info",
+                        "discriminator": "no-chains",
+                        "title": "No dangerous tool chain categories detected",
+                        "description": "The discovered tool set does not form any known dangerous capability combinations.",
+                        "evidence": f"Tools analyzed: {len(mcp_tools)}\nCapabilities: {', '.join(sorted(all_caps)) or 'none'}",
+                        "raw_data": None,
+                    }
                 )
 
-        if detected_chains:
-            result.outputs["mcp_dangerous_chains"] = detected_chains
-
-        return result
+        return detected_chains, findings
 
     def _tag_capabilities(self, name: str, description: str) -> list[str]:
         """Map a tool to capability tags based on name and description patterns."""
@@ -313,9 +426,11 @@ class ToolChainAnalysisCheck(BaseCheck):
 
         return caps
 
-    def _check_partial_chains(self, all_caps: set, capability_to_tools: dict, host: str) -> list:
+    def _check_partial_chains(
+        self, all_caps: set, capability_to_tools: dict, host: str
+    ) -> list[dict]:
         """Check for partial dangerous chains (source present but no sink, or vice versa)."""
-        observations = []
+        findings: list[dict] = []
 
         # Check for dangerous source capabilities without exfil vector
         source_caps = {"file_read", "database_access", "credential_access"}
@@ -329,24 +444,23 @@ class ToolChainAnalysisCheck(BaseCheck):
                 source_tools.extend(capability_to_tools.get(cap, []))
             source_tools = list(set(source_tools))
 
-            observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title="Partial dangerous chain: data access tools present but no exfiltration vector",
-                    description=(
+            findings.append(
+                {
+                    "kind": "partial",
+                    "severity": "medium",
+                    "discriminator": "partial-chain-source",
+                    "title": "Partial dangerous chain: data access tools present but no exfiltration vector",
+                    "description": (
                         f"Tools with data access capabilities ({', '.join(source_tools[:5])}) "
                         "are present but no exfiltration or network request tools were found. "
                         "The chain is incomplete but could be enabled by additional tool registration."
                     ),
-                    severity="medium",
-                    evidence=f"Source capabilities: {', '.join(has_source)}\nTools: {', '.join(source_tools[:5])}",
-                    host=host,
-                    discriminator="partial-chain-source",
-                    raw_data={"source_caps": list(has_source), "tools": source_tools},
-                )
+                    "evidence": f"Source capabilities: {', '.join(has_source)}\nTools: {', '.join(source_tools[:5])}",
+                    "raw_data": {"source_caps": list(has_source), "tools": source_tools},
+                }
             )
 
-        return observations
+        return findings
 
     def _build_chain_evidence(self, chain_info: dict, tool_capabilities: dict) -> str:
         """Build evidence string for a detected chain."""

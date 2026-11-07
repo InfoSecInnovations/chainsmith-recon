@@ -28,3 +28,30 @@ references:
 - OWASP WSTG-INFO-10
 - CWE-693
 reason: WAF/CDN presence affects interpretation of all downstream check results
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # Each product is a separate judgement over the same two responses, so the
+  # probe emits one undiscriminated candidate and `grade()` names each.
+  # `detected-<product>` carries the product it matched; that set follows the
+  # signature tables, so the map records the `detected` family and
+  # `provisional_for` falls to `default`.
+  #
+  # Confidence is derived structurally rather than hand-rated per row, because
+  # the tables already say which signatures are weak *in the product name they
+  # map to*: `CDN (generic)` names a category (0.6) and `Fastly/Varnish` or
+  # `AWS (API Gateway/ALB)` name alternatives (0.7), while a vendor block page
+  # (0.97), a vendor cookie (0.95), a `Server` value (0.95) or a
+  # vendor-prefixed header (0.95) name one product.
+  # `waf-accuracy-warning` inherits the best confidence among the WAF-class
+  # products, because the warning is as good as the strongest evidence for a
+  # WAF being there.
+  default: info
+  observations:
+    detected: info
+    waf-accuracy-warning: low

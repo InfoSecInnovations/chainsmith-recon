@@ -674,6 +674,57 @@
         }
 
         // ─── Log ─────────────────────────────────────────────
+        // One captured exchange. `protocol` says how to read it: an `http` or
+        // `llm` row has a method and a URL, a `dns` or `tcp` row carries its
+        // protocol-native payload in the request body instead.
+        function renderExchange(ex, key) {
+            const headers = h => Object.entries(h || {})
+                .map(([k, v]) => `${k}: ${v}`).join('\n');
+            const line = ex.request_url
+                ? `${ex.request_method || 'GET'} ${ex.request_url}`
+                : (ex.request_body || '').split('\n')[0];
+            const status = ex.error
+                ? `<span class="check-log-io-err">${esc(ex.error)}</span>`
+                : `<span class="check-log-io-status">${ex.response_status ?? '--'}</span>`;
+            const ms = ex.elapsed_ms != null ? `${Math.round(ex.elapsed_ms)}ms` : '';
+            const block = (label, text) => text
+                ? `<div class="check-log-io-part"><span>${label}</span><pre>${esc(text)}</pre></div>`
+                : '';
+            return `<details class="check-log-io-item">
+                <summary>
+                    <span class="check-log-io-proto">${esc(ex.protocol)}</span>
+                    ${status}
+                    <code>${esc(line)}</code>
+                    <span class="check-log-meta">${esc(ms)}</span>
+                    ${ex.truncated ? '<span class="check-log-io-trunc">truncated</span>' : ''}
+                </summary>
+                <div class="check-log-io-body">
+                    ${ex.curl ? `<div class="check-log-io-curl">
+                        <button class="btn btn-secondary btn-copy-curl" data-curl="${esc(ex.curl)}">Copy as curl</button>
+                    </div>` : ''}
+                    ${block('request headers', headers(ex.request_headers))}
+                    ${block('request body', ex.request_body)}
+                    ${block('response headers', headers(ex.response_headers))}
+                    ${block('response body', ex.response_body)}
+                </div>
+            </details>`;
+        }
+
+        // The command is built server-side from the exchange the viewer was
+        // shown, so a redacted view yields a redacted command.
+        document.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.btn-copy-curl');
+            if (!btn) return;
+            try {
+                await navigator.clipboard.writeText(btn.dataset.curl);
+                const was = btn.textContent;
+                btn.textContent = 'Copied';
+                setTimeout(() => { btn.textContent = was; }, 1200);
+            } catch (err) {
+                btn.textContent = 'Copy failed';
+            }
+        });
+
         async function loadLog(scanId) {
             const el = document.getElementById('log-content');
             el.innerHTML = '<p class="empty-message">Loading...</p>';
@@ -681,6 +732,16 @@
                 const data = await api.getScanLog(scanId);
                 const log = data.log || [];
                 if (!log.length) { el.innerHTML = '<p class="empty-message">No log entries.</p>'; return; }
+                // Captured exchanges, grouped by the check that made
+                // them. Capture is off by default, so an empty result is the
+                // normal case and must read as "nothing captured", not an error.
+                const ioByCheck = {};
+                try {
+                    const io = await api.getScanCheckIO(scanId, { limit: 2000 });
+                    for (const ex of (io.exchanges || [])) {
+                        (ioByCheck[ex.check_name || 'unknown'] ||= []).push(ex);
+                    }
+                } catch (e) { /* evidence is optional; the log still renders */ }
                 const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString() : '--';
                 // Group log entries by check_name
                 const byCheck = {};
@@ -717,6 +778,12 @@
                             ${o.evidence ? `<pre class="check-log-evidence">${esc(o.evidence)}</pre>` : ''}
                             ${o.raw_data ? `<details class="check-log-raw"><summary>raw_data</summary><pre>${esc(JSON.stringify(o.raw_data, null, 2))}</pre></details>` : ''}
                         </div>`).join('') : '<div class="check-log-empty">No observations recorded.</div>';
+                    const ioList = ioByCheck[c.name] || [];
+                    const ioBody = !ioList.length ? '' : `
+                        <details class="check-log-io">
+                            <summary>Raw I/O — ${ioList.length} exchange${ioList.length === 1 ? '' : 's'}</summary>
+                            ${ioList.map((ex, i) => renderExchange(ex, `${c.name}-${i}`)).join('')}
+                        </details>`;
                     return `<details class="check-log-check" ${obsList.length ? 'open' : ''}>
                         <summary>
                             <span class="check-log-status check-log-status-${status}">${status}</span>
@@ -725,7 +792,7 @@
                             <span class="check-log-count">${c.obs} obs</span>
                             ${c.error ? `<span class="check-log-err">${esc(c.error)}</span>` : ''}
                         </summary>
-                        <div class="check-log-body">${obsBody}</div>
+                        <div class="check-log-body">${obsBody}${ioBody}</div>
                     </details>`;
                 }).join('')}</div>`;
             } catch (e) {

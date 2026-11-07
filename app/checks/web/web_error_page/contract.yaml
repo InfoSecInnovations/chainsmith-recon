@@ -27,3 +27,35 @@ references:
 - OWASP WSTG-INFO-08
 - CWE-209
 reason: Error pages reveal framework identity and debug mode, enabling targeted attacks
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # All three judgements read the same set of error responses, so the probe
+  # emits one undiscriminated candidate and `grade()` names each.
+  # `framework-<name>` carries the framework it matched
+  # (`framework-django`, `framework-werkzeug-flask`); that set follows the
+  # signature table, so the map records the `framework` family and
+  # `provisional_for` falls to `default`.
+  #
+  # **The confidences live in `FRAMEWORK_SIGNATURES` itself**, one per row,
+  # beside the pattern that earned it — because the twenty-four signatures are
+  # not equally good and a single number for the check would waste the point.
+  # `Whitelabel Error Page` and the nginx `<center>` footer are 0.97; the
+  # `traceback` CSS class is 0.5 (any template may define one), the bare
+  # `Ignition` word 0.55, and the loose `laravel`/`exception` pair 0.6. No
+  # severity changed.
+  #
+  # `stack-trace-404` is 0.9 (language-specific trace lines, not generic
+  # words). `custom-errors` is 0.7: "framework not identified" is an absence
+  # claim bounded by the table, and a target running something it does not list
+  # produces it just as readily as one with genuinely custom error pages.
+  default: info
+  observations:
+    framework: info
+    stack-trace-404: low
+    custom-errors: info

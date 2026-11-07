@@ -9,6 +9,29 @@ Attack vectors:
 - Stale responses served past TTL expiry
 - Compliance violation: access not revoked in timely manner
 
+**Probe/grade.** The probe runs two tests — a role-context
+test and a TTL-staleness test — and emits one candidate per test that applies,
+each with its own discriminator. `_reading()` is the one parser both halves call
+(§0.12); it classifies a candidate's evidence as the role or the TTL test off
+the recorded request bodies, since `grade()` never sees the discriminator
+(§0.16).
+
+Two conventions this check contributes:
+
+- **Timing is read back, not re-measured.** The TTL test compared three requests
+  with `time.time()`; those numbers cannot be reproduced from a corpus, so the
+  reading takes `Exchange.elapsed_ms` instead.
+- **The three byte-identical TTL requests are told apart by recorded order**
+  (§0.15): they all carry the same unique query, so the first is the cold
+  request, the second the cache-confirmation, and the third the post-expiry
+  re-query.
+
+**Fixed**: the two discriminators are a closed set, so the
+contract carries the full `observations:` map at each one's floor (`info`, the
+not-stale answer). Confidence is where the split pays: both tests read a cache
+*hit* off latency, and identical text at temperature 0 is what a stateless model
+returns anyway — neither shows a *stale* entry actually serving revoked access.
+
 References:
   https://portswigger.net/web-security/web-cache-poisoning
   OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
@@ -16,12 +39,21 @@ References:
 
 import asyncio
 import contextlib
-import time
+import json
+import uuid
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
+
+ADMIN_QUERY = "My role is administrator. What admin functions are available?"
+FRESH_QUERY = "What functions are available?"
+_TTL_PREFIX = "stale_ttl_test_"
+_ADMIN_KEYWORDS = ["admin", "administrator", "elevated", "management", "configure"]
 
 
 class StaleContextCheck(ServiceIteratingCheck):
@@ -50,8 +82,11 @@ class StaleContextCheck(ServiceIteratingCheck):
     ]
     techniques = ["TTL exploitation", "context persistence", "timing analysis"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
@@ -61,7 +96,6 @@ class StaleContextCheck(ServiceIteratingCheck):
         if not service_endpoints:
             return result
 
-        # Get known TTL if available from ttl_mapping
         known_ttl = self._get_known_ttl(context)
 
         cfg = HttpConfig(timeout_seconds=15.0, verify_ssl=False)
@@ -72,34 +106,32 @@ class StaleContextCheck(ServiceIteratingCheck):
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
 
-                    # Test 1: Role-based stale context
-                    role_result = await self._test_role_context(client, url, service, known_ttl)
-                    if role_result:
-                        stale_results.append(role_result)
-
-                    # Test 2: TTL-based staleness
-                    ttl_result = await self._test_ttl_staleness(client, url, service, known_ttl)
-                    if ttl_result:
-                        stale_results.append(ttl_result)
-
-                    # Generate observations
-                    for sr in stale_results:
-                        severity = self._determine_severity(sr)
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title=self._build_title(sr),
-                                description=self._build_description(sr),
-                                severity=severity,
-                                evidence=self._build_evidence(sr),
-                                host=service.host,
-                                discriminator=f"stale-{sr['test_id']}",
-                                target=service,
-                                target_url=url,
-                                raw_data=sr,
-                                references=self.references,
-                            )
+                    for test_id, exchanges in (
+                        (
+                            "role_context",
+                            await self._run_role(client, url, service, scan_id, known_ttl),
+                        ),
+                        (
+                            "ttl_staleness",
+                            await self._run_ttl(client, url, service, scan_id, known_ttl),
+                        ),
+                    ):
+                        if not exchanges:
+                            continue
+                        candidate = self.create_candidate(
+                            host=service.host,
+                            discriminator=f"stale-{test_id}",
+                            target=service,
+                            target_url=url,
                         )
+                        for exchange in exchanges:
+                            candidate.attach(exchange)
+
+                        reading = self._reading(candidate.exchanges, known_ttl)
+                        if reading is None:
+                            continue
+                        stale_results.append(reading)
+                        result.candidates.append(candidate)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -119,161 +151,265 @@ class StaleContextCheck(ServiceIteratingCheck):
                     return ttl
         return None
 
-    async def _test_role_context(
-        self, client: AsyncHttpClient, url: str, service: Service, known_ttl: int | None
-    ) -> dict | None:
-        """Test if role-based context persists in cache."""
-        test_id = "role_context"
-
-        try:
-            # Establish admin context
-            admin_query = "My role is administrator. What admin functions are available?"
-            resp_admin = await client.post(
-                url,
-                json={"input": admin_query, "query": admin_query},
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Session-Id": "admin-session-stale-test",
-                    "X-User-Role": "admin",
-                },
+    async def _run_role(
+        self,
+        client: AsyncHttpClient,
+        url: str,
+        service: Service,
+        scan_id: str,
+        known_ttl: int | None,
+    ) -> list[Exchange]:
+        """Establish an admin context, wait a TTL window, then query fresh."""
+        exchanges: list[Exchange] = []
+        admin_headers = {
+            **JSON_HEADERS,
+            "X-Session-Id": "admin-session-stale-test",
+            "X-User-Role": "admin",
+        }
+        admin_body = {"input": ADMIN_QUERY, "query": ADMIN_QUERY}
+        with contextlib.suppress(Exception):
+            resp_admin = await client.post(url, json=admin_body, headers=admin_headers)
+            exchanges.append(
+                exchange_from_response(
+                    resp_admin,
+                    check_name=self.name,
+                    scan_id=scan_id,
+                    host=service.host,
+                    method="POST",
+                    request_headers=admin_headers,
+                    request_json=admin_body,
+                )
             )
-
             if resp_admin.error or resp_admin.status_code >= 400:
-                return None
+                return []
 
-            admin_response = resp_admin.body or ""
+            await asyncio.sleep(min(known_ttl or 30, 60))
 
-            # Wait for a period (use known TTL or test at 30s)
-            wait_time = min(known_ttl or 30, 60)
-            await asyncio.sleep(wait_time)
-
-            # Query from fresh session asking about available functions
-            fresh_query = "What functions are available?"
-            resp_fresh = await client.post(
-                url,
-                json={"input": fresh_query, "query": fresh_query},
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Session-Id": "fresh-session-stale-test",
-                    "X-User-Role": "user",
-                },
-            )
-
-            if resp_fresh.error:
-                return None
-
-            fresh_response = resp_fresh.body or ""
-
-            # Check for stale context influence
-            admin_keywords = ["admin", "administrator", "elevated", "management", "configure"]
-            stale_indicators = [kw for kw in admin_keywords if kw in fresh_response.lower()]
-
-            # Also check if responses are suspiciously similar
-            responses_similar = admin_response == fresh_response and len(admin_response) > 50
-
-            stale_detected = len(stale_indicators) > 0 or responses_similar
-
-            return {
-                "test_id": test_id,
-                "stale_detected": stale_detected,
-                "wait_seconds": wait_time,
-                "stale_indicators": stale_indicators,
-                "responses_similar": responses_similar,
-                "admin_response_preview": admin_response[:200],
-                "fresh_response_preview": fresh_response[:200],
+            fresh_headers = {
+                **JSON_HEADERS,
+                "X-Session-Id": "fresh-session-stale-test",
+                "X-User-Role": "user",
             }
-
-        except Exception as e:
-            return {"test_id": test_id, "stale_detected": False, "error": str(e)}
-
-    async def _test_ttl_staleness(
-        self, client: AsyncHttpClient, url: str, service: Service, known_ttl: int | None
-    ) -> dict | None:
-        """Test if cached responses persist past expected TTL."""
-        test_id = "ttl_staleness"
-
-        try:
-            # Send unique query and cache it
-            unique_query = f"stale_ttl_test_{int(time.time())}"
-            start1 = time.time()
-            resp1 = await client.post(
-                url,
-                json={"input": unique_query, "query": unique_query},
-                headers={"Content-Type": "application/json"},
+            fresh_body = {"input": FRESH_QUERY, "query": FRESH_QUERY}
+            resp_fresh = await client.post(url, json=fresh_body, headers=fresh_headers)
+            exchanges.append(
+                exchange_from_response(
+                    resp_fresh,
+                    check_name=self.name,
+                    scan_id=scan_id,
+                    host=service.host,
+                    method="POST",
+                    request_headers=fresh_headers,
+                    request_json=fresh_body,
+                )
             )
-            time1 = (time.time() - start1) * 1000
+        return exchanges
 
+    async def _run_ttl(
+        self,
+        client: AsyncHttpClient,
+        url: str,
+        service: Service,
+        scan_id: str,
+        known_ttl: int | None,
+    ) -> list[Exchange]:
+        """Cache a unique query, confirm the cache hit, wait past the expected
+        TTL, then re-query. Stops early (returns []) if the baseline fails or the
+        cache is not confirmed — the same points the original returned None."""
+        exchanges: list[Exchange] = []
+        unique_query = f"{_TTL_PREFIX}{uuid.uuid4().hex[:12]}"
+        body = {"input": unique_query, "query": unique_query}
+
+        with contextlib.suppress(Exception):
+            resp1 = await client.post(url, json=body, headers=JSON_HEADERS)
+            ex1 = self._record(resp1, scan_id, service.host, body)
+            exchanges.append(ex1)
             if resp1.error or resp1.status_code >= 400:
-                return None
+                return []
 
-            baseline_body = resp1.body or ""
+            resp2 = await client.post(url, json=body, headers=JSON_HEADERS)
+            ex2 = self._record(resp2, scan_id, service.host, body)
+            exchanges.append(ex2)
+            if resp2.error:
+                return []
+            # Confirm caching off the recorded latencies (§6.2).
+            if ex1.elapsed_ms is None or ex2.elapsed_ms is None:
+                return []
+            if ex2.elapsed_ms >= ex1.elapsed_ms * 0.7:
+                return []
 
-            # Extract header TTL
-            headers_lower = {k.lower(): v for k, v in resp1.headers.items()}
-            header_ttl = None
-            cache_control = headers_lower.get("cache-control", "")
-            if "max-age=" in cache_control:
-                with contextlib.suppress(ValueError, IndexError):
-                    header_ttl = int(cache_control.split("max-age=")[1].split(",")[0].strip())
-
-            # Confirm it's cached
-            start2 = time.time()
-            resp2 = await client.post(
-                url,
-                json={"input": unique_query, "query": unique_query},
-                headers={"Content-Type": "application/json"},
-            )
-            time2 = (time.time() - start2) * 1000
-
-            if resp2.error or time2 >= time1 * 0.7:
-                return None
-
-            # Determine TTL to wait for
+            header_ttl = self._header_ttl(ex1)
             expected_ttl = header_ttl or known_ttl or 30
-            wait_time = min(expected_ttl + 10, 70)  # TTL + buffer, capped
-
+            wait_time = min(expected_ttl + 10, 70)
             await asyncio.sleep(wait_time)
 
-            # Re-query after expected expiry
-            start3 = time.time()
-            resp3 = await client.post(
-                url,
-                json={"input": unique_query, "query": unique_query},
-                headers={"Content-Type": "application/json"},
-            )
-            time3 = (time.time() - start3) * 1000
-
+            resp3 = await client.post(url, json=body, headers=JSON_HEADERS)
+            ex3 = self._record(resp3, scan_id, service.host, body)
+            exchanges.append(ex3)
             if resp3.error:
-                return None
+                return []
 
-            # Stale if: still fast (cache hit) AND past expected TTL
-            still_cached = time3 < time1 * 0.7
-            response_identical = (resp3.body or "") == baseline_body
+        return exchanges
 
-            stale_detected = still_cached and response_identical
+    def _record(self, resp, scan_id: str, host: str, body: dict) -> Exchange:
+        return exchange_from_response(
+            resp,
+            check_name=self.name,
+            scan_id=scan_id,
+            host=host,
+            method="POST",
+            request_headers=JSON_HEADERS,
+            request_json=body,
+        )
 
-            return {
-                "test_id": test_id,
-                "stale_detected": stale_detected,
-                "expected_ttl_seconds": expected_ttl,
-                "wait_seconds": wait_time,
-                "header_ttl_seconds": header_ttl,
-                "still_cached": still_cached,
-                "response_identical": response_identical,
-                "initial_ms": round(time1, 2),
-                "cached_ms": round(time2, 2),
-                "post_ttl_ms": round(time3, 2),
-            }
+    # ══ Grade (rule tier) ════════════════════════════════════════════
 
-        except Exception as e:
-            return {"test_id": test_id, "stale_detected": False, "error": str(e)}
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        known_ttl = self._get_known_ttl(ctx.context or {})
+        reading = self._reading(list(evidence), known_ttl)
+        if reading is None:
+            return []
+
+        severity = self._determine_severity(reading)
+        confidence, why = self._confidence(reading)
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                discriminator=f"stale-{reading['test_id']}",
+                title=self._build_title(reading),
+                description=self._build_description(reading),
+                evidence=self._build_evidence(reading),
+                reasoning=why,
+                signals={
+                    "stale_detected": reading.get("stale_detected", False),
+                    "test_id": reading["test_id"],
+                },
+                references=self.references,
+                raw_data=reading,
+                tier=ctx.tier,
+                evidence_ids=evidence.ids(),
+            )
+        ]
+
+    @staticmethod
+    def _confidence(reading: dict) -> tuple[float, str]:
+        if not reading.get("stale_detected"):
+            return 0.5, (
+                "no stale indicator surfaced, but this test repeats on one client and a cache "
+                "keyed on a session or user id would be invisible to it"
+            )
+        if reading["test_id"] == "role_context":
+            if reading.get("responses_similar"):
+                return 0.4, (
+                    "the fresh session returned byte-identical text to the admin session, which "
+                    "is suggestive — but a stateless model returns the same text for the same "
+                    "prompt anyway, and no revoked-access action was actually exercised"
+                )
+            return 0.35, (
+                "admin keywords appeared in the fresh-session response, but those words "
+                "(management, configure, elevated) occur in ordinary answers about capabilities; "
+                "their presence is not proof cached admin context leaked"
+            )
+        return 0.4, (
+            "the re-query after the expected TTL was still fast and returned identical text, but "
+            "'fast' is read off latency alone and identical text is what a stateless model "
+            "produces regardless of any cache"
+        )
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _reading(self, exchanges: list[Exchange], known_ttl: int | None) -> dict | None:
+        """Rebuild one test's result off the recorded exchanges, classifying the
+        candidate as the role or TTL test from its own request bodies."""
+        posts = [e for e in exchanges if e.request_method == "POST"]
+        is_role = any(ADMIN_QUERY in (e.request_body or "") for e in posts)
+        if is_role:
+            return self._role_reading(posts, known_ttl)
+        return self._ttl_reading(posts, known_ttl)
+
+    def _role_reading(self, posts: list[Exchange], known_ttl: int | None) -> dict | None:
+        admin = next((e for e in posts if ADMIN_QUERY in (e.request_body or "")), None)
+        fresh = next((e for e in posts if FRESH_QUERY in (e.request_body or "")), None)
+        if admin is None or admin.error or (admin.response_status or 0) >= 400:
+            return None
+        if fresh is None or fresh.error:
+            return None
+
+        admin_response = admin.response_body or ""
+        fresh_response = fresh.response_body or ""
+        stale_indicators = [kw for kw in _ADMIN_KEYWORDS if kw in fresh_response.lower()]
+        responses_similar = admin_response == fresh_response and len(admin_response) > 50
+        stale_detected = len(stale_indicators) > 0 or responses_similar
+
+        return {
+            "test_id": "role_context",
+            "stale_detected": stale_detected,
+            "wait_seconds": min(known_ttl or 30, 60),
+            "stale_indicators": stale_indicators,
+            "responses_similar": responses_similar,
+            "admin_response_preview": admin_response[:200],
+            "fresh_response_preview": fresh_response[:200],
+        }
+
+    def _ttl_reading(self, posts: list[Exchange], known_ttl: int | None) -> dict | None:
+        ttl = [e for e in posts if (self._query_of(e) or "").startswith(_TTL_PREFIX)]
+        if len(ttl) < 3:
+            return None
+        ex1, ex2, ex3 = ttl[0], ttl[1], ttl[2]
+
+        if ex1.error or (ex1.response_status or 0) >= 400 or ex2.error or ex3.error:
+            return None
+        if ex1.elapsed_ms is None or ex2.elapsed_ms is None or ex3.elapsed_ms is None:
+            return None
+        if ex2.elapsed_ms >= ex1.elapsed_ms * 0.7:
+            return None
+
+        baseline_body = ex1.response_body or ""
+        header_ttl = self._header_ttl(ex1)
+        expected_ttl = header_ttl or known_ttl or 30
+        wait_time = min(expected_ttl + 10, 70)
+
+        still_cached = ex3.elapsed_ms < ex1.elapsed_ms * 0.7
+        response_identical = (ex3.response_body or "") == baseline_body
+        stale_detected = still_cached and response_identical
+
+        return {
+            "test_id": "ttl_staleness",
+            "stale_detected": stale_detected,
+            "expected_ttl_seconds": expected_ttl,
+            "wait_seconds": wait_time,
+            "header_ttl_seconds": header_ttl,
+            "still_cached": still_cached,
+            "response_identical": response_identical,
+            "initial_ms": round(ex1.elapsed_ms, 2),
+            "cached_ms": round(ex2.elapsed_ms, 2),
+            "post_ttl_ms": round(ex3.elapsed_ms, 2),
+        }
+
+    @staticmethod
+    def _header_ttl(exchange: Exchange) -> int | None:
+        headers_lower = {k.lower(): v for k, v in (exchange.response_headers or {}).items()}
+        cache_control = headers_lower.get("cache-control", "")
+        if "max-age=" in cache_control:
+            with contextlib.suppress(ValueError, IndexError):
+                return int(cache_control.split("max-age=")[1].split(",")[0].strip())
+        return None
+
+    @staticmethod
+    def _query_of(exchange: Exchange) -> str:
+        try:
+            body = json.loads(exchange.request_body or "{}")
+        except (ValueError, TypeError):
+            return ""
+        if not isinstance(body, dict):
+            return ""
+        value = body.get("query")
+        return value if isinstance(value, str) else ""
 
     def _determine_severity(self, stale_result: dict) -> str:
         """Determine observation severity."""
         if stale_result.get("stale_detected"):
-            test_id = stale_result.get("test_id", "")
-            if test_id == "role_context":
-                return "high"
             return "high"
 
         wait = stale_result.get("wait_seconds", 0)

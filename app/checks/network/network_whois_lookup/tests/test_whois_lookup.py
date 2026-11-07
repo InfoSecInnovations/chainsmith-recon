@@ -1,9 +1,45 @@
-"""Co-located tests (Phase 56 §3) — split from test_network_whois.py."""
+"""Tests for network_whois_lookup."""
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
+
+def _whois_exchange(payload: dict | None, host: str = "example.com", rdap: bool = False):
+    """One recorded WHOIS or RDAP answer, as the lookups now hand them back.
+
+    57.4 wave 2: the parsed record is the exchange's JSON `response_body`, and
+    the request body is how `grade()` tells a domain lookup from a network one.
+    """
+    import json
+
+    from app.grading import exchange_from_payload
+
+    if payload is None:
+        return None
+    return exchange_from_payload(
+        "whois",
+        host,
+        check_name="network_whois_lookup",
+        request_body=f"RDAP {host}" if rdap else host,
+        request_headers={"method": "rdap"} if rdap else {},
+        response_body=json.dumps(payload, default=str),
+    )
+
+
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 class TestWhoisLookupCheckInit:
@@ -85,25 +121,27 @@ class TestWhoisLookupCheckRun:
             patch.object(check, "_domain_whois", new_callable=AsyncMock) as mock_whois,
             patch.object(check, "_asn_lookup", new_callable=AsyncMock) as mock_asn,
         ):
-            mock_whois.return_value = {
-                "domain": "example.com",
-                "registrar": "Test Registrar",
-                "created": "2020-01-01",
-                "expires": "2025-01-01",
-                "nameservers": ["ns1.example.com"],
-                "status": [],
-                "redacted": False,
-                "raw_length": 500,
-                "updated": None,
-                "dnssec": None,
-            }
+            mock_whois.return_value = _whois_exchange(
+                {
+                    "domain": "example.com",
+                    "registrar": "Test Registrar",
+                    "created": "2020-01-01",
+                    "expires": "2025-01-01",
+                    "nameservers": ["ns1.example.com"],
+                    "status": [],
+                    "redacted": False,
+                    "raw_length": 500,
+                    "updated": None,
+                    "dnssec": None,
+                }
+            )
             mock_asn.return_value = None
 
             context = {
                 "dns_records": {"www.example.com": "1.2.3.4"},
                 "base_domain": "example.com",
             }
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
             # Verify _domain_whois was called with the base domain
             mock_whois.assert_called_once_with("example.com")
@@ -121,7 +159,7 @@ class TestWhoisLookupCheckRun:
         ):
             mock_asn.return_value = None
             context = {"dns_records": {"www.example.com": "1.2.3.4"}}
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
             mock_whois.assert_not_called()
             # domain key should be empty dict when skipped
             assert result.outputs["whois_data"]["domain"] == {}
@@ -136,14 +174,18 @@ class TestWhoisLookupCheckRun:
             patch.object(check, "_asn_lookup", new_callable=AsyncMock) as mock_asn,
         ):
             mock_whois.return_value = None
-            mock_asn.return_value = {
-                "ip": "1.2.3.4",
-                "asn": 16509,
-                "asn_description": "Amazon",
-                "asn_country": "US",
-                "network_name": "AMAZON-AES",
-                "network_cidr": "1.2.0.0/16",
-            }
+            mock_asn.return_value = _whois_exchange(
+                rdap=True,
+                host="1.2.3.4",
+                payload={
+                    "ip": "1.2.3.4",
+                    "asn": 16509,
+                    "asn_description": "Amazon",
+                    "asn_country": "US",
+                    "network_name": "AMAZON-AES",
+                    "network_cidr": "1.2.0.0/16",
+                },
+            )
 
             context = {
                 "dns_records": {
@@ -166,25 +208,29 @@ class TestWhoisLookupCheckRun:
             patch.object(check, "_domain_whois", new_callable=AsyncMock) as mock_whois,
             patch.object(check, "_asn_lookup", new_callable=AsyncMock) as mock_asn,
         ):
-            mock_whois.return_value = {
-                "domain": "example.com",
-                "registrar": "R",
-                "created": "2020-01-01",
-                "expires": "2025-01-01",
-                "nameservers": [],
-                "status": [],
-                "redacted": False,
-                "raw_length": 100,
-                "updated": None,
-                "dnssec": None,
-            }
-            mock_asn.return_value = {"ip": "1.2.3.4", "asn": 16509}
+            mock_whois.return_value = _whois_exchange(
+                {
+                    "domain": "example.com",
+                    "registrar": "R",
+                    "created": "2020-01-01",
+                    "expires": "2025-01-01",
+                    "nameservers": [],
+                    "status": [],
+                    "redacted": False,
+                    "raw_length": 100,
+                    "updated": None,
+                    "dnssec": None,
+                }
+            )
+            mock_asn.return_value = _whois_exchange(
+                rdap=True, host="1.2.3.4", payload={"ip": "1.2.3.4", "asn": 16509}
+            )
 
             context = {
                 "dns_records": {"www.example.com": "1.2.3.4"},
                 "base_domain": "example.com",
             }
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
             data = result.outputs["whois_data"]
             assert "domain" in data
             assert "asn" in data
@@ -295,25 +341,27 @@ class TestWhoisDomainObservations:
             patch.object(check, "_domain_whois", new_callable=AsyncMock) as mock_whois,
             patch.object(check, "_asn_lookup", new_callable=AsyncMock) as mock_asn,
         ):
-            mock_whois.return_value = {
-                "domain": "example.com",
-                "registrar": "Cloudflare, Inc.",
-                "created": "2019-03-15T00:00:00Z",
-                "expires": "2025-03-15T00:00:00Z",
-                "nameservers": ["ns1.cloudflare.com"],
-                "status": [],
-                "redacted": False,
-                "raw_length": 500,
-                "updated": None,
-                "dnssec": None,
-            }
+            mock_whois.return_value = _whois_exchange(
+                {
+                    "domain": "example.com",
+                    "registrar": "Cloudflare, Inc.",
+                    "created": "2019-03-15T00:00:00Z",
+                    "expires": "2025-03-15T00:00:00Z",
+                    "nameservers": ["ns1.cloudflare.com"],
+                    "status": [],
+                    "redacted": False,
+                    "raw_length": 500,
+                    "updated": None,
+                    "dnssec": None,
+                }
+            )
             mock_asn.return_value = None
 
             context = {
                 "dns_records": {"www.example.com": "1.2.3.4"},
                 "base_domain": "example.com",
             }
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
             info_obs = [f for f in result.observations if f.severity == "info"]
             registrar_obs = [f for f in info_obs if "registrar" in f.title.lower()]
             assert len(registrar_obs) == 1
@@ -330,25 +378,27 @@ class TestWhoisDomainObservations:
             patch.object(check, "_domain_whois", new_callable=AsyncMock) as mock_whois,
             patch.object(check, "_asn_lookup", new_callable=AsyncMock) as mock_asn,
         ):
-            mock_whois.return_value = {
-                "domain": "newsite.com",
-                "registrar": "GoDaddy",
-                "created": recent_date,
-                "expires": "2027-01-01T00:00:00Z",
-                "nameservers": [],
-                "status": [],
-                "redacted": False,
-                "raw_length": 300,
-                "updated": None,
-                "dnssec": None,
-            }
+            mock_whois.return_value = _whois_exchange(
+                {
+                    "domain": "newsite.com",
+                    "registrar": "GoDaddy",
+                    "created": recent_date,
+                    "expires": "2027-01-01T00:00:00Z",
+                    "nameservers": [],
+                    "status": [],
+                    "redacted": False,
+                    "raw_length": 300,
+                    "updated": None,
+                    "dnssec": None,
+                }
+            )
             mock_asn.return_value = None
 
             context = {
                 "dns_records": {"newsite.com": "1.2.3.4"},
                 "base_domain": "newsite.com",
             }
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
             low_obs = [f for f in result.observations if f.severity == "low"]
             recent_obs = [f for f in low_obs if "90 days" in f.title]
             assert len(recent_obs) == 1
@@ -363,25 +413,27 @@ class TestWhoisDomainObservations:
             patch.object(check, "_domain_whois", new_callable=AsyncMock) as mock_whois,
             patch.object(check, "_asn_lookup", new_callable=AsyncMock) as mock_asn,
         ):
-            mock_whois.return_value = {
-                "domain": "example.com",
-                "registrar": "Namecheap",
-                "created": "2020-01-01",
-                "expires": "2025-01-01",
-                "nameservers": [],
-                "status": [],
-                "redacted": True,
-                "raw_length": 400,
-                "updated": None,
-                "dnssec": None,
-            }
+            mock_whois.return_value = _whois_exchange(
+                {
+                    "domain": "example.com",
+                    "registrar": "Namecheap",
+                    "created": "2020-01-01",
+                    "expires": "2025-01-01",
+                    "nameservers": [],
+                    "status": [],
+                    "redacted": True,
+                    "raw_length": 400,
+                    "updated": None,
+                    "dnssec": None,
+                }
+            )
             mock_asn.return_value = None
 
             context = {
                 "dns_records": {"example.com": "1.2.3.4"},
                 "base_domain": "example.com",
             }
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
             redacted_obs = [f for f in result.observations if "redacted" in f.title.lower()]
             assert len(redacted_obs) == 1
             assert redacted_obs[0].severity == "info"
@@ -401,22 +453,26 @@ class TestWhoisAsnObservations:
             patch.object(check, "_asn_lookup", new_callable=AsyncMock) as mock_asn,
         ):
             mock_whois.return_value = None
-            mock_asn.return_value = {
-                "ip": "1.2.3.4",
-                "asn": 16509,
-                "asn_description": "AMAZON-02",
-                "asn_country": "US",
-                "network_name": "AMAZON-AES",
-                "network_cidr": "1.2.0.0/16",
-                "asn_registry": "arin",
-                "network_country": "US",
-            }
+            mock_asn.return_value = _whois_exchange(
+                rdap=True,
+                host="1.2.3.4",
+                payload={
+                    "ip": "1.2.3.4",
+                    "asn": 16509,
+                    "asn_description": "AMAZON-02",
+                    "asn_country": "US",
+                    "network_name": "AMAZON-AES",
+                    "network_cidr": "1.2.0.0/16",
+                    "asn_registry": "arin",
+                    "network_country": "US",
+                },
+            )
 
             context = {
                 "dns_records": {"api.example.com": "1.2.3.4"},
                 "base_domain": "example.com",
             }
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
             info_obs = [f for f in result.observations if f.severity == "info"]
             asn_obs = [f for f in info_obs if "AS16509" in f.title]
             assert len(asn_obs) == 1
@@ -434,13 +490,15 @@ class TestWhoisAsnObservations:
             patch.object(check, "_asn_lookup", new_callable=AsyncMock) as mock_asn,
         ):
             mock_whois.return_value = None
-            mock_asn.return_value = {"ip": "10.0.0.1", "asn": None, "private": True}
+            mock_asn.return_value = _whois_exchange(
+                rdap=True, host="1.2.3.4", payload={"ip": "10.0.0.1", "asn": None, "private": True}
+            )
 
             context = {
                 "dns_records": {"internal.example.com": "10.0.0.1"},
                 "base_domain": "example.com",
             }
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
             private_obs = [f for f in result.observations if "private" in f.title.lower()]
             assert len(private_obs) == 1
             assert private_obs[0].severity == "info"
@@ -460,6 +518,6 @@ class TestWhoisAsnObservations:
                 "dns_records": {"www.example.com": "1.2.3.4"},
                 "base_domain": "example.com",
             }
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
             # Still succeeds (domain whois path is independent)
             assert any("ipwhois" in e.lower() for e in result.errors)

@@ -31,6 +31,9 @@ def _write_check(root, suite, name, *, config=None):
                 "description": f"{name} description",
                 "entry": "check.py:Foo",
                 "suite": suite,
+                # Every built-in check declares one since the 57.4 exit
+                # condition; without it the tree is not "clean" any more.
+                "severity": {"model": "fixed", "default": "info"},
             }
         ),
         encoding="utf-8",

@@ -29,3 +29,23 @@ references:
 reason: PTR records reveal internal hostnames, virtual hosting relationships, and
   cloud infrastructure patterns. Internal naming conventions (*.internal, ip-*) expose
   infrastructure details useful for reconnaissance.
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. The discriminators carry the IP
+  # (`ptr-93.184.216.34`) because this check is labelled by forward hostname and
+  # iterates addresses; the set is unbounded, so the map below records one entry per
+  # *family* and `provisional_for` falls to `default` — every verdict here is placed
+  # by `grade()` anyway.
+  #
+  # Only the first judgement is categorical. The other three are inferences with
+  # real room to be wrong, and `grade()` now says so: several PTR records read as
+  # virtual hosting (0.7) but look identical to a stale reverse zone; `ip-` matches
+  # plenty of hostnames that are not AWS internal names (0.75); and "not a known
+  # forward host" (0.6) means "absent from a map built from one wordlist". None is
+  # worth more than `low` for that reason.
+  default: info
+  observations:
+    ptr: info
+    multi-ptr: info
+    internal: low
+    mismatch: info

@@ -1,5 +1,6 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_ssrf.py."""
+"""Tests for web_ssrf_indicator."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -37,11 +38,13 @@ def mock_client_multi(response_map=None, default=None):
     mock.__aexit__ = AsyncMock()
 
     def _lookup(method, url):
+        # The real client stamps the requested URL onto the response, and a
+        # migrated check records that URL on the exchange its grader reads.
         if response_map:
             for (m, pattern), response in response_map.items():
                 if m == method and pattern in url:
-                    return response
-        return default
+                    return replace(response, url=url)
+        return replace(default, url=url)
 
     async def dispatch_get(url, **kwargs):
         return _lookup("GET", url)
@@ -55,6 +58,20 @@ def mock_client_multi(response_map=None, default=None):
     mock._request = AsyncMock(side_effect=lambda m, url, **kw: _lookup(m, url))
 
     return mock
+
+
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
 
 
 class TestSSRFIndicatorCheck:
@@ -91,7 +108,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) == 1
@@ -138,7 +155,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) == 1
@@ -169,7 +186,7 @@ class TestSSRFIndicatorCheck:
             "app.checks.web.web_ssrf_indicator.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(404)),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) == 0
@@ -198,7 +215,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) == 2
@@ -227,7 +244,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         ssrf = [f for f in result.observations if "preview" in (f.id or "")]
         assert len(ssrf) == 1
@@ -252,7 +269,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         fetch_obs = [f for f in result.observations if "api-fetch" in (f.id or "")]
         assert len(fetch_obs) == 0
@@ -268,7 +285,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) == 0
@@ -294,7 +311,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         # Should find /proxy?url= but not /page?id= or /view?name=
@@ -321,7 +338,7 @@ class TestSSRFIndicatorCheck:
             "app.checks.web.web_ssrf_indicator.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(404)),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         ssrf = [f for f in result.observations if "ssrf" in (f.id or "")]
         assert len(ssrf) == 0
@@ -350,7 +367,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert "ssrf_candidates" in result.outputs
         candidates = result.outputs["ssrf_candidates"]
@@ -384,7 +401,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         proxy_observations = [f for f in result.observations if "proxy" in (f.id or "")]
         assert len(proxy_observations) == 1
@@ -418,7 +435,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         # /api/fetch should appear only once despite being in both sources
         fetch_observations = [f for f in result.observations if "api-fetch" in (f.id or "")]
@@ -436,7 +453,7 @@ class TestSSRFIndicatorCheck:
                 default=resp(0, error="Connection refused"),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.success
         # No SSRF observations from errored responses
@@ -454,7 +471,7 @@ class TestSSRFIndicatorCheck:
         mock.get = AsyncMock(side_effect=OSError("Network unreachable"))
 
         with patch("app.checks.web.web_ssrf_indicator.check.AsyncHttpClient", return_value=mock):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert len(result.errors) >= 1
         assert "SSRF probe error" in result.errors[0]

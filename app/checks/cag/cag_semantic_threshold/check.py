@@ -9,6 +9,30 @@ Attack vectors:
 - Tight threshold: limited blast radius but still exploitable
 - Threshold mapping enables targeted poisoning of broad query sets
 
+**Probe/grade.** The probe sends the baseline query twice
+(cold, then hot) and each similarity variation once, records every exchange, and
+hands them over as one candidate per endpoint. `_reading()` is the one parser
+both halves call (§0.12), and two things it does are the conventions this check
+contributes:
+
+- **Timing is read back, not re-measured.** The original wrapped every request
+  in `time.time()`; those numbers cannot be reproduced from a corpus, so the
+  reading takes `Exchange.elapsed_ms` instead and a re-grade reaches the same
+  cache-hit/miss decision about the same requests.
+- **The byte-identical cold/hot pair is told apart by recorded order** (§0.15):
+  both carry the baseline query, so the first is the cold request and the second
+  the hot one. Variations carry distinct queries and are matched by body.
+
+`grade()` never sees the discriminator (§0.16); it identifies the endpoint from
+`ctx.target_url`.
+
+**Fixed**: the discriminator embeds the endpoint path, an
+unbounded value, so the contract declares no `observations:` map and `grade()`
+places the real severity. Confidence is where the split pays: the whole reading
+rests on latency deltas, and a single fast response is as easily network jitter
+or a warm connection as a genuine semantic cache hit — the six similarity buckets
+are coarse, so the estimated threshold is an order-of-magnitude figure at best.
+
 References:
   https://github.com/zilliztech/GPTCache
   https://portswigger.net/web-security/web-cache-poisoning
@@ -16,12 +40,15 @@ References:
 """
 
 import asyncio
-import time
+import json
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 # Query variations with decreasing similarity to baseline
 SIMILARITY_PROBES = [
@@ -59,8 +86,11 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
     ]
     techniques = ["semantic threshold probing", "timing analysis", "similarity estimation"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
@@ -70,7 +100,6 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
         if not service_endpoints:
             return result
 
-        # Check if semantic cache is known
         cache_infra = context.get("cache_infrastructure", [])
         has_semantic = (
             any(t in cache_infra for t in ["semantic_cache", "gptcache"]) if cache_infra else False
@@ -83,27 +112,22 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
             async with AsyncHttpClient(cfg) as client:
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
-                    threshold_info = await self._probe_threshold(client, url, service, has_semantic)
+                    path = endpoint.get("path", "unknown").strip("/").replace("/", "-")
+                    candidate = self.create_candidate(
+                        host=service.host,
+                        discriminator=f"threshold-{path}",
+                        target=service,
+                        target_url=url,
+                    )
 
-                    if threshold_info:
-                        threshold_results.append(threshold_info)
+                    stop = await self._probe(client, url, service, scan_id, candidate)
+                    if stop:
+                        continue
 
-                        severity = self._determine_severity(threshold_info)
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title=self._build_title(threshold_info),
-                                description=self._build_description(threshold_info),
-                                severity=severity,
-                                evidence=self._build_evidence(threshold_info),
-                                host=service.host,
-                                discriminator=f"threshold-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                                target=service,
-                                target_url=url,
-                                raw_data=threshold_info,
-                                references=self.references,
-                            )
-                        )
+                    reading = self._reading(candidate.exchanges, url, has_semantic)
+                    if reading:
+                        threshold_results.append(reading)
+                        result.candidates.append(candidate)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -113,88 +137,165 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _probe_threshold(
-        self, client: AsyncHttpClient, url: str, service: Service, has_semantic: bool
-    ) -> dict | None:
-        """Probe the semantic similarity threshold."""
+    async def _probe(
+        self,
+        client: AsyncHttpClient,
+        url: str,
+        service: Service,
+        scan_id: str,
+        candidate,
+    ) -> bool:
+        """Send the probe requests, recording each. Returns True to skip this
+        endpoint (the original returned None before emitting a result): a failed
+        baseline, or caching not confirmed on the hot request. Both decisions are
+        made on the exchange just recorded (§6.2)."""
         baseline_query = SIMILARITY_PROBES[0]["query"]
 
-        # Establish baseline: cold request
-        start_cold = time.time()
-        resp_cold = await client.post(
-            url,
-            json={"input": baseline_query, "query": baseline_query},
-            headers={"Content-Type": "application/json"},
-        )
-        cold_ms = (time.time() - start_cold) * 1000
+        cold = await self._send(client, url, baseline_query, scan_id, service.host)
+        candidate.attach(cold)
+        if cold.error or (cold.response_status or 0) >= 400:
+            return True
 
-        if resp_cold.error or resp_cold.status_code >= 400:
+        hot = await self._send(client, url, baseline_query, scan_id, service.host)
+        candidate.attach(hot)
+        if hot.error:
+            return True
+        # Caching must be confirmed on the exact repeat before variations mean
+        # anything (read off the record, not a re-measured await).
+        if hot.elapsed_ms is None or cold.elapsed_ms is None:
+            return True
+        if hot.elapsed_ms >= cold.elapsed_ms * 0.7:
+            return True
+
+        for probe in SIMILARITY_PROBES[1:]:
+            await asyncio.sleep(0.3)
+            candidate.attach(await self._send(client, url, probe["query"], scan_id, service.host))
+
+        return False
+
+    async def _send(
+        self, client: AsyncHttpClient, url: str, query: str, scan_id: str, host: str
+    ) -> Exchange:
+        body = {"input": query, "query": query}
+        resp = await client.post(url, json=body, headers=JSON_HEADERS)
+        return exchange_from_response(
+            resp,
+            check_name=self.name,
+            scan_id=scan_id,
+            host=host,
+            method="POST",
+            request_headers=JSON_HEADERS,
+            request_json=body,
+        )
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        has_semantic = bool((ctx.context or {}).get("cache_infrastructure")) and any(
+            t in (ctx.context or {}).get("cache_infrastructure", [])
+            for t in ["semantic_cache", "gptcache"]
+        )
+        reading = self._reading(list(evidence), ctx.target_url or "", has_semantic)
+        if not reading:
+            return []
+
+        severity = self._determine_severity(reading)
+        confidence, why = self._confidence(reading)
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                title=self._build_title(reading),
+                description=self._build_description(reading),
+                evidence=self._build_evidence(reading),
+                reasoning=why,
+                signals={
+                    "is_semantic_cache": reading["is_semantic_cache"],
+                    "estimated_threshold": reading["estimated_threshold"],
+                    "variations_hit": reading["variations_hit"],
+                },
+                references=self.references,
+                raw_data=reading,
+                tier=ctx.tier,
+                evidence_ids=evidence.ids(),
+            )
+        ]
+
+    @staticmethod
+    def _confidence(reading: dict) -> tuple[float, str]:
+        if not reading.get("is_semantic_cache"):
+            return 0.5, (
+                "no variation returned faster than the cold-request baseline, but a semantic "
+                "cache with a tight threshold looks identical to no cache at all on timing alone"
+            )
+        hits = reading.get("variations_hit", 0)
+        if hits >= 4:
+            return 0.55, (
+                "several variations returned markedly faster than the cold baseline, a strong "
+                "timing signal — still timing only: a warm connection or server-side jitter can "
+                "produce the same latency drop without any semantic match"
+            )
+        return 0.4, (
+            "the reading rests entirely on latency deltas across six coarse similarity buckets; "
+            "one or two fast variations is as easily network jitter as a genuine cache hit, so "
+            "the estimated threshold is indicative, not measured"
+        )
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _reading(self, exchanges: list[Exchange], url: str, has_semantic: bool) -> dict | None:
+        """Rebuild the threshold reading off the recorded exchanges.
+
+        The baseline query is sent twice; the first recorded is the cold request
+        and the second the hot one (§0.15). Variations carry distinct queries.
+        """
+        posts = [e for e in exchanges if e.request_url == url and e.request_method == "POST"]
+        baseline_query = SIMILARITY_PROBES[0]["query"]
+        baseline = [e for e in posts if self._query_of(e) == baseline_query]
+        if len(baseline) < 2:
             return None
 
-        baseline_body = resp_cold.body or ""
-
-        # Confirm caching: re-send exact query
-        start_hot = time.time()
-        resp_hot = await client.post(
-            url,
-            json={"input": baseline_query, "query": baseline_query},
-            headers={"Content-Type": "application/json"},
-        )
-        hot_ms = (time.time() - start_hot) * 1000
-
-        if resp_hot.error:
+        cold, hot = baseline[0], baseline[1]
+        if cold.error or (cold.response_status or 0) >= 400 or hot.error:
             return None
-
-        # Check if caching is working
+        if cold.elapsed_ms is None or hot.elapsed_ms is None:
+            return None
+        cold_ms, hot_ms = cold.elapsed_ms, hot.elapsed_ms
         if hot_ms >= cold_ms * 0.7:
             return None
 
+        baseline_body = cold.response_body or ""
         cache_hit_threshold_ms = cold_ms * 0.7
 
-        # Test each variation
         probe_results = []
-        for probe in SIMILARITY_PROBES[1:]:  # Skip exact duplicate
-            await asyncio.sleep(0.3)
-
-            start = time.time()
-            resp = await client.post(
-                url,
-                json={"input": probe["query"], "query": probe["query"]},
-                headers={"Content-Type": "application/json"},
-            )
-            elapsed = (time.time() - start) * 1000
-
-            if resp.error:
+        for probe in SIMILARITY_PROBES[1:]:
+            exchange = next((e for e in posts if self._query_of(e) == probe["query"]), None)
+            if exchange is None or exchange.error or exchange.elapsed_ms is None:
                 continue
-
-            is_cache_hit = elapsed < cache_hit_threshold_ms
-            content_matches = (resp.body or "") == baseline_body
-
+            elapsed = exchange.elapsed_ms
             probe_results.append(
                 {
                     "label": probe["label"],
                     "query": probe["query"],
                     "similarity": probe["similarity"],
                     "elapsed_ms": round(elapsed, 2),
-                    "cache_hit": is_cache_hit,
-                    "content_matches": content_matches,
+                    "cache_hit": elapsed < cache_hit_threshold_ms,
+                    "content_matches": (exchange.response_body or "") == baseline_body,
                 }
             )
 
         if not probe_results:
             return None
 
-        # Determine estimated threshold
         hits = [p for p in probe_results if p["cache_hit"]]
         misses = [p for p in probe_results if not p["cache_hit"]]
 
         if hits:
-            # Threshold is between lowest hit similarity and highest miss similarity
             lowest_hit = min(h["similarity"] for h in hits)
             highest_miss = max(m["similarity"] for m in misses) if misses else 0
             estimated_threshold = (lowest_hit + highest_miss) / 2
         else:
-            estimated_threshold = 1.0  # Exact match only
+            estimated_threshold = 1.0
 
         is_semantic = len(hits) > 0 and any(
             h["label"] in ("rephrased", "related", "tangential") for h in hits
@@ -211,6 +312,17 @@ class SemanticThresholdCheck(ServiceIteratingCheck):
             "probe_results": probe_results,
             "semantic_cache_known": has_semantic,
         }
+
+    @staticmethod
+    def _query_of(exchange: Exchange) -> str:
+        try:
+            body = json.loads(exchange.request_body or "{}")
+        except (json.JSONDecodeError, TypeError):
+            return ""
+        if not isinstance(body, dict):
+            return ""
+        value = body.get("query")
+        return value if isinstance(value, str) else ""
 
     def _determine_severity(self, threshold_info: dict) -> str:
         """Determine observation severity."""

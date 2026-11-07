@@ -1,0 +1,431 @@
+{
+  "by_check": {
+    "agent_discovery": 1,
+    "ai_framework_fingerprint": 2,
+    "debug_endpoints": 1,
+    "dns_enumeration": 4,
+    "error_page": 4,
+    "favicon": 2,
+    "header_analysis": 4,
+    "hsts_preload": 4,
+    "http2_detection": 4,
+    "http_method_enum": 4,
+    "llm_endpoint_discovery": 1,
+    "model_enumeration": 1,
+    "model_info_check": 2,
+    "openapi_discovery": 2,
+    "path_probe": 4,
+    "port_scan": 4,
+    "reverse_dns": 8,
+    "robots_txt": 1,
+    "service_probe": 3,
+    "sri_check": 2,
+    "traceroute": 4,
+    "whois_lookup": 5
+  },
+  "identities": [
+    [
+      "agent_discovery",
+      "chat.fakobanko.local",
+      "medium",
+      "Agent endpoint: /chat"
+    ],
+    [
+      "ai_framework_fingerprint",
+      "api.fakobanko.local",
+      "medium",
+      "AI framework identified: huggingface_tgi"
+    ],
+    [
+      "ai_framework_fingerprint",
+      "chat.fakobanko.local",
+      "medium",
+      "AI framework identified: huggingface_tgi"
+    ],
+    [
+      "debug_endpoints",
+      "chat.fakobanko.local",
+      "medium",
+      "Verbose health endpoint: chat.fakobanko.local/health"
+    ],
+    [
+      "dns_enumeration",
+      "unknown",
+      "info",
+      "Host discovered: api.fakobanko.local"
+    ],
+    [
+      "dns_enumeration",
+      "unknown",
+      "info",
+      "Host discovered: chat.fakobanko.local"
+    ],
+    [
+      "dns_enumeration",
+      "unknown",
+      "info",
+      "Host discovered: docs.fakobanko.local"
+    ],
+    [
+      "dns_enumeration",
+      "unknown",
+      "info",
+      "Host discovered: www.fakobanko.local"
+    ],
+    [
+      "error_page",
+      "api.fakobanko.local",
+      "info",
+      "Framework identified from error page: FastAPI"
+    ],
+    [
+      "error_page",
+      "chat.fakobanko.local",
+      "info",
+      "Framework identified from error page: FastAPI"
+    ],
+    [
+      "error_page",
+      "docs.fakobanko.local",
+      "info",
+      "Framework identified from error page: FastAPI"
+    ],
+    [
+      "error_page",
+      "www.fakobanko.local",
+      "info",
+      "Framework identified from error page: FastAPI"
+    ],
+    [
+      "favicon",
+      "docs.fakobanko.local",
+      "info",
+      "No favicon found: docs.fakobanko.local"
+    ],
+    [
+      "favicon",
+      "www.fakobanko.local",
+      "info",
+      "No favicon found: www.fakobanko.local"
+    ],
+    [
+      "header_analysis",
+      "api.fakobanko.local",
+      "low",
+      "Missing security headers (6)"
+    ],
+    [
+      "header_analysis",
+      "chat.fakobanko.local",
+      "low",
+      "Missing security headers (6)"
+    ],
+    [
+      "header_analysis",
+      "docs.fakobanko.local",
+      "low",
+      "Missing security headers (6)"
+    ],
+    [
+      "header_analysis",
+      "www.fakobanko.local",
+      "low",
+      "Missing security headers (6)"
+    ],
+    [
+      "hsts_preload",
+      "api.fakobanko.local",
+      "info",
+      "No HSTS header: api.fakobanko.local"
+    ],
+    [
+      "hsts_preload",
+      "chat.fakobanko.local",
+      "info",
+      "No HSTS header: chat.fakobanko.local"
+    ],
+    [
+      "hsts_preload",
+      "docs.fakobanko.local",
+      "info",
+      "No HSTS header: docs.fakobanko.local"
+    ],
+    [
+      "hsts_preload",
+      "www.fakobanko.local",
+      "info",
+      "No HSTS header: www.fakobanko.local"
+    ],
+    [
+      "http2_detection",
+      "api.fakobanko.local",
+      "info",
+      "HTTP/1.1 only: api.fakobanko.local:8080"
+    ],
+    [
+      "http2_detection",
+      "chat.fakobanko.local",
+      "info",
+      "HTTP/1.1 only: chat.fakobanko.local:8081"
+    ],
+    [
+      "http2_detection",
+      "docs.fakobanko.local",
+      "info",
+      "HTTP/1.1 only: docs.fakobanko.local:8083"
+    ],
+    [
+      "http2_detection",
+      "www.fakobanko.local",
+      "info",
+      "HTTP/1.1 only: www.fakobanko.local:8082"
+    ],
+    [
+      "http_method_enum",
+      "unknown",
+      "info",
+      "Allowed methods: api.fakobanko.local:8080"
+    ],
+    [
+      "http_method_enum",
+      "unknown",
+      "info",
+      "Allowed methods: chat.fakobanko.local:8081"
+    ],
+    [
+      "http_method_enum",
+      "unknown",
+      "info",
+      "Allowed methods: docs.fakobanko.local:8083"
+    ],
+    [
+      "http_method_enum",
+      "unknown",
+      "info",
+      "Allowed methods: www.fakobanko.local:8082"
+    ],
+    [
+      "llm_endpoint_discovery",
+      "chat.fakobanko.local",
+      "info",
+      "LLM endpoint: /chat"
+    ],
+    [
+      "model_enumeration",
+      "chat.fakobanko.local",
+      "info",
+      "Single model available (no enumeration possible)"
+    ],
+    [
+      "model_info_check",
+      "api.fakobanko.local",
+      "medium",
+      "Model info endpoint: /health"
+    ],
+    [
+      "model_info_check",
+      "chat.fakobanko.local",
+      "medium",
+      "Model info endpoint: /health"
+    ],
+    [
+      "openapi_discovery",
+      "api.fakobanko.local",
+      "high",
+      "OpenAPI documentation exposed (11 endpoints)"
+    ],
+    [
+      "openapi_discovery",
+      "chat.fakobanko.local",
+      "high",
+      "OpenAPI documentation exposed (5 endpoints)"
+    ],
+    [
+      "path_probe",
+      "api.fakobanko.local",
+      "info",
+      "Accessible path: /health"
+    ],
+    [
+      "path_probe",
+      "chat.fakobanko.local",
+      "info",
+      "Accessible path: /health"
+    ],
+    [
+      "path_probe",
+      "docs.fakobanko.local",
+      "info",
+      "Accessible path: /health"
+    ],
+    [
+      "path_probe",
+      "www.fakobanko.local",
+      "info",
+      "Accessible path: /health"
+    ],
+    [
+      "port_scan",
+      "api.fakobanko.local",
+      "info",
+      "Open port: api.fakobanko.local:8080"
+    ],
+    [
+      "port_scan",
+      "chat.fakobanko.local",
+      "info",
+      "Open port: chat.fakobanko.local:8081"
+    ],
+    [
+      "port_scan",
+      "docs.fakobanko.local",
+      "info",
+      "Open port: docs.fakobanko.local:8083"
+    ],
+    [
+      "port_scan",
+      "www.fakobanko.local",
+      "info",
+      "Open port: www.fakobanko.local:8082"
+    ],
+    [
+      "reverse_dns",
+      "unknown",
+      "info",
+      "PTR/forward mismatch: 172.18.0.3"
+    ],
+    [
+      "reverse_dns",
+      "unknown",
+      "info",
+      "PTR/forward mismatch: 172.18.0.4"
+    ],
+    [
+      "reverse_dns",
+      "unknown",
+      "info",
+      "PTR/forward mismatch: 172.18.0.5"
+    ],
+    [
+      "reverse_dns",
+      "unknown",
+      "info",
+      "PTR/forward mismatch: 172.18.0.6"
+    ],
+    [
+      "reverse_dns",
+      "unknown",
+      "info",
+      "Reverse DNS: 172.18.0.3 -> fakobanko-www.chainsmith-shared"
+    ],
+    [
+      "reverse_dns",
+      "unknown",
+      "info",
+      "Reverse DNS: 172.18.0.4 -> fakobanko-docs.chainsmith-shared"
+    ],
+    [
+      "reverse_dns",
+      "unknown",
+      "info",
+      "Reverse DNS: 172.18.0.5 -> fakobanko-chat.chainsmith-shared"
+    ],
+    [
+      "reverse_dns",
+      "unknown",
+      "info",
+      "Reverse DNS: 172.18.0.6 -> fakobanko-api.chainsmith-shared"
+    ],
+    [
+      "robots_txt",
+      "www.fakobanko.local",
+      "low",
+      "Sensitive paths in robots.txt (4)"
+    ],
+    [
+      "service_probe",
+      "api.fakobanko.local",
+      "info",
+      "Custom header: x-api-version"
+    ],
+    [
+      "service_probe",
+      "chat.fakobanko.local",
+      "info",
+      "Custom header: x-chatbot-version"
+    ],
+    [
+      "service_probe",
+      "docs.fakobanko.local",
+      "info",
+      "Custom header: x-docs-version"
+    ],
+    [
+      "sri_check",
+      "docs.fakobanko.local",
+      "info",
+      "No external resources found: docs.fakobanko.local"
+    ],
+    [
+      "sri_check",
+      "www.fakobanko.local",
+      "info",
+      "No external resources found: www.fakobanko.local"
+    ],
+    [
+      "traceroute",
+      "unknown",
+      "info",
+      "Route to api.fakobanko.local: 1 hops, 0.12ms avg"
+    ],
+    [
+      "traceroute",
+      "unknown",
+      "info",
+      "Route to chat.fakobanko.local: 1 hops, 0.14ms avg"
+    ],
+    [
+      "traceroute",
+      "unknown",
+      "info",
+      "Route to docs.fakobanko.local: 1 hops, 0.21ms avg"
+    ],
+    [
+      "traceroute",
+      "unknown",
+      "info",
+      "Route to www.fakobanko.local: 1 hops, 0.15ms avg"
+    ],
+    [
+      "whois_lookup",
+      "unknown",
+      "info",
+      "Domain registrar: unknown"
+    ],
+    [
+      "whois_lookup",
+      "unknown",
+      "info",
+      "Private/reserved IP: 172.18.0.3"
+    ],
+    [
+      "whois_lookup",
+      "unknown",
+      "info",
+      "Private/reserved IP: 172.18.0.4"
+    ],
+    [
+      "whois_lookup",
+      "unknown",
+      "info",
+      "Private/reserved IP: 172.18.0.5"
+    ],
+    [
+      "whois_lookup",
+      "unknown",
+      "info",
+      "Private/reserved IP: 172.18.0.6"
+    ]
+  ],
+  "total": 67
+}

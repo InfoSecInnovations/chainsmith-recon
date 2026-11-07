@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_favicon.py."""
+"""Tests for web_http2_detection."""
 
 import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -69,6 +69,20 @@ def mock_client_multi(response_map=None, default=None):
     return mock
 
 
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
+
+
 def _mock_alpn_socket(selected_protocol):
     """Create mock SSL context and socket that return the given ALPN protocol.
 
@@ -113,7 +127,7 @@ class TestHTTP2DetectionCheck:
             ),
         ):
             check = HTTP2DetectionCheck()
-            result = await check.check_service(https_service, {})
+            result = await probe_and_grade(check, https_service)
 
         assert result.success
         assert result.outputs["http_protocols"]["h2"] is True
@@ -139,7 +153,7 @@ class TestHTTP2DetectionCheck:
             ),
         ):
             check = HTTP2DetectionCheck()
-            result = await check.check_service(https_service, {})
+            result = await probe_and_grade(check, https_service)
 
         assert result.success
         assert result.outputs["http_protocols"]["h3"] is True
@@ -166,7 +180,7 @@ class TestHTTP2DetectionCheck:
             ),
         ):
             check = HTTP2DetectionCheck()
-            result = await check.check_service(https_service, {})
+            result = await probe_and_grade(check, https_service)
 
         assert result.outputs["http_protocols"]["h2"] is True
         assert result.outputs["http_protocols"]["h3"] is True
@@ -180,7 +194,7 @@ class TestHTTP2DetectionCheck:
         client = mock_client_multi(default=resp(200, headers={}))
         with patch("app.checks.web.web_http2_detection.check.AsyncHttpClient", return_value=client):
             check = HTTP2DetectionCheck()
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.outputs["http_protocols"]["h2"] is False
         assert result.outputs["http_protocols"]["h3"] is False
@@ -196,7 +210,7 @@ class TestHTTP2DetectionCheck:
         )
         with patch("app.checks.web.web_http2_detection.check.AsyncHttpClient", return_value=client):
             check = HTTP2DetectionCheck()
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert result.outputs["http_protocols"]["h2"] is True
         assert "h2c" in result.outputs["http_protocols"]["protocols"]
@@ -218,7 +232,7 @@ class TestHTTP2DetectionCheck:
             ),
         ):
             check = HTTP2DetectionCheck()
-            result = await check.check_service(https_service, {})
+            result = await probe_and_grade(check, https_service)
 
         assert result.outputs["http_protocols"]["h2"] is False
         assert result.outputs["http_protocols"]["h3"] is False
@@ -237,7 +251,7 @@ class TestHTTP2DetectionCheck:
             ),
         ):
             check = HTTP2DetectionCheck()
-            result = await check.check_service(https_service, {})
+            result = await probe_and_grade(check, https_service)
 
         assert result.success
         # Should fall back to HTTP/1.1 only

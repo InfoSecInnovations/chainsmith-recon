@@ -28,3 +28,35 @@ references:
 - CWE-215
 reason: Debug endpoints frequently expose environment variables, connection strings,
   and internal IPs
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # One candidate per probed path (each observation named its own target_url);
+  # the actuator root's candidate also carries the sub-endpoint probes. Every
+  # discriminator carries the path (`werkzeug-debugger--debug`,
+  # `sensitive--actuator-env`, `verbose-health--health`), so those sets are
+  # unbounded and the map records one entry per *family*. `default` is `low` —
+  # the lowest this check emits — so a deferred grade can never present an
+  # ungraded candidate as one of the criticals.
+  #
+  # The two structural matches are near-certain: `werkzeug-debugger` and
+  # `django-debug` are 0.95 (the page names itself), and `actuator-exposed`
+  # 0.9 (each sub-endpoint returned 200). The two pattern-over-body judgements
+  # over-fire and now say so: `sensitive-data` drops from 0.9 to 0.5 when every
+  # secret-name hit is a *masked* value (`/actuator/env` prints property names
+  # beside `******`), and `verbose-health` is 0.4 because it is only "a health
+  # endpoint returned >100 bytes". `framework` (the loose signatures) is 0.75.
+  # No severity changed.
+  default: low
+  observations:
+    actuator-exposed: high
+    werkzeug-debugger: critical
+    django-debug: high
+    sensitive: critical
+    framework: low
+    verbose-health: medium

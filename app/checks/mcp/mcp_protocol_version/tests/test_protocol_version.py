@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp_discovery.py."""
+"""Tests for mcp_protocol_version."""
 
 import json
 from unittest.mock import AsyncMock, patch
@@ -8,6 +8,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_protocol_version import MCPProtocolVersionCheck
 from app.lib.http import HttpResponse
+
+
+async def run_and_grade(check, context):
+    """Run the check, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -81,7 +89,7 @@ def mock_client_factory():
     """Create a properly configured mock client with context manager."""
     mock = AsyncMock()
     mock.__aenter__ = AsyncMock(return_value=mock)
-    mock.__aexit__ = AsyncMock()
+    mock.__aexit__ = AsyncMock(return_value=False)
     return mock
 
 
@@ -129,7 +137,7 @@ class TestMCPProtocolVersionCheck:
         mock.post = mock_post
 
         with patch("app.checks.mcp.mcp_protocol_version.check.AsyncHttpClient", return_value=mock):
-            result = await check.run(http_mcp_context)
+            result = await run_and_grade(check, http_mcp_context)
 
         assert result.success
         versions = result.outputs["mcp_protocol_versions"]
@@ -167,7 +175,7 @@ class TestMCPProtocolVersionCheck:
         mock.post = mock_post
 
         with patch("app.checks.mcp.mcp_protocol_version.check.AsyncHttpClient", return_value=mock):
-            result = await check.run(http_mcp_context)
+            result = await run_and_grade(check, http_mcp_context)
 
         assert result.success
         downgrade = [f for f in result.observations if "downgrade" in f.title.lower()]

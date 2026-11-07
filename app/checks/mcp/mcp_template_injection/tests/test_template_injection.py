@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp_injection.py."""
+"""Tests for mcp_template_injection."""
 
 import json
 from unittest.mock import AsyncMock, patch
@@ -8,6 +8,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_template_injection import ResourceTemplateInjectionCheck
 from app.lib.http import HttpResponse
+
+
+async def run_and_grade(check, context):
+    """Run the check, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -95,7 +103,7 @@ class TestResourceTemplateInjectionCheck:
         """SQL-style error in a JSON-RPC response flags a template injection."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
 
         async def mock_post(url, **kwargs):
             body = kwargs.get("json", {})
@@ -123,7 +131,7 @@ class TestResourceTemplateInjectionCheck:
         with patch(
             "app.checks.mcp.mcp_template_injection.check.AsyncHttpClient", return_value=mock
         ):
-            result = await check.run(mcp_server_context)
+            result = await run_and_grade(check, mcp_server_context)
 
         assert result.success
         vulns = [o for o in result.observations if o.severity in ("high", "critical")]
@@ -137,13 +145,13 @@ class TestResourceTemplateInjectionCheck:
         """Empty template list produces no injection observations."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
         mock.post = AsyncMock(return_value=_jsonrpc_result({"resourceTemplates": []}))
 
         with patch(
             "app.checks.mcp.mcp_template_injection.check.AsyncHttpClient", return_value=mock
         ):
-            result = await check.run(mcp_server_context)
+            result = await run_and_grade(check, mcp_server_context)
 
         assert result.success
         assert all(o.severity == "info" or o.check_name != check.name for o in result.observations)
@@ -153,7 +161,7 @@ class TestResourceTemplateInjectionCheck:
         """Templates exist but all injection payloads get benign empty results."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
 
         async def mock_post(url, **kwargs):
             body = kwargs.get("json", {})
@@ -174,7 +182,7 @@ class TestResourceTemplateInjectionCheck:
         with patch(
             "app.checks.mcp.mcp_template_injection.check.AsyncHttpClient", return_value=mock
         ):
-            result = await check.run(mcp_server_context)
+            result = await run_and_grade(check, mcp_server_context)
 
         assert result.success
         info = [

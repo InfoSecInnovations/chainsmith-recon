@@ -1,4 +1,4 @@
-"""Check-proof advisor component (Phase 56 folder shape, 56.11).
+"""Check-proof advisor component.
 
 Re-exports the public surface so existing imports
 (`from app.advisors.check_proof import CheckProofAdvisor`) and the lazy

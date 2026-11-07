@@ -3,8 +3,6 @@ app/engine/guided.py - Guided Mode Proactive Message Infrastructure
 
 Provides the shared `maybe_emit_proactive()` pattern used by all agents
 to push proactive messages when Guided Mode is active.
-
-Phase 36.
 """
 
 from __future__ import annotations

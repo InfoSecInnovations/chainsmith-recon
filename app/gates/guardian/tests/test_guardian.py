@@ -165,8 +165,9 @@ class TestGuardianScanWindow:
 
         from app import proof_of_scope as pos
 
-        monkeypatch.setattr(pos.violation_logger, "_data_dir", tmp_path)
-        monkeypatch.setattr(pos.violation_logger, "_log_file", tmp_path / "v.jsonl")
+        # 57.1a: `_data_dir` / `_log_file` are derived properties now (they
+        # resolve the workspace lazily), so point the seam they derive from.
+        monkeypatch.setattr(pos.violation_logger, "_explicit_dir", tmp_path)
 
         past = datetime.now(UTC) - timedelta(days=2)
         window = ScanWindow(
@@ -183,8 +184,9 @@ class TestGuardianScanWindow:
 
         from app import proof_of_scope as pos
 
-        monkeypatch.setattr(pos.violation_logger, "_data_dir", tmp_path)
-        monkeypatch.setattr(pos.violation_logger, "_log_file", tmp_path / "v.jsonl")
+        # 57.1a: `_data_dir` / `_log_file` are derived properties now (they
+        # resolve the workspace lazily), so point the seam they derive from.
+        monkeypatch.setattr(pos.violation_logger, "_explicit_dir", tmp_path)
 
         past = datetime.now(UTC) - timedelta(days=2)
         window = ScanWindow(

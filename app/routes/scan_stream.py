@@ -1,5 +1,5 @@
 """
-app/routes/scan_stream.py - Phase 51.2: per-scan SSE stream endpoint.
+app/routes/scan_stream.py - Per-scan SSE stream endpoint.
 
 GET /api/v1/scans/{scan_id}/stream   (scoped; 404 on unknown id)
 GET /api/v1/scan/stream              (unscoped alias; resolves current scan)

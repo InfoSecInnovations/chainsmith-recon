@@ -28,3 +28,24 @@ references:
 reason: Non-HTTP services (databases, caches, message queues) often send version banners
   on connect. An exposed Redis with no authentication is a critical observation. Service
   version identification enables vulnerability correlation.
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2, and this is the one network check that
+  # reaches `critical`. `noauth` earns it: the probe ran a command and the service
+  # answered, so the verdict is compliance rather than inference (0.95), and the value
+  # comes from `no_auth_severity` in check.py — `critical` for Redis, `high` for
+  # Memcached, and nothing is emitted below that.
+  #
+  # `unknown` is the opposite case and worth contrasting. It carries `medium` at 0.6
+  # because "matched none of the nine signatures" is a statement about the signature
+  # list, not about the service: it asks for a human rather than reporting a finding.
+  # `banner` drops to 0.9 when it *does* name a service, because the signatures are
+  # short — "220 " is shared by SMTP and FTP and separated only by port number.
+  #
+  # Discriminators carry the port (`noauth-6379`), so the map records families.
+  default: info
+  observations:
+    banner: info
+    noauth: high
+    version: low
+    unknown: medium

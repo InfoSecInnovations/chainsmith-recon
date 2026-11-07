@@ -6,7 +6,7 @@ evidence rubric. Produces adjudicated_risk annotations without modifying
 original observations.
 
 Uses a CVSS-like scoring rubric (single LLM call per observation) for
-deterministic, comparable results. See docs/future-ideas/adjudicator-strategies-reference.md
+deterministic, comparable results. See docs/adjudicator-strategies-reference.md
 for alternative approaches considered and archived.
 """
 

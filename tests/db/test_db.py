@@ -189,9 +189,11 @@ class TestFingerprinting:
 class TestStorageConfig:
     """Tests for storage config loading."""
 
-    def test_storage_in_yaml(self, tmp_path, clean_env):
-        """Storage config loads from YAML."""
+    def test_storage_in_yaml(self, tmp_path, clean_env, monkeypatch):
+        """Storage config loads from YAML; the workspace still owns db_path."""
         from app.config import load_config
+
+        monkeypatch.setenv("CHAINSMITH_WORKSPACE", str(tmp_path / "ws"))
 
         config_file = tmp_path / "chainsmith.yaml"
         config_file.write_text("""
@@ -203,9 +205,13 @@ storage:
 """)
         cfg = load_config(config_path=config_file)
         assert cfg.storage.backend == "sqlite"
-        assert cfg.storage.db_path == Path("/custom/path.db")
         assert cfg.storage.auto_persist is False
         assert cfg.storage.retention_days == 90
+
+        # 57.1a: an explicit `storage.db_path` loses to the workspace. Honouring
+        # it would put the database outside the workspace and defeat the
+        # physical separation workspaces exist to provide.
+        assert cfg.storage.db_path == (tmp_path / "ws" / "chainsmith.db")
 
     def test_storage_env_overrides(self, monkeypatch, clean_env):
         """Storage config responds to environment variables."""

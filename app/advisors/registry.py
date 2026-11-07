@@ -1,4 +1,4 @@
-"""app/advisors/registry.py - Advisor discovery + config accessor (Phase 56 §6, 56.11).
+"""app/advisors/registry.py - Advisor discovery + config accessor.
 
 Advisors are deterministic and caller-constructed (see `app/advisors/base.py`),
 so this is NOT a factory like `app/agents/registry.py` — there is no `.create()`.

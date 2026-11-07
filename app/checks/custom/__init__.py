@@ -5,7 +5,7 @@ This directory holds custom checks created by or for the organization.
 Community upstream updates never touch this directory.
 
 Each custom check is a self-contained component folder, discovered exactly
-like a core check (Phase 56 §6, C9):
+like a core check:
 
     app/checks/custom/custom_<name>/
         contract.yaml   # identity + I/O contract (name: custom_<name>, suite: custom)

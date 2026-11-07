@@ -1,4 +1,4 @@
-"""Researcher agent component (Phase 56 folder shape).
+"""Researcher agent component.
 
 Pure re-export of the entry class so `from app.agents.researcher import
 ResearcherAgent` resolves to the same object the agent factory builds

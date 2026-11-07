@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_network_tls.py."""
+"""Tests for network_tls_analysis."""
 
 import datetime
 from unittest.mock import patch
@@ -40,6 +40,82 @@ def _make_cert(
         "version": 3,
         "protocols": [],
     }
+
+
+def _cert_exchange(cert: dict, host: str, port: int):
+    """One recorded certificate handshake, as `_get_cert_info` now hands it back.
+
+    57.4 wave 2: the certificate is the exchange's JSON `response_body` and the
+    port is its request metadata, which is what both the probe's `tls_data` and
+    `grade()` read.
+    """
+    import json
+
+    from app.grading import exchange_from_payload
+
+    return exchange_from_payload(
+        "tls",
+        host,
+        check_name="network_tls_analysis",
+        request_body=f"ClientHello sni={host}",
+        response_body=json.dumps(cert, default=str),
+        request_headers={"port": str(port)},
+    )
+
+
+def _cert_probe(cert: dict | None):
+    """A fake `_get_cert_info` recording `cert` for whatever endpoint it's asked."""
+
+    async def _get(host, port):
+        return _cert_exchange(cert, host, port) if cert is not None else None
+
+    return _get
+
+
+def _protocol_probe(protocols: list[str]):
+    """A fake `_probe_protocols` returning `protocols` and the handshakes for them."""
+    from app.grading import exchange_from_payload
+
+    async def _probe(host, port):
+        exchanges = [
+            exchange_from_payload(
+                "tls",
+                host,
+                check_name="network_tls_analysis",
+                request_body=f"ClientHello version={version}",
+                response_body="accepted" if version in protocols else "rejected",
+                request_headers={"port": str(port)},
+            )
+            for version in ("TLS 1.0", "TLS 1.1", "TLS 1.2")
+        ]
+        modern = [v for v in protocols if v in ("TLS 1.2", "TLS 1.3")]
+        exchanges.append(
+            exchange_from_payload(
+                "tls",
+                host,
+                check_name="network_tls_analysis",
+                request_body="ClientHello version=modern",
+                response_body=", ".join(modern),
+                request_headers={"port": str(port)},
+            )
+        )
+        return protocols, exchanges
+
+    return _probe
+
+
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 class TestTlsAnalysisCheckInit:
@@ -120,7 +196,7 @@ class TestTlsAnalysisCheckRun:
         from app.checks.network.network_tls_analysis import TlsAnalysisCheck
 
         check = TlsAnalysisCheck()
-        result = await check.run({"services": []})
+        result = await probe_and_grade(check, {"services": []})
         assert result.success is False
         assert any("services" in e.lower() for e in result.errors)
 
@@ -133,7 +209,7 @@ class TestTlsAnalysisCheckRun:
         svc = Service(
             url="http://db.example.com:6379", host="db.example.com", port=6379, scheme="http"
         )
-        result = await check.run({"services": [svc]})
+        result = await probe_and_grade(check, {"services": [svc]})
         assert result.outputs["tls_data"] == {}
         assert result.outputs["tls_hosts"] == []
 
@@ -150,9 +226,13 @@ class TestTlsAnalysisCheckRun:
             sans=["www.example.com", "api.example.com", "staging.example.com"],
         )
 
-        with patch.object(check, "_get_cert_info", return_value=cert):
-            with patch.object(check, "_probe_protocols", return_value=["TLS 1.2", "TLS 1.3"]):
-                result = await check.run({"services": [svc], "base_domain": "example.com"})
+        with patch.object(check, "_get_cert_info", side_effect=_cert_probe(cert)):
+            with patch.object(
+                check, "_probe_protocols", side_effect=_protocol_probe(["TLS 1.2", "TLS 1.3"])
+            ):
+                result = await probe_and_grade(
+                    check, {"services": [svc], "base_domain": "example.com"}
+                )
 
         assert result.targets_checked == 1
 
@@ -186,9 +266,11 @@ class TestTlsAnalysisCheckRun:
         )
         cert = _make_cert(cn="dev.example.com", self_signed=True)
 
-        with patch.object(check, "_get_cert_info", return_value=cert):
-            with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({"services": [svc], "base_domain": "example.com"})
+        with patch.object(check, "_get_cert_info", side_effect=_cert_probe(cert)):
+            with patch.object(check, "_probe_protocols", side_effect=_protocol_probe(["TLS 1.2"])):
+                result = await probe_and_grade(
+                    check, {"services": [svc], "base_domain": "example.com"}
+                )
 
         self_signed_obs = [f for f in result.observations if "self-signed" in f.title.lower()]
         assert len(self_signed_obs) == 1
@@ -211,9 +293,11 @@ class TestTlsAnalysisCheckRun:
             not_after=_past_iso(30),  # expired 30 days ago
         )
 
-        with patch.object(check, "_get_cert_info", return_value=cert):
-            with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({"services": [svc], "base_domain": "example.com"})
+        with patch.object(check, "_get_cert_info", side_effect=_cert_probe(cert)):
+            with patch.object(check, "_probe_protocols", side_effect=_protocol_probe(["TLS 1.2"])):
+                result = await probe_and_grade(
+                    check, {"services": [svc], "base_domain": "example.com"}
+                )
 
         expired_obs = [f for f in result.observations if "expired" in f.title.lower()]
         assert len(expired_obs) == 1
@@ -235,9 +319,11 @@ class TestTlsAnalysisCheckRun:
             not_after=_future_iso(15),  # 15 days left
         )
 
-        with patch.object(check, "_get_cert_info", return_value=cert):
-            with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({"services": [svc], "base_domain": "example.com"})
+        with patch.object(check, "_get_cert_info", side_effect=_cert_probe(cert)):
+            with patch.object(check, "_probe_protocols", side_effect=_protocol_probe(["TLS 1.2"])):
+                result = await probe_and_grade(
+                    check, {"services": [svc], "base_domain": "example.com"}
+                )
 
         expiring_obs = [f for f in result.observations if "expires soon" in f.title.lower()]
         assert len(expiring_obs) == 1
@@ -259,11 +345,15 @@ class TestTlsAnalysisCheckRun:
         )
         cert = _make_cert(cn="legacy.example.com")
 
-        with patch.object(check, "_get_cert_info", return_value=cert):
+        with patch.object(check, "_get_cert_info", side_effect=_cert_probe(cert)):
             with patch.object(
-                check, "_probe_protocols", return_value=["TLS 1.0", "TLS 1.1", "TLS 1.2"]
+                check,
+                "_probe_protocols",
+                side_effect=_protocol_probe(["TLS 1.0", "TLS 1.1", "TLS 1.2"]),
             ):
-                result = await check.run({"services": [svc], "base_domain": "example.com"})
+                result = await probe_and_grade(
+                    check, {"services": [svc], "base_domain": "example.com"}
+                )
 
         deprecated_obs = [
             f for f in result.observations if "TLS 1.0" in f.title or "TLS 1.1" in f.title
@@ -288,8 +378,8 @@ class TestTlsAnalysisCheckRun:
             scheme="https",
         )
 
-        with patch.object(check, "_get_cert_info", return_value=None):
-            result = await check.run({"services": [svc], "base_domain": "example.com"})
+        with patch.object(check, "_get_cert_info", side_effect=_cert_probe(None)):
+            result = await probe_and_grade(check, {"services": [svc], "base_domain": "example.com"})
 
         assert result.outputs["tls_data"] == {}
         assert result.targets_checked == 0
@@ -308,9 +398,11 @@ class TestTlsAnalysisCheckRun:
             sans=["www.example.com", "*.example.com", "*.dev.example.com", "api.example.com"],
         )
 
-        with patch.object(check, "_get_cert_info", return_value=cert):
-            with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({"services": [svc], "base_domain": "example.com"})
+        with patch.object(check, "_get_cert_info", side_effect=_cert_probe(cert)):
+            with patch.object(check, "_probe_protocols", side_effect=_protocol_probe(["TLS 1.2"])):
+                result = await probe_and_grade(
+                    check, {"services": [svc], "base_domain": "example.com"}
+                )
 
         tls_hosts = result.outputs["tls_hosts"]
         assert "api.example.com" in tls_hosts
@@ -337,11 +429,13 @@ class TestTlsAnalysisCheckRun:
         async def counting_get_cert_info(host, port):
             nonlocal call_count
             call_count += 1
-            return cert
+            return _cert_exchange(cert, host, port)
 
         with patch.object(check, "_get_cert_info", side_effect=counting_get_cert_info):
-            with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({"services": [svc1, svc2], "base_domain": "example.com"})
+            with patch.object(check, "_probe_protocols", side_effect=_protocol_probe(["TLS 1.2"])):
+                result = await probe_and_grade(
+                    check, {"services": [svc1, svc2], "base_domain": "example.com"}
+                )
 
         assert call_count == 1
         assert result.targets_checked == 1
@@ -357,9 +451,11 @@ class TestTlsAnalysisCheckRun:
         )
         cert = _make_cert()
 
-        with patch.object(check, "_get_cert_info", return_value=cert):
-            with patch.object(check, "_probe_protocols", return_value=["TLS 1.2"]):
-                result = await check.run({"services": [svc], "base_domain": "example.com"})
+        with patch.object(check, "_get_cert_info", side_effect=_cert_probe(cert)):
+            with patch.object(check, "_probe_protocols", side_effect=_protocol_probe(["TLS 1.2"])):
+                result = await probe_and_grade(
+                    check, {"services": [svc], "base_domain": "example.com"}
+                )
 
         # Should have checked — endpoint appears in tls_data
         assert "www.example.com:443" in result.outputs["tls_data"]

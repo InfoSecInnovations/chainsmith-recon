@@ -25,3 +25,21 @@ techniques:
 references:
 - OWASP WSTG-INFO-02
 reason: Understanding service types guides which checks to run next
+severity:
+  model: fixed
+  # Categorical: every judgement is "this header is present and says this", so no
+  # grader above the rule tier is ever called. Migrated to probe/grade in 57.4
+  # wave 2 — `_classify_service` stayed on the probe side because `service_type`
+  # routes the rest of the scan and cannot wait for a grader.
+  #
+  # `technology-disclosure` is the one entry whose value moves: the map records
+  # `low`, and `grade()` raises it to `medium` when X-Powered-By names an inference
+  # runtime, because that tells an attacker which model-layer attacks apply at all.
+  # `custom-header-*` discriminators are per-header (`custom-header-x-internal-token`)
+  # so several custom headers on one service stay distinct observations; the set is
+  # unbounded and cannot be enumerated here, and `grade()` places `medium` when the
+  # header's *name* suggests a leak and `info` otherwise.
+  default: info
+  observations:
+    server-version-disclosure: low
+    technology-disclosure: low

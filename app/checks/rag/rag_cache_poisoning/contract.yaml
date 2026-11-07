@@ -29,3 +29,18 @@ references:
 - CWE-524 Use of Cache Containing Sensitive Information
 reason: If RAG caches poisoned responses, the attack affects all subsequent users
   submitting the same or similar query — not just the attacker
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`.
+  default: info
+  observations:
+    # A closed four-value set; the check emits exactly one per service. Which of
+    # the first two applies depends on whether another check already found
+    # injection here, which `grade()` reads from the scan context.
+    cache-poisoned: high
+    cache-detected: medium
+    cache-varied: low
+    no-cache: info

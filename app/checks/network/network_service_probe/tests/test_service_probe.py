@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_network_service_probe.py."""
+"""Tests for network_service_probe."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -296,6 +296,20 @@ class TestServiceProbeCheckService:
         assert result.services[0].service_type == "tcp"
 
 
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
+
+
 class TestServiceProbeCheckObservations:
     """Tests for ServiceProbeCheck observation generation."""
 
@@ -307,7 +321,7 @@ class TestServiceProbeCheckObservations:
             headers={"Server": "nginx/1.21.0", "content-type": "text/html"},
         )
         patched_client(get_return_value=response)
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service)
 
         server_observations = [f for f in result.observations if "Server" in f.title]
         assert len(server_observations) == 1
@@ -319,7 +333,7 @@ class TestServiceProbeCheckObservations:
             headers={"X-Powered-By": "Express", "content-type": "text/html"},
         )
         patched_client(get_return_value=response)
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service)
 
         tech_observations = [f for f in result.observations if "Technology" in f.title]
         assert len(tech_observations) == 1
@@ -332,7 +346,7 @@ class TestServiceProbeCheckObservations:
             headers={"X-Powered-By": "vLLM/0.4.1", "content-type": "text/html"},
         )
         patched_client(get_return_value=response)
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service)
 
         tech_observations = [f for f in result.observations if "Technology" in f.title]
         assert len(tech_observations) == 1
@@ -347,7 +361,7 @@ class TestServiceProbeCheckObservations:
             },
         )
         patched_client(get_return_value=response)
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service)
 
         custom_observations = [f for f in result.observations if "Custom header" in f.title]
         assert len(custom_observations) == 1
@@ -363,7 +377,7 @@ class TestServiceProbeCheckObservations:
             },
         )
         patched_client(get_return_value=response)
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service)
 
         custom_observations = [f for f in result.observations if "Custom header" in f.title]
         assert len(custom_observations) == 1

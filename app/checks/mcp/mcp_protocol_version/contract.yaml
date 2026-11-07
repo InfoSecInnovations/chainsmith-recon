@@ -26,3 +26,14 @@ techniques:
 references:
 - MCP Specification - https://modelcontextprotocol.io/specification
 reason: Older MCP protocol versions may have weaker security or missing capabilities
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. The two discriminators are a closed set, so the full map is
+  # declared at each floor (§0.12): `protocol-downgrade` at `low` (it rises to
+  # `medium` only when the old version sheds capabilities), `protocol-current` at
+  # `info`. `default` is the lowest of these (57.4 wave 7).
+  default: info
+  observations:
+    protocol-downgrade: low
+    protocol-current: info

@@ -30,3 +30,21 @@ references:
 - MITRE ATLAS - AML.T0051 LLM Plugin Compromise
 reason: Individual tools may be low risk, but combinations can enable full attack
   chains (read + exfil = data breach)
+severity:
+  model: fixed
+  # Categorical: the chain category is decided by set intersection over the
+  # tools' inferred capabilities (recorded as a `local` exchange), so no grader
+  # above the rule tier is ever called. `default` is the floor — `info`, the
+  # no-chains answer. The discriminators are a closed set (six chain categories
+  # from DANGEROUS_CHAINS, plus the partial and no-chains fallbacks), so the map
+  # below carries each at the severity it emits (57.4 wave 7).
+  default: info
+  observations:
+    chain-data-read--exfiltration: critical
+    chain-credential-access--network: critical
+    chain-file-access--code-execution: critical
+    chain-write--persistence: critical
+    chain-recon--lateral-movement: high
+    chain-database--exfiltration: critical
+    partial-chain-source: medium
+    no-chains: info

@@ -29,3 +29,11 @@ references:
 - CWE-285 Improper Authorization
 reason: Multi-tenant RAG deployments often share a vector store. If collection isolation
   is not enforced, public queries can surface private documents
+severity:
+  model: contextual
+  # Attack-compliance: severity is a continuum the evidence places, not a fact
+  # read off the response, so this check is in phase 58's grading scope (§7.2).
+  # `default` is what `on_critical` reads before a grader has run; `rubric:` and
+  # `signals:` are inert until 58 and are authored with it.
+  default: medium
+  range: [info, critical]

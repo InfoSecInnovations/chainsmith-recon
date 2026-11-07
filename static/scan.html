@@ -470,7 +470,7 @@
             }
         }
 
-        // Phase 51.4: prefer SSE when advertised; fall back to polling on any
+        // Prefer SSE when advertised; fall back to polling on any
         // error. Same UI widgets, different trigger — stream events debounce
         // into the existing updateUI path instead of a fixed 500ms poll.
         function startLiveUpdates(status) {

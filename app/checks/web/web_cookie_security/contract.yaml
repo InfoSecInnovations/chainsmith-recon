@@ -29,3 +29,34 @@ references:
 - CWE-614
 - CWE-1004
 reason: Insecure cookies enable session theft via XSS, network sniffing, and CSRF
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # Every cookie attribute is its own judgement over one response, so the probe
+  # emits one undiscriminated candidate and `grade()` names each. The
+  # discriminators carry the cookie's name (`no-secure-sessionid`,
+  # `samesite-none-csrftoken`) so one host's several cookies stay distinct
+  # observations; that set is unbounded, so the map records one entry per
+  # *family* and `provisional_for` falls to `default`.
+  #
+  # `grade()` separates two things the original ran together. Whether an
+  # attribute is present is categorical — 0.99. Whether the cookie is a
+  # *session* cookie is a guess from its name (`SESSION_COOKIE_PATTERNS` matches
+  # substrings like `sid`, `auth`, `token`), and that guess is the only thing
+  # between `low` and `medium` — so an escalated verdict carries 0.85 and names
+  # the matched pattern in `signals`. `no-samesite` and `broad-domain` sit at
+  # 0.95: the reading is certain, the consequence is about a browser default and
+  # a legacy spelling respectively.
+  default: low
+  observations:
+    no-secure: low
+    no-httponly: low
+    no-samesite: low
+    samesite-none: low
+    broad-domain: low
+    long-lived: low

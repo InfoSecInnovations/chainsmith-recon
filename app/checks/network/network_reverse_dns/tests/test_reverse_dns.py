@@ -1,8 +1,10 @@
-"""Co-located tests (Phase 56 §3) — split from test_network_reverse_dns.py."""
+"""Tests for network_reverse_dns."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+from app.checks.network.network_reverse_dns.check import _records
 
 
 def _make_ptr_answer(hostnames):
@@ -15,6 +17,20 @@ def _make_ptr_answer(hostnames):
         rdata.target.__str__ = lambda self, n=name: n + "."
         records.append(rdata)
     return records
+
+
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 class TestReverseDnsCheckInit:
@@ -87,7 +103,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", return_value=fake_answer),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.success is True
         assert result.targets_checked == 1
@@ -121,7 +137,7 @@ class TestReverseDnsCheckRun:
                 return_value=("www.example.com", [], ["93.184.216.34"]),
             ),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.success is True
         assert result.targets_checked == 1
@@ -150,7 +166,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", return_value=fake_answer),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.success is True
 
@@ -179,7 +195,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", return_value=fake_answer),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.success is True
         assert result.outputs["reverse_dns"]["10.0.1.42"]["internal"] is True
@@ -209,7 +225,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", return_value=fake_answer),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.success is True
         mismatch_observations = [f for f in result.observations if "mismatch" in f.title.lower()]
@@ -236,7 +252,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", side_effect=dns.exception.DNSException("NXDOMAIN")),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.success is True
         assert result.targets_checked == 1
@@ -261,7 +277,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", False),
             patch("socket.gethostbyaddr", side_effect=socket_mod.herror("Host not found")),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.success is True
         assert result.targets_checked == 1
@@ -287,7 +303,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", return_value=fake_answer),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert "new-host.example.com" in result.outputs["reverse_dns_hosts"]
 
@@ -309,7 +325,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", return_value=fake_answer),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert "www.example.com" not in result.outputs["reverse_dns_hosts"]
 
@@ -332,7 +348,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", return_value=fake_answer),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         # The trailing dot should be stripped when adding to new hosts
         assert "newhost.example.com" in result.outputs["reverse_dns_hosts"]
@@ -364,7 +380,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", side_effect=counting_resolve),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         # Same IP should only be looked up once
         assert call_count == 1
@@ -401,7 +417,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", side_effect=route_resolve),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.targets_checked == 2
         assert "1.2.3.4" in result.outputs["reverse_dns"]
@@ -427,7 +443,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", return_value=fake_answer),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.outputs["reverse_dns"]["10.0.0.5"]["internal"] is True
         internal_observations = [f for f in result.observations if "internal" in f.title.lower()]
@@ -453,7 +469,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", True),
             patch("dns.resolver.resolve", return_value=fake_answer),
         ):
-            result = await check.run(context)
+            result = await probe_and_grade(check, context)
 
         assert result.outputs["reverse_dns"]["1.2.3.4"]["internal"] is False
         internal_observations = [f for f in result.observations if "internal" in f.title.lower()]
@@ -473,8 +489,11 @@ class TestReverseDnsCheckRun:
                 return_value=("host1.example.com", ["alias1.example.com"], ["1.2.3.4"]),
             ),
         ):
-            records = await check._ptr_lookup_socket("1.2.3.4")
+            exchange = await check._ptr_lookup_socket("1.2.3.4")
 
+        # 57.4 wave 2: the records are the exchange's comma-joined response body,
+        # which is what both the probe's outputs and `grade()` read.
+        records = _records(exchange)
         assert "host1.example.com" in records
         assert "alias1.example.com" in records
 
@@ -491,6 +510,7 @@ class TestReverseDnsCheckRun:
             patch("app.checks.network.network_reverse_dns.check.HAS_DNSPYTHON", False),
             patch("socket.gethostbyaddr", side_effect=socket_mod.herror),
         ):
-            records = await check._ptr_lookup_socket("1.2.3.4")
+            exchange = await check._ptr_lookup_socket("1.2.3.4")
 
-        assert records == []
+        assert _records(exchange) == []
+        assert exchange.error is not None

@@ -1,5 +1,5 @@
 """
-Co-located tests for the Adjudicator agent component (Phase 56 folder shape).
+Tests for the Adjudicator agent component.
 
 Covers:
 - Folder-shape discovery + factory construction (discover_agent_specs → create)
@@ -127,7 +127,7 @@ def sample_operator_context():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Folder-shape discovery + factory (Phase 56.10)
+# Folder-shape discovery + factory
 # ═══════════════════════════════════════════════════════════════════════════════
 
 

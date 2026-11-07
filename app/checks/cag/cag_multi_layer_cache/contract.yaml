@@ -29,3 +29,13 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Multi-layer caches may have inconsistent security properties; bypassing one
   layer can reveal vulnerabilities in another
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`. The discriminator embeds the endpoint
+  # path (an open set), so there is no per-discriminator `observations:` map;
+  # `grade()` places the real severity (info for one layer, medium for more than
+  # one). `info` is the lowest it emits.
+  default: info

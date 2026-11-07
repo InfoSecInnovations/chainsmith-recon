@@ -30,3 +30,26 @@ references:
 - OpenAPI Specification
 reason: OpenAPI docs reveal all API endpoints, parameters, auth mechanisms, and data
   models
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # Two judgements over one service, so the probe emits one undiscriminated
+  # candidate and `grade()` names each. `ui-<path>` carries the path it was
+  # found at (`ui-swagger`, `ui-api-v1-docs`) so two doc pages on one host stay
+  # distinct observations; that set is unbounded, so the map records the `ui`
+  # family and `provisional_for` falls to `default`.
+  #
+  # `spec-exposed` escalates to `high` when an endpoint name contains one of six
+  # keywords, and `grade()` now says how much that rests on: 0.9 for `admin` or
+  # `internal`, 0.6 when only `user` or `auth` matched, which nearly every REST
+  # API satisfies. A spec accepted on a bare `paths` key with no declared
+  # OpenAPI/Swagger version carries 0.7 rather than 0.95.
+  default: low
+  observations:
+    spec-exposed: medium
+    ui: low

@@ -14,6 +14,25 @@ Risk classification:
 - LOW: Read-only data access, formatting, computation
 - INFO: Benign utilities (time, math, text processing)
 
+**Probe/grade.** The probe walks the tools/list paths for
+each server, records every request it sends, and hands them over as one
+candidate per server — each server's observations carry that server's URL as
+`target_url`, so it cannot be one candidate per service (§0.15). `grade()`
+re-reads the recorded listing and emits one verdict per tool. `_listing_from()`
+is the one parser both halves call (§0.12): the probe reads its `mcp_tools` /
+`high_risk_tools` outputs off the exchange it just recorded, and it skips the
+same 404/405/error answers the grader skips.
+
+**Fixed**: every discriminator embeds a tool name
+(`tool-<name>`), an unbounded set, so the contract declares no `observations:`
+map and `grade()` places the tier. Confidence comes from *what* matched
+(`_classify`): a tool-name pattern matched as a whole token is the author's own
+declaration of capability; the same pattern inside a longer word (`cmd` in
+`cmdb_lookup`) is a substring collision; a description phrase is weaker, and a
+schema parameter name (`path`, `query`) says little about what the tool does
+with it. Nothing here invokes a tool, so declared capability is never shown to
+be reachable or unsandboxed.
+
 References:
   https://modelcontextprotocol.io/specification
   https://spec.modelcontextprotocol.io/specification/server/tools/
@@ -23,9 +42,12 @@ import json
 import re
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 # Tool name patterns mapped to risk levels
 TOOL_RISK_PATTERNS = {
@@ -141,9 +163,12 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
         "/api/mcp/tools/list",
     ]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         """Check a service for MCP tools."""
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         # Get MCP servers from context (from mcp_discovery)
         mcp_servers = context.get("mcp_servers", [])
@@ -166,36 +191,27 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
                     server_url = server.get("url", service.url)
                     base_path = server.get("path", "")
 
-                    tools = await self._enumerate_tools(client, service, base_path)
-
-                    if tools is None:
+                    exchanges = await self._enumerate_tools(client, service, base_path, scan_id)
+                    listing = self._listing_from(exchanges)
+                    if listing is None:
                         continue
 
+                    candidate = self.create_candidate(
+                        host=service.host,
+                        discriminator=f"tools-{base_path or '/'}",
+                        target=service,
+                        target_url=server_url,
+                    )
+                    for exchange in exchanges:
+                        candidate.attach(exchange)
+                    result.candidates.append(candidate)
+
+                    tools, _ = listing
                     for tool in tools:
-                        tool_info = self._analyze_tool(tool, service, server_url)
+                        tool_info = self._analyze_tool(tool, service.host, server_url)
                         all_tools.append(tool_info)
-
-                        # Generate observations based on risk level
-                        severity = self._risk_to_severity(tool_info["risk_level"])
-
                         if tool_info["risk_level"] in ("critical", "high"):
                             high_risk_tools.append(tool_info)
-
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title=f"MCP tool: {tool_info['name']} ({tool_info['risk_level']} risk)",
-                                description=self._build_tool_description(tool_info),
-                                severity=severity,
-                                evidence=self._build_tool_evidence(tool_info),
-                                host=service.host,
-                                discriminator=f"tool-{tool_info['name']}",
-                                target=service,
-                                target_url=server_url,
-                                raw_data=tool_info,
-                                references=self.references,
-                            )
-                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -208,48 +224,147 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
         return result
 
     async def _enumerate_tools(
-        self, client: AsyncHttpClient, service: Service, base_path: str
-    ) -> list[dict] | None:
-        """Enumerate tools via tools/list endpoint."""
+        self, client: AsyncHttpClient, service: Service, base_path: str, scan_id: str
+    ) -> list[Exchange]:
+        """Walk the tools/list paths, recording every request sent.
+
+        Stops at the first answer `_listing_from` can read, so the recorded
+        exchanges end with the one the grader will parse.
+        """
 
         # Try direct path first
         paths_to_try = [f"{base_path.rstrip('/')}/tools/list"] if base_path else []
         paths_to_try.extend(self.TOOL_LIST_PATHS)
 
+        exchanges: list[Exchange] = []
         for path in paths_to_try:
             url = service.with_path(path)
 
             # Try JSON-RPC style request
-            resp = await client.post(
-                url,
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "tools/list",
-                    "id": 1,
-                },
-                headers={"Content-Type": "application/json"},
+            payload = {"jsonrpc": "2.0", "method": "tools/list", "id": 1}
+            resp = await client.post(url, json=payload, headers=JSON_HEADERS)
+            exchange = exchange_from_response(
+                resp,
+                check_name=self.name,
+                scan_id=scan_id,
+                host=service.host,
+                method="POST",
+                request_headers=JSON_HEADERS,
+                request_json=payload,
             )
+            exchanges.append(exchange)
 
-            if resp.error or resp.status_code in (404, 405):
+            if not self._answered(exchange):
                 # Try GET
                 resp = await client.get(url)
-                if resp.error or resp.status_code in (404, 405):
+                exchange = exchange_from_response(
+                    resp, check_name=self.name, scan_id=scan_id, host=service.host
+                )
+                exchanges.append(exchange)
+                if not self._answered(exchange):
                     continue
 
-            # Parse response
-            tools = self._parse_tools_response(resp)
-            if tools is not None:
-                return tools
+            if self._parse_tools_response(exchange) is not None:
+                break
 
+        return exchanges
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        listing = self._listing_from(list(evidence))
+        if listing is None:
+            return []
+        tools, source = listing
+
+        server_url = ctx.target_url or (ctx.target.url if ctx.target else "")
+        verdicts: list[Verdict] = []
+        for tool in tools:
+            tool_info = self._analyze_tool(tool, ctx.host, server_url)
+            _, basis, bounded = self._classify(
+                tool_info["name"], tool_info["description"], tool_info["input_schema"]
+            )
+            confidence, why = self._confidence(tool_info["risk_level"], basis, bounded)
+            verdicts.append(
+                Verdict(
+                    severity=self._risk_to_severity(tool_info["risk_level"]),
+                    confidence=confidence,
+                    discriminator=f"tool-{tool_info['name']}",
+                    title=f"MCP tool: {tool_info['name']} ({tool_info['risk_level']} risk)",
+                    description=self._build_tool_description(tool_info),
+                    evidence=self._build_tool_evidence(tool_info),
+                    reasoning=why,
+                    signals={
+                        "risk_level": tool_info["risk_level"],
+                        "classified_by": basis,
+                        "whole_token": bounded,
+                    },
+                    references=self.references,
+                    raw_data=tool_info,
+                    tier=ctx.tier,
+                    evidence_ids=[source.id],
+                )
+            )
+        return verdicts
+
+    @staticmethod
+    def _confidence(risk_level: str, basis: str, bounded: bool) -> tuple[float, str]:
+        unproven = (
+            "the listing is the server's own description of the tool and nothing was "
+            "invoked, so the capability is declared, not shown reachable or unsandboxed"
+        )
+        if basis == "name" and bounded:
+            return (
+                0.7,
+                f"the tool's name matches a {risk_level}-risk pattern as a whole token; {unproven}",
+            )
+        if basis == "name":
+            return 0.5, (
+                f"the {risk_level}-risk pattern matched inside a longer word of the tool name, "
+                f"which is how `cmd` turns up in `cmdb_lookup`; {unproven}"
+            )
+        if basis == "description":
+            return 0.6, (
+                f"only the free-text description matched a {risk_level}-risk phrase, and "
+                f"descriptions paraphrase loosely; {unproven}"
+            )
+        if basis == "schema":
+            return 0.45, (
+                f"only a parameter name placed this tool at {risk_level}; a `path` or `query` "
+                f"parameter says little about what the tool does with it; {unproven}"
+            )
+        return 0.6, (
+            "no name, description or parameter pattern matched; the absence is bounded by "
+            "fixed pattern tables, so a dangerous tool with an unremarkable name reads as benign"
+        )
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    @staticmethod
+    def _answered(exchange: Exchange) -> bool:
+        return not (exchange.error or exchange.response_status in (404, 405))
+
+    def _listing_from(self, exchanges: list[Exchange]) -> tuple[list[dict], Exchange] | None:
+        """The first tool listing in recorded order, and the exchange it came from.
+
+        Skips the answers the probe fell through on — an error, a 404 or a 405
+        — and any answered body that does not parse as a listing.
+        """
+        for exchange in exchanges:
+            if not self._answered(exchange):
+                continue
+            tools = self._parse_tools_response(exchange)
+            if tools is not None:
+                return tools, exchange
         return None
 
-    def _parse_tools_response(self, resp) -> list[dict] | None:
+    def _parse_tools_response(self, exchange: Exchange) -> list[dict] | None:
         """Parse tools from MCP response."""
-        if not resp.body:
+        if not exchange.response_body:
             return None
 
         try:
-            data = json.loads(resp.body)
+            data = json.loads(exchange.response_body)
 
             # JSON-RPC response
             if "result" in data:
@@ -272,7 +387,7 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
 
         return None
 
-    def _analyze_tool(self, tool: dict, service: Service, server_url: str) -> dict:
+    def _analyze_tool(self, tool: dict, host: str, server_url: str) -> dict:
         """Analyze a tool and classify its risk level."""
         name = tool.get("name", "unknown")
         description = tool.get("description", "")
@@ -289,25 +404,35 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
             "risk_level": risk_level,
             "risk_indicators": risk_indicators,
             "server_url": server_url,
-            "service_host": service.host,
+            "service_host": host,
         }
 
     def _classify_risk(self, name: str, description: str, schema: dict) -> str:
         """Classify tool risk level based on name, description, and schema."""
+        return self._classify(name, description, schema)[0]
+
+    @staticmethod
+    def _classify(name: str, description: str, schema: dict) -> tuple[str, str, bool]:
+        """Risk level, what decided it (`name` / `description` / `schema` /
+        `none`), and whether a name match covered a whole token."""
         name_lower = name.lower()
         desc_lower = description.lower()
 
         # Check name patterns (highest priority)
         for level in ("critical", "high", "medium", "low"):
             for pattern in TOOL_RISK_PATTERNS.get(level, []):
-                if re.search(pattern, name_lower, re.IGNORECASE):
-                    return level
+                match = re.search(pattern, name_lower, re.IGNORECASE)
+                if match:
+                    before = name_lower[match.start() - 1] if match.start() else ""
+                    after = name_lower[match.end()] if match.end() < len(name_lower) else ""
+                    bounded = not before.isalnum() and not after.isalnum()
+                    return level, "name", bounded
 
         # Check description patterns
         for level in ("critical", "high", "medium"):
             for pattern in DESC_RISK_PATTERNS.get(level, []):
                 if re.search(pattern, desc_lower, re.IGNORECASE):
-                    return level
+                    return level, "description", False
 
         # Check schema for dangerous parameter names
         if schema:
@@ -326,13 +451,13 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
             for param in dangerous_params:
                 if param in [p.lower() for p in props]:
                     if param in ("command", "cmd", "shell", "code", "script"):
-                        return "critical"
+                        return "critical", "schema", False
                     elif param in ("path", "file"):
-                        return "high"
+                        return "high", "schema", False
                     else:
-                        return "medium"
+                        return "medium", "schema", False
 
-        return "info"
+        return "info", "none", False
 
     def _get_risk_indicators(self, name: str, description: str) -> list[str]:
         """Get list of risk indicators that matched."""

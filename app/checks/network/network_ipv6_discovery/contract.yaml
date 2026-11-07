@@ -28,3 +28,21 @@ references:
 reason: Many targets have IPv6 endpoints with different security postures than IPv4.
   Firewalls and ACLs that restrict IPv4 access sometimes don't cover IPv6 equivalents.
   Services bound to 0.0.0.0 (all interfaces) are reachable on both stacks.
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Two of the three judgements are
+  # categorical — an AAAA record answered, an address is inside fd00::/8 — and no
+  # grader above the rule tier is called for either.
+  #
+  # `ipv6-only` is the exception worth reading twice. It is not a fact about this
+  # check's own evidence: it asserts the *absence* of an A record, which this check
+  # reads out of `dns_records`, and that map only holds what the enumeration
+  # wordlist happened to ask for. A host with an A record nobody queried looks
+  # IPv6-only and is not, so `grade()` states 0.65 rather than asserting it. The
+  # severity is still `medium` because an IPv4 ACL that was never extended to IPv6
+  # is the scenario the check exists for.
+  default: info
+  observations:
+    ipv6: info
+    ipv6-only: medium
+    ula: low

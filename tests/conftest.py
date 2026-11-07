@@ -26,7 +26,7 @@ def project_root() -> Path:
 @pytest.fixture
 def simulations_dir(project_root: Path) -> Path:
     """Simulations YAML directory."""
-    return project_root / "app" / "data" / "simulations"
+    return project_root / "app" / "checks" / "simulator" / "simulations"
 
 
 # ─── Environment Fixtures ─────────────────────────────────────────────────────

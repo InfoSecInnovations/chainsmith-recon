@@ -245,6 +245,13 @@ class SwarmAgent:
         if check is None:
             raise ValueError(f"Unknown check: {check_name}")
 
+        # The coordinator's scan id. The payload field is authoritative; a task
+        # from a coordinator that predates it still carries the id inside
+        # `upstream_context`, because the scanner puts it in the scan context
+        # the coordinator snapshots.
+        upstream = task_data.get("upstream_context", {})
+        scan_id = task_data.get("scan_id") or upstream.get("scan_id") or ""
+
         # Scan-window gate — symmetric with coordinator-side Guardian.
         window_data = task_data.get("scan_window")
         if window_data:
@@ -253,8 +260,13 @@ class SwarmAgent:
 
             window = ScanWindow(**window_data)
             target = task_data.get("target", {})
+            # Stamped with the scan id so a window violation recorded on the
+            # agent is attributable to the scan it blocked.
             local_guardian = Guardian.from_scope(
-                target.get("url", ""), exclude=[], forbidden_techniques=[]
+                target.get("url", ""),
+                exclude=[],
+                forbidden_techniques=[],
+                scan_id=scan_id or None,
             )
             allowed, reason = local_guardian.check_scan_window(
                 window, acknowledged=bool(task_data.get("outside_window_acknowledged"))
@@ -264,9 +276,12 @@ class SwarmAgent:
 
         # Build context from upstream + target
         target = task_data.get("target", {})
-        upstream = task_data.get("upstream_context", {})
 
         context = dict(upstream)
+        # What `BaseCheck.execute()` attributes captured exchanges to and what
+        # `grade_result()` reads the corpus and binds candidates under.
+        if scan_id:
+            context["scan_id"] = scan_id
         context["base_domain"] = (
             target.get("url", "").replace("https://", "").replace("http://", "").rstrip("/")
         )
@@ -290,6 +305,19 @@ class SwarmAgent:
         # Execute
         start = time.monotonic()
         result = await check.execute(context)
+
+        # Grade before serializing. A migrated check returns
+        # candidates, and only observations cross the wire — without this a
+        # probe/grade check would come back from a swarm agent empty.
+        # Grading reads the corpus and binds candidates under the task's scan
+        # id, but against the *agent's* store: the coordinator's `--capture`
+        # posture is not propagated (O-4), so with the agent's default of
+        # capture off this grades from the probe's in-memory hand-off and the
+        # evidence stays on the agent rather than joining the scan's corpus.
+        from app.grading import grade_result
+
+        await grade_result(check, result, context)
+
         duration_ms = int((time.monotonic() - start) * 1000)
 
         return {

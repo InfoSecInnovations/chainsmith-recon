@@ -25,3 +25,26 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Embedding endpoints reveal model architecture via vector dimensions and may
   leak metadata
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: dimensionality, model
+  # guess and metadata are read off the recorded vectors, so no grader above the
+  # rule tier is ever called. `default` is the pre-grade value a candidate
+  # carries (§6.1) and the lowest of the four judgements.
+  #
+  # Four independent judgements over one candidate (header-pilot shape), so one
+  # map entry per discriminator and grade() emits any subset.
+  #
+  # Confidence spans a wide range because the four signals do. A vector's LENGTH
+  # is counted directly (0.98). Model-from-dimensionality is only 0.5 — 768 is
+  # BERT-base AND all-mpnet AND a dozen others, which is why DIMENSION_MAP lists
+  # two guesses per size. Metadata-beyond-vectors is 0.7 (fields are named, but
+  # whether any is sensitive depends on the field). The cosine-similarity sanity
+  # check is 0.9 — two similar texts embedding close together is something a real
+  # model does and a fixed/random stub does not.
+  default: info
+  observations:
+    embedding-dimensions: info
+    embedding-model-id: low
+    embedding-metadata: medium
+    embedding-similarity: info

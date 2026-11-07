@@ -29,3 +29,19 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: 'Understanding cache key structure reveals poisoning vectors: keys that exclude
   system prompts enable multi-tenant attacks'
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`.
+  default: low
+  observations:
+    # A closed five-value set; the check may emit any subset per endpoint, each
+    # at the floor below. `grade()` never raises these — the severity a
+    # discriminator carries is fixed by which test produced it.
+    key-excludes-system-prompt: high
+    key-ignores-capitalization: medium
+    key-ignores-whitespace: medium
+    key-ignores-punctuation: medium
+    key-detailed: low

@@ -34,11 +34,14 @@ curl -X POST http://localhost:8100/api/v1/scope \
   -H "Content-Type: application/json" \
   -d '{"target": "api.example.com", "exclude": ["admin.example.com"]}'
 
-# Start scan
-curl -X POST http://localhost:8100/api/v1/scan/start
+# Start scan (returns a scan_id)
+curl -X POST http://localhost:8100/api/v1/scan
 
 # Check status
 curl http://localhost:8100/api/v1/scan
+
+# Or stream live progress (Server-Sent Events)
+curl -N http://localhost:8100/api/v1/scans/<scan_id>/stream
 
 # Get observations
 curl http://localhost:8100/api/v1/observations
@@ -46,15 +49,18 @@ curl http://localhost:8100/api/v1/observations
 
 ### Using the CLI
 
+The CLI talks to the running server; with the Docker stack that is port 8100
+(see [CLI Overview](cli/overview.md#server-address)).
+
 ```bash
 # Scan a target
-chainsmith scan --target api.example.com
+chainsmith --server 127.0.0.1:8100 scan api.example.com
 
 # Run specific check suites
-chainsmith scan --target api.example.com --suite ai --suite web
+chainsmith --server 127.0.0.1:8100 scan api.example.com --suite ai --suite web
 
 # Run specific checks
-chainsmith scan --target api.example.com --check llm_endpoint_discovery --check prompt_leakage
+chainsmith --server 127.0.0.1:8100 scan api.example.com -c ai_llm_endpoint_discovery -c ai_prompt_leakage
 ```
 
 ---
@@ -111,7 +117,7 @@ curl -X POST http://localhost:8100/api/v1/scenarios/clear
 
 ```bash
 # Run with a scenario
-chainsmith scan --scenario fakobanko --target "*.fakobanko.local"
+chainsmith --server 127.0.0.1:8100 scan fakobanko.local --scenario fakobanko
 
 # List available scenarios
 chainsmith scenarios list
@@ -171,7 +177,7 @@ chainsmith serve --coordinator --host 0.0.0.0
 chainsmith swarm agent --coordinator http://coordinator:8000 --key <key>
 
 # 4. Run a scan (same as normal mode)
-chainsmith scan example.com --server coordinator:8000
+chainsmith --server coordinator:8000 scan example.com
 ```
 
 ### When to Use Swarm Mode
@@ -254,9 +260,10 @@ curl -X POST http://localhost:8100/api/v1/scenarios/clear
 |----------|--------|-------------|
 | `/api/v1/scope` | POST | Set target scope |
 | `/api/v1/scope` | GET | Get current scope |
-| `/api/v1/scan/start` | POST | Start scan |
-| `/api/v1/scan` | GET | Get scan status |
-| `/api/v1/scan/stop` | POST | Stop running scan |
+| `/api/v1/scan` | POST | Start scan (optional body: `checks`, `suites`, `preset`); returns `scan_id` |
+| `/api/v1/scan` | GET | Get scan status (`?scan_id=` for a specific scan) |
+| `/api/v1/scans/{scan_id}/stream` | GET | Live progress as Server-Sent Events |
+| `/api/v1/scans/{scan_id}/pause` / `resume` / `stop` | POST | Control one scan (unscoped `/api/v1/scan/pause` etc. act on the current scan) |
 | `/api/v1/observations` | GET | Get all observations |
 | `/api/v1/observations/by-host` | GET | Get observations grouped by host |
 | `/api/v1/chains` | GET | Get detected attack chains |

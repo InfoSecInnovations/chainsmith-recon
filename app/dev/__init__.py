@@ -1,5 +1,5 @@
 """
-app/dev/ - Local source-tree authoring tools (Phase 56 §8, C11).
+app/dev/ - Local source-tree authoring tools.
 
 A *different category* from the operator CLI in `app/cli.py` (a thin HTTP
 client). These commands are filesystem + AST + codemod tools that run

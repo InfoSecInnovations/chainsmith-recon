@@ -24,3 +24,22 @@ techniques:
 references:
 - OWASP LLM Top 10 - LLM04 Model Denial of Service
 reason: On pay-per-token services, missing output caps allow cost exhaustion attacks
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: which cost payloads were
+  # accepted is read off the record, so no grader above the rule tier is ever
+  # called. `default` is the pre-grade value a candidate carries (§6.1) and the
+  # LOWEST of the ladder, so a deferred grade cannot present an ungraded
+  # candidate as the `high` no-token-limit finding.
+  #
+  # Confidence: accepting max_tokens=100000 with a 200 is close to conclusive
+  # (0.8, or 0.9 when the response reports usage, confirming it was actually
+  # served) — but a 200 says the parameter was ACCEPTED, not that a 100k-token
+  # completion would truly be generated and billed; a gateway may clamp it
+  # downstream. large-completions is 0.6 (cost real but bounded by the model's
+  # own output length, not an operator cap).
+  default: info
+  observations:
+    no-token-limit: high
+    large-completions: medium
+    token-limits-ok: info

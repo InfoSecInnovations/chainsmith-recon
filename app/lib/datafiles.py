@@ -1,5 +1,5 @@
 """
-app/lib/datafiles.py - Externalized check data loader (Phase 56.13 / phase-17 Wave 2).
+app/lib/datafiles.py - Externalized check data loader.
 
 Checks that enumerate hosts/endpoints or fire injection payloads keep that *data*
 in `app/data/{wordlists,endpoints,payloads}/` rather than as Python literals, so it

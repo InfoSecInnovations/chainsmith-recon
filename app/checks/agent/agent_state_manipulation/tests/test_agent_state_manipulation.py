@@ -1,6 +1,12 @@
-"""Co-located tests (Phase 56 §3) — split from test_agent_framework.py."""
+"""Tests for agent_state_manipulation.
+
+This check is split into probe + grade; tests route through
+`probe_and_grade()`. The mock stamps the requested URL onto each response,
+because a migrated check attributes each write to its path by that URL.
+"""
 
 import json
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -45,9 +51,10 @@ def make_response(
     headers: dict = None,
     body: str = "",
     error: str = None,
+    url: str = "http://agent.example.com:8080",
 ) -> HttpResponse:
     return HttpResponse(
-        url="http://agent.example.com:8080",
+        url=url,
         status_code=status_code,
         headers=headers or {},
         body=body,
@@ -56,14 +63,36 @@ def make_response(
     )
 
 
+def _stamp(response: HttpResponse, url: str | None) -> HttpResponse:
+    return replace(response, url=url) if url else response
+
+
 def _mock_client(get_fn=None, post_fn=None):
-    """Create mock async HTTP client."""
+    """Create mock async HTTP client (`__aexit__` returns False so probe
+    exceptions are not suppressed; responses carry the requested URL)."""
     client = AsyncMock()
-    client.get = get_fn or AsyncMock(return_value=make_response(status_code=404))
-    client.post = post_fn or AsyncMock(return_value=make_response(status_code=404))
+
+    async def _get(url=None, **kw):
+        resp = (await get_fn(url, **kw)) if get_fn else make_response(status_code=404)
+        return _stamp(resp, url)
+
+    async def _post(url=None, **kw):
+        resp = (await post_fn(url, **kw)) if post_fn else make_response(status_code=404)
+        return _stamp(resp, url)
+
+    client.get = AsyncMock(side_effect=_get)
+    client.post = AsyncMock(side_effect=_post)
     client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock()
+    client.__aexit__ = AsyncMock(return_value=False)
     return client
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 class TestStateManipulation:
@@ -100,7 +129,7 @@ class TestStateManipulation:
         with patch(
             "app.checks.agent.agent_state_manipulation.check.AsyncHttpClient", return_value=client
         ):
-            result = await check.check_service(sample_service, agent_context)
+            result = await probe_and_grade(check, sample_service, agent_context)
 
         critical = [o for o in result.observations if o.severity == "critical"]
         assert len(critical) == 3  # One per STATE_MODIFICATIONS entry
@@ -132,7 +161,7 @@ class TestStateManipulation:
         with patch(
             "app.checks.agent.agent_state_manipulation.check.AsyncHttpClient", return_value=client
         ):
-            result = await check.check_service(sample_service, agent_context)
+            result = await probe_and_grade(check, sample_service, agent_context)
 
         info = [o for o in result.observations if o.severity == "info"]
         assert len(info) == 1
@@ -156,7 +185,7 @@ class TestStateManipulation:
         with patch(
             "app.checks.agent.agent_state_manipulation.check.AsyncHttpClient", return_value=client
         ):
-            result = await check.check_service(sample_service, agent_context)
+            result = await probe_and_grade(check, sample_service, agent_context)
 
         assert result.success is True
         assert len(result.observations) == 0

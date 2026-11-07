@@ -17,15 +17,27 @@ Requirements:
     or place them in ./data/geoip/
 
 If database files are not available, the check skips gracefully.
+
+**Probe/grade.** `run()` queries the databases and records one
+`local` exchange per IP — the address asked for, the answer as JSON; `grade()`
+reads that answer back and places severity. This is the first check to record the
+`local` protocol, and it is worth saying why a database lookup is capture at all:
+the grader reads evidence and nothing else, so a verdict derived from a GeoLite2
+row needs that row on the record. A corpus copy also pins *which* answer was
+given, which matters here more than elsewhere — these databases are reissued
+weekly and an ASN's classification moves.
 """
 
+import json
 import logging
 import os
 from pathlib import Path
 from typing import Any
 
+from app import capture
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.observations import build_observation
+from app.grading import Evidence, GradeContext, Verdict
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +192,10 @@ class GeoIpCheck(BaseCheck):
 
         geoip_data: dict[str, dict] = {}
 
+        # Which databases answered is part of the record: the same IP grades
+        # differently against a City-only corpus than against City + ASN.
+        databases = {name for name, path in (("city", city_db_path), ("asn", asn_db_path)) if path}
+
         # Open database readers
         city_reader = None
         asn_reader = None
@@ -193,8 +209,15 @@ class GeoIpCheck(BaseCheck):
                 entry = self._lookup_ip(ip, city_reader, asn_reader)
                 geoip_data[ip] = entry
 
-                self._generate_observations(
-                    result, ip, hostnames, entry, context.get("base_domain", "")
+                exchange = capture.record_exchange(
+                    "local",
+                    ip,
+                    request_body=f"geoip {ip}",
+                    request_headers={"databases": ",".join(sorted(databases))},
+                    response_body=json.dumps(entry, default=str),
+                )
+                result.candidates.append(
+                    self.create_candidate(host=hostnames[0] if hostnames else ip).attach(exchange)
                 )
 
         finally:
@@ -265,16 +288,22 @@ class GeoIpCheck(BaseCheck):
 
         return entry
 
-    def _generate_observations(
-        self,
-        result: CheckResult,
-        ip: str,
-        hostnames: list[str],
-        entry: dict,
-        base_domain: str,
-    ) -> None:
-        """Generate observations based on GeoIP/ASN data for an IP."""
-        host_label = hostnames[0] if hostnames else ip
+    # ══ Grade ════════════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Place severity on one IP's recorded GeoIP answer."""
+        exchange = next((e for e in evidence if _entry_from(e)), None)
+        if exchange is None:
+            return []
+
+        entry = _entry_from(exchange)
+        ip = entry.get("ip") or exchange.host
+        host_label = ctx.host
+        # The hostnames behind this address are an upstream output, not this
+        # check's evidence — the same map the probe grouped by.
+        dns_records: dict[str, str] = ctx.context.get("dns_records") or {}
+        hostnames = [host for host, addr in dns_records.items() if addr == ip] or [host_label]
+
         location_parts = [
             p for p in [entry.get("country_code"), entry.get("region"), entry.get("city")] if p
         ]
@@ -284,56 +313,98 @@ class GeoIpCheck(BaseCheck):
         asn_str = f"AS{asn}" if asn else "unknown ASN"
         classification = entry.get("classification", "unknown")
 
-        # Base info observation for every IP
-        evidence = f"IP: {ip} | Location: {location} | {org} ({asn_str})"
-        result.observations.append(
-            build_observation(
-                check_name=self.name,
+        evidence_ids = [exchange.id]
+        verdicts: list[Verdict] = []
+
+        # ── Where the address is, and whose it is ─────────
+        verdicts.append(
+            Verdict(
+                severity="info",
+                # GeoLite2 is reliable at country level and frequently wrong at
+                # city level, so the *more specific* claim is the less confident
+                # one. Anycast makes any single location partly fictional.
+                confidence=0.75 if entry.get("city") else 0.9,
+                discriminator=f"geo-{ip}",
                 title=f"Host geo: {host_label} -> {location} ({org})",
                 description=(
                     f"Geolocation and ASN data for {', '.join(hostnames)} "
                     f"({ip}). Classification: {classification}."
                 ),
-                severity="info",
-                evidence=evidence,
-                host=host_label,
-                discriminator=f"geo-{ip}",
+                evidence=f"IP: {ip} | Location: {location} | {org} ({asn_str})",
+                reasoning=(
+                    f"GeoLite2 placed {ip} in {location}"
+                    + (" at city granularity" if entry.get("city") else " at country granularity")
+                ),
+                signals={
+                    "country_code": entry.get("country_code"),
+                    "city": entry.get("city"),
+                    "asn": asn,
+                    "classification": classification,
+                },
+                evidence_ids=evidence_ids,
             )
         )
 
-        # Residential IP hosting a service — notable observation
+        # ── A consumer ISP serving a production host ──────
         if classification == "residential":
             provider = entry.get("provider", org)
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            verdicts.append(
+                Verdict(
+                    severity="medium",
+                    # The ASN match is exact; reading it as "someone's house" is
+                    # not. Consumer ISPs sell business lines off the same ASN,
+                    # and `RESIDENTIAL_ASNS` holds fifteen of them.
+                    confidence=0.8,
+                    discriminator=f"residential-{ip}",
                     title=f"Residential IP hosting service: {host_label}",
                     description=(
                         f"{host_label} ({ip}) belongs to a residential ISP ({provider}). "
                         f"This may indicate a developer's home machine, misconfigured "
                         f"tunnel, or compromised host."
                     ),
-                    severity="medium",
-                    evidence=f"IP: {ip} | ISP: {provider} ({asn_str}) | Hosts: {', '.join(hostnames)}",
-                    host=host_label,
-                    discriminator=f"residential-{ip}",
+                    evidence=(
+                        f"IP: {ip} | ISP: {provider} ({asn_str}) | Hosts: {', '.join(hostnames)}"
+                    ),
+                    reasoning=f"{asn_str} is a known consumer ISP ({provider})",
+                    signals={"asn": asn, "provider": provider},
+                    evidence_ids=evidence_ids,
                 )
             )
 
-        # Non-standard hosting (ASN exists but not in our known lists)
+        # ── An ASN in neither list ─────────────────────────
         elif classification == "other" and asn is not None:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            verdicts.append(
+                Verdict(
+                    severity="low",
+                    # This judgement is the absence of a match against two
+                    # hand-maintained lists of about forty ASNs between them.
+                    # Most of the internet is "not in the list", so it is the
+                    # weakest thing this check says.
+                    confidence=0.5,
+                    discriminator=f"other-hosting-{ip}",
                     title=f"Non-standard hosting: {host_label}",
                     description=(
                         f"{host_label} ({ip}) is hosted on a network not in the "
                         f"known hosting provider list ({org}, {asn_str}). "
                         f"May warrant investigation."
                     ),
-                    severity="low",
                     evidence=f"IP: {ip} | Org: {org} ({asn_str})",
-                    host=host_label,
-                    discriminator=f"other-hosting-{ip}",
+                    reasoning=f"{asn_str} is in neither the hosting nor the residential list",
+                    signals={"asn": asn, "org": org},
+                    evidence_ids=evidence_ids,
                 )
             )
+
+        return verdicts
+
+
+def _entry_from(exchange: Exchange | None) -> dict[str, Any] | None:
+    """The GeoIP answer one recorded lookup came back with."""
+    if exchange is None or exchange.error is not None or not exchange.response_body:
+        return None
+    try:
+        entry = json.loads(exchange.response_body)
+    except (ValueError, TypeError):
+        logger.debug("Could not read GeoIP entry from exchange %s", exchange.id)
+        return None
+    return entry if isinstance(entry, dict) else None

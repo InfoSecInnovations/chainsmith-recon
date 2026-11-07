@@ -29,3 +29,33 @@ references:
 - OWASP WSTG-CONF-05
 - CWE-538
 reason: Common paths often lead to admin panels, backups, or configuration files
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # One candidate per *probed path*, not per service, because each observation
+  # names its own `target_url`. Every path that answered is handed over — the
+  # 404s included, since `paths_<port>` is computed from them and the set is
+  # bounded by `COMMON_PATHS` rather than by the target.
+  #
+  # This check kept its ids through `make_observation_id_hashed`, so `grade()`
+  # names the discriminator `<kind>-<4-char digest>` (`accessible-a3f2`) and the
+  # grading stage's plain `make_observation_id` reconstructs the identical id.
+  # That set is unbounded, so the map records one entry per *family*.
+  #
+  # `accessible` is `info`/`medium`/`high` by path pattern, unchanged. What
+  # `grade()` adds is the catch-all caveat: a config or data path answering 200
+  # with an HTML body is a catch-all route rather than an exposed file, and
+  # carries 0.4 instead of 0.85 — which matters most exactly where the severity
+  # is `high` (`/.env`, `/.git/config`, `/db.sql`). A plain `info` 200 is 0.99;
+  # `forbidden` is 0.85 (a 403 usually means the path exists, but a denied
+  # prefix or a WAF returns 403 for paths that do not); `redirect` is 0.99.
+  default: info
+  observations:
+    accessible: info
+    forbidden: low
+    redirect: info

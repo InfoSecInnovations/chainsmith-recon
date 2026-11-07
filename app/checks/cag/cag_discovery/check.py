@@ -19,6 +19,23 @@ CAG indicators:
 - Prompt caching signatures (Anthropic, OpenAI)
 - Semantic cache layers (GPTCache, etc.)
 
+**Probe/grade.** The probe GETs every signature and CAG
+path and POSTs the known AI endpoints, recording each; it emits one candidate
+per probed URL (the `web_path_probe` / `rag_collection_enumeration` pattern, so
+each observation keeps its own `target_url`). `grade()` never sees the
+discriminator (§0.16): it recovers which family an exchange belongs to from the
+recorded *request* — a signature-path GET is graded for infrastructure, a
+CAG-path GET for an endpoint (one GET to a shared path such as `/cache` can
+yield both verdicts), an AI-endpoint POST for caching behaviour. The infra,
+endpoint and caching readings are each one parser both halves call (§0.12).
+
+**Fixed**: the `cag-<path>` / `cached-<path>` discriminators
+embed the path (an unbounded set), so the contract carries no map and `grade()`
+places the severity (the `ai_model_info_check` pattern). Confidence is
+signal-kind graded (§0.15/§0.16 `agent_discovery`, `rag_discovery`): a
+signature-specific header is worth far more than a keyword substring in a body,
+which recurs in unrelated JSON.
+
 References:
   https://www.anthropic.com/news/prompt-caching
   https://platform.openai.com/docs/guides/prompt-caching
@@ -27,10 +44,14 @@ References:
 
 import json
 from typing import Any
+from urllib.parse import urlparse
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 # CAG/caching infrastructure signatures
 CAG_SIGNATURES = {
@@ -105,6 +126,14 @@ CACHE_HEADERS = [
     "x-cache-creation-time",
 ]
 
+# Ordered signature paths, first type wins — used to key an infra GET back to
+# its cache type at grade time (grade never sees the discriminator).
+_PATH_TO_TYPE = {
+    path: cache_type
+    for cache_type, sigs in CAG_SIGNATURES.items()
+    for path in sigs.get("paths", [])
+}
+
 
 class CAGDiscoveryCheck(ServiceIteratingCheck):
     """
@@ -129,89 +158,80 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
     ]
     techniques = ["cache discovery", "timing analysis", "header fingerprinting"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
-        cag_endpoints = []
-        cache_infra = set()
+        scan_id = context.get("scan_id") or ""
+        cag_endpoints: list[dict] = []
+        cache_infra: set[str] = set()
 
         cfg = HttpConfig(timeout_seconds=10.0, verify_ssl=False)
 
         try:
             async with AsyncHttpClient(cfg) as client:
-                # Check for cache infrastructure APIs
-                infra_results = await self._detect_cache_infrastructure(client, service)
-                for infra_info in infra_results:
-                    cache_infra.add(infra_info["cache_type"])
-                    cag_endpoints.append(infra_info)
-
-                    result.observations.append(
-                        build_observation(
-                            check_name=self.name,
-                            title=f"Cache infrastructure: {infra_info['cache_type']}",
-                            description=self._build_infra_description(infra_info),
-                            severity="medium" if not infra_info.get("auth_required") else "info",
-                            evidence=self._build_evidence(infra_info),
-                            host=service.host,
-                            discriminator=f"cache-{infra_info['cache_type']}",
-                            target=service,
-                            target_url=infra_info.get("url"),
-                            raw_data=infra_info,
-                            references=self.references,
-                        )
-                    )
-
-                # Check CAG-specific endpoints
-                for path in CAG_PATHS:
+                # GET every signature path and CAG path once.
+                get_paths = list(dict.fromkeys(list(_PATH_TO_TYPE) + CAG_PATHS))
+                for path in get_paths:
                     url = service.with_path(path)
+                    try:
+                        resp = await client.get(url)
+                    except Exception:
+                        continue
+                    exchange = exchange_from_response(
+                        resp, check_name=self.name, scan_id=scan_id, host=service.host, method="GET"
+                    )
+                    candidate = self.create_candidate(
+                        host=service.host, target=service, target_url=url
+                    )
+                    candidate.attach(exchange)
+                    result.candidates.append(candidate)
 
-                    resp = await client.get(url)
-                    endpoint_info = self._analyze_cag_response(resp, path, service)
+                    # Build the produced outputs off the same exchange.
+                    if path in _PATH_TO_TYPE:
+                        infra_info = self._infra_from(exchange, service)
+                        if infra_info and infra_info["cache_type"] not in cache_infra:
+                            cache_infra.add(infra_info["cache_type"])
+                            cag_endpoints.append(infra_info)
+                    if path in CAG_PATHS:
+                        endpoint_info = self._analyze_cag_response(exchange, path, service)
+                        if endpoint_info:
+                            cag_endpoints.append(endpoint_info)
 
-                    if endpoint_info:
-                        cag_endpoints.append(endpoint_info)
-
-                        severity = self._determine_severity(endpoint_info)
-
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title=f"CAG endpoint: {path}",
-                                description=self._build_endpoint_description(endpoint_info),
-                                severity=severity,
-                                evidence=self._build_evidence(endpoint_info),
-                                host=service.host,
-                                discriminator=f"cag-{path.strip('/').replace('/', '-')}",
-                                target=service,
-                                target_url=url,
-                                raw_data=endpoint_info,
-                                references=self.references,
-                            )
-                        )
-
-                # Check existing AI endpoints for cache headers
+                # POST the known AI endpoints to check for caching behaviour.
                 ai_endpoints = context.get("chat_endpoints", []) + context.get("rag_endpoints", [])
                 for ep in ai_endpoints:
                     if ep.get("service", {}).get("host") != service.host:
                         continue
+                    url = ep.get("url")
+                    if not url:
+                        continue
+                    try:
+                        resp = await client.post(
+                            url,
+                            json={"input": "cache test query", "query": "cache test"},
+                            headers=JSON_HEADERS,
+                        )
+                    except Exception:
+                        continue
+                    exchange = exchange_from_response(
+                        resp,
+                        check_name=self.name,
+                        scan_id=scan_id,
+                        host=service.host,
+                        method="POST",
+                        request_headers=JSON_HEADERS,
+                        request_json={"input": "cache test query", "query": "cache test"},
+                    )
+                    candidate = self.create_candidate(
+                        host=service.host, target=service, target_url=url, raw_data={"ep": ep}
+                    )
+                    candidate.attach(exchange)
+                    result.candidates.append(candidate)
 
-                    cache_info = await self._check_endpoint_caching(client, ep)
+                    cache_info = self._check_endpoint_caching(exchange, ep)
                     if cache_info:
                         cag_endpoints.append(cache_info)
-
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title=f"Caching detected on: {cache_info['path']}",
-                                description=self._build_cache_description(cache_info),
-                                severity="low",
-                                evidence=self._build_evidence(cache_info),
-                                host=service.host,
-                                discriminator=f"cached-{cache_info['path'].strip('/').replace('/', '-')}",
-                                target=service,
-                                target_url=cache_info.get("url"),
-                                raw_data=cache_info,
-                            )
-                        )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -223,65 +243,178 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _detect_cache_infrastructure(
-        self, client: AsyncHttpClient, service: Service
-    ) -> list[dict]:
-        """Detect cache infrastructure by probing known APIs."""
-        detected = []
+    # ══ Grade (rule tier) ════════════════════════════════════════════
 
-        for cache_type, sigs in CAG_SIGNATURES.items():
-            for path in sigs.get("paths", []):
-                url = service.with_path(path)
-                resp = await client.get(url)
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        verdicts: list[Verdict] = []
+        service = ctx.target
+        for exchange in evidence:
+            path = urlparse(exchange.request_url or "").path
+            if exchange.request_method == "GET":
+                if path in _PATH_TO_TYPE:
+                    verdicts.extend(self._grade_infra(exchange, service, ctx))
+                if path in CAG_PATHS:
+                    verdicts.extend(self._grade_endpoint(exchange, path, service, ctx))
+            elif exchange.request_method == "POST":
+                # The endpoint identity is on the recorded request, not the
+                # scan context — grade() reconstructs it from the URL (§0.16).
+                ep = {"url": exchange.request_url, "path": path}
+                verdicts.extend(self._grade_cached(exchange, ep, ctx))
+        return verdicts
 
-                if resp.error or resp.status_code == 404:
-                    continue
+    def _grade_infra(self, exchange: Exchange, service, ctx: GradeContext) -> list[Verdict]:
+        infra_info = self._infra_from(exchange, service)
+        if not infra_info:
+            return []
+        severity = "medium" if not infra_info.get("auth_required") else "info"
+        confidence, why = self._infra_confidence(infra_info)
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                discriminator=f"cache-{infra_info['cache_type']}",
+                title=f"Cache infrastructure: {infra_info['cache_type']}",
+                description=self._build_infra_description(infra_info),
+                evidence=self._build_evidence(infra_info),
+                reasoning=why,
+                signals={"indicators": infra_info.get("indicators", {})},
+                references=self.references,
+                raw_data=infra_info,
+                tier=ctx.tier,
+                evidence_ids=[exchange.id],
+            )
+        ]
 
-                # Check headers
-                resp_headers_lower = {k.lower(): v for k, v in resp.headers.items()}
-                headers_match = any(h in resp_headers_lower for h in sigs.get("headers", []))
+    def _grade_endpoint(
+        self, exchange: Exchange, path: str, service, ctx: GradeContext
+    ) -> list[Verdict]:
+        endpoint_info = self._analyze_cag_response(exchange, path, service)
+        if not endpoint_info:
+            return []
+        severity = self._determine_severity(endpoint_info)
+        confidence, why = self._endpoint_confidence(endpoint_info)
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                discriminator=f"cag-{path.strip('/').replace('/', '-')}",
+                title=f"CAG endpoint: {path}",
+                description=self._build_endpoint_description(endpoint_info),
+                evidence=self._build_evidence(endpoint_info),
+                reasoning=why,
+                signals={"indicators": endpoint_info.get("indicators", [])},
+                references=self.references,
+                raw_data=endpoint_info,
+                tier=ctx.tier,
+                evidence_ids=[exchange.id],
+            )
+        ]
 
-                # Check body
-                body_lower = (resp.body or "").lower()
-                body_match = any(p in body_lower for p in sigs.get("body_patterns", []))
+    def _grade_cached(self, exchange: Exchange, ep: dict, ctx: GradeContext) -> list[Verdict]:
+        cache_info = self._check_endpoint_caching(exchange, ep)
+        if not cache_info:
+            return []
+        indicators = cache_info.get("cache_indicators", [])
+        header_signal = any(i.startswith("header:") for i in indicators)
+        confidence = 0.85 if header_signal else 0.45
+        why = (
+            "an AI-specific cache header is present, a strong signal of intentional caching"
+            if header_signal
+            else "the only signal is a cache field in the response body, which many APIs emit "
+            "regardless of whether a cache is actually in the path"
+        )
+        return [
+            Verdict(
+                severity="low",
+                confidence=confidence,
+                discriminator=f"cached-{cache_info['path'].strip('/').replace('/', '-')}",
+                title=f"Caching detected on: {cache_info['path']}",
+                description=self._build_cache_description(cache_info),
+                evidence=self._build_evidence(cache_info),
+                reasoning=why,
+                signals={"cache_indicators": indicators},
+                references=self.references,
+                raw_data=cache_info,
+                tier=ctx.tier,
+                evidence_ids=[exchange.id],
+            )
+        ]
 
-                if headers_match or body_match or resp.status_code == 200:
-                    detected.append(
-                        {
-                            "cache_type": cache_type,
-                            "url": url,
-                            "path": path,
-                            "status_code": resp.status_code,
-                            "auth_required": resp.status_code == 401,
-                            "indicators": {
-                                "headers_match": headers_match,
-                                "body_match": body_match,
-                            },
-                            "service": service.to_dict(),
-                            "endpoint_type": "cache_infrastructure",
-                        }
-                    )
-                    break
+    @staticmethod
+    def _infra_confidence(infra_info: dict) -> tuple[float, str]:
+        indicators = infra_info.get("indicators", {})
+        if indicators.get("headers_match"):
+            return 0.9, (
+                "a signature-specific cache header identified the backend — the strongest kind of "
+                "signal, since these headers are near-unique to the product"
+            )
+        if indicators.get("body_match"):
+            return 0.55, (
+                "the backend was named by a substring in the response body; product names recur "
+                "in unrelated JSON, so this is softer than a header"
+            )
+        return 0.4, (
+            "the only signal is a non-404 status on a signature path, which any catch-all route "
+            "returns; the cache type is inferred from the path alone"
+        )
 
-        return detected
+    @staticmethod
+    def _endpoint_confidence(endpoint_info: dict) -> tuple[float, str]:
+        indicators = endpoint_info.get("indicators", [])
+        if any(i.startswith("header:") for i in indicators):
+            return 0.85, "a cache-control header on the path is a strong, intentional signal"
+        if any(i.startswith("field:") for i in indicators):
+            return 0.7, "a structured cache field in the JSON body indicates cache-aware responses"
+        return 0.45, (
+            "the signal is only a cache keyword in the body text, which appears in documentation "
+            "and unrelated responses as readily as in a real cache endpoint"
+        )
 
-    def _analyze_cag_response(self, resp, path: str, service: Service) -> dict | None:
-        """Analyze response for CAG indicators."""
-        if resp.error or resp.status_code in (404, 405, 502, 503):
+    # ── The parsers both halves share ────────────────────────────────
+
+    def _infra_from(self, exchange: Exchange, service) -> dict | None:
+        """Rebuild one infrastructure reading off a recorded signature-path GET."""
+        if exchange.error or exchange.response_status == 404:
+            return None
+        path = urlparse(exchange.request_url or "").path
+        cache_type = _PATH_TO_TYPE.get(path)
+        if not cache_type:
+            return None
+        sigs = CAG_SIGNATURES[cache_type]
+
+        resp_headers_lower = {k.lower(): v for k, v in (exchange.response_headers or {}).items()}
+        headers_match = any(h in resp_headers_lower for h in sigs.get("headers", []))
+        body_lower = (exchange.response_body or "").lower()
+        body_match = any(p in body_lower for p in sigs.get("body_patterns", []))
+
+        if not (headers_match or body_match or exchange.response_status == 200):
+            return None
+
+        return {
+            "cache_type": cache_type,
+            "url": exchange.request_url,
+            "path": path,
+            "status_code": exchange.response_status,
+            "auth_required": exchange.response_status == 401,
+            "indicators": {"headers_match": headers_match, "body_match": body_match},
+            "service": service.to_dict() if service else {},
+            "endpoint_type": "cache_infrastructure",
+        }
+
+    def _analyze_cag_response(self, exchange: Exchange, path: str, service) -> dict | None:
+        """Analyze a recorded CAG-path GET for cache indicators."""
+        if exchange.error or exchange.response_status in (404, 405, 502, 503):
             return None
 
         indicators = []
 
-        # Check for cache-related headers
-        resp_headers_lower = {k.lower(): v for k, v in resp.headers.items()}
+        resp_headers_lower = {k.lower(): v for k, v in (exchange.response_headers or {}).items()}
         for header in CACHE_HEADERS:
             if header in resp_headers_lower:
                 indicators.append(f"header:{header}={resp_headers_lower[header]}")
 
-        # Check body for cache patterns
-        body = resp.body or ""
+        body = exchange.response_body or ""
         body_lower = body.lower()
-
         cache_keywords = [
             "cache",
             "cached",
@@ -298,8 +431,7 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
             if kw in body_lower:
                 indicators.append(f"body:{kw}")
 
-        # Try to parse JSON for cache fields
-        if resp.status_code == 200:
+        if exchange.response_status == 200:
             try:
                 data = json.loads(body)
                 if isinstance(data, dict):
@@ -323,42 +455,28 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
             return None
 
         return {
-            "url": service.with_path(path),
+            "url": service.with_path(path) if service else exchange.request_url,
             "path": path,
-            "status_code": resp.status_code,
+            "status_code": exchange.response_status,
             "indicators": indicators,
-            "auth_required": resp.status_code == 401,
-            "service": service.to_dict(),
+            "auth_required": exchange.response_status == 401,
+            "service": service.to_dict() if service else {},
             "endpoint_type": "cag_endpoint",
         }
 
-    async def _check_endpoint_caching(self, client: AsyncHttpClient, endpoint: dict) -> dict | None:
-        """Check if an existing endpoint has caching behavior."""
-        url = endpoint.get("url")
-        if not url:
+    def _check_endpoint_caching(self, exchange: Exchange, endpoint: dict) -> dict | None:
+        """Rebuild the caching reading off a recorded AI-endpoint POST."""
+        if exchange.error or (exchange.response_status or 0) >= 400:
             return None
 
-        # Make two requests and check for cache indicators
-        resp1 = await client.post(
-            url,
-            json={"input": "cache test query", "query": "cache test"},
-            headers={"Content-Type": "application/json"},
-        )
-
-        if resp1.error or resp1.status_code >= 400:
-            return None
-
-        # Check response headers for cache indicators
-        resp_headers_lower = {k.lower(): v for k, v in resp1.headers.items()}
+        resp_headers_lower = {k.lower(): v for k, v in (exchange.response_headers or {}).items()}
         cache_indicators = []
-
         for header in CACHE_HEADERS:
             if header in resp_headers_lower:
                 cache_indicators.append(f"header:{header}={resp_headers_lower[header]}")
 
-        # Check for cache-related response body fields
         try:
-            data = json.loads(resp1.body)
+            data = json.loads(exchange.response_body or "")
             if isinstance(data, dict):
                 if "cached" in data or "cache_hit" in data:
                     cache_indicators.append("response:cache_field")
@@ -366,12 +484,13 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
                     usage = data["usage"]
                     if "cached_tokens" in usage or "prompt_tokens_cached" in usage:
                         cache_indicators.append("usage:cached_tokens")
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError, TypeError):
             pass
 
         if not cache_indicators:
             return None
 
+        url = endpoint.get("url") or exchange.request_url
         return {
             "url": url,
             "path": endpoint.get("path", url),

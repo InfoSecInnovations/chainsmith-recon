@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp_injection.py."""
+"""Tests for mcp_resource_traversal."""
 
 import json
 from unittest.mock import AsyncMock, patch
@@ -8,6 +8,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_resource_traversal import MCPResourceTraversalCheck
 from app.lib.http import HttpResponse
+
+
+async def run_and_grade(check, context):
+    """Run the check, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -96,7 +104,7 @@ class TestMCPResourceTraversalCheck:
         """Passwd-style content in a traversal URI triggers a critical observation."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
 
         async def mock_post(url, **kwargs):
             body = kwargs.get("json", {})
@@ -120,7 +128,7 @@ class TestMCPResourceTraversalCheck:
         with patch(
             "app.checks.mcp.mcp_resource_traversal.check.AsyncHttpClient", return_value=mock
         ):
-            result = await check.run(mcp_server_context)
+            result = await run_and_grade(check, mcp_server_context)
 
         assert result.success
         critical = [o for o in result.observations if o.severity == "critical"]
@@ -133,13 +141,13 @@ class TestMCPResourceTraversalCheck:
         """When every probe returns a JSON-RPC error, only an info observation appears."""
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
         mock.post = AsyncMock(return_value=_jsonrpc_error(message="Access denied"))
 
         with patch(
             "app.checks.mcp.mcp_resource_traversal.check.AsyncHttpClient", return_value=mock
         ):
-            result = await check.run(mcp_server_context)
+            result = await run_and_grade(check, mcp_server_context)
 
         assert result.success
         info = [o for o in result.observations if o.severity == "info"]
@@ -148,3 +156,41 @@ class TestMCPResourceTraversalCheck:
         # No high/critical observations when everything is blocked
         dangerous = [o for o in result.observations if o.severity in ("high", "critical")]
         assert dangerous == []
+
+    @pytest.mark.asyncio
+    async def test_payloads_sharing_an_attack_type_yield_one_observation(
+        self, check, mcp_server_context
+    ):
+        """passwd and hosts are both `path_traversal`: one observation names both.
+
+        One verdict per payload minted the same observation id twice, and the
+        duplicate primary key sent the rest of the scan's observations to scratch.
+        """
+        mock = AsyncMock()
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+
+        async def mock_post(url, **kwargs):
+            uri = kwargs.get("json", {}).get("params", {}).get("uri", "")
+            if uri.startswith("file://"):
+                return _jsonrpc_error(message=f"No such resource: /opt/app/resources/{uri[7:]}")
+            return _jsonrpc_error(message="Access denied")
+
+        mock.post = mock_post
+
+        with patch(
+            "app.checks.mcp.mcp_resource_traversal.check.AsyncHttpClient", return_value=mock
+        ):
+            result = await run_and_grade(check, mcp_server_context)
+
+        ids = [o.id for o in result.observations]
+        assert len(ids) == len(set(ids))
+        # path_traversal (x2), absolute_file, encoded_traversal, null_byte
+        assert len(ids) == 4
+
+        leak = [o for o in result.observations if o.id.endswith("traversal-leak-path_traversal")]
+        assert len(leak) == 1
+        assert leak[0].severity == "medium"
+        assert "file://../../etc/passwd" in leak[0].evidence
+        assert "file://../../etc/hosts" in leak[0].evidence
+        assert len(leak[0].evidence_ids) == 2

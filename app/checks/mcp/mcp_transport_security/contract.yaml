@@ -29,3 +29,18 @@ references:
 - OWASP - Transport Layer Security
 reason: MCP endpoints may transmit tool results and credentials in cleartext or allow
   cross-origin access
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. The discriminators are a closed set, so the full map is
+  # declared, each at its single severity (§0.12). `transport-ok` is the probe's
+  # cross-server "adequate" summary, emitted directly rather than graded, and is
+  # the floor. `default` is the lowest of these (57.4 wave 7).
+  default: info
+  observations:
+    no-tls: high
+    cors-wildcard: high
+    cors-reflect: high
+    no-origin-check: medium
+    sse-no-auth: medium
+    transport-ok: info

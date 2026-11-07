@@ -29,3 +29,11 @@ references:
 - MITRE ATLAS - AML.T0024 Exfiltration via ML Inference API
 reason: Agent memory often contains full conversation logs including PII, system prompt
   fragments, and tool invocation history with parameters
+severity:
+  model: contextual
+  # Attack-compliance: severity is a continuum the evidence places, not a fact
+  # read off the response, so this check is in phase 58's grading scope (§7.2).
+  # `default` is what `on_critical` reads before a grader has run; `rubric:` and
+  # `signals:` are inert until 58 and are authored with it.
+  default: medium
+  range: [info, critical]

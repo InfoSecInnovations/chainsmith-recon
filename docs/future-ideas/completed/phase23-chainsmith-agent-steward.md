@@ -243,7 +243,7 @@ broken patterns, shadow conflicts).
 
 ## Relationship to Other Components
 
-Per the [component taxonomy](component-taxonomy.md), Chainsmith is an
+Per the [component taxonomy](../../component-taxonomy.md), Chainsmith is an
 **Agent** (LLM-powered for content-aware analysis, with deterministic
 fallback for metadata-only validation).
 

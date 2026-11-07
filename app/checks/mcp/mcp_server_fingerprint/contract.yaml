@@ -28,3 +28,12 @@ references:
 - MCP Specification - https://modelcontextprotocol.io/specification
 - CWE-200 Exposure of Sensitive Information
 reason: Identifying the MCP server implementation enables targeted vulnerability research
+severity:
+  model: fixed
+  # Categorical: the answer is in the serverInfo/error response, so no grader
+  # above the rule tier is ever called. The discriminator embeds the
+  # implementation name (`impl-<name>` / `impl-custom`), an unbounded set, so
+  # there is no `observations:` map (§0.12): `default` is the floor — `info`, an
+  # identified server — and grade() places `low` for the custom answer
+  # (57.4 wave 7).
+  default: info

@@ -107,6 +107,7 @@ class ChainsmithClient:
         suites: list[str] = None,
         port_profile: str = None,
         preset: str = None,
+        capture: dict = None,
     ) -> dict:
         body: dict = {}
         if checks:
@@ -117,6 +118,8 @@ class ChainsmithClient:
             body["port_profile"] = port_profile
         if preset:
             body["preset"] = preset
+        if capture:
+            body["capture"] = capture
         return self._request("POST", "/api/v1/scan", json=body if body else None)
 
     def get_scan_presets(self) -> dict:

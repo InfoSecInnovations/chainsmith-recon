@@ -1,5 +1,5 @@
 """
-app/agents/base.py - BaseAgent (Phase 56 §6, sub-phase 56.10).
+app/agents/base.py - BaseAgent.
 
 The per-type base for `agent` components, attaching to the minimal
 `BaseComponent` (identity + construction contract).

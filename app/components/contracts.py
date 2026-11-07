@@ -1,5 +1,5 @@
 """
-app/components/contracts.py - The authoritative `contract.yaml` schema (Phase 56 §4).
+app/components/contracts.py - The authoritative `contract.yaml` schema.
 
 The loader parses `contract.yaml` into these Pydantic v2 models
 (`CheckContract(**yaml_data)`), so required/optional fields, types, enums, and
@@ -25,6 +25,67 @@ ConditionOperator = Literal["exists", "equals", "contains", "truthy", "gte", "lt
 
 # Allowed side-effect tags (§4 / §8.2 import-derived).
 SideEffect = Literal["network", "filesystem", "db", "none"]
+
+# The five severity levels, weakest first. Mirrors `SEVERITY_ORDER` in
+# `app/reports.py` and `SEVERITY_LEVELS` in `app/db/repositories.py`; declared
+# here as a Literal so a typo in a `contract.yaml` is a parse error rather than
+# a severity nothing renders.
+SeverityLevel = Literal["info", "low", "medium", "high", "critical"]
+
+# Weakest-to-strongest, for the range-containment check in `verify_contracts`.
+SEVERITY_ORDER: tuple[str, ...] = ("info", "low", "medium", "high", "critical")
+
+# Which kind of severity a check has (§7). `fixed` is categorical — the answer
+# is in the response, and no model is ever called. `contextual` is a continuum
+# the evidence places; phase 58 grades it, and until then it falls through to
+# rule logic carrying its declared `default:`.
+SeverityModel = Literal["fixed", "contextual"]
+
+
+class SeverityBlock(BaseModel):
+    """A check's declared severity model.
+
+    Contract, not config: model, range, rubric and signals are the author's
+    statement of what compliance means for their payload, not an operator knob
+    — and a mutable rubric would make rubric provenance meaningless. So the
+    block lives in `contract.yaml`, with `extra="forbid"` like everything here.
+
+    Two shapes. The cross-field rules ("contextual needs a default", "a fixed
+    check has no rubric") are enforced by `verify_contracts` rather than here,
+    because an accumulated `Violation` names the folder at fault and reads
+    better than a pydantic error thrown mid-parse:
+
+        severity:                       severity:
+          model: fixed                    model: contextual
+          observations:                   default: medium
+            missing-hsts: medium          range: [info, critical]
+            weak-csp: high                rubric: |
+                                            ...
+                                          signals: [reproduction_rate]
+
+    `rubric` and `signals` are **inert until phase 58**. They are declared now
+    so an author can write them once, beside the payload they describe.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: SeverityModel
+
+    #: The provisional severity a candidate carries before a grader places one
+    #: (§6.1). Required for `contextual`; optional for `fixed`, whose
+    #: `observations` map already supplies one per discriminator.
+    default: SeverityLevel | None = None
+
+    #: `fixed` only: discriminator -> severity. This is what makes a fixed
+    #: check's provisional severity free (§6.1).
+    observations: dict[str, SeverityLevel] = Field(default_factory=dict)
+
+    #: `contextual` only: `[weakest, strongest]` a grader may place.
+    range: list[SeverityLevel] = Field(default_factory=list)
+
+    #: `contextual` only. Inert until phase 58.
+    rubric: str = ""
+    signals: list[str] = Field(default_factory=list)
 
 
 class Condition(BaseModel):
@@ -71,6 +132,14 @@ class CheckContract(BaseModel):
     intrusive: bool = False
     service_types: list[str] = Field(default_factory=list)
     parallel_safe: bool = False
+
+    # ─── severity model ────────────────────────
+    # Required for every built-in check since the §8 exit condition — enforced by
+    # `verify_contracts` (`severity-undeclared`), not here. It stays optional in
+    # the schema for one reason: `custom`-suite checks, which the Chainsmith agent
+    # scaffolds without a severity block (O-5, parked). A schema-level requirement
+    # would make one such folder fail discovery for every check in the tree.
+    severity: SeverityBlock | None = None
 
     # ─── I/O + metadata ─────────────────────────────────────────
     outputs: dict[str, Any] = Field(default_factory=lambda: {"observations": ["Observation"]})
@@ -154,7 +223,7 @@ class GateContract(BaseModel):
     """Identity + I/O contract for a `gate` component (§4.1, 56.12).
 
     Gates are DETERMINISTIC allow/block authorities — they answer "may this
-    proceed?" at the scan chokepoint ([[project_guardian_gating]]). Like an
+    proceed?" at the scan chokepoint. Like an
     advisor the contract is thin (no check execution wiring, no agent LLM
     interface), but a gate *decides* rather than *recommends*: its methods
     return a (allowed, reason) decision and it may record violations

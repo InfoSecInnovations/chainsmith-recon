@@ -1,5 +1,5 @@
 """
-app/dev/codemod.py - Import-path rewriting for moved component modules (Phase 56 §10 risk 3).
+app/dev/codemod.py - Import-path rewriting for moved component modules.
 
 When a flat check file moves into a component folder whose name differs from the
 old filename (98 of 133 checks — suite-prefixed `mcp_`/`agent_`/`rag_`/`cag_` and

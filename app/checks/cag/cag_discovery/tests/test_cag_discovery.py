@@ -1,5 +1,6 @@
-"""Co-located tests (Phase 56 §3) — split from test_cag.py."""
+"""Tests for cag_discovery."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -56,6 +57,32 @@ def make_response(
     )
 
 
+def _stamp(response: HttpResponse, url: str | None) -> HttpResponse:
+    """Report the response as coming from the URL it was requested from (§0.13)."""
+    return replace(response, url=url) if url else response
+
+
+def _stamped(fn):
+    """Wrap a client method so whatever it returns is stamped with its URL."""
+
+    async def _call(*args, **kwargs):
+        url = kwargs.get("url")
+        if url is None:
+            url = next((a for a in args if isinstance(a, str) and "://" in a), None)
+        response = await fn(*args, **kwargs)
+        return _stamp(response, url) if isinstance(response, HttpResponse) else response
+
+    return AsyncMock(side_effect=_call)
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
+
+
 class TestCAGDiscoveryCheck:
     """Tests for CAGDiscoveryCheck."""
 
@@ -88,13 +115,13 @@ class TestCAGDiscoveryCheck:
                 )
             return make_response(status_code=404)
 
-        mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
+        mock_client.get = _stamped(mock_get)
+        mock_client.post = _stamped(AsyncMock(return_value=make_response(status_code=404)))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.cag.cag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         # Verify gptcache infrastructure detected
@@ -130,13 +157,13 @@ class TestCAGDiscoveryCheck:
                 )
             return make_response(status_code=404)
 
-        mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
+        mock_client.get = _stamped(mock_get)
+        mock_client.post = _stamped(AsyncMock(return_value=make_response(status_code=404)))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.cag.cag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         infra = result.outputs.get("cache_infrastructure", [])
@@ -169,13 +196,13 @@ class TestCAGDiscoveryCheck:
                 )
             return make_response(status_code=404)
 
-        mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
+        mock_client.get = _stamped(mock_get)
+        mock_client.post = _stamped(AsyncMock(return_value=make_response(status_code=404)))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.cag.cag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         endpoints = result.outputs.get("cag_endpoints", [])
@@ -210,13 +237,13 @@ class TestCAGDiscoveryCheck:
                 body="",
             )
 
-        mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
+        mock_client.get = _stamped(mock_get)
+        mock_client.post = _stamped(AsyncMock(return_value=make_response(status_code=404)))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.cag.cag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         assert len(result.outputs.get("cag_endpoints", [])) == 0
@@ -233,13 +260,13 @@ class TestCAGDiscoveryCheck:
                 return make_response(status_code=401)
             return make_response(status_code=404)
 
-        mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
+        mock_client.get = _stamped(mock_get)
+        mock_client.post = _stamped(AsyncMock(return_value=make_response(status_code=404)))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.cag.cag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         # 401 on a signature path still counts as detected infrastructure
@@ -255,13 +282,13 @@ class TestCAGDiscoveryCheck:
     async def test_no_cag_found(self, check, sample_service):
         """When all probes return 404, no CAG endpoints should be reported."""
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=make_response(status_code=404))
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
+        mock_client.get = _stamped(AsyncMock(return_value=make_response(status_code=404)))
+        mock_client.post = _stamped(AsyncMock(return_value=make_response(status_code=404)))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.cag.cag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         assert len(result.outputs.get("cag_endpoints", [])) == 0
@@ -285,13 +312,13 @@ class TestCAGDiscoveryCheck:
                 body="<html><body>Welcome to our API</body></html>",
             )
 
-        mock_client.get = mock_get
-        mock_client.post = AsyncMock(return_value=make_response(status_code=404))
+        mock_client.get = _stamped(mock_get)
+        mock_client.post = _stamped(AsyncMock(return_value=make_response(status_code=404)))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.cag.cag_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         # _detect_cache_infrastructure will fire for 200 on signature paths

@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from app.db.engine import Database
     from app.db.writers import ObservationWriter
     from app.scan_session import ScanSession
-    from app.state import AppState
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ def _is_enabled() -> bool:
 
 
 async def on_scan_start(
-    state: AppState,
+    session: ScanSession,
     db: Database | None = None,
     scan_id: str | None = None,
 ) -> str | None:
@@ -47,7 +46,11 @@ async def on_scan_start(
     Returns the scan_id for use in subsequent persistence calls, or None
     if persistence is disabled or fails.
 
-    `state` supplies operator scope prep (session_id, target, settings).
+    The scan row is written from the *session*, not from the global AppState,
+    so it records the scope this scan actually ran with. Reading AppState here
+    made the row reflect whatever scope prep was current when the row was
+    written, which is wrong as soon as two scans overlap.
+
     If `scan_id` is provided, it is used verbatim — callers that pre-register
     a ScanSession at route time pass their id in so the DB row matches.
     """
@@ -71,9 +74,9 @@ async def on_scan_start(
         scan_repo = ScanRepository(db)
         await scan_repo.create_scan(
             scan_id=scan_id,
-            session_id=state.session_id,
-            target_domain=state.target or "",
-            settings=state.settings,
+            session_id=session.operator_session_id,
+            target_domain=session.target or "",
+            settings=session.settings,
             scenario_name=scenario_mgr,
         )
         return scan_id

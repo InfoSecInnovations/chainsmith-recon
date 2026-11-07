@@ -26,6 +26,11 @@ router = APIRouter()
 _observation_repo = ObservationRepository()
 _scan_repo = ScanRepository()
 
+_INCLUDE_SUPERSEDED = (
+    "Also return rows an offline re-grade superseded. Off by default: each has a "
+    "successor row, so counting both counts one subject twice."
+)
+
 
 async def _resolve_scan_id(scan_id: str | None) -> str | None:
     """Resolve scan_id: explicit param > current session > most recent DB scan."""
@@ -42,26 +47,32 @@ async def get_observations(
     scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
     severity: str | None = Query(None, description="Filter by severity"),
     host: str | None = Query(None, description="Filter by host"),
+    include_superseded: bool = Query(False, description=_INCLUDE_SUPERSEDED),
 ):
     """Get all observations for a scan."""
     sid = await _resolve_scan_id(scan_id)
     if not sid:
         return {"total": 0, "observations": []}
 
-    observations = await _observation_repo.get_observations(sid, severity=severity, host=host)
+    observations = await _observation_repo.get_observations(
+        sid, severity=severity, host=host, include_superseded=include_superseded
+    )
     return {"total": len(observations), "observations": observations}
 
 
 @router.get("/api/v1/observations/by-host")
 async def get_observations_by_host(
     scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
+    include_superseded: bool = Query(False, description=_INCLUDE_SUPERSEDED),
 ):
     """Get observations grouped by host."""
     sid = await _resolve_scan_id(scan_id)
     if not sid:
         return {"target": state.target or "unknown", "hosts": []}
 
-    hosts = await _observation_repo.get_observations_by_host(sid)
+    hosts = await _observation_repo.get_observations_by_host(
+        sid, include_superseded=include_superseded
+    )
     scan = await _scan_repo.get_scan(sid)
     target = scan["target_domain"] if scan else state.target or "unknown"
     return {"target": target, "hosts": hosts}
@@ -72,12 +83,16 @@ async def get_observation_detail(
     observation_id: str,
     scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
 ):
-    """Get detailed info about a specific observation."""
+    """Get detailed info about a specific observation.
+
+    A lookup by id finds a superseded row too: nothing is counted here, and a
+    chain or an old link may name one. Its `grading_state` says what it is.
+    """
     sid = await _resolve_scan_id(scan_id)
     if not sid:
         raise HTTPException(404, f"Observation '{observation_id}' not found")
 
-    observations = await _observation_repo.get_observations(sid)
+    observations = await _observation_repo.get_observations(sid, include_superseded=True)
     observation = next((f for f in observations if f.get("id") == observation_id), None)
     if not observation:
         raise HTTPException(404, f"Observation '{observation_id}' not found")
@@ -89,6 +104,7 @@ async def export_observations_csv(
     scan_id: str | None = Query(None, description="Scan ID (defaults to active scan)"),
     severity: str | None = Query(None, description="Filter by severity"),
     host: str | None = Query(None, description="Filter by host"),
+    include_superseded: bool = Query(False, description=_INCLUDE_SUPERSEDED),
 ):
     """Export observations as a downloadable CSV file."""
     from app.cli_formatters import observations_to_csv
@@ -101,7 +117,9 @@ async def export_observations_csv(
             headers={"Content-Disposition": "attachment; filename=observations.csv"},
         )
 
-    observations = await _observation_repo.get_observations(sid, severity=severity, host=host)
+    observations = await _observation_repo.get_observations(
+        sid, severity=severity, host=host, include_superseded=include_superseded
+    )
     csv_content = observations_to_csv(observations)
     return Response(
         content=csv_content,

@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp.py."""
+"""Tests for mcp_tool_enumeration."""
 
 import json
 from unittest.mock import AsyncMock, patch
@@ -8,6 +8,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_tool_enumeration import MCPToolEnumerationCheck
 from app.lib.http import HttpResponse
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -108,12 +116,12 @@ class TestMCPToolEnumerationCheck:
         )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
             "app.checks.mcp.mcp_tool_enumeration.check.AsyncHttpClient", return_value=mock_client
         ):
-            result = await check.check_service(sample_service, mcp_server_context)
+            result = await probe_and_grade(check, sample_service, mcp_server_context)
 
         assert result.success
         tools = result.outputs["mcp_tools"]
@@ -172,12 +180,12 @@ class TestMCPToolEnumerationCheck:
         )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
             "app.checks.mcp.mcp_tool_enumeration.check.AsyncHttpClient", return_value=mock_client
         ):
-            result = await check.check_service(sample_service, mcp_server_context)
+            result = await probe_and_grade(check, sample_service, mcp_server_context)
 
         assert result.success
 
@@ -255,12 +263,12 @@ class TestMCPToolEnumerationCheck:
         )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
             "app.checks.mcp.mcp_tool_enumeration.check.AsyncHttpClient", return_value=mock_client
         ):
-            result = await check.check_service(sample_service, mcp_server_context)
+            result = await probe_and_grade(check, sample_service, mcp_server_context)
 
         assert result.success
 
@@ -317,12 +325,12 @@ class TestMCPToolEnumerationCheck:
         )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
             "app.checks.mcp.mcp_tool_enumeration.check.AsyncHttpClient", return_value=mock_client
         ):
-            result = await check.check_service(sample_service, mcp_server_context)
+            result = await probe_and_grade(check, sample_service, mcp_server_context)
 
         assert result.success
 
@@ -365,12 +373,12 @@ class TestMCPToolEnumerationCheck:
         )
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
             "app.checks.mcp.mcp_tool_enumeration.check.AsyncHttpClient", return_value=mock_client
         ):
-            result = await check.check_service(sample_service, mcp_server_context)
+            result = await probe_and_grade(check, sample_service, mcp_server_context)
 
         assert result.success
 
@@ -393,7 +401,7 @@ class TestMCPToolEnumerationCheck:
     @pytest.mark.asyncio
     async def test_no_mcp_servers_skips(self, check, sample_service):
         """Test check skips when no MCP servers in context."""
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service, {})
 
         assert result.success
         assert len(result.observations) == 0

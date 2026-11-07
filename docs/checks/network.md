@@ -7,7 +7,7 @@ Service discovery and infrastructure reconnaissance.
 
 ## Phase 1 — DNS Discovery (no dependencies)
 
-### dns_enumeration
+### network_dns_enumeration
 
 **Enumerate subdomains via DNS resolution.**
 
@@ -24,7 +24,7 @@ Resolves common subdomains (www, api, chat, app, admin, portal, auth, login, doc
 
 ---
 
-### wildcard_dns
+### network_wildcard_dns
 
 **Detect wildcard DNS records that cause false subdomain discoveries.**
 
@@ -41,7 +41,7 @@ Generates 3 random non-existent subdomains and checks if they resolve. If all re
 
 ---
 
-### dns_records
+### network_dns_records
 
 **Extract MX, NS, TXT, CNAME, SOA, AAAA records for infrastructure context.**
 
@@ -60,7 +60,7 @@ Queries six record types. Detects verification tokens from 42 cloud/SaaS provide
 
 ---
 
-### whois_lookup
+### network_whois_lookup
 
 **WHOIS domain registration and ASN lookup for resolved IPs.**
 
@@ -80,9 +80,9 @@ Queries WHOIS servers for domain registration details and performs RDAP lookups 
 
 ---
 
-## Phase 2 — IP Analysis (depends on dns_enumeration)
+## Phase 2 — IP Analysis (depends on network_dns_enumeration)
 
-### geoip
+### network_geoip
 
 **GeoIP and ASN lookup for resolved IP addresses.**
 
@@ -101,7 +101,7 @@ Classifies IPs as hosting (major cloud, CDN, VPS), residential (consumer ISP), o
 
 ---
 
-### reverse_dns
+### network_reverse_dns
 
 **Reverse DNS (PTR) lookup for discovered IP addresses.**
 
@@ -121,7 +121,7 @@ Reveals internal hostnames, virtual hosting relationships, and cloud infrastruct
 
 ---
 
-### ipv6_discovery
+### network_ipv6_discovery
 
 **IPv6 AAAA record resolution and dual-stack analysis.**
 
@@ -140,7 +140,7 @@ Identifies hosts with IPv6 endpoints that may have different security postures t
 
 ---
 
-### port_scan
+### network_port_scan
 
 **Scan TCP ports to discover services.**
 
@@ -157,9 +157,9 @@ TCP connect scan (no root required). Port selection uses profile hierarchy: in_s
 
 ---
 
-## Phase 3 — Service Analysis (depends on services/port_scan)
+## Phase 3 — Service Analysis (depends on services/network_port_scan)
 
-### tls_analysis
+### network_tls_analysis
 
 **TLS certificate inspection and protocol version detection.**
 
@@ -181,14 +181,14 @@ Inspects certificates on HTTPS services and common TLS ports. Extracts SANs for 
 
 ---
 
-### service_probe
+### network_service_probe
 
 **Probe services to determine type and gather initial fingerprints.**
 
 | Property | Value |
 |----------|-------|
 | Conditions | `services is truthy` |
-| Produces | `services` (enriched) |
+| Produces | `services` (enriched), `services_probed` |
 
 Probes each service with HTTPS then HTTP. Classifies as "ai", "api", "html", "http", or "tcp". Detects AI services via headers (x-model, x-inference, x-llm), powered-by values (vllm, ollama, tgi, langchain), and API paths.
 
@@ -202,7 +202,7 @@ Probes each service with HTTPS then HTTP. Classifies as "ai", "api", "html", "ht
 
 ---
 
-### banner_grab
+### network_banner_grab
 
 **Banner grabbing and service identification on non-HTTP ports.**
 
@@ -223,9 +223,9 @@ Identifies non-HTTP services (Redis, PostgreSQL, MongoDB, MySQL, SMTP, FTP, SSH,
 
 ---
 
-## Phase 4 — Deep Probing (depends on service_probe)
+## Phase 4 — Deep Probing (depends on network_service_probe)
 
-### http_method_enum
+### network_http_method_enum
 
 **HTTP method enumeration and dangerous method detection.**
 
@@ -247,7 +247,7 @@ Sends OPTIONS request then individually probes TRACE, PUT, DELETE, PATCH, and We
 
 ---
 
-### traceroute
+### network_traceroute
 
 **TCP-based network path tracing and CDN/WAF detection.**
 

@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_security_detection.py."""
+"""Tests for web_cookie_security."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -68,6 +68,20 @@ def mock_client_multi(response_map=None, default=None):
     return mock
 
 
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
+
+
 class TestCookieSecurityCheck:
     def test_init(self):
         check = CookieSecurityCheck()
@@ -82,7 +96,7 @@ class TestCookieSecurityCheck:
             "app.checks.web.web_cookie_security.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         secure_observations = [f for f in result.observations if "no-secure" in (f.id or "")]
         assert len(secure_observations) == 1
         assert secure_observations[0].severity == "medium"  # session cookie -> medium
@@ -95,7 +109,7 @@ class TestCookieSecurityCheck:
             "app.checks.web.web_cookie_security.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         httponly_observations = [f for f in result.observations if "no-httponly" in (f.id or "")]
         assert len(httponly_observations) == 1
         assert httponly_observations[0].severity == "medium"
@@ -108,7 +122,7 @@ class TestCookieSecurityCheck:
             "app.checks.web.web_cookie_security.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         samesite_observations = [f for f in result.observations if "no-samesite" in (f.id or "")]
         assert len(samesite_observations) == 1
 
@@ -120,7 +134,7 @@ class TestCookieSecurityCheck:
             "app.checks.web.web_cookie_security.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         samesite_none = [f for f in result.observations if "samesite-none" in (f.id or "")]
         assert len(samesite_none) == 1
 
@@ -134,7 +148,7 @@ class TestCookieSecurityCheck:
             "app.checks.web.web_cookie_security.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         domain_observations = [f for f in result.observations if "broad-domain" in (f.id or "")]
         assert len(domain_observations) == 1
 
@@ -146,7 +160,7 @@ class TestCookieSecurityCheck:
             "app.checks.web.web_cookie_security.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         secure_observations = [f for f in result.observations if "no-secure" in (f.id or "")]
         assert len(secure_observations) == 1
         assert secure_observations[0].severity == "low"  # non-session -> low
@@ -159,7 +173,7 @@ class TestCookieSecurityCheck:
             "app.checks.web.web_cookie_security.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         # No secure/httponly/samesite observations
         issue_observations = [
             f
@@ -178,7 +192,7 @@ class TestCookieSecurityCheck:
             "app.checks.web.web_cookie_security.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers={})),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         assert len(result.observations) == 0
 
     @pytest.mark.asyncio
@@ -191,6 +205,6 @@ class TestCookieSecurityCheck:
             "app.checks.web.web_cookie_security.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         long_lived = [f for f in result.observations if "long-lived" in (f.id or "")]
         assert len(long_lived) == 1

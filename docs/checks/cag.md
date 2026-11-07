@@ -13,7 +13,7 @@ Cache-Augmented Generation discovery, infrastructure analysis, and cache exploit
 
 | Property | Value |
 |----------|-------|
-| Conditions | `services is truthy` |
+| Conditions | `services is truthy` and `services_probed is truthy` |
 | Produces | `cag_endpoints`, `cache_infrastructure` |
 
 Probes cache-specific paths (/cache, /context, /precompute, /cache/warm, /prompt-cache, /semantic-cache). Detects cache infrastructure via signatures: GPTCache, semantic cache, prompt cache (Anthropic/OpenAI), KV cache, Redis. Analyzes response headers for cache indicators and performs timing analysis.

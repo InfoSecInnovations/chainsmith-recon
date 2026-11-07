@@ -31,7 +31,8 @@ def apply_check_overrides(checks: list, overrides) -> list:
 
     `overrides` maps check name → a `CheckOverride` model (or a plain dict) with
     optional `timeout_seconds` / `requests_per_second` / `retry_count` /
-    `delay_between_targets` / `on_critical`. Only set (non-None) fields apply.
+    `delay_between_targets` / `on_critical` / `capture`. Only set (non-None)
+    fields apply.
 
     An override for a check that isn't in `checks` (deselected, disabled, or an
     unknown name) is silently skipped — there is no instance to scalpel. An
@@ -57,6 +58,10 @@ def apply_check_overrides(checks: list, overrides) -> list:
         on_critical = data.get("on_critical")
         if on_critical is not None and on_critical != "inherit":
             check.on_critical = on_critical
+            applied = True
+        capture = data.get("capture")
+        if capture is not None and capture != "inherit":
+            check.capture = capture
             applied = True
         if applied:
             touched += 1

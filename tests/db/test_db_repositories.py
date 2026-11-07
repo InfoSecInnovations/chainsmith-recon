@@ -452,7 +452,10 @@ class TestChainRepository:
         a global primary key. Persisting a second scan's "C-001" used to raise
         an IntegrityError that was swallowed, silently dropping every chain.
         """
-        ided = [dict(c, id="C-001") if i == 0 else dict(c, id="C-002") for i, c in enumerate(sample_chains)]
+        ided = [
+            dict(c, id="C-001") if i == 0 else dict(c, id="C-002")
+            for i, c in enumerate(sample_chains)
+        ]
 
         n_a = await chain_repo.bulk_create("scan-A", ided)
         n_b = await chain_repo.bulk_create("scan-B", ided)

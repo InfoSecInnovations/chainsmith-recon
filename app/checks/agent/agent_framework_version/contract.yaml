@@ -29,3 +29,19 @@ references:
 - CVE-2023-36188 - LangChain PythonREPLTool RCE
 reason: Outdated agent frameworks may contain known RCE, deserialization, or code
   execution vulnerabilities
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. Migrated to probe/grade in 57.4 wave 4. `default` is the
+  # pre-grade severity one candidate carries (§6.1) — the lowest this check
+  # emits, so a deferred or failed grade can never over-escalate `on_critical`.
+  #
+  # No `observations:` map, for the ai_model_info_check reason: the discriminator
+  # embeds the framework and version (`vuln-<fw>-<version>` / `version-<fw>`), so
+  # a map cannot enumerate it. `provisional_for()` falls through to `default:
+  # info` and `grade()` places the real severity — the vuln DB's `high`/`medium`
+  # for a version at or below a known-bad ceiling, else `info`. Confidence is
+  # weighted by where the version came from (header 0.9 / metadata 0.75 / error
+  # scrape 0.6) and capped at 0.8 for a vuln hit, since 'vulnerable' rests on a
+  # naive dotted-integer comparison.
+  default: info

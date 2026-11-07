@@ -29,3 +29,24 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Accessible cache eviction endpoints enable DoS via cache busting and preparation
   for cache poisoning attacks
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`.
+  default: medium
+  observations:
+    # A closed nine-value set, one per row of the two endpoint tables. Each
+    # declares its floor: an auth-required answer (401/403) is `medium` for
+    # every endpoint; `grade()` raises an accessible bulk endpoint to
+    # `critical` and an accessible key-specific one to `high`.
+    eviction-clear: medium
+    eviction-flush: medium
+    eviction-invalidate: medium
+    eviction-delete: medium
+    eviction-purge: medium
+    eviction-reset: medium
+    eviction-key-delete_key: medium
+    eviction-key-invalidate_key: medium
+    eviction-key-delete_entry: medium

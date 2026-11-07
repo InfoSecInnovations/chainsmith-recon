@@ -7,6 +7,22 @@ retrieval of specific documents regardless of query intent.
 Uses keyword-stuffing and semantic mismatch techniques rather than
 gradient-based attacks (no GPU required).
 
+**Probe/grade.** For each technique the probe sends the
+baseline query and the adversarial queries, recording every exchange; `grade()`
+re-reads them, rebuilds each technique's result, and emits one verdict per
+steered technique (plus a "not effective" verdict when none steered).
+`_reading()` is the one parser both halves call (§0.12): each query is attributed
+to its technique by its recorded request body, never a remembered list.
+
+**Contextual**: whether steered retrieval is a real attack
+depends on what the newly-retrieved documents are — the attack-compliance
+question — so the rule logic runs at `GradingTier.RULE` and defers to the planned LLM grading tier.
+Confidence states the gap: "retrieval steered" here means the adversarial query
+returned document ids the baseline did not, which is the *expected* behaviour of
+any retriever answering a different question — it is only an attack if those
+documents are ones the query had no legitimate claim to, which this doc-id diff
+cannot tell.
+
 References:
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 """
@@ -14,9 +30,12 @@ References:
 import json
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 # Adversarial query techniques (keyword-based, no GPU)
 ADVERSARIAL_TECHNIQUES = [
@@ -76,8 +95,11 @@ class RAGAdversarialEmbeddingCheck(ServiceIteratingCheck):
     ]
     techniques = ["adversarial embedding", "retrieval steering", "embedding collision"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         rag_endpoints = context.get("rag_endpoints", [])
         service_endpoints = [
@@ -89,131 +111,176 @@ class RAGAdversarialEmbeddingCheck(ServiceIteratingCheck):
         if not service_endpoints:
             return result
 
-        # Leverage embedding model info if available
-        context.get("embedding_model", {})
-
         cfg = HttpConfig(timeout_seconds=12.0, verify_ssl=False)
-        adversarial_results: list[dict] = []
+        ep = service_endpoints[0]
+        url = ep.get("url", service.url)
+        candidate = self.create_candidate(host=service.host, target=service, target_url=url)
+
+        def record(resp, body: dict) -> None:
+            candidate.attach(
+                exchange_from_response(
+                    resp,
+                    check_name=self.name,
+                    scan_id=scan_id,
+                    host=service.host,
+                    method="POST",
+                    request_headers=JSON_HEADERS,
+                    request_json=body,
+                )
+            )
 
         try:
             async with AsyncHttpClient(cfg) as client:
-                ep = service_endpoints[0]
-                url = ep.get("url", service.url)
-
                 for technique in ADVERSARIAL_TECHNIQUES:
-                    tech_result = await self._test_technique(client, url, ep, technique)
-                    adversarial_results.append(tech_result)
-
-                    if tech_result.get("retrieval_steered"):
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title=f"Adversarial embedding: {technique['description']}",
-                                description=(
-                                    f"Adversarial query retrieved documents from "
-                                    f"unexpected categories compared to baseline. "
-                                    f"Technique: {technique['id']}."
-                                ),
-                                severity="high" if tech_result.get("strong_mismatch") else "medium",
-                                evidence=self._build_evidence(tech_result),
-                                host=service.host,
-                                discriminator=f"adv-{technique['id']}",
-                                target=service,
-                                raw_data=tech_result,
-                                references=self.references,
-                            )
+                    baseline_body = self._query_body(technique["baseline"])
+                    baseline_resp = await client.post(url, json=baseline_body, headers=JSON_HEADERS)
+                    record(baseline_resp, baseline_body)
+                    if baseline_resp.error or baseline_resp.status_code >= 400:
+                        continue
+                    for query in technique["queries"]:
+                        adv_body = self._query_body(query)
+                        record(
+                            await client.post(url, json=adv_body, headers=JSON_HEADERS), adv_body
                         )
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        if not any(r.get("retrieval_steered") for r in adversarial_results):
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title="Adversarial queries did not force unexpected retrieval",
-                    description="Adversarial embedding techniques were not effective.",
-                    severity="info",
-                    evidence=f"Tested {len(ADVERSARIAL_TECHNIQUES)} techniques",
-                    host=service.host,
-                    discriminator="adv-not-effective",
-                    target=service,
-                )
-            )
-
+        result.candidates.append(candidate)
+        adversarial_results = self._reading(candidate.exchanges)
         if adversarial_results:
             result.outputs["adversarial_embedding_results"] = adversarial_results
 
         return result
 
-    async def _test_technique(
-        self,
-        client: AsyncHttpClient,
-        url: str,
-        endpoint: dict,
-        technique: dict,
-    ) -> dict:
-        """Test an adversarial technique against baseline."""
-        tech_result = {
-            "technique": technique["id"],
-            "retrieval_steered": False,
-            "strong_mismatch": False,
-            "baseline_topics": [],
-            "adversarial_topics": [],
-        }
+    @staticmethod
+    def _query_body(query: str) -> dict:
+        return {"query": query, "question": query, "input": query, "k": 5}
 
-        # Get baseline results
-        baseline_body = {
-            "query": technique["baseline"],
-            "question": technique["baseline"],
-            "input": technique["baseline"],
-            "k": 5,
-        }
-        baseline_resp = await client.post(
-            url,
-            json=baseline_body,
-            headers={"Content-Type": "application/json"},
-        )
-        if baseline_resp.error or baseline_resp.status_code >= 400:
-            return tech_result
+    # ══ Grade (rule tier) ════════════════════════════════════════════
 
-        baseline_docs = self._extract_doc_info(baseline_resp.body)
-        tech_result["baseline_topics"] = baseline_docs
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        adversarial_results = self._reading(list(evidence))
+        ids = evidence.ids()
+        verdicts: list[Verdict] = []
 
-        # Get adversarial results
-        all_adv_docs: list[str] = []
-        for query in technique["queries"]:
-            adv_body = {
-                "query": query,
-                "question": query,
-                "input": query,
-                "k": 5,
-            }
-            adv_resp = await client.post(
-                url,
-                json=adv_body,
-                headers={"Content-Type": "application/json"},
-            )
-            if adv_resp.error or adv_resp.status_code >= 400:
+        by_id = {t["id"]: t for t in ADVERSARIAL_TECHNIQUES}
+        for tech_result in adversarial_results:
+            if not tech_result.get("retrieval_steered"):
                 continue
-            adv_docs = self._extract_doc_info(adv_resp.body)
-            all_adv_docs.extend(adv_docs)
+            technique = by_id.get(tech_result["technique"], {})
+            verdicts.append(
+                Verdict(
+                    severity="high" if tech_result.get("strong_mismatch") else "medium",
+                    confidence=0.35,
+                    discriminator=f"adv-{tech_result['technique']}",
+                    title=f"Adversarial embedding: {technique.get('description', tech_result['technique'])}",
+                    description=(
+                        f"Adversarial query retrieved documents from "
+                        f"unexpected categories compared to baseline. "
+                        f"Technique: {tech_result['technique']}."
+                    ),
+                    evidence=self._build_evidence(tech_result),
+                    reasoning=(
+                        "the adversarial query returned document ids the baseline query did not — "
+                        "but that is what any retriever does when asked a different question, so a "
+                        "doc-id diff shows the query changed the results, not that it forced "
+                        "retrieval of documents it had no claim to; the real attack would be judged by "
+                        "model-based grading (not yet available) from what those documents contain"
+                    ),
+                    signals={
+                        "technique": tech_result["technique"],
+                        "strong_mismatch": tech_result.get("strong_mismatch"),
+                        "baseline_topics": tech_result.get("baseline_topics"),
+                        "adversarial_topics": tech_result.get("adversarial_topics"),
+                    },
+                    references=self.references,
+                    raw_data=tech_result,
+                    tier=ctx.tier,
+                    evidence_ids=ids,
+                )
+            )
 
-        tech_result["adversarial_topics"] = all_adv_docs
+        if not any(r.get("retrieval_steered") for r in adversarial_results):
+            verdicts.append(
+                Verdict(
+                    severity="info",
+                    confidence=0.4,
+                    discriminator="adv-not-effective",
+                    title="Adversarial queries did not force unexpected retrieval",
+                    description="Adversarial embedding techniques were not effective.",
+                    evidence=f"Tested {len(ADVERSARIAL_TECHNIQUES)} techniques",
+                    reasoning=(
+                        "no technique returned document ids beyond the baseline set; the negative is "
+                        "weak because the signal is a doc-id diff — a store returning the same small "
+                        "corpus for every query, or one whose ids are unstable, would read the same"
+                    ),
+                    tier=ctx.tier,
+                    evidence_ids=ids,
+                )
+            )
 
-        # Compare: if adversarial retrieved different docs than baseline
-        if baseline_docs and all_adv_docs:
-            baseline_set = set(baseline_docs)
-            adv_set = set(all_adv_docs)
-            new_docs = adv_set - baseline_set
+        return verdicts
 
-            if new_docs:
-                tech_result["retrieval_steered"] = True
-                # Strong mismatch if majority of adv results are new
-                if len(new_docs) > len(adv_set) * 0.5:
-                    tech_result["strong_mismatch"] = True
+    # ── The parser both halves share ─────────────────────────────────
 
-        return tech_result
+    def _reading(self, exchanges: list[Exchange]) -> list[dict]:
+        """Rebuild each technique's result off the recorded exchanges."""
+        results: list[dict] = []
+        for technique in ADVERSARIAL_TECHNIQUES:
+            tech_result = {
+                "technique": technique["id"],
+                "retrieval_steered": False,
+                "strong_mismatch": False,
+                "baseline_topics": [],
+                "adversarial_topics": [],
+            }
+
+            baseline_ex = self._find_body(exchanges, self._query_body(technique["baseline"]))
+            if (
+                baseline_ex is None
+                or baseline_ex.error
+                or (baseline_ex.response_status or 0) >= 400
+            ):
+                results.append(tech_result)
+                continue
+
+            baseline_docs = self._extract_doc_info(baseline_ex.response_body)
+            tech_result["baseline_topics"] = baseline_docs
+
+            all_adv_docs: list[str] = []
+            for query in technique["queries"]:
+                ex = self._find_body(exchanges, self._query_body(query))
+                if ex is None or ex.error or (ex.response_status or 0) >= 400:
+                    continue
+                all_adv_docs.extend(self._extract_doc_info(ex.response_body))
+            tech_result["adversarial_topics"] = all_adv_docs
+
+            if baseline_docs and all_adv_docs:
+                new_docs = set(all_adv_docs) - set(baseline_docs)
+                if new_docs:
+                    tech_result["retrieval_steered"] = True
+                    if len(new_docs) > len(set(all_adv_docs)) * 0.5:
+                        tech_result["strong_mismatch"] = True
+
+            results.append(tech_result)
+
+        return results
+
+    @staticmethod
+    def _find_body(exchanges: list[Exchange], body: dict) -> Exchange | None:
+        """The recorded POST whose request body equals `body` (the query key
+        would suffice, but a full-body match keeps this identical to the probe)."""
+        for exchange in exchanges:
+            if exchange.request_method != "POST":
+                continue
+            try:
+                got = json.loads(exchange.request_body or "null")
+            except (ValueError, TypeError):
+                continue
+            if got == body:
+                return exchange
+        return None
 
     def _extract_doc_info(self, body: str | None) -> list[str]:
         """Extract document identifiers/topics from response."""

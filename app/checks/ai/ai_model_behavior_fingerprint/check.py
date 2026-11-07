@@ -1,17 +1,32 @@
 """
-app/checks/ai/model_fingerprint.py - Model Behavior Fingerprinting
+app/checks/ai/ai_model_behavior_fingerprint/check.py - Model Behavior Fingerprinting
 
 Identify the actual underlying model by analyzing response patterns and
 known behavioral signatures.
+
+**Probe/grade.** The probe asks five behavioural questions
+and records the answers; `grade()` re-reads them, rebuilds the `{test_id: text}`
+map the analysis works over, and returns up to three verdicts — self-identified
+family, a possible identity mismatch, and any reported knowledge cutoff.
+`_responses_from()` is the one parser both halves call (§0.12); which test a
+recorded answer belongs to is read back off its own prompt, not the send order.
 """
 
+import re
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
-from app.lib.ai_helpers import extract_response_text, format_chat_request
+from app.grading import Candidate, Evidence, GradeContext, Verdict, exchange_from_response
+from app.lib.ai_helpers import (
+    dialect_from_request,
+    format_chat_request,
+    prompt_from_request,
+    response_text_from,
+)
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
-from app.lib.parsing import safe_json
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 
 class ModelBehaviorFingerprintCheck(BaseCheck):
@@ -76,8 +91,11 @@ class ModelBehaviorFingerprintCheck(BaseCheck):
         "command": ["command", "cohere"],
     }
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def run(self, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         for endpoint_info in context.get("chat_endpoints", []):
             url = endpoint_info.get("url")
@@ -88,112 +106,150 @@ class ModelBehaviorFingerprintCheck(BaseCheck):
             api_format = endpoint_info.get("api_format", "unknown")
 
             try:
-                fr = await self._fingerprint_model(url, service, api_format, context)
-                result.observations.extend(fr.observations)
-                result.outputs.update(fr.outputs)
+                candidate = self.create_candidate(host=service.host, target=service, target_url=url)
+                await self._probe_fingerprint(url, api_format, candidate, scan_id)
+                result.candidates.append(candidate)
+
+                responses = self._responses_from(candidate.exchanges)
+                if responses:
+                    result.outputs[f"model_identity_{service.port}"] = self._determine_identity(
+                        responses
+                    )
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
 
         return result
 
-    async def _fingerprint_model(
-        self,
-        url: str,
-        service: Service,
-        api_format: str,
-        context: dict,
-    ) -> CheckResult:
-        result = CheckResult(success=True)
-        host = service.host
-        responses_data = {}
-
+    async def _probe_fingerprint(
+        self, url: str, api_format: str, candidate: Candidate, scan_id: str
+    ) -> None:
+        """Ask each fingerprint question, recording every answer."""
         cfg = HttpConfig(timeout_seconds=20.0, verify_ssl=False)
-        try:
-            async with AsyncHttpClient(cfg) as client:
-                for test_id, prompt, _ in self.FINGERPRINT_TESTS:
-                    await self._rate_limit()
+        async with AsyncHttpClient(cfg) as client:
+            for _test_id, prompt, _ in self.FINGERPRINT_TESTS:
+                await self._rate_limit()
 
-                    body = format_chat_request(prompt, api_format)
-                    resp = await client.post(
-                        url,
-                        json=body,
-                        headers={"Content-Type": "application/json"},
+                body = format_chat_request(prompt, api_format)
+                resp = await client.post(url, json=body, headers=JSON_HEADERS)
+
+                candidate.attach(
+                    exchange_from_response(
+                        resp,
+                        check_name=self.name,
+                        scan_id=scan_id,
+                        host=candidate.host,
+                        method="POST",
+                        request_headers=JSON_HEADERS,
+                        request_json=body,
                     )
+                )
 
-                    if resp.error or resp.status_code != 200:
-                        continue
+    # ══ Grade ════════════════════════════════════════════════════════
 
-                    parsed = safe_json(resp.body) or {}
-                    text = extract_response_text(parsed, api_format)
-                    responses_data[test_id] = text
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Up to three verdicts from the recorded behavioural answers."""
+        responses = self._responses_from(list(evidence))
+        if not responses:
+            return []
 
-        except Exception as e:
-            result.errors.append(f"{url}: {e}")
-            return result
-
-        if not responses_data:
-            return result
-
-        # Analyze collected responses
-        identity = self._determine_identity(responses_data)
-
-        # Check for misrepresentation
-        framework_key = f"ai_framework_{service.port}"
-        framework = context.get(framework_key, {})
-        if isinstance(framework, dict):
-            str(framework.get("framework", "")).lower()
+        identity = self._determine_identity(responses)
+        ids = evidence.ids()
+        verdicts: list[Verdict] = []
 
         if identity.get("model_family"):
-            # Self-identification observation
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            verdicts.append(
+                Verdict(
+                    severity="info",
+                    # A model asked what it is will say, and a wrapper can make
+                    # it say anything — self-report is suggestive, not proof.
+                    # This is why the check exists: to compare the claim against
+                    # behaviour, which is the mismatch verdict below.
+                    confidence=0.5,
+                    discriminator="model-identity",
                     title=f"Model self-identifies as: {identity['model_family']}",
                     description=f"Behavioral fingerprinting suggests {identity['model_family']}",
-                    severity="info",
-                    evidence=self._format_evidence(identity, responses_data),
-                    host=host,
-                    discriminator="model-identity",
-                    target=service,
-                    target_url=url,
+                    evidence=self._format_evidence(identity, responses),
+                    reasoning=(
+                        "the model named its own family; a self-report is easily overridden by a "
+                        "system prompt, so it is suggestive rather than conclusive"
+                    ),
+                    signals={"model_family": identity["model_family"]},
                     raw_data=identity,
+                    evidence_ids=ids,
                 )
             )
 
-            # Check misrepresentation
             if identity.get("possible_mismatch"):
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
+                verdicts.append(
+                    Verdict(
+                        severity="low",
+                        # A behavioural contradiction is a stronger signal than
+                        # the self-report it contradicts — but the strawberry
+                        # and last-letter tests are noisy, and a wrapper adding
+                        # its own creator line also trips the creator check.
+                        confidence=0.55,
+                        discriminator="model-mismatch",
                         title=f"Model misrepresents identity: {identity['mismatch_detail']}",
                         description="Behavioral patterns inconsistent with claimed model identity",
-                        severity="low",
                         evidence=identity["mismatch_detail"],
-                        host=host,
-                        discriminator="model-mismatch",
-                        target=service,
-                        target_url=url,
+                        reasoning=(
+                            "a behavioural answer contradicts the claimed family; the tokenisation "
+                            "and creator tests are individually noisy, so this flags rather than "
+                            "concludes misrepresentation"
+                        ),
+                        signals={"mismatch_detail": identity["mismatch_detail"]},
                         raw_data=identity,
+                        evidence_ids=ids,
                     )
                 )
 
         if identity.get("knowledge_cutoff"):
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            verdicts.append(
+                Verdict(
+                    severity="info",
+                    # The date was parsed from the response with a strict regex,
+                    # but it is the model's self-report of its cutoff, which is
+                    # frequently wrong or hallucinated.
+                    confidence=0.6,
+                    discriminator="model-cutoff",
                     title=f"Knowledge cutoff: {identity['knowledge_cutoff']}",
                     description="Model reports a training data cutoff date",
-                    severity="info",
                     evidence=f"Cutoff: {identity['knowledge_cutoff']}",
-                    host=host,
-                    discriminator="model-cutoff",
-                    target=service,
-                    target_url=url,
+                    reasoning=(
+                        "a date was parsed from the model's own answer; models routinely misstate "
+                        "or hallucinate their cutoff, so the value is a claim, not a measurement"
+                    ),
+                    signals={"knowledge_cutoff": identity["knowledge_cutoff"]},
+                    evidence_ids=ids,
                 )
             )
 
-        result.outputs[f"model_identity_{service.port}"] = identity
-        return result
+        return verdicts
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _responses_from(self, exchanges: list[Exchange]) -> dict[str, str]:
+        """Rebuild `{test_id: answer text}` from recorded exchanges.
+
+        Each answer is matched to its test by the prompt the recorded request
+        carried, so the map is correct regardless of order or which tests were
+        skipped for a non-200.
+        """
+        # Built from the instance, not the class, so a test (or an operator)
+        # that overrides FINGERPRINT_TESTS is still matched correctly.
+        test_by_prompt = {prompt: test_id for test_id, prompt, _ in self.FINGERPRINT_TESTS}
+
+        responses: dict[str, str] = {}
+        for exchange in exchanges:
+            if exchange.error or exchange.response_status != 200:
+                continue
+            prompt = prompt_from_request(exchange.request_body or "")
+            test_id = test_by_prompt.get(prompt)
+            if test_id is None:
+                continue
+            api_format = dialect_from_request(exchange.request_body or "")
+            responses[test_id] = response_text_from(exchange, api_format)
+        return responses
 
     def _determine_identity(self, responses: dict[str, str]) -> dict:
         """Analyze all test responses to determine model identity."""
@@ -216,8 +272,6 @@ class ModelBehaviorFingerprintCheck(BaseCheck):
 
         # Knowledge cutoff
         cutoff = responses.get("knowledge_cutoff", "")
-        import re
-
         date_match = re.search(
             r"((?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}|\d{4}-\d{2})",
             cutoff,

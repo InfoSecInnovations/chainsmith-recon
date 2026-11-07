@@ -30,3 +30,17 @@ references:
 - PortSwigger CORS
 reason: CORS misconfigurations can allow malicious sites to steal data via a user's
   browser
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in
+  # the preflight response, so no grader above the
+  # rule tier is ever called. `default` is the pre-grade severity one candidate
+  # carries (§6.1) — the lowest this check emits, so a deferred or failed grade
+  # can never over-escalate `on_critical`. These are pre-grade values; `grade()`
+  # places the real one and may place it higher (wildcard-origin and
+  # reflected-origin both reach `high` when credentials are allowed).
+  default: medium
+  observations:
+    wildcard-origin: medium
+    reflected-origin: medium
+    null-origin: medium

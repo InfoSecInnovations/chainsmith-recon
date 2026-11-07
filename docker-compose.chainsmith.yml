@@ -46,11 +46,15 @@ services:
       - LITELLM_MODEL=${LITELLM_MODEL:-gpt-4o-mini}
       - LITELLM_MODEL_FALLBACK=${LITELLM_MODEL_FALLBACK:-gpt-4o-mini}
 
-      - RECON_DB_PATH=/data/chainsmith.db
+      # Workspace (phase 57): database, evidence, logs and reports all root here.
+      # Mounted from the host so they survive the container being recreated.
+      - CHAINSMITH_WORKSPACE=/workspace
     volumes:
       - ./app:/app/app:ro
       - ./static:/app/static:ro
       - ./scenarios:/app/scenarios:ro
+      - ./workspace:/workspace
+      # Pre-workspace database location; kept so startup can point at an old DB.
       - ./data:/data
     ports:
       # ── LOCALHOST ONLY ──────────────────────────────────────

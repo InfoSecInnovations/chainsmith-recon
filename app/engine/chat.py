@@ -4,7 +4,7 @@ app/engine/chat.py - Chat SSE Manager & Agent Event Bridge
 Manages per-user SSE connections, agent message queues, and the bridge
 that routes AgentEvent emissions into the chat stream.
 
-Phase 35a: Text chat with SSE (MVP).
+Text chat with SSE.
 """
 
 from __future__ import annotations
@@ -209,7 +209,7 @@ def create_chat_event_bridge(
             },
         )
 
-        # Phase 36: proactive messages for key events
+        # Proactive messages for key events
         if event.event_type == EventType.HALLUCINATION_CAUGHT:
             await maybe_emit_proactive(
                 sse_manager=sse_manager,
@@ -266,7 +266,7 @@ class ChatDispatcher:
         self.repo = chat_repo
         self._router = None  # lazy — set via set_router()
         self._coach = None  # lazy — created on first Coach request
-        self._guided_welcome_sent = False  # Phase 36: one welcome per session
+        self._guided_welcome_sent = False  # one welcome per session
 
     def set_router(self, router) -> None:
         """Inject the PromptRouter (avoids circular import)."""

@@ -43,7 +43,7 @@ _CONTEXT_ROUTES: dict[str, ComponentType] = {
 # Patterns are checked in order; first match wins.
 
 _KEYWORD_RULES: list[tuple[re.Pattern[str], ComponentType]] = [
-    # ScanPlannerAdvisor — pre-scan scoping guidance (Phase 41, migrated from Coach)
+    # ScanPlannerAdvisor — pre-scan scoping guidance (migrated from Coach)
     (
         re.compile(r"\b(scope|target|exclude|exclusion|timeframe)\b", re.I),
         ComponentType.SCAN_PLANNER_ADVISOR,
@@ -129,7 +129,7 @@ Classify this message. Respond with ONLY: {{"agent": "<name>", "confidence": <fl
 class PromptRouter:
     """Classifies operator intent and routes to the correct agent.
 
-    Not an agent — invisible infrastructure for the chat system (Phase 35).
+    Not an agent — invisible infrastructure for the chat system.
     """
 
     def __init__(self, client: LLMClient):

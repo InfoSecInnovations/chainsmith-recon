@@ -46,8 +46,14 @@ from app.cli_server import ServerManager
 @click.version_option(version="1.3.0", prog_name="chainsmith")
 @click.option("--server", default="127.0.0.1:8000", help="API server address (host:port)")
 @click.option("--profile", help="Activate a scan behavior profile (e.g., aggressive, stealth)")
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Workspace directory owning this body of work's database, evidence, and reports "
+    "(default: ~/chainsmith/default, or $CHAINSMITH_WORKSPACE)",
+)
 @click.pass_context
-def cli(ctx, server: str, profile: str):
+def cli(ctx, server: str, profile: str, workspace: Path | None):
     """Chainsmith Recon - AI Reconnaissance Framework
 
     A reconnaissance tool for AI/ML systems, designed for penetration testers
@@ -56,6 +62,50 @@ def cli(ctx, server: str, profile: str):
     ctx.ensure_object(dict)
     ctx.obj["server"] = server
     ctx.obj["profile"] = profile
+    ctx.obj["workspace"] = _activate_workspace(workspace)
+
+
+def _activate_workspace(explicit: Path | None):
+    """
+    Select the workspace for this invocation and report it.
+
+    Announced on stderr rather than logged quietly: scanning into the wrong
+    workspace is a stated risk, and the operator should be able to see which
+    setting chose the directory without going looking for it.
+
+    Only when stderr is a terminal, though. `list-checks --json`, `export`, and
+    friends are machine-consumed, and a banner on every invocation would land
+    in whatever is parsing them. The risk this guards against — losing track of
+    which workspace you are in — is inherently interactive; a pipeline set the
+    workspace explicitly by flag or env and is being told nothing new. The
+    server path logs the same three lines unconditionally via `app.main`.
+    """
+    from app import workspace as ws
+
+    resolved, source = ws.resolve(explicit=explicit)
+    ws.set_workspace(resolved)
+
+    # Parse workspace.yaml now, so a malformed file is one clear line at launch
+    # rather than a traceback from whichever command first needed the config.
+    try:
+        ws.load_workspace_config(resolved)
+    except ws.WorkspaceConfigError as exc:
+        click.echo(click.style(f"workspace: {resolved.root}", fg="cyan"), err=True)
+        click.echo(click.style(f"error: {exc}", fg="red"), err=True)
+        raise SystemExit(1) from None
+
+    if not sys.stderr.isatty():
+        return resolved
+
+    click.echo(click.style(f"workspace: {resolved.root}  ({source})", fg="cyan"), err=True)
+
+    for conflict in ws.legacy_conflicts(resolved):
+        click.echo(click.style(f"  warning: {conflict}", fg="yellow"), err=True)
+
+    if notice := ws.legacy_db_notice(resolved):
+        click.echo(click.style(f"  {notice}", fg="yellow"), err=True)
+
+    return resolved
 
 
 def _get_client(ctx) -> ChainsmithClient:
@@ -129,6 +179,28 @@ def _handle_api_error(e: ChainsmithAPIError):
     help="Named scan preset (quick, thorough, passive, ai-focused). "
     "Explicit --suite/--checks/--port-profile override it.",
 )
+@click.option(
+    "--capture",
+    is_flag=True,
+    help="Record evidence (raw request/response pairs) into the workspace. "
+    "Off by default: capture is opt-in per scan.",
+)
+@click.option(
+    "--capture-protocol",
+    multiple=True,
+    type=click.Choice(["http", "dns", "tcp", "tls", "whois", "icmp", "llm", "local"]),
+    help="Protocols to record (repeatable). Default: http and llm.",
+)
+@click.option(
+    "--capture-full",
+    is_flag=True,
+    help="Record every exchange, overriding each check's own capture policy.",
+)
+@click.option(
+    "--capture-failures",
+    is_flag=True,
+    help="Also record probes that never completed, with the transport error.",
+)
 @click.pass_context
 def scan(
     ctx,
@@ -149,6 +221,10 @@ def scan(
     provider: str,
     port_profile: str,
     preset: str,
+    capture: bool,
+    capture_protocol: tuple,
+    capture_full: bool,
+    capture_failures: bool,
 ):
     """Run reconnaissance scan against a target.
 
@@ -254,6 +330,9 @@ def scan(
             click.echo(f"Target: {target}")
             if preset:
                 click.echo(f"Preset: {preset}")
+            if capture or capture_full:
+                protocols = ", ".join(capture_protocol) if capture_protocol else "http, llm"
+                click.echo(style(f"Capture: ON ({protocols})", fg="yellow"))
             if exclude:
                 click.echo(f"Excluding: {', '.join(exclude)}")
             if dry_run:
@@ -279,11 +358,25 @@ def scan(
             return
 
         # 5. Start scan with optional check/suite filters
+        # The capture block is sent only when asked for. Sending
+        # `enabled: false` would be equivalent, but omitting it keeps "capture
+        # was never mentioned" and "capture was turned off" distinguishable in
+        # the request log.
+        capture_block = None
+        if capture or capture_protocol or capture_full or capture_failures:
+            capture_block = {
+                "enabled": capture or capture_full,
+                "protocols": list(capture_protocol),
+                "full_capture": capture_full,
+                "capture_failures": capture_failures,
+            }
+
         client.start_scan(
             checks=scan_checks,
             suites=scan_suites,
             port_profile=port_profile if port_profile else None,
             preset=preset if preset else None,
+            capture=capture_block,
         )
 
         # 6. Poll until complete
@@ -1607,8 +1700,10 @@ def observations_overrides(ctx, status: str, as_json: bool):
 
 
 def _get_reports_dir() -> Path:
-    """Return the reports directory, creating it if needed."""
-    reports_dir = Path.home() / ".chainsmith" / "reports"
+    """Return the workspace's reports directory, creating it if needed."""
+    from app.workspace import get_workspace
+
+    reports_dir = get_workspace().reports_dir
     reports_dir.mkdir(parents=True, exist_ok=True)
     return reports_dir
 
@@ -1617,7 +1712,7 @@ def _write_report(result: dict, fmt: str, output: str | None):
     """Write report output to file or terminal. Handles binary PDF content.
 
     When no explicit ``-o`` path is given, the report is automatically saved
-    to ``~/.chainsmith/reports/`` with the timestamped filename produced by
+    to the workspace's ``reports/`` with the timestamped filename produced by
     the report generator.  Text formats are also printed to stdout.
     """
     content = result.get("content", "")
@@ -1920,7 +2015,7 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
     """Import observations from scratch space into the database.
 
     When the database becomes unreachable during a scan, observations are
-    written to ~/.chainsmith/scratch/<scan_id>/ as JSON files. This command
+    written to the workspace's scratch/<scan_id>/ as JSON files. This command
     imports those observations into the database and cleans up the scratch
     directory.
 
@@ -1930,7 +2025,9 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
     import json
     import shutil
 
-    from app.db.writers import SCRATCH_DIR
+    from app.db.writers import scratch_dir
+
+    SCRATCH_DIR = scratch_dir()
 
     if not scan_id and not import_all:
         click.echo(click.style("Error: provide a SCAN_ID or use --all", fg="red"), err=True)
@@ -1993,8 +2090,9 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
             if not observations:
                 continue
 
-            # Get existing fingerprints for this scan to skip duplicates
-            existing = await repo.get_observations(sid)
+            # Get existing fingerprints for this scan to skip duplicates. Superseded
+            # rows count: unseen, their scratch copies would be imported again.
+            existing = await repo.get_observations(sid, include_superseded=True)
             existing_fps = {obs.get("fingerprint") for obs in existing if obs.get("fingerprint")}
 
             # Compute fingerprints for scratch observations and filter duplicates
@@ -2066,7 +2164,9 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
 @cli.command("scratch-list")
 def scratch_list():
     """List scratch directories awaiting import."""
-    from app.db.writers import SCRATCH_DIR
+    from app.db.writers import scratch_dir
+
+    SCRATCH_DIR = scratch_dir()
 
     if not SCRATCH_DIR.exists():
         click.echo("No scratch directory found.")
@@ -2280,7 +2380,7 @@ def swarm_status(ctx):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Dev Commands (Phase 56 §8, C11)
+# Dev Commands
 # ═══════════════════════════════════════════════════════════════════════════════
 #
 # Local source-tree authoring tools — a different category from the operator
@@ -2326,6 +2426,90 @@ def dev_verify_contracts(root: str, component_type: str):
         click.echo(click.style(f"  {v}", fg="red"), err=True)
     click.echo(click.style(f"{len(violations)} violation(s)", fg="red"), err=True)
     sys.exit(1)
+
+
+@dev_group.command("regrade")
+@click.argument("scan_id")
+@click.option("--check", "checks", multiple=True, help="Re-grade only this check (repeatable)")
+@click.option(
+    "--apply",
+    "apply_changes",
+    is_flag=True,
+    help="Write the re-graded verdicts back (default: show the diff only)",
+)
+@click.option(
+    "--show-unchanged", is_flag=True, help="Also list observations the re-grade reproduced exactly"
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON")
+def dev_regrade(
+    scan_id: str, checks: tuple[str, ...], apply_changes: bool, show_unchanged: bool, as_json: bool
+):
+    """Re-grade a stored scan offline, from its workspace alone.
+
+    Replays each check's current grade() against the evidence and grading
+    records a --capture scan left in the workspace. No probe runs and no target
+    is contacted. Prints the diff against the stored observations; --apply
+    writes it (updates, new verdicts, superseded placeholders — never deletes).
+    """
+    import asyncio
+    import json
+
+    from app.grading.regrade import apply_regrade, regrade_scan, render_report
+
+    async def _run():
+        from app.config import get_config
+        from app.db import init_db
+        from app.db.repositories import ObservationRepository, ScanRepository
+
+        cfg = get_config()
+        await init_db(
+            backend=cfg.storage.backend,
+            db_path=cfg.storage.db_path,
+            postgresql_url=cfg.storage.postgresql_url,
+        )
+        if await ScanRepository().get_scan(scan_id) is None:
+            return None, None
+        stored_rows = await ObservationRepository().get_records(scan_id)
+        report = await regrade_scan(scan_id, stored_rows, only=checks or None)
+        counts = await apply_regrade(report) if apply_changes and report.has_changes else None
+        return report, counts
+
+    report, counts = asyncio.run(_run())
+
+    if report is None:
+        click.echo(
+            click.style(f"No scan '{scan_id}' in this workspace's database.", fg="red"), err=True
+        )
+        sys.exit(1)
+    if not report.records_found:
+        click.echo(
+            click.style(
+                f"No grading records for scan '{scan_id}'. A re-grade replays what a scan "
+                "recorded with --capture on; this one left nothing to replay.",
+                fg="yellow",
+            ),
+            err=True,
+        )
+        sys.exit(1)
+
+    if as_json:
+        click.echo(json.dumps({**report.to_dict(), "applied": counts}, indent=2, default=str))
+        return
+
+    click.echo(render_report(report, show_unchanged=show_unchanged))
+    if counts is not None:
+        click.echo(
+            click.style(
+                f"Applied: {counts['updated']} updated, {counts['inserted']} inserted, "
+                f"{counts['superseded']} superseded, {counts['bound']} exchange binding(s), "
+                f"status history rebuilt for {counts['statuses_recomputed']} scan(s).",
+                fg="green",
+            )
+        )
+    elif report.has_changes and not apply_changes:
+        click.echo("Dry run: nothing written. Pass --apply to write these changes.")
+    elif not report.has_changes:
+        click.echo(click.style("Nothing to apply.", fg="green"))
 
 
 @dev_group.command("diff-registry")
@@ -2375,15 +2559,37 @@ def dev_diff_registry(save_baseline: str | None, compare_to: str | None, rename_
 def dev_show_config(check_name: str | None, root: str):
     """Show each check's resolved tunable config + per-value layer attribution (56.16).
 
-    Resolves the §5.1 load-time baseline (class default → suite.yaml → config.yaml →
-    env) and prints, per knob, the winning value and the layer it came from. Also
-    lists the per-component env overrides currently in effect. Offline; no server.
+    Resolves the load-time baseline (class default → suite.yaml → config.yaml →
+    env → workspace.yaml) and prints, per knob, the winning value and the layer it
+    came from. Also lists the workspace and the per-component env overrides
+    currently in effect. Offline; no server.
     """
     _require_source_tree()
     import os
 
     from app.component_loader import discover_components
     from app.components.config_resolver import active_env_overrides
+    from app.workspace import get_workspace, load_workspace_config
+
+    # Layer 5 (57.1b) — shown before the knobs so a value attributed to
+    # [workspace] can be traced to the file that set it.
+    workspace = get_workspace()
+    ws_config = load_workspace_config(workspace)
+    ws_defaults = {
+        param: value
+        for param, value in ws_config.defaults.model_dump().items()
+        if value is not None
+    }
+    click.echo(click.style(f"Workspace: {workspace.root}", fg="cyan"))
+    if ws_defaults:
+        click.echo(click.style(f"  {workspace.config_path.name} defaults:", fg="yellow"))
+        for param, value in sorted(ws_defaults.items()):
+            click.echo(f"    {param} = {value!r}")
+    elif workspace.config_path.exists():
+        click.echo(f"  {workspace.config_path.name}: present, no defaults set")
+    else:
+        click.echo(f"  {workspace.config_path.name}: none")
+    click.echo("")
 
     checks = discover_components(Path(root), "check")
     if check_name:
@@ -2410,6 +2616,8 @@ def dev_show_config(check_name: str | None, root: str):
         click.echo(
             f"  {'on_critical':24} {check.on_critical!r:>10}  [{prov.get('on_critical', '?')}]"
         )
+        # How much of this check's traffic is recorded.
+        click.echo(f"  {'capture':24} {check.capture!r:>10}  [{prov.get('capture', '?')}]")
 
 
 @dev_group.command("new-check")

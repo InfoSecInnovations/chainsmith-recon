@@ -13,6 +13,14 @@ Feeds: additional attack surface for port scanning, security posture
 Requirements:
   - dnspython (pip install dnspython) — for reliable AAAA queries
   - Falls back to socket.getaddrinfo if dnspython not available
+
+**Probe/grade.** `run()` resolves AAAA and records one
+exchange per hostname; `grade()` reads the addresses back off the exchange and
+places severity. `ipv6_data` is an output downstream checks read, so the probe
+still parses the address list for itself (§6.2's two parses). The dual-stack
+comparison is the grader's, and it is the one judgement in this check that needs
+more than its own evidence: *"IPv6 but no IPv4"* is a statement about
+`dns_records`, which reaches `grade()` through `GradeContext.context`.
 """
 
 import asyncio
@@ -20,8 +28,10 @@ import logging
 import socket
 from typing import Any
 
+from app import capture
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.observations import build_observation
+from app.grading import Evidence, GradeContext, Verdict
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +112,8 @@ class IPv6DiscoveryCheck(BaseCheck):
         hosts_with_ipv6 = 0
 
         for hostname in target_hosts:
-            ipv6_addrs = await self._resolve_aaaa(hostname)
+            exchange = await self._resolve_aaaa(hostname)
+            ipv6_addrs = _addresses(exchange)
 
             has_ipv4 = hostname in dns_records and dns_records[hostname] is not None
             has_ipv6 = len(ipv6_addrs) > 0
@@ -120,24 +131,32 @@ class IPv6DiscoveryCheck(BaseCheck):
                     ),
                 }
                 ipv6_data[hostname] = entry
-                self._generate_observations(result, hostname, entry, dns_records)
+                result.candidates.append(self.create_candidate(host=hostname).attach(exchange))
 
             result.targets_checked += 1
 
         result.outputs["ipv6_data"] = ipv6_data
         return result
 
-    async def _resolve_aaaa(self, hostname: str) -> list[str]:
-        """Resolve AAAA records for a hostname."""
+    async def _resolve_aaaa(self, hostname: str) -> Exchange | None:
+        """Resolve AAAA records for a hostname and return the recorded exchange.
+
+        The addresses are the exchange's comma-joined `response_body`, which is
+        what both `ipv6_data` and `grade()` read (57.4 wave 2) — one
+        representation of the resolver's answer rather than two.
+        """
         loop = asyncio.get_event_loop()
+        prb = None
         try:
-            return await asyncio.wait_for(
-                loop.run_in_executor(None, self._sync_resolve_aaaa, hostname),
-                timeout=self.DNS_TIMEOUT,
-            )
+            async with capture.probe("dns", hostname, request_body="AAAA", qtype="AAAA") as prb:
+                addresses = await asyncio.wait_for(
+                    loop.run_in_executor(None, self._sync_resolve_aaaa, hostname),
+                    timeout=self.DNS_TIMEOUT,
+                )
+                prb.responded(", ".join(addresses))
         except (TimeoutError, Exception) as exc:
             logger.debug(f"AAAA resolution failed for {hostname}: {exc}")
-            return []
+        return prb.exchange if prb is not None else None
 
     def _sync_resolve_aaaa(self, hostname: str) -> list[str]:
         """Synchronous AAAA record resolution."""
@@ -177,41 +196,69 @@ class IPv6DiscoveryCheck(BaseCheck):
 
         return addresses
 
-    def _generate_observations(
-        self,
-        result: CheckResult,
-        hostname: str,
-        entry: dict[str, Any],
-        dns_records: dict[str, str],
-    ) -> None:
-        """Generate observations from IPv6 discovery results."""
-        ipv6_addrs = entry["ipv6_addresses"]
+    # ══ Grade ════════════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Place severity on one host's recorded AAAA answer."""
+        exchange = next((e for e in evidence if _addresses(e)), None)
+        if exchange is None:
+            return []
+
+        hostname = ctx.host
+        ipv6_addrs = _addresses(exchange)
+        # `dns_records` is the IPv4 half of the dual-stack comparison. It is an
+        # upstream check's output rather than this check's evidence, which is
+        # why `GradeContext` carries the scan context at all.
+        dns_records: dict[str, str] = ctx.context.get("dns_records") or {}
+        has_ipv4 = hostname in dns_records and dns_records[hostname] is not None
+
+        ula_addrs = [a for a in ipv6_addrs if a.lower().startswith(ULA_PREFIX)]
+        entry = {
+            "ipv6_addresses": ipv6_addrs,
+            "has_ipv4": has_ipv4,
+            "ipv6_only": not has_ipv4,
+            "ula_detected": bool(ula_addrs),
+            "link_local": any(a.lower().startswith(LINK_LOCAL_PREFIX) for a in ipv6_addrs),
+        }
+
         addr_str = ", ".join(ipv6_addrs[:3])
         if len(ipv6_addrs) > 3:
             addr_str += f" (+{len(ipv6_addrs) - 3} more)"
 
-        # Info: IPv6 address discovered
-        result.observations.append(
-            build_observation(
-                check_name=self.name,
+        evidence_ids = [exchange.id]
+        verdicts: list[Verdict] = []
+
+        # ── IPv6 address discovered ───────────────────────
+        verdicts.append(
+            Verdict(
+                severity="info",
+                # An AAAA record either answered or it did not.
+                confidence=0.99,
+                discriminator="ipv6",
                 title=f"IPv6 address discovered: {hostname}",
                 description=(
                     f"{hostname} has {len(ipv6_addrs)} IPv6 address(es): {addr_str}. "
-                    f"Dual-stack: {'yes' if entry['has_ipv4'] else 'no (IPv6 only)'}."
+                    f"Dual-stack: {'yes' if has_ipv4 else 'no (IPv6 only)'}."
                 ),
-                severity="info",
-                evidence=f"Host: {hostname} | IPv6: {addr_str} | IPv4: {entry['has_ipv4']}",
-                host=hostname,
-                discriminator="ipv6",
+                evidence=f"Host: {hostname} | IPv6: {addr_str} | IPv4: {has_ipv4}",
+                reasoning=f"AAAA query returned {len(ipv6_addrs)} address(es)",
+                signals={"ipv6_addresses": ipv6_addrs, "has_ipv4": has_ipv4},
                 raw_data=entry,
+                evidence_ids=evidence_ids,
             )
         )
 
-        # Medium: IPv6-only host (reachable on IPv6 but not IPv4 — possible firewall bypass)
+        # ── IPv6 reachable, IPv4 not ──────────────────────
         if entry["ipv6_only"]:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            verdicts.append(
+                Verdict(
+                    severity="medium",
+                    # The absence of an A record here is the absence of one in
+                    # `dns_records`, which only holds what the wordlist asked
+                    # for. A host with an A record nobody queried reads as
+                    # IPv6-only and is not.
+                    confidence=0.65,
+                    discriminator="ipv6-only",
                     title=f"Service reachable on IPv6 but not IPv4: {hostname}",
                     description=(
                         f"{hostname} resolves to IPv6 ({addr_str}) but has no "
@@ -219,22 +266,24 @@ class IPv6DiscoveryCheck(BaseCheck):
                         f"service or a potential firewall bypass if IPv4 ACLs were "
                         f"configured but IPv6 was overlooked."
                     ),
-                    severity="medium",
                     evidence=(
                         f"Host: {hostname} | IPv6: {addr_str} | "
                         f"IPv4: not resolved | Possible firewall bypass"
                     ),
-                    host=hostname,
-                    discriminator="ipv6-only",
+                    reasoning="AAAA answered and the host has no A record in dns_records",
+                    signals={"ipv6_addresses": ipv6_addrs, "dns_records_size": len(dns_records)},
+                    evidence_ids=evidence_ids,
                 )
             )
 
-        # Low: ULA address exposed
-        if entry.get("ula_detected"):
-            ula_addrs = [a for a in ipv6_addrs if a.lower().startswith(ULA_PREFIX)]
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+        # ── RFC 4193 unique local address ─────────────────
+        if ula_addrs:
+            verdicts.append(
+                Verdict(
+                    severity="low",
+                    # fd00::/8 membership is arithmetic.
+                    confidence=0.95,
+                    discriminator="ula",
                     title=f"RFC 4193 unique local address exposed: {hostname}",
                     description=(
                         f"{hostname} resolves to a unique local address (ULA) "
@@ -242,9 +291,23 @@ class IPv6DiscoveryCheck(BaseCheck):
                         f"ULA addresses are intended for local communication only "
                         f"and may indicate internal infrastructure leaking into DNS."
                     ),
-                    severity="low",
                     evidence=f"Host: {hostname} | ULA: {', '.join(ula_addrs)}",
-                    host=hostname,
-                    discriminator="ula",
+                    reasoning=f"{len(ula_addrs)} address(es) in the fd00::/8 range",
+                    signals={"ula_addresses": ula_addrs},
+                    evidence_ids=evidence_ids,
                 )
             )
+
+        return verdicts
+
+
+def _addresses(exchange: Exchange | None) -> list[str]:
+    """The AAAA addresses one recorded exchange came back with.
+
+    `probe()` records an empty body for a query that completed and answered
+    nothing, which is exactly NXDOMAIN or NOERROR/NODATA, so an empty list here
+    is the honest reading of both.
+    """
+    if exchange is None or exchange.error is not None or not exchange.response_body:
+        return []
+    return [a for a in (part.strip() for part in exchange.response_body.split(",")) if a]

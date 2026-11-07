@@ -1,0 +1,1254 @@
+{
+  "agent_callback_injection": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_callback_injection",
+    "produces": [
+      "callback_injection_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_context_overflow": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_context_overflow",
+    "produces": [
+      "context_overflow_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_cross_injection": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_cross_injection",
+    "produces": [
+      "cross_injection_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_discovery": {
+    "conditions": [
+      "services is truthy",
+      "services_probed is truthy"
+    ],
+    "name": "agent_discovery",
+    "produces": [
+      "agent_endpoints",
+      "agent_frameworks"
+    ],
+    "suite": "agent"
+  },
+  "agent_framework_exploits": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_framework_exploits",
+    "produces": [
+      "framework_exploit_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_framework_version": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_framework_version",
+    "produces": [
+      "framework_versions"
+    ],
+    "suite": "agent"
+  },
+  "agent_goal_injection": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_goal_injection",
+    "produces": [
+      "goal_injection_results",
+      "vulnerable_agents"
+    ],
+    "suite": "agent"
+  },
+  "agent_loop_detection": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_loop_detection",
+    "produces": [
+      "loop_detection_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_memory_extraction": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_memory_extraction",
+    "produces": [
+      "memory_contents"
+    ],
+    "suite": "agent"
+  },
+  "agent_memory_poisoning": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_memory_poisoning",
+    "produces": [
+      "memory_poisoning_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_multi_agent_detection": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_multi_agent_detection",
+    "produces": [
+      "multi_agent_topology"
+    ],
+    "suite": "agent"
+  },
+  "agent_privilege_escalation": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_privilege_escalation",
+    "produces": [
+      "privilege_escalation_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_reflection_abuse": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_reflection_abuse",
+    "produces": [
+      "reflection_abuse_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_state_manipulation": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_state_manipulation",
+    "produces": [
+      "state_manipulation_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_streaming_injection": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_streaming_injection",
+    "produces": [
+      "streaming_injection_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_tool_abuse": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_tool_abuse",
+    "produces": [
+      "tool_abuse_results"
+    ],
+    "suite": "agent"
+  },
+  "agent_trust_chain": {
+    "conditions": [
+      "agent_endpoints is truthy"
+    ],
+    "name": "agent_trust_chain",
+    "produces": [
+      "trust_chain_results"
+    ],
+    "suite": "agent"
+  },
+  "ai_error_leakage": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "ai_error_leakage",
+    "produces": [
+      "error_leaks"
+    ],
+    "suite": "ai"
+  },
+  "ai_framework_fingerprint": {
+    "conditions": [
+      "services is truthy",
+      "services_probed is truthy"
+    ],
+    "name": "ai_framework_fingerprint",
+    "produces": [
+      "ai_framework"
+    ],
+    "suite": "ai"
+  },
+  "api_parameter_injection": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "api_parameter_injection",
+    "produces": [
+      "accepted_params"
+    ],
+    "suite": "ai"
+  },
+  "auth_detection": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "auth_detection",
+    "produces": [
+      "auth_mechanisms"
+    ],
+    "suite": "web"
+  },
+  "banner_grab": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "banner_grab",
+    "produces": [
+      "banner_data"
+    ],
+    "suite": "network"
+  },
+  "cag_cache_eviction": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_cache_eviction",
+    "produces": [
+      "eviction_capability"
+    ],
+    "suite": "cag"
+  },
+  "cag_cache_key_reverse": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_cache_key_reverse",
+    "produces": [
+      "key_structure"
+    ],
+    "suite": "cag"
+  },
+  "cag_cache_poisoning": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_cache_poisoning",
+    "produces": [
+      "cache_poisoning_results"
+    ],
+    "suite": "cag"
+  },
+  "cag_cache_probe": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_cache_probe",
+    "produces": [
+      "cache_timing_results",
+      "cache_vulnerabilities"
+    ],
+    "suite": "cag"
+  },
+  "cag_cache_quota": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_cache_quota",
+    "produces": [
+      "cache_size"
+    ],
+    "suite": "cag"
+  },
+  "cag_cache_warming": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_cache_warming",
+    "produces": [
+      "warm_capability"
+    ],
+    "suite": "cag"
+  },
+  "cag_cross_user_leakage": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_cross_user_leakage",
+    "produces": [
+      "isolation_status"
+    ],
+    "suite": "cag"
+  },
+  "cag_discovery": {
+    "conditions": [
+      "services is truthy",
+      "services_probed is truthy"
+    ],
+    "name": "cag_discovery",
+    "produces": [
+      "cache_infrastructure",
+      "cag_endpoints"
+    ],
+    "suite": "cag"
+  },
+  "cag_distributed_cache": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_distributed_cache",
+    "produces": [
+      "distributed_cache_info"
+    ],
+    "suite": "cag"
+  },
+  "cag_injection_persistence": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_injection_persistence",
+    "produces": [
+      "injection_persistence_results"
+    ],
+    "suite": "cag"
+  },
+  "cag_multi_layer_cache": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_multi_layer_cache",
+    "produces": [
+      "cache_layers"
+    ],
+    "suite": "cag"
+  },
+  "cag_provider_caching": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_provider_caching",
+    "produces": [
+      "provider_cache_info"
+    ],
+    "suite": "cag"
+  },
+  "cag_semantic_threshold": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_semantic_threshold",
+    "produces": [
+      "similarity_threshold"
+    ],
+    "suite": "cag"
+  },
+  "cag_serialization": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_serialization",
+    "produces": [
+      "serialization_risks"
+    ],
+    "suite": "cag"
+  },
+  "cag_side_channel": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_side_channel",
+    "produces": [
+      "side_channel_risk"
+    ],
+    "suite": "cag"
+  },
+  "cag_stale_context": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_stale_context",
+    "produces": [
+      "stale_context_risk"
+    ],
+    "suite": "cag"
+  },
+  "cag_ttl_mapping": {
+    "conditions": [
+      "cag_endpoints is truthy"
+    ],
+    "name": "cag_ttl_mapping",
+    "produces": [
+      "cache_ttl"
+    ],
+    "suite": "cag"
+  },
+  "config_exposure": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "config_exposure",
+    "produces": [
+      "config_observations"
+    ],
+    "suite": "web"
+  },
+  "content_filter_check": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "content_filter_check",
+    "produces": [
+      "content_filter_info"
+    ],
+    "suite": "ai"
+  },
+  "context_window_check": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "context_window_check",
+    "produces": [
+      "context_info"
+    ],
+    "suite": "ai"
+  },
+  "cookie_security": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "cookie_security",
+    "produces": [
+      "cookie_observations"
+    ],
+    "suite": "web"
+  },
+  "cors_check": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "cors_check",
+    "produces": [
+      "cors_observations"
+    ],
+    "suite": "web"
+  },
+  "debug_endpoints": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "debug_endpoints",
+    "produces": [
+      "debug_observations"
+    ],
+    "suite": "web"
+  },
+  "default_creds": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "default_creds",
+    "produces": [
+      "default_creds_observations"
+    ],
+    "suite": "web"
+  },
+  "directory_listing": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "directory_listing",
+    "produces": [
+      "directory_listing_observations"
+    ],
+    "suite": "web"
+  },
+  "dns_enumeration": {
+    "conditions": [],
+    "name": "dns_enumeration",
+    "produces": [
+      "dns_records",
+      "target_hosts"
+    ],
+    "suite": "network"
+  },
+  "dns_records": {
+    "conditions": [],
+    "name": "dns_records",
+    "produces": [
+      "dns_extra_hosts",
+      "dns_extra_records"
+    ],
+    "suite": "network"
+  },
+  "embedding_endpoint_discovery": {
+    "conditions": [
+      "services is truthy",
+      "services_probed is truthy"
+    ],
+    "name": "embedding_endpoint_discovery",
+    "produces": [
+      "embedding_endpoints"
+    ],
+    "suite": "ai"
+  },
+  "error_page": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "error_page",
+    "produces": [
+      "error_page_info"
+    ],
+    "suite": "web"
+  },
+  "favicon": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "favicon",
+    "produces": [
+      "favicon_info"
+    ],
+    "suite": "web"
+  },
+  "geoip": {
+    "conditions": [
+      "dns_records is truthy"
+    ],
+    "name": "geoip",
+    "produces": [
+      "geoip_data"
+    ],
+    "suite": "network"
+  },
+  "header_analysis": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "header_analysis",
+    "produces": [
+      "header_observations"
+    ],
+    "suite": "web"
+  },
+  "hsts_preload": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "hsts_preload",
+    "produces": [
+      "hsts_preload_info"
+    ],
+    "suite": "web"
+  },
+  "http2_detection": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "http2_detection",
+    "produces": [
+      "http_protocols"
+    ],
+    "suite": "web"
+  },
+  "http_method_enum": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "http_method_enum",
+    "produces": [
+      "http_methods"
+    ],
+    "suite": "network"
+  },
+  "input_format_injection": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "input_format_injection",
+    "produces": [
+      "input_format_results"
+    ],
+    "suite": "ai"
+  },
+  "ipv6_discovery": {
+    "conditions": [
+      "target_hosts is truthy"
+    ],
+    "name": "ipv6_discovery",
+    "produces": [
+      "ipv6_data"
+    ],
+    "suite": "network"
+  },
+  "jailbreak_testing": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "jailbreak_testing",
+    "produces": [
+      "jailbreak_results"
+    ],
+    "suite": "ai"
+  },
+  "llm_endpoint_discovery": {
+    "conditions": [
+      "services is truthy",
+      "services_probed is truthy"
+    ],
+    "name": "llm_endpoint_discovery",
+    "produces": [
+      "chat_endpoints",
+      "completion_endpoints"
+    ],
+    "suite": "ai"
+  },
+  "mass_assignment": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "mass_assignment",
+    "produces": [
+      "mass_assignment_info"
+    ],
+    "suite": "web"
+  },
+  "mcp_auth_check": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_auth_check",
+    "produces": [
+      "mcp_auth_status"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_discovery": {
+    "conditions": [
+      "services is truthy",
+      "services_probed is truthy"
+    ],
+    "name": "mcp_discovery",
+    "produces": [
+      "mcp_servers"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_notification_injection": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_notification_injection",
+    "produces": [
+      "mcp_notification_status"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_prompt_injection": {
+    "conditions": [
+      "mcp_servers is truthy",
+      "mcp_tools is truthy"
+    ],
+    "name": "mcp_prompt_injection",
+    "produces": [
+      "mcp_injection_results"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_protocol_version": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_protocol_version",
+    "produces": [
+      "mcp_protocol_versions"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_resource_traversal": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_resource_traversal",
+    "produces": [
+      "mcp_resource_traversal_results"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_sampling_abuse": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_sampling_abuse",
+    "produces": [
+      "mcp_sampling_status"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_schema_leakage": {
+    "conditions": [
+      "mcp_tools is truthy"
+    ],
+    "name": "mcp_schema_leakage",
+    "produces": [
+      "mcp_schema_leaks"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_server_fingerprint": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_server_fingerprint",
+    "produces": [
+      "mcp_server_implementations"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_shadow_tool_detection": {
+    "conditions": [
+      "mcp_tools is truthy"
+    ],
+    "name": "mcp_shadow_tool_detection",
+    "produces": [
+      "mcp_shadow_tool_risk"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_template_injection": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_template_injection",
+    "produces": [
+      "mcp_template_injection_results"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_tool_chain_analysis": {
+    "conditions": [
+      "mcp_tools is truthy"
+    ],
+    "name": "mcp_tool_chain_analysis",
+    "produces": [
+      "mcp_dangerous_chains"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_tool_enumeration": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_tool_enumeration",
+    "produces": [
+      "high_risk_tools",
+      "mcp_tools"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_tool_invocation": {
+    "conditions": [
+      "mcp_servers is truthy",
+      "mcp_tools is truthy"
+    ],
+    "name": "mcp_tool_invocation",
+    "produces": [
+      "mcp_invocation_results"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_tool_rate_limit": {
+    "conditions": [
+      "mcp_servers is truthy",
+      "mcp_tools is truthy"
+    ],
+    "name": "mcp_tool_rate_limit",
+    "produces": [
+      "mcp_rate_limit_status"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_transport_security": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_transport_security",
+    "produces": [
+      "mcp_transport_security"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_undeclared_capabilities": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_undeclared_capabilities",
+    "produces": [
+      "mcp_undeclared_capabilities"
+    ],
+    "suite": "mcp"
+  },
+  "mcp_websocket_transport": {
+    "conditions": [
+      "mcp_servers is truthy"
+    ],
+    "name": "mcp_websocket_transport",
+    "produces": [
+      "mcp_websocket_servers"
+    ],
+    "suite": "mcp"
+  },
+  "model_enumeration": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "model_enumeration",
+    "produces": [
+      "available_models"
+    ],
+    "suite": "ai"
+  },
+  "model_info_check": {
+    "conditions": [
+      "services is truthy",
+      "services_probed is truthy"
+    ],
+    "name": "model_info_check",
+    "produces": [
+      "model_info"
+    ],
+    "suite": "ai"
+  },
+  "multi_turn_injection": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "multi_turn_injection",
+    "produces": [
+      "multi_turn_results"
+    ],
+    "suite": "ai"
+  },
+  "openapi_discovery": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "openapi_discovery",
+    "produces": [
+      "api_endpoints",
+      "openapi_specs"
+    ],
+    "suite": "web"
+  },
+  "output_format_manipulation": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "output_format_manipulation",
+    "produces": [
+      "format_risks"
+    ],
+    "suite": "ai"
+  },
+  "path_probe": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "path_probe",
+    "produces": [
+      "discovered_paths"
+    ],
+    "suite": "web"
+  },
+  "port_scan": {
+    "conditions": [
+      "target_hosts is truthy"
+    ],
+    "name": "port_scan",
+    "produces": [
+      "services"
+    ],
+    "suite": "network"
+  },
+  "prompt_leakage": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "prompt_leakage",
+    "produces": [
+      "prompt_leak_observations"
+    ],
+    "suite": "ai"
+  },
+  "rag_adversarial_embedding": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_adversarial_embedding",
+    "produces": [
+      "adversarial_embedding_results"
+    ],
+    "suite": "rag"
+  },
+  "rag_auth_bypass": {
+    "conditions": [
+      "vector_stores is truthy"
+    ],
+    "name": "rag_auth_bypass",
+    "produces": [
+      "auth_bypass_results"
+    ],
+    "suite": "rag"
+  },
+  "rag_cache_poisoning": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_cache_poisoning",
+    "produces": [
+      "rag_cache_behavior"
+    ],
+    "suite": "rag"
+  },
+  "rag_chunk_boundary": {
+    "conditions": [
+      "ingestion_endpoints is truthy",
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_chunk_boundary",
+    "produces": [
+      "chunk_boundary_results"
+    ],
+    "suite": "rag"
+  },
+  "rag_collection_enumeration": {
+    "conditions": [
+      "accessible_stores is truthy"
+    ],
+    "name": "rag_collection_enumeration",
+    "produces": [
+      "knowledge_base_structure"
+    ],
+    "suite": "rag"
+  },
+  "rag_corpus_poisoning": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_corpus_poisoning",
+    "produces": [
+      "ingestion_endpoints"
+    ],
+    "suite": "rag"
+  },
+  "rag_cross_collection": {
+    "conditions": [
+      "knowledge_base_structure is truthy"
+    ],
+    "name": "rag_cross_collection",
+    "produces": [
+      "cross_collection_results"
+    ],
+    "suite": "rag"
+  },
+  "rag_discovery": {
+    "conditions": [
+      "services is truthy",
+      "services_probed is truthy"
+    ],
+    "name": "rag_discovery",
+    "produces": [
+      "rag_endpoints",
+      "vector_stores"
+    ],
+    "suite": "rag"
+  },
+  "rag_document_exfiltration": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_document_exfiltration",
+    "produces": [
+      "sensitive_content_categories"
+    ],
+    "suite": "rag"
+  },
+  "rag_embedding_fingerprint": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_embedding_fingerprint",
+    "produces": [
+      "embedding_model"
+    ],
+    "suite": "rag"
+  },
+  "rag_fusion_reranker": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_fusion_reranker",
+    "produces": [
+      "reranker_info"
+    ],
+    "suite": "rag"
+  },
+  "rag_indirect_injection": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_indirect_injection",
+    "produces": [
+      "indirect_injection_results",
+      "vulnerable_rag_endpoints"
+    ],
+    "suite": "rag"
+  },
+  "rag_metadata_injection": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_metadata_injection",
+    "produces": [
+      "metadata_injection_results"
+    ],
+    "suite": "rag"
+  },
+  "rag_multimodal_injection": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_multimodal_injection",
+    "produces": [
+      "multimodal_injection_results"
+    ],
+    "suite": "rag"
+  },
+  "rag_retrieval_manipulation": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_retrieval_manipulation",
+    "produces": [
+      "retrieval_control"
+    ],
+    "suite": "rag"
+  },
+  "rag_source_attribution": {
+    "conditions": [
+      "rag_endpoints is truthy"
+    ],
+    "name": "rag_source_attribution",
+    "produces": [
+      "citation_reliability"
+    ],
+    "suite": "rag"
+  },
+  "rag_vector_store_access": {
+    "conditions": [
+      "vector_stores is truthy"
+    ],
+    "name": "rag_vector_store_access",
+    "produces": [
+      "accessible_stores",
+      "vector_store_collections"
+    ],
+    "suite": "rag"
+  },
+  "rate_limit_check": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "rate_limit_check",
+    "produces": [
+      "rate_limit_info"
+    ],
+    "suite": "ai"
+  },
+  "redirect_chain": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "redirect_chain",
+    "produces": [
+      "redirect_info"
+    ],
+    "suite": "web"
+  },
+  "reverse_dns": {
+    "conditions": [
+      "dns_records is truthy"
+    ],
+    "name": "reverse_dns",
+    "produces": [
+      "reverse_dns",
+      "reverse_dns_hosts"
+    ],
+    "suite": "network"
+  },
+  "robots_txt": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "robots_txt",
+    "produces": [
+      "robots_paths"
+    ],
+    "suite": "web"
+  },
+  "service_probe": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "service_probe",
+    "produces": [
+      "services",
+      "services_probed"
+    ],
+    "suite": "network"
+  },
+  "sitemap": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "sitemap",
+    "produces": [
+      "sitemap_paths"
+    ],
+    "suite": "web"
+  },
+  "sri_check": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "sri_check",
+    "produces": [
+      "sri_info"
+    ],
+    "suite": "web"
+  },
+  "ssrf_indicator": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "ssrf_indicator",
+    "produces": [
+      "ssrf_candidates"
+    ],
+    "suite": "web"
+  },
+  "system_prompt_injection": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "system_prompt_injection",
+    "produces": [
+      "system_inject_results"
+    ],
+    "suite": "ai"
+  },
+  "tls_analysis": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "tls_analysis",
+    "produces": [
+      "tls_data",
+      "tls_hosts"
+    ],
+    "suite": "network"
+  },
+  "token_cost_exhaustion": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "token_cost_exhaustion",
+    "produces": [
+      "token_cost_info"
+    ],
+    "suite": "ai"
+  },
+  "tool_discovery": {
+    "conditions": [
+      "chat_endpoints is truthy"
+    ],
+    "name": "tool_discovery",
+    "produces": [
+      "chatbot_capabilities",
+      "discovered_tools"
+    ],
+    "suite": "ai"
+  },
+  "traceroute": {
+    "conditions": [
+      "dns_records is truthy"
+    ],
+    "name": "traceroute",
+    "produces": [
+      "traceroute_data"
+    ],
+    "suite": "network"
+  },
+  "vcs_exposure": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "vcs_exposure",
+    "produces": [
+      "vcs_observations"
+    ],
+    "suite": "web"
+  },
+  "waf_detection": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "waf_detection",
+    "produces": [
+      "waf_detected"
+    ],
+    "suite": "web"
+  },
+  "webdav_check": {
+    "conditions": [
+      "services is truthy"
+    ],
+    "name": "webdav_check",
+    "produces": [
+      "webdav_observations"
+    ],
+    "suite": "web"
+  },
+  "whois_lookup": {
+    "conditions": [
+      "dns_records is truthy"
+    ],
+    "name": "whois_lookup",
+    "produces": [
+      "whois_data"
+    ],
+    "suite": "network"
+  },
+  "wildcard_dns": {
+    "conditions": [],
+    "name": "wildcard_dns",
+    "produces": [
+      "wildcard_dns"
+    ],
+    "suite": "network"
+  }
+}

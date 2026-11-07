@@ -1,16 +1,27 @@
 """
-app/checks/ai/embedding_extract.py - Embedding Extraction/Inversion
+app/checks/ai/ai_embedding_extraction/check.py - Embedding Extraction/Inversion
 
 For discovered embedding endpoints: send known text, capture embedding
 vectors, test similarity relationships, and check for information leakage.
+
+**Probe/grade.** The probe sends three known texts to an
+embedding endpoint and records the vector responses; `grade()` re-reads them and
+returns up to four independent verdicts — dimensionality, model identification,
+metadata leakage, and a similarity sanity check. `_reading()` is the one parser
+both halves call (§0.12); it pulls the vectors and extra fields out of the
+recorded bodies, keyed on the request dialect read back off each request.
 """
 
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.grading import Candidate, Evidence, GradeContext, Verdict, exchange_from_response
+from app.lib.ai_helpers import dialect_from_request
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
 from app.lib.parsing import safe_json
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 
 class EmbeddingExtractionCheck(BaseCheck):
@@ -51,8 +62,13 @@ class EmbeddingExtractionCheck(BaseCheck):
         "Quantum computing uses qubits for computation.",
     ]
 
+    SIMILARITY_THRESHOLD = 0.5
+
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def run(self, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         for endpoint_info in context.get("embedding_endpoints", []):
             url = endpoint_info.get("url")
@@ -63,135 +79,184 @@ class EmbeddingExtractionCheck(BaseCheck):
             api_format = endpoint_info.get("api_format", "unknown")
 
             try:
-                er = await self._analyze_endpoint(url, service, api_format)
-                result.observations.extend(er.observations)
-                result.outputs.update(er.outputs)
+                candidate = self.create_candidate(host=service.host, target=service, target_url=url)
+                await self._probe_embeddings(url, api_format, candidate, scan_id)
+                result.candidates.append(candidate)
+
+                reading = self._reading(candidate.exchanges)
+                if reading["vectors"]:
+                    result.outputs[f"embedding_analysis_{service.port}"] = {
+                        "dimensions": reading["dimensions"],
+                        "model_guess": reading["model_guess"],
+                        "vectors_captured": len(reading["vectors"]),
+                        "extra_fields": reading["extra_fields"],
+                    }
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
 
         return result
 
-    async def _analyze_endpoint(
-        self,
-        url: str,
-        service: Service,
-        api_format: str,
-    ) -> CheckResult:
-        result = CheckResult(success=True)
-        host = service.host
-        vectors = []
-        extra_fields = []
-
+    async def _probe_embeddings(
+        self, url: str, api_format: str, candidate: Candidate, scan_id: str
+    ) -> None:
+        """Send each known text, recording every response."""
         cfg = HttpConfig(timeout_seconds=15.0, verify_ssl=False)
-        try:
-            async with AsyncHttpClient(cfg) as client:
-                for text in self.TEST_TEXTS:
-                    await self._rate_limit()
+        async with AsyncHttpClient(cfg) as client:
+            for text in self.TEST_TEXTS:
+                await self._rate_limit()
 
-                    body = self._build_embedding_request(text, api_format)
-                    resp = await client.post(
-                        url,
-                        json=body,
-                        headers={"Content-Type": "application/json"},
+                body = self._build_embedding_request(text, api_format)
+                resp = await client.post(url, json=body, headers=JSON_HEADERS)
+
+                candidate.attach(
+                    exchange_from_response(
+                        resp,
+                        check_name=self.name,
+                        scan_id=scan_id,
+                        host=candidate.host,
+                        method="POST",
+                        request_headers=JSON_HEADERS,
+                        request_json=body,
                     )
+                )
 
-                    if resp.error or resp.status_code != 200:
-                        continue
+    # ══ Grade ════════════════════════════════════════════════════════
 
-                    parsed = safe_json(resp.body) or {}
-                    vec, fields = self._extract_vector(parsed, api_format)
-                    if vec:
-                        vectors.append(vec)
-                    if fields:
-                        extra_fields.extend(fields)
-
-        except Exception as e:
-            result.errors.append(f"{url}: {e}")
-            return result
-
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Up to four independent verdicts over the recorded vectors."""
+        reading = self._reading(list(evidence))
+        vectors = reading["vectors"]
         if not vectors:
-            return result
+            return []
 
-        # Analyze dimensionality
-        dimensions = len(vectors[0])
-        model_guess = self.DIMENSION_MAP.get(dimensions, "unknown")
+        ids = evidence.ids()
+        dimensions = reading["dimensions"]
+        verdicts: list[Verdict] = []
 
-        result.observations.append(
-            build_observation(
-                check_name=self.name,
+        # ── Dimensionality (always, when a vector came back) ──
+        verdicts.append(
+            Verdict(
+                severity="info",
+                # A vector's own length is not open to interpretation.
+                confidence=0.98,
+                discriminator="embedding-dimensions",
                 title=f"Embedding endpoint functional: {dimensions}-dimensional vectors",
                 description=f"Embedding endpoint returns {dimensions}-dimensional vectors",
-                severity="info",
                 evidence=f"Dimensions: {dimensions}, vectors captured: {len(vectors)}",
-                host=host,
-                discriminator="embedding-dimensions",
-                target=service,
-                target_url=url,
+                reasoning="the returned vector's length is counted directly",
+                signals={"dimensions": dimensions, "vectors_captured": len(vectors)},
                 raw_data={"dimensions": dimensions, "vectors_captured": len(vectors)},
+                evidence_ids=ids,
             )
         )
 
-        if model_guess != "unknown":
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title=f"Embedding model identified: {model_guess}",
-                    description=f"Vector dimensionality ({dimensions}) matches known model: {model_guess}",
+        # ── Model identification from dimensionality ──
+        if reading["model_guess"] != "unknown":
+            verdicts.append(
+                Verdict(
                     severity="low",
-                    evidence=f"Dimensions: {dimensions} -> {model_guess}",
-                    host=host,
+                    # Dimensionality narrows the model but never names it: 768 is
+                    # BERT-base AND all-mpnet AND a dozen others, and the map
+                    # lists two guesses per size for exactly that reason.
+                    confidence=0.5,
                     discriminator="embedding-model-id",
-                    target=service,
-                    target_url=url,
-                    raw_data={"dimensions": dimensions, "model_guess": model_guess},
+                    title=f"Embedding model identified: {reading['model_guess']}",
+                    description=(
+                        f"Vector dimensionality ({dimensions}) matches known model: "
+                        f"{reading['model_guess']}"
+                    ),
+                    evidence=f"Dimensions: {dimensions} -> {reading['model_guess']}",
+                    reasoning=(
+                        f"{dimensions} dimensions is a family of models, not one — the guess "
+                        "names the most common members but many models share a vector size"
+                    ),
+                    signals={"dimensions": dimensions, "model_guess": reading["model_guess"]},
+                    raw_data={"dimensions": dimensions, "model_guess": reading["model_guess"]},
+                    evidence_ids=ids,
                 )
             )
 
-        # Check for extra metadata beyond vectors
-        unique_fields = list(set(extra_fields))
-        if unique_fields:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title=f"Embedding endpoint returns metadata beyond vectors: {', '.join(unique_fields[:5])}",
-                    description="Extra fields in embedding response may reveal configuration or usage data",
+        # ── Metadata beyond the vector ──
+        if reading["extra_fields"]:
+            verdicts.append(
+                Verdict(
                     severity="medium",
-                    evidence=f"Extra fields: {', '.join(unique_fields)}",
-                    host=host,
+                    # The fields are named in the body; the doubt is whether they
+                    # are sensitive, and `usage` is already excluded as standard.
+                    confidence=0.7,
                     discriminator="embedding-metadata",
-                    target=service,
-                    target_url=url,
-                    raw_data={"extra_fields": unique_fields},
+                    title=(
+                        "Embedding endpoint returns metadata beyond vectors: "
+                        + ", ".join(reading["extra_fields"][:5])
+                    ),
+                    description=(
+                        "Extra fields in embedding response may reveal configuration or usage data"
+                    ),
+                    evidence=f"Extra fields: {', '.join(reading['extra_fields'])}",
+                    reasoning=(
+                        f"{len(reading['extra_fields'])} field(s) beyond the standard envelope; "
+                        "whether any is sensitive depends on the field, so this is reported for "
+                        "review rather than asserted as a leak"
+                    ),
+                    signals={"extra_fields": reading["extra_fields"]},
+                    raw_data={"extra_fields": reading["extra_fields"]},
+                    evidence_ids=ids,
                 )
             )
 
-        # Check similarity if we have enough vectors
+        # ── Similarity sanity check ──
         if len(vectors) >= 2:
             sim = self._cosine_similarity(vectors[0], vectors[1])
-            if sim > 0.5:
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
-                        title="Embedding similarity confirms real model",
-                        description=f"Similar texts produce cosine similarity {sim:.3f} (> 0.5 threshold)",
+            if sim > self.SIMILARITY_THRESHOLD:
+                verdicts.append(
+                    Verdict(
                         severity="info",
-                        evidence=f"Cosine similarity between similar texts: {sim:.3f}",
-                        host=host,
+                        confidence=0.9,
                         discriminator="embedding-similarity",
-                        target=service,
-                        target_url=url,
+                        title="Embedding similarity confirms real model",
+                        description=(
+                            f"Similar texts produce cosine similarity {sim:.3f} "
+                            f"(> {self.SIMILARITY_THRESHOLD} threshold)"
+                        ),
+                        evidence=f"Cosine similarity between similar texts: {sim:.3f}",
+                        reasoning=(
+                            "two semantically similar texts embedded close together, which a real "
+                            "model does and a stub returning fixed or random vectors does not"
+                        ),
+                        signals={"cosine_similarity": round(sim, 4)},
                         raw_data={"cosine_similarity": round(sim, 4)},
+                        evidence_ids=ids,
                     )
                 )
 
-        analysis = {
+        return verdicts
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _reading(self, exchanges: list[Exchange]) -> dict:
+        """Pull vectors and extra fields out of the recorded responses."""
+        vectors: list[list] = []
+        extra_fields: list[str] = []
+
+        for exchange in exchanges:
+            if exchange.error or exchange.response_status != 200:
+                continue
+
+            api_format = dialect_from_request(exchange.request_body or "")
+            parsed = safe_json(exchange.response_body or "") or {}
+            vec, fields = self._extract_vector(parsed, api_format)
+            if vec:
+                vectors.append(vec)
+            if fields:
+                extra_fields.extend(fields)
+
+        dimensions = len(vectors[0]) if vectors else 0
+        return {
+            "vectors": vectors,
             "dimensions": dimensions,
-            "model_guess": model_guess,
-            "vectors_captured": len(vectors),
-            "extra_fields": unique_fields,
+            "model_guess": self.DIMENSION_MAP.get(dimensions, "unknown"),
+            "extra_fields": sorted(set(extra_fields)),
         }
-        result.outputs[f"embedding_analysis_{service.port}"] = analysis
-        return result
 
     def _build_embedding_request(self, text: str, api_format: str) -> dict:
         if api_format == "openai":

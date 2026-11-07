@@ -13,7 +13,7 @@ Retrieval-Augmented Generation pipeline discovery, vector store analysis, and in
 
 | Property | Value |
 |----------|-------|
-| Conditions | `services is truthy` |
+| Conditions | `services is truthy` and `services_probed is truthy` |
 | Produces | `rag_endpoints`, `vector_stores` |
 
 Probes common RAG paths (/query, /search, /retrieve, /ask, /chat, /rag, /documents, /knowledge, /embeddings, /invoke). Detects vector stores: Chroma, Pinecone, Weaviate, Qdrant, Milvus, pgvector, FAISS. Identifies RAG indicators in responses (sources, citations, chunks, similarity scores).
@@ -250,7 +250,7 @@ Active test (with write capability): injects metadata with payloads and queries 
 
 | Property | Value |
 |----------|-------|
-| Conditions | `rag_endpoints is truthy` AND `ingestion_endpoints is truthy` |
+| Conditions | `rag_endpoints is truthy` and `ingestion_endpoints is truthy` |
 | Produces | `chunk_boundary_results` |
 
 Tests at multiple chunk sizes (256, 512, 1024 tokens). Splits injection payload across boundary with filler text. Injects document and queries to check if split payload reassembles in LLM context. Intrusive check.

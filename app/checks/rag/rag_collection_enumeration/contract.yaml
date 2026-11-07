@@ -28,3 +28,12 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Collection enumeration reveals the structure and purpose of the knowledge
   base, identifying high-value targets for exfiltration
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. No `observations:` map — the discriminator embeds the store
+  # type (`enum-chroma`), so `provisional_for()` falls to `default` and `grade()`
+  # places the real severity (the ai_model_info_check pattern). `default` is the
+  # lowest severity this check emits, so a deferred or failed grade can never
+  # over-escalate `on_critical`.
+  default: info

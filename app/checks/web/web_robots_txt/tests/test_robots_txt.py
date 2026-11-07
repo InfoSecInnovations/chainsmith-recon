@@ -1,4 +1,4 @@
-"""Co-located tests for the robots_txt check (Phase 56 §3).
+"""Tests for the robots_txt check.
 
 Extracted from tests/checks/test_web.py during the 56.1 pilot migration. The
 patch target points at the `check` submodule where AsyncHttpClient is bound
@@ -69,6 +69,20 @@ def mock_client(responses: list[HttpResponse] | HttpResponse):
     return mock
 
 
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
+
+
 # ─── Tests ───────────────────────────────────────────────────────────────────
 
 
@@ -95,7 +109,7 @@ class TestRobotsTxtCheckService:
             "app.checks.web.web_robots_txt.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 0
 
@@ -114,7 +128,7 @@ Disallow: /public/
             "app.checks.web.web_robots_txt.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         # /admin/ matches "admin" pattern
         sensitive_observations = [f for f in result.observations if "Sensitive paths" in f.title]
@@ -141,7 +155,7 @@ Disallow: /public/
             "app.checks.web.web_robots_txt.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         sensitive_observations = [f for f in result.observations if "Sensitive paths" in f.title]
         assert len(sensitive_observations) == 1
@@ -169,7 +183,7 @@ Disallow: /public/
             "app.checks.web.web_robots_txt.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         sensitive_observations = [f for f in result.observations if "Sensitive paths" in f.title]
         assert len(sensitive_observations) == 0
@@ -189,7 +203,7 @@ Sitemap: https://example.com/sitemap2.xml
             "app.checks.web.web_robots_txt.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         sitemap_observations = [f for f in result.observations if "Sitemaps" in f.title]
         assert len(sitemap_observations) == 1
@@ -209,7 +223,7 @@ Sitemap: https://example.com/sitemap.xml
             "app.checks.web.web_robots_txt.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         key = f"robots_{sample_service.port}"
         assert key in result.outputs

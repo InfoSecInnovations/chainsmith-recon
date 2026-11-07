@@ -1,4 +1,4 @@
-"""Triage agent component (Phase 56 folder shape).
+"""Triage agent component.
 
 Pure re-export of the entry class so `from app.agents.triage import TriageAgent`
 resolves to the same object the agent factory builds (identity-preserving, §3.1).

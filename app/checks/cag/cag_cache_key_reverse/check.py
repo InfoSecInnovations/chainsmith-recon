@@ -9,18 +9,44 @@ Attack vectors:
 - Cache key truncation: injection payload after key boundary
 - Case-insensitive keys: wider collision surface
 
+**Probe/grade.** The probe confirms caching, then sends each
+component test's populate + variant requests and the system-prompt pair,
+recording all of them as one candidate per endpoint (each observation names the
+endpoint `target_url`, and one candidate yields several verdicts — §0.15).
+`grade()` re-reads the recorded exchanges; `_analyze()` is the one parser both
+halves call (§0.12). Conventions it contributes:
+
+- **Timing is read back, not re-measured** (`Exchange.elapsed_ms`), so a re-grade
+  reproduces every cache-hit call from the corpus.
+- **Byte-identical baseline requests are paired by order** (§0.15): the two
+  `baseline_key_test_` probes are identical, so the first recorded is the
+  uncached read and the second the cached one.
+- **Each test's variant is recovered from its own recorded body** — the variant
+  query text (`_variant_of`) for the component tests, the `system` field for the
+  system-prompt test — never from the order the tests ran.
+
+**Fixed**: the discriminators are a closed five-value set,
+so the contract carries the full `observations:` map at each one's floor.
+Confidence is where the split pays: every call is a timing inference, and a fast
+response to a variant query is as easily backend warmup as a cache hit.
+
 References:
   https://portswigger.net/web-security/web-cache-poisoning
   OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 """
 
 import asyncio
+import json
 import time
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
+BASELINE_PREFIX = "baseline_key_test_"
 
 # Query variation pairs to test which components are in the cache key
 KEY_COMPONENT_TESTS = [
@@ -91,8 +117,11 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
     ]
     techniques = ["cache key analysis", "timing analysis", "input variation"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
@@ -109,32 +138,14 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
             async with AsyncHttpClient(cfg) as client:
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
+                    candidate = self.create_candidate(
+                        host=service.host, target=service, target_url=url
+                    )
+                    await self._probe_endpoint(client, url, scan_id, service.host, candidate)
+                    result.candidates.append(candidate)
 
-                    # First confirm caching is active
-                    baseline = await self._get_baseline_timing(client, url)
-                    if not baseline or not baseline.get("caching_detected"):
-                        continue
-
-                    cache_hit_threshold = baseline["uncached_ms"] * 0.7
-
-                    # Test each key component
-                    for test in KEY_COMPONENT_TESTS:
-                        component_result = await self._test_key_component(
-                            client, url, test, cache_hit_threshold
-                        )
-                        if component_result:
-                            key_results.append(component_result)
-
-                    # Test system prompt inclusion
-                    for test in SYSTEM_PROMPT_TESTS:
-                        sys_result = await self._test_system_prompt_key(
-                            client, url, test, cache_hit_threshold
-                        )
-                        if sys_result:
-                            key_results.append(sys_result)
-
-                    # Generate observations from results
-                    self._generate_observations(result, key_results, service, url)
+                    analysis = self._analyze(candidate.exchanges)
+                    key_results.extend(analysis["key_results"])
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -144,211 +155,260 @@ class CacheKeyReverseCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _get_baseline_timing(self, client: AsyncHttpClient, url: str) -> dict | None:
-        """Get baseline timing for cached vs uncached requests."""
-        test_query = f"baseline_key_test_{int(time.time())}"
-
-        # Uncached request
-        start1 = time.time()
-        resp1 = await client.post(
-            url,
-            json={"input": test_query, "query": test_query},
-            headers={"Content-Type": "application/json"},
-        )
-        uncached_ms = (time.time() - start1) * 1000
-
-        if resp1.error or resp1.status_code >= 400:
-            return None
-
-        # Cached request (same query)
-        start2 = time.time()
-        await client.post(
-            url,
-            json={"input": test_query, "query": test_query},
-            headers={"Content-Type": "application/json"},
-        )
-        cached_ms = (time.time() - start2) * 1000
-
-        caching_detected = cached_ms < uncached_ms * 0.7
-
-        return {
-            "uncached_ms": uncached_ms,
-            "cached_ms": cached_ms,
-            "caching_detected": caching_detected,
-        }
-
-    async def _test_key_component(
-        self, client: AsyncHttpClient, url: str, test: dict, cache_hit_threshold: float
-    ) -> dict | None:
-        """Test if a specific component is part of the cache key."""
-        base_query = test["base"]
-        variant_query = test["variant"]
-
-        try:
-            # Send base query (populate cache)
-            await client.post(
-                url,
-                json={"input": base_query, "query": base_query},
-                headers={"Content-Type": "application/json"},
+    async def _probe_endpoint(
+        self, client: AsyncHttpClient, url: str, scan_id: str, host: str, candidate
+    ) -> None:
+        # Baseline: two identical probes (uncached read, then cached read).
+        test_query = f"{BASELINE_PREFIX}{int(time.time())}"
+        for _ in range(2):
+            candidate.attach(
+                await self._send(
+                    client, url, {"input": test_query, "query": test_query}, scan_id, host
+                )
             )
 
-            # Brief wait for cache population
+        # Each key component: populate with base (not timed), then send variant.
+        for test in KEY_COMPONENT_TESTS:
+            await self._send(
+                client, url, {"input": test["base"], "query": test["base"]}, scan_id, host
+            )
             await asyncio.sleep(0.5)
-
-            # Send variant query and measure timing
-            start = time.time()
-            resp = await client.post(
-                url,
-                json={"input": variant_query, "query": variant_query},
-                headers={"Content-Type": "application/json"},
+            candidate.attach(
+                await self._send(
+                    client, url, {"input": test["variant"], "query": test["variant"]}, scan_id, host
+                )
             )
-            variant_ms = (time.time() - start) * 1000
 
-            if resp.error:
-                return None
-
-            cache_hit = variant_ms < cache_hit_threshold
-            in_cache_key = not cache_hit  # If variant misses cache, component IS in key
-
-            return {
-                "test_id": test["id"],
-                "description": test["description"],
-                "component_in_key": in_cache_key,
-                "cache_hit_on_variant": cache_hit,
-                "variant_ms": round(variant_ms, 2),
-                "threshold_ms": round(cache_hit_threshold, 2),
-            }
-
-        except Exception:
-            return None
-
-    async def _test_system_prompt_key(
-        self, client: AsyncHttpClient, url: str, test: dict, cache_hit_threshold: float
-    ) -> dict | None:
-        """Test if system prompt is part of the cache key."""
-        query = test["query"]
-
-        try:
-            # Send with system prompt A
-            await client.post(
+        # System prompt: populate with system A, then send with system B.
+        for test in SYSTEM_PROMPT_TESTS:
+            q = test["query"]
+            await self._send(
+                client,
                 url,
-                json={
-                    "input": query,
-                    "query": query,
+                {
+                    "input": q,
+                    "query": q,
                     "system": test["system_a"],
                     "messages": [
                         {"role": "system", "content": test["system_a"]},
-                        {"role": "user", "content": query},
+                        {"role": "user", "content": q},
                     ],
                 },
-                headers={"Content-Type": "application/json"},
+                scan_id,
+                host,
             )
-
             await asyncio.sleep(0.5)
-
-            # Send same query with system prompt B
-            start = time.time()
-            resp = await client.post(
-                url,
-                json={
-                    "input": query,
-                    "query": query,
-                    "system": test["system_b"],
-                    "messages": [
-                        {"role": "system", "content": test["system_b"]},
-                        {"role": "user", "content": query},
-                    ],
-                },
-                headers={"Content-Type": "application/json"},
+            candidate.attach(
+                await self._send(
+                    client,
+                    url,
+                    {
+                        "input": q,
+                        "query": q,
+                        "system": test["system_b"],
+                        "messages": [
+                            {"role": "system", "content": test["system_b"]},
+                            {"role": "user", "content": q},
+                        ],
+                    },
+                    scan_id,
+                    host,
+                )
             )
-            variant_ms = (time.time() - start) * 1000
 
-            if resp.error:
-                return None
+    async def _send(
+        self, client: AsyncHttpClient, url: str, body: dict, scan_id: str, host: str
+    ) -> Exchange:
+        resp = await client.post(url, json=body, headers=JSON_HEADERS)
+        return exchange_from_response(
+            resp,
+            check_name=self.name,
+            scan_id=scan_id,
+            host=host,
+            method="POST",
+            request_headers=JSON_HEADERS,
+            request_json=body,
+        )
 
-            cache_hit = variant_ms < cache_hit_threshold
+    # ══ Grade (rule tier) ════════════════════════════════════════════
 
-            return {
-                "test_id": test["id"],
-                "description": test["description"],
-                "component_in_key": not cache_hit,
-                "cache_hit_on_variant": cache_hit,
-                "variant_ms": round(variant_ms, 2),
-                "threshold_ms": round(cache_hit_threshold, 2),
-            }
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        analysis = self._analyze(list(evidence))
+        if not analysis["caching_detected"]:
+            # The original `continue`d past a non-caching endpoint, emitting
+            # nothing; a candidate with no verdict yields no observation.
+            return []
 
-        except Exception:
-            return None
+        key_results = analysis["key_results"]
+        verdicts: list[Verdict] = []
 
-    def _generate_observations(
-        self, result: CheckResult, key_results: list[dict], service: Service, url: str
-    ) -> None:
-        """Generate observations from key analysis results."""
-        if not key_results:
-            return
-
-        # Check for high-severity: system prompt not in key
-        sys_tests = [r for r in key_results if r["test_id"] == "system_prompt"]
-        for r in sys_tests:
-            if r.get("cache_hit_on_variant"):
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
+        # High: system prompt not in key.
+        for r in key_results:
+            if r["test_id"] == "system_prompt" and r.get("cache_hit_on_variant"):
+                verdicts.append(
+                    Verdict(
+                        severity="high",
+                        confidence=0.4,
+                        discriminator="key-excludes-system-prompt",
                         title="Cache key excludes system prompt: different system messages share cache",
                         description=(
                             "The cache key does not include the system prompt. Different system "
                             "messages produce cache hits for the same user query, meaning users "
                             "with different safety configurations share cache entries."
                         ),
-                        severity="high",
                         evidence=self._build_evidence(r),
-                        host=service.host,
-                        discriminator="key-excludes-system-prompt",
-                        target=service,
-                        target_url=url,
-                        raw_data=r,
+                        reasoning=(
+                            "the exclusion is inferred from one timing: system_b answered faster "
+                            "than 70% of the uncached baseline. A warm backend or an unrelated "
+                            "load dip gives the same fast response, and nothing confirms the "
+                            "system prompt was actually left out of the key"
+                        ),
+                        signals={
+                            "variant_ms": r.get("variant_ms"),
+                            "threshold_ms": r.get("threshold_ms"),
+                        },
                         references=self.references,
+                        raw_data=r,
+                        tier=ctx.tier,
+                        evidence_ids=evidence.ids(),
                     )
                 )
 
-        # Check for medium-severity: case-insensitive, whitespace-insensitive
+        # Medium: case/whitespace/punctuation-insensitive key.
         for r in key_results:
-            if r["test_id"] in ("capitalization", "whitespace", "punctuation"):
-                if r.get("cache_hit_on_variant"):
-                    result.observations.append(
-                        build_observation(
-                            check_name=self.name,
-                            title=f"Cache key is {r['description'].lower()}-insensitive",
-                            description=(
-                                f"Cache key ignores {r['description'].lower()} differences. "
-                                f"This widens the collision surface for cache poisoning attacks."
-                            ),
-                            severity="medium",
-                            evidence=self._build_evidence(r),
-                            host=service.host,
-                            discriminator=f"key-ignores-{r['test_id']}",
-                            target=service,
-                            target_url=url,
-                            raw_data=r,
-                        )
+            if r["test_id"] in ("capitalization", "whitespace", "punctuation") and r.get(
+                "cache_hit_on_variant"
+            ):
+                verdicts.append(
+                    Verdict(
+                        severity="medium",
+                        confidence=0.4,
+                        discriminator=f"key-ignores-{r['test_id']}",
+                        title=f"Cache key is {r['description'].lower()}-insensitive",
+                        description=(
+                            f"Cache key ignores {r['description'].lower()} differences. "
+                            f"This widens the collision surface for cache poisoning attacks."
+                        ),
+                        evidence=self._build_evidence(r),
+                        reasoning=(
+                            "rests on the variant answering faster than the cache-hit threshold — "
+                            "a timing inference over a single sample. Response-time noise on an "
+                            "LLM backend spans this margin, and no cache header corroborates the "
+                            "normalisation"
+                        ),
+                        signals={
+                            "variant_ms": r.get("variant_ms"),
+                            "threshold_ms": r.get("threshold_ms"),
+                        },
+                        references=self.references,
+                        raw_data=r,
+                        tier=ctx.tier,
+                        evidence_ids=evidence.ids(),
                     )
+                )
 
-        # Summary observation if all components are in key
-        all_in_key = all(r.get("component_in_key", False) for r in key_results)
-        if all_in_key:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+        # Low: all components in key.
+        if key_results and all(r.get("component_in_key", False) for r in key_results):
+            verdicts.append(
+                Verdict(
+                    severity="low",
+                    confidence=0.5,
+                    discriminator="key-detailed",
                     title="Cache key includes most query components (detailed key)",
                     description="All tested query components are part of the cache key, reducing collision risk.",
-                    severity="low",
                     evidence=f"Tested {len(key_results)} key components, all included in cache key",
-                    host=service.host,
-                    discriminator="key-detailed",
-                    target=service,
-                    target_url=url,
+                    reasoning=(
+                        "every variant answered slower than the cache-hit threshold, read as the "
+                        "component being in the key — but that is the absence of a timing signal "
+                        "across a handful of samples, not positive proof the key is detailed"
+                    ),
+                    signals={"components_tested": len(key_results)},
+                    raw_data={"key_results": key_results},
+                    tier=ctx.tier,
+                    evidence_ids=evidence.ids(),
                 )
             )
+
+        return verdicts
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _analyze(self, exchanges: list[Exchange]) -> dict:
+        """Rebuild baseline detection + per-component results off the record."""
+        baseline = [e for e in exchanges if BASELINE_PREFIX in self._input_of(e) and not e.error]
+        if len(baseline) < 2 or baseline[0].elapsed_ms is None or baseline[1].elapsed_ms is None:
+            return {"caching_detected": False, "key_results": []}
+
+        uncached_ms = baseline[0].elapsed_ms
+        cached_ms = baseline[1].elapsed_ms
+        if (baseline[0].response_status or 0) >= 400:
+            return {"caching_detected": False, "key_results": []}
+
+        caching_detected = cached_ms < uncached_ms * 0.7
+        if not caching_detected:
+            return {"caching_detected": False, "key_results": []}
+
+        threshold = uncached_ms * 0.7
+        key_results = []
+
+        for test in KEY_COMPONENT_TESTS:
+            variant = self._variant_of(exchanges, test["variant"])
+            if variant is None or variant.error or variant.elapsed_ms is None:
+                continue
+            variant_ms = variant.elapsed_ms
+            cache_hit = variant_ms < threshold
+            key_results.append(
+                {
+                    "test_id": test["id"],
+                    "description": test["description"],
+                    "component_in_key": not cache_hit,
+                    "cache_hit_on_variant": cache_hit,
+                    "variant_ms": round(variant_ms, 2),
+                    "threshold_ms": round(threshold, 2),
+                }
+            )
+
+        for test in SYSTEM_PROMPT_TESTS:
+            variant = self._system_variant(exchanges, test["system_b"])
+            if variant is None or variant.error or variant.elapsed_ms is None:
+                continue
+            variant_ms = variant.elapsed_ms
+            cache_hit = variant_ms < threshold
+            key_results.append(
+                {
+                    "test_id": test["id"],
+                    "description": test["description"],
+                    "component_in_key": not cache_hit,
+                    "cache_hit_on_variant": cache_hit,
+                    "variant_ms": round(variant_ms, 2),
+                    "threshold_ms": round(threshold, 2),
+                }
+            )
+
+        return {"caching_detected": True, "key_results": key_results}
+
+    @staticmethod
+    def _body_of(exchange: Exchange) -> dict:
+        try:
+            body = json.loads(exchange.request_body or "{}")
+        except (ValueError, TypeError):
+            return {}
+        return body if isinstance(body, dict) else {}
+
+    def _input_of(self, exchange: Exchange) -> str:
+        return self._body_of(exchange).get("input", "")
+
+    def _variant_of(self, exchanges: list[Exchange], variant_query: str) -> Exchange | None:
+        for exchange in exchanges:
+            if self._input_of(exchange) == variant_query:
+                return exchange
+        return None
+
+    def _system_variant(self, exchanges: list[Exchange], system_b: str) -> Exchange | None:
+        for exchange in exchanges:
+            if self._body_of(exchange).get("system") == system_b:
+                return exchange
+        return None
 
     def _build_evidence(self, test_result: dict) -> str:
         """Build evidence string."""

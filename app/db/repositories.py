@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select, update
 
 from app.db.engine import Database, get_session
 from app.db.models import (
@@ -23,6 +23,7 @@ from app.db.models import (
     Chain,
     ChatMessage,
     CheckLog,
+    EvidenceRecord,
     ObservationOverride,
     ObservationRecord,
     ObservationStatusHistory,
@@ -57,6 +58,93 @@ def _generate_fingerprint(check_name: str, host: str, title: str, evidence: str 
     """
     normalized = f"{check_name}|{host or ''}|{title}|{evidence or ''}"
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+
+
+def scoped_observation_id(scan_id: str, raw_id: str) -> str:
+    """The stored id of an observation.
+
+    Scoped per scan so deterministic ids from checks (e.g.
+    "dns_enumeration-www.example.com") don't collide across scans. The
+    fingerprint column handles cross-scan dedup.
+    """
+    return f"{scan_id[:8]}-{raw_id}"
+
+
+def _observation_row(scan_id: str, obs: dict) -> ObservationRecord:
+    """Build one observations-table row from a check-shaped observation dict."""
+    raw_id = obs.get("id")
+    observation_id = scoped_observation_id(scan_id, raw_id) if raw_id else uuid.uuid4().hex[:12]
+    host = obs.get("target_host") or obs.get("host") or obs.get("target_url", "")
+    fingerprint = _generate_fingerprint(
+        check_name=obs.get("check_name", obs.get("check", "")),
+        host=host,
+        title=obs.get("title", ""),
+        evidence=obs.get("evidence", ""),
+    )
+    return ObservationRecord(
+        id=observation_id,
+        scan_id=scan_id,
+        title=obs.get("title", "Untitled"),
+        description=obs.get("description"),
+        severity=obs.get("severity", "info"),
+        check_name=obs.get("check_name", obs.get("check", "unknown")),
+        suite=obs.get("suite"),
+        target_url=obs.get("target_url") or obs.get("url"),
+        host=host,
+        evidence=obs.get("evidence"),
+        raw_data=obs.get("raw_data") or obs.get("raw"),
+        references=obs.get("references"),
+        verification_status=obs.get("verification_status", "pending"),
+        confidence=obs.get("confidence"),
+        fingerprint=fingerprint,
+        event_seq=obs.get("event_seq"),
+        provisional_severity=obs.get("provisional_severity"),
+        grading_state=obs.get("grading_state", "ungraded"),
+        grading_tier=obs.get("grading_tier"),
+        grading_reasoning=obs.get("grading_reasoning"),
+        evidence_ids=obs.get("evidence_ids"),
+        evidence_source=obs.get("evidence_source"),
+        signals=obs.get("signals"),
+    )
+
+
+#: The columns a grader owns. An offline re-grade rewrites these
+#: and nothing else: identity, provisional severity, verification status and
+#: the launcher's raw_data annotations stay as the scan left them. The
+#: fingerprint is here because it hashes title and evidence, which a grader
+#: writes.
+REGRADE_COLUMNS: tuple[str, ...] = (
+    "title",
+    "description",
+    "severity",
+    "evidence",
+    "confidence",
+    "grading_state",
+    "grading_tier",
+    "grading_reasoning",
+    "evidence_ids",
+    "evidence_source",
+    "signals",
+    "fingerprint",
+)
+
+#: `GradingState.SUPERSEDED`, spelled out so the data layer does not import the
+#: grading package (a test holds the two equal).
+SUPERSEDED_STATE = "superseded"
+
+
+def not_superseded():
+    """The predicate for rows a count or a default view reads.
+
+    A superseded placeholder always has a successor row, so reading both counts
+    one subject twice. `grading_state` is nullable — rows from before 57.3 hold
+    NULL — and in SQL `NULL != 'superseded'` is not true, so a bare `!=` would
+    silently drop every such row. The NULL case is spelled out.
+    """
+    return or_(
+        ObservationRecord.grading_state.is_(None),
+        ObservationRecord.grading_state != SUPERSEDED_STATE,
+    )
 
 
 class ScanRepository(_RepositoryBase):
@@ -289,40 +377,7 @@ class ObservationRepository(_RepositoryBase):
         if not observations:
             return 0
 
-        rows = []
-        for obs in observations:
-            # Scope observation IDs per scan so deterministic IDs from
-            # checks (e.g. "dns_enumeration-www.example.com") don't collide
-            # across scans.  The fingerprint column handles cross-scan dedup.
-            raw_id = obs.get("id")
-            observation_id = f"{scan_id[:8]}-{raw_id}" if raw_id else uuid.uuid4().hex[:12]
-            host = obs.get("target_host") or obs.get("host") or obs.get("target_url", "")
-            fingerprint = _generate_fingerprint(
-                check_name=obs.get("check_name", obs.get("check", "")),
-                host=host,
-                title=obs.get("title", ""),
-                evidence=obs.get("evidence", ""),
-            )
-            rows.append(
-                ObservationRecord(
-                    id=observation_id,
-                    scan_id=scan_id,
-                    title=obs.get("title", "Untitled"),
-                    description=obs.get("description"),
-                    severity=obs.get("severity", "info"),
-                    check_name=obs.get("check_name", obs.get("check", "unknown")),
-                    suite=obs.get("suite"),
-                    target_url=obs.get("target_url") or obs.get("url"),
-                    host=host,
-                    evidence=obs.get("evidence"),
-                    raw_data=obs.get("raw_data") or obs.get("raw"),
-                    references=obs.get("references"),
-                    verification_status=obs.get("verification_status", "pending"),
-                    confidence=obs.get("confidence"),
-                    fingerprint=fingerprint,
-                    event_seq=obs.get("event_seq"),
-                )
-            )
+        rows = [_observation_row(scan_id, obs) for obs in observations]
 
         async with self._session() as session:
             session.add_all(rows)
@@ -331,18 +386,90 @@ class ObservationRepository(_RepositoryBase):
         logger.info(f"Persisted {len(rows)} observations for scan {scan_id}")
         return len(rows)
 
+    async def get_records(self, scan_id: str) -> list[dict]:
+        """Every stored observation for a scan, exactly as persisted.
+
+        Unlike `get_observations`, no user severity override is layered on: a
+        re-grade diffs against what the scan wrote, and an override applied
+        after the scan is not something a grader produced.
+        """
+        async with self._session() as session:
+            result = await session.execute(
+                select(ObservationRecord).where(ObservationRecord.scan_id == scan_id)
+            )
+            return [_observation_to_dict(obs) for obs in result.scalars().all()]
+
+    async def apply_regrade(
+        self,
+        scan_id: str,
+        *,
+        changed: list[dict],
+        added: list[dict],
+        superseded: dict[str, str],
+        successors: dict[str, list[str]] | None = None,
+    ) -> dict[str, int]:
+        """Write an offline re-grade back, in one transaction.
+
+        `changed` rewrites `REGRADE_COLUMNS` on rows the re-grade reproduced;
+        `added` inserts verdicts it newly produced; `superseded` maps a stored
+        id to the reasoning stamped on it, and `successors` to the stored ids
+        that replaced it — recorded in `raw_data["superseded_by"]` so a chain
+        naming the placeholder can be rendered through to them. **Nothing is
+        deleted** — chains name observation ids, and nothing subtracts (§2).
+        """
+        successors = successors or {}
+        counts = {"updated": 0, "inserted": 0, "superseded": 0}
+        async with self._session() as session:
+            for obs in changed:
+                row = _observation_row(scan_id, obs)
+                result = await session.execute(
+                    update(ObservationRecord)
+                    .where(ObservationRecord.scan_id == scan_id, ObservationRecord.id == row.id)
+                    .values(**{column: getattr(row, column) for column in REGRADE_COLUMNS})
+                )
+                counts["updated"] += int(result.rowcount or 0)
+
+            for observation_id, reasoning in superseded.items():
+                row = await session.get(ObservationRecord, observation_id)
+                if row is None or row.scan_id != scan_id:
+                    continue
+                row.grading_state = SUPERSEDED_STATE
+                row.grading_reasoning = reasoning
+                row.raw_data = {
+                    **(row.raw_data or {}),
+                    "superseded_by": list(successors.get(observation_id) or []),
+                }
+                counts["superseded"] += 1
+
+            rows = [_observation_row(scan_id, obs) for obs in added]
+            session.add_all(rows)
+            counts["inserted"] = len(rows)
+
+            await session.commit()
+
+        logger.info(f"Applied re-grade to scan {scan_id}: {counts}")
+        return counts
+
     async def get_observations(
         self,
         scan_id: str,
         severity: str | None = None,
         host: str | None = None,
+        *,
+        include_superseded: bool = False,
     ) -> list[dict]:
         """Get observations for a scan with optional filters.
 
         Severity overrides from user customizations are applied before
         filtering, so the severity parameter filters on effective severity.
+
+        Superseded rows are left out unless `include_superseded` — each one's
+        successor is already in the result. Opt in where the audit
+        trail is the point: a report's supersession appendix, a dedupe.
         """
         query = select(ObservationRecord).where(ObservationRecord.scan_id == scan_id)
+        if not include_superseded:
+            query = query.where(not_superseded())
         # Host filter can still be applied at query level
         if host:
             query = query.where(ObservationRecord.host == host)
@@ -370,7 +497,7 @@ class ObservationRepository(_RepositoryBase):
     ) -> list[tuple[int, dict]]:
         """Return observation rows as `observation_added` payloads for SSE replay.
 
-        Phase 51.3b: backs the DB-backed replay path for `observation_added`
+        Backs the DB-backed replay path for `observation_added`
         events, which are never kept in the hot ring. Only rows whose
         `event_seq` falls in `(last_seq, upper_seq]` are returned, ordered by
         seq. Payload shape mirrors what `ObservationWriter` publishes live
@@ -403,15 +530,19 @@ class ObservationRepository(_RepositoryBase):
             for seq, obs_id, severity, host, check in rows
         ]
 
-    async def get_observations_by_host(self, scan_id: str) -> list[dict]:
+    async def get_observations_by_host(
+        self, scan_id: str, *, include_superseded: bool = False
+    ) -> list[dict]:
         """Get observations for a scan grouped by host.
 
-        Severity overrides from user customizations are applied.
+        Severity overrides from user customizations are applied. Superseded
+        rows are left out unless asked for, as in `get_observations`.
         """
+        query = select(ObservationRecord).where(ObservationRecord.scan_id == scan_id)
+        if not include_superseded:
+            query = query.where(not_superseded())
         async with self._session() as session:
-            result = await session.execute(
-                select(ObservationRecord).where(ObservationRecord.scan_id == scan_id)
-            )
+            result = await session.execute(query)
             observation_dicts = [_observation_to_dict(obs) for obs in result.scalars().all()]
 
         # Apply scan-specific severity overrides
@@ -468,6 +599,13 @@ def _observation_to_dict(f: ObservationRecord) -> dict:
         "references": f.references,
         "verification_status": f.verification_status,
         "confidence": f.confidence,
+        "provisional_severity": f.provisional_severity,
+        "grading_state": f.grading_state or "ungraded",
+        "grading_tier": f.grading_tier,
+        "grading_reasoning": f.grading_reasoning,
+        "evidence_ids": f.evidence_ids or [],
+        "evidence_source": f.evidence_source,
+        "signals": f.signals,
         "fingerprint": f.fingerprint,
         "created_at": f.created_at.isoformat() if f.created_at else None,
         "original_severity": None,
@@ -535,7 +673,7 @@ def _chain_to_dict(c: Chain) -> dict:
     display_id = c.id
     prefix = f"{c.scan_id}:"
     if display_id and display_id.startswith(prefix):
-        display_id = display_id[len(prefix):]
+        display_id = display_id[len(prefix) :]
     return {
         "id": display_id,
         "scan_id": c.scan_id,
@@ -586,7 +724,7 @@ class CheckLogRepository(_RepositoryBase):
     ) -> list[tuple[int, str, dict]]:
         """Return check_log rows as SSE (event_type, payload) tuples for replay.
 
-        Phase 51.3b: backs the DB-backed replay for `check_started`,
+        Backs the DB-backed replay for `check_started`,
         `check_completed`, and `check_skipped` events older than the hot
         ring's floor. Uses `CheckLog.to_sse_event()` — the single mapping
         shared with the live publisher — so replay cannot drift.
@@ -633,6 +771,187 @@ def _check_log_to_dict(entry: CheckLog) -> dict:
     }
 
 
+class EvidenceRepository(_RepositoryBase):
+    """Index captured exchanges.
+
+    The document on disk is the evidence; this table is the index over it. Rows
+    are written by ``EvidenceIndexWriter`` after the store has the file, so the
+    index never points at something that is not there.
+    """
+
+    async def bulk_create(self, exchanges: list) -> int:
+        """Index a batch of ``Exchange`` objects. Returns the count inserted.
+
+        Takes the scan id from each exchange rather than as an argument: two
+        scans run concurrently and their evidence drains through one writer, so
+        a batch is not guaranteed to belong to a single scan.
+        """
+        if not exchanges:
+            return 0
+
+        rows = [
+            EvidenceRecord(
+                id=exchange.id,
+                scan_id=exchange.scan_id,
+                check_name=exchange.check_name,
+                host=exchange.host,
+                protocol=exchange.protocol,
+                candidate_id=exchange.candidate_id,
+                iteration=exchange.iteration,
+                request_method=exchange.request_method,
+                request_url=exchange.request_url,
+                response_status=exchange.response_status,
+                elapsed_ms=exchange.elapsed_ms,
+                error=exchange.error,
+                probe_hash=exchange.probe_hash,
+                content_hash=exchange.content_hash,
+                truncated=exchange.truncated,
+                document_path=f"{exchange.scan_id}/{exchange.id}.json",
+                captured_at=exchange.captured_at,
+            )
+            for exchange in exchanges
+        ]
+
+        async with self._session() as session:
+            session.add_all(rows)
+            await session.commit()
+
+        logger.debug("Indexed %d captured exchanges", len(rows))
+        return len(rows)
+
+    async def get_for_scan(
+        self,
+        scan_id: str,
+        check_name: str | None = None,
+        protocol: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """Index rows for one scan, oldest first, optionally narrowed."""
+        query = select(EvidenceRecord).where(EvidenceRecord.scan_id == scan_id)
+        if check_name:
+            query = query.where(EvidenceRecord.check_name == check_name)
+        if protocol:
+            query = query.where(EvidenceRecord.protocol == protocol)
+        query = query.order_by(EvidenceRecord.captured_at, EvidenceRecord.id)
+        if limit:
+            query = query.limit(limit)
+
+        async with self._session() as session:
+            result = await session.execute(query)
+            return [_evidence_to_dict(row) for row in result.scalars().all()]
+
+    async def get(self, exchange_id: str) -> dict | None:
+        """One index row by exchange id."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(EvidenceRecord).where(EvidenceRecord.id == exchange_id)
+            )
+            row = result.scalar_one_or_none()
+            return _evidence_to_dict(row) if row else None
+
+    async def get_by_probe_hash(self, probe_hash: str) -> list[dict]:
+        """Every iteration of one probe, across scans (phase 58 §4 sampling)."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(EvidenceRecord)
+                .where(EvidenceRecord.probe_hash == probe_hash)
+                .order_by(EvidenceRecord.captured_at, EvidenceRecord.iteration)
+            )
+            return [_evidence_to_dict(row) for row in result.scalars().all()]
+
+    async def get_by_content_hash(self, content_hash: str) -> list[dict]:
+        """Every row holding identical evidence (phase 58 §5 grade cache)."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(EvidenceRecord)
+                .where(EvidenceRecord.content_hash == content_hash)
+                .order_by(EvidenceRecord.captured_at)
+            )
+            return [_evidence_to_dict(row) for row in result.scalars().all()]
+
+    async def count_for_scan(self, scan_id: str) -> int:
+        """How many exchanges one scan captured — the §9 growth number."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(EvidenceRecord)
+                .where(EvidenceRecord.scan_id == scan_id)
+            )
+            return int(result.scalar() or 0)
+
+    async def bind_candidate(self, scan_id: str, exchange_ids: list[str], candidate_id: str) -> int:
+        """Stamp a candidate id onto index rows.
+
+        The grade side of the binding: a grader names the exchanges it read and
+        the stage records that join here, so a verdict traces back to its exact
+        bytes. Scoped by ``scan_id`` as well as id because exchange ids are
+        minted per process and the scan is the only thing that makes them
+        unambiguous across a shared corpus.
+        """
+        if not exchange_ids:
+            return 0
+        async with self._session() as session:
+            result = await session.execute(
+                update(EvidenceRecord)
+                .where(
+                    EvidenceRecord.scan_id == scan_id,
+                    EvidenceRecord.id.in_(exchange_ids),
+                )
+                .values(candidate_id=candidate_id)
+            )
+            await session.commit()
+            return int(result.rowcount or 0)
+
+    async def get_for_candidate(self, scan_id: str, candidate_id: str) -> list[dict]:
+        """Every exchange one observation was graded from."""
+        async with self._session() as session:
+            result = await session.execute(
+                select(EvidenceRecord)
+                .where(
+                    EvidenceRecord.scan_id == scan_id,
+                    EvidenceRecord.candidate_id == candidate_id,
+                )
+                .order_by(EvidenceRecord.captured_at, EvidenceRecord.id)
+            )
+            return [_evidence_to_dict(row) for row in result.scalars().all()]
+
+    async def delete_scan(self, scan_id: str) -> int:
+        """Drop one scan's index rows. Returns how many were removed.
+
+        Retention deletes the documents too; see ``EvidenceStore.delete_scan``.
+        Cascade already covers the case where the scan row itself is deleted.
+        """
+        async with self._session() as session:
+            result = await session.execute(
+                delete(EvidenceRecord).where(EvidenceRecord.scan_id == scan_id)
+            )
+            await session.commit()
+            return int(result.rowcount or 0)
+
+
+def _evidence_to_dict(row: EvidenceRecord) -> dict:
+    """Convert an EvidenceRecord ORM object to a JSON-safe dict."""
+    return {
+        "id": row.id,
+        "scan_id": row.scan_id,
+        "check_name": row.check_name,
+        "host": row.host,
+        "protocol": row.protocol,
+        "candidate_id": row.candidate_id,
+        "iteration": row.iteration,
+        "request_method": row.request_method,
+        "request_url": row.request_url,
+        "response_status": row.response_status,
+        "elapsed_ms": row.elapsed_ms,
+        "error": row.error,
+        "probe_hash": row.probe_hash,
+        "content_hash": row.content_hash,
+        "truncated": row.truncated,
+        "document_path": row.document_path,
+        "captured_at": row.captured_at.isoformat() if row.captured_at else None,
+    }
+
+
 class ComparisonRepository(_RepositoryBase):
     """Compute and store observation status tracking and scan comparisons."""
 
@@ -643,6 +962,11 @@ class ComparisonRepository(_RepositoryBase):
         entries and a ScanComparison record.
 
         Returns {new, recurring, resolved, regressed, previous_scan_id}.
+
+        Safe to rerun: this scan's own history and comparison rows
+        are replaced rather than appended to, the previous scan is always one
+        that started no later than this one, and superseded rows are not
+        fingerprints. `recompute_statuses_from` relies on all three.
         """
         async with self._session() as session:
             # Get current scan
@@ -651,7 +975,13 @@ class ComparisonRepository(_RepositoryBase):
             if current_scan is None:
                 return {"new": 0, "recurring": 0, "resolved": 0, "regressed": 0}
 
-            # Find previous scan for the same target
+            await session.execute(
+                delete(ObservationStatusHistory).where(ObservationStatusHistory.scan_id == scan_id)
+            )
+            await session.execute(delete(ScanComparison).where(ScanComparison.scan_b_id == scan_id))
+
+            # Find previous scan for the same target. Bounded by start time:
+            # unbounded, a rerun on an older scan would pair it with a later one.
             prev_query = (
                 select(Scan)
                 .where(Scan.target_domain == current_scan.target_domain)
@@ -660,13 +990,17 @@ class ComparisonRepository(_RepositoryBase):
                 .order_by(Scan.started_at.desc())
                 .limit(1)
             )
+            if current_scan.started_at is not None:
+                prev_query = prev_query.where(Scan.started_at <= current_scan.started_at)
 
             result = await session.execute(prev_query)
             previous_scan = result.scalar_one_or_none()
 
             # Get all current fingerprints (used for first-scan path)
             result = await session.execute(
-                select(ObservationRecord.fingerprint).where(ObservationRecord.scan_id == scan_id)
+                select(ObservationRecord.fingerprint)
+                .where(ObservationRecord.scan_id == scan_id)
+                .where(not_superseded())
             )
             all_current_fps = {row[0] for row in result.all() if row[0]}
 
@@ -718,6 +1052,7 @@ class ComparisonRepository(_RepositoryBase):
                     select(ObservationRecord.fingerprint)
                     .where(ObservationRecord.scan_id == scan_id)
                     .where(ObservationRecord.check_name.in_(common_checks))
+                    .where(not_superseded())
                 )
                 current_fps = {row[0] for row in result.all() if row[0]}
 
@@ -725,15 +1060,16 @@ class ComparisonRepository(_RepositoryBase):
                     select(ObservationRecord.fingerprint)
                     .where(ObservationRecord.scan_id == previous_scan.id)
                     .where(ObservationRecord.check_name.in_(common_checks))
+                    .where(not_superseded())
                 )
                 previous_fps = {row[0] for row in result.all() if row[0]}
             else:
                 # No common checks (edge case) — fall back to all fingerprints
                 current_fps = all_current_fps
                 result = await session.execute(
-                    select(ObservationRecord.fingerprint).where(
-                        ObservationRecord.scan_id == previous_scan.id
-                    )
+                    select(ObservationRecord.fingerprint)
+                    .where(ObservationRecord.scan_id == previous_scan.id)
+                    .where(not_superseded())
                 )
                 previous_fps = {row[0] for row in result.all() if row[0]}
 
@@ -745,6 +1081,7 @@ class ComparisonRepository(_RepositoryBase):
                     select(ObservationRecord.fingerprint)
                     .where(ObservationRecord.scan_id == scan_id)
                     .where(ObservationRecord.check_name.in_(current_only_checks))
+                    .where(not_superseded())
                 )
                 current_only_fps = {row[0] for row in result.all() if row[0]}
             else:
@@ -861,8 +1198,8 @@ class ComparisonRepository(_RepositoryBase):
             common_checks = checks_a & checks_b
 
             # Get fingerprints scoped to common checks (or all if no log data)
-            fp_filter_a = [ObservationRecord.scan_id == scan_a_id]
-            fp_filter_b = [ObservationRecord.scan_id == scan_b_id]
+            fp_filter_a = [ObservationRecord.scan_id == scan_a_id, not_superseded()]
+            fp_filter_b = [ObservationRecord.scan_id == scan_b_id, not_superseded()]
             if common_checks:
                 fp_filter_a.append(ObservationRecord.check_name.in_(common_checks))
                 fp_filter_b.append(ObservationRecord.check_name.in_(common_checks))
@@ -901,6 +1238,7 @@ class ComparisonRepository(_RepositoryBase):
                     )
                     .where(ObservationRecord.scan_id == scan_b_id)
                     .where(ObservationRecord.check_name.in_(b_only_checks))
+                    .where(not_superseded())
                 )
                 fps_b_only = {
                     row[0]: {"title": row[1], "severity": row[2]} for row in result.all() if row[0]
@@ -923,6 +1261,57 @@ class ComparisonRepository(_RepositoryBase):
             "checks_only_in_a": len(checks_a - checks_b),
             "checks_only_in_b": len(b_only_checks),
         }
+
+    async def recompute_statuses_from(self, scan_id: str) -> list[str]:
+        """
+        Rebuild status history for a scan and every later scan of its target.
+
+        An offline re-grade changes which fingerprints a scan holds: a
+        superseded placeholder drops out and its successors arrive under new
+        ones. That scan's history is then stale, and so is every later scan's —
+        each was compared against its predecessor, and regression detection
+        reads `resolved` history across scans. History is data rebuilt from
+        observation rows and check logs, so the whole run is cleared first
+        (a later scan's stale `resolved` row must not be read while an earlier
+        one is recomputed) and then rebuilt oldest first.
+
+        As at scan completion, only complete scans that recorded observations
+        are compared. Returns the ids recomputed, in order.
+        """
+        async with self._session() as session:
+            result = await session.execute(select(Scan).where(Scan.id == scan_id))
+            scan = result.scalar_one_or_none()
+            if scan is None or scan.status != "complete":
+                return []
+
+            query = (
+                select(Scan.id, Scan.observations_count)
+                .where(Scan.target_domain == scan.target_domain)
+                .where(Scan.status == "complete")
+                .order_by(Scan.started_at, Scan.id)
+            )
+            if scan.started_at is not None:
+                query = query.where(Scan.started_at >= scan.started_at)
+            run = (await session.execute(query)).all()
+            run_ids = [row[0] for row in run]
+
+            await session.execute(
+                delete(ObservationStatusHistory).where(
+                    ObservationStatusHistory.scan_id.in_(run_ids)
+                )
+            )
+            await session.execute(
+                delete(ScanComparison).where(ScanComparison.scan_b_id.in_(run_ids))
+            )
+            await session.commit()
+
+        recomputed = []
+        for run_id, observations_count in run:
+            if observations_count:
+                await self.compute_observation_statuses(run_id)
+                recomputed.append(run_id)
+        logger.info(f"Recomputed observation statuses from scan {scan_id}: {recomputed}")
+        return recomputed
 
     async def get_observation_history(self, fingerprint: str) -> list[dict]:
         """Get status history for an observation fingerprint across scans."""
@@ -1142,7 +1531,9 @@ class TrendRepository(_RepositoryBase):
                     ObservationRecord.severity,
                     ObservationRecord.suite,
                     ObservationRecord.fingerprint,
-                ).where(ObservationRecord.scan_id == scan_id)
+                )
+                .where(ObservationRecord.scan_id == scan_id)
+                .where(not_superseded())
             )
             all_observations = result.all()
 
@@ -1301,6 +1692,7 @@ class TrendRepository(_RepositoryBase):
                 result = await session.execute(
                     select(ObservationRecord.fingerprint, ObservationRecord.severity)
                     .where(ObservationRecord.fingerprint.in_(resolved_fps))
+                    .where(not_superseded())
                     .distinct()
                 )
                 for fp, sev in result.all():
@@ -1577,7 +1969,7 @@ def _triage_action_to_dict(r: TriageActionRecord) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Chat (Phase 35)
+# Chat
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -1693,7 +2085,7 @@ def _chat_message_to_dict(r: ChatMessage) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Research Enrichment (Phase 22)
+# Research Enrichment
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -1779,7 +2171,7 @@ class ResearchRepository(_RepositoryBase):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Proof Guidance (Phase 22)
+# Proof Guidance
 # ═══════════════════════════════════════════════════════════════════════════════
 
 

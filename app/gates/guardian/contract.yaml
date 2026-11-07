@@ -15,5 +15,5 @@ outputs:
   decision: [GateDecision]
 side_effects: [filesystem]
 references:
-  - docs/future-ideas/phase56-component-modularization.md
+  - docs/future-ideas/completed/phase56-component-modularization.md
 reason: ""

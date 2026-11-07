@@ -1,4 +1,4 @@
-"""app/scan_presets.py - Scan presets (Phase 56.14 / phase-17 Wave 3).
+"""app/scan_presets.py - Scan presets.
 
 A **preset** is a named, scan-time bundle that layers on top of the per-component
 config baseline (§5.1 **layer 6a**). It is orthogonal to the preference/profile

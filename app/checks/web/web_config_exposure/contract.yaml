@@ -29,3 +29,29 @@ references:
 - CWE-540
 reason: An accessible .env with API keys is game over — no need to probe for prompt
   leakage when you have the key
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # One candidate per config file, because each observation names its own
+  # target_url. Both discriminators carry the path (`secrets--env`,
+  # `config-accessible-config.json`); those sets are unbounded, so the map
+  # records one entry per *family* and `provisional_for` falls to `default`.
+  #
+  # Both judgements are `high` or `critical` and `config-accessible` rests on
+  # nothing more than a 200 with a body — which a single-page app returns for
+  # `/.env` too. `grade()` therefore asks whether the body is the format the
+  # path implies: an HTML document is a catch-all route (0.4), a `.json` path
+  # whose body does not parse as JSON is probably not that file (0.5), anything
+  # else 0.85. `secrets` is 0.95 when a *named* key pattern matched and 0.7 when
+  # only the generic `*KEY`/`*TOKEN`-with-20-characters pattern did, which a
+  # committed placeholder satisfies. Severity is unchanged in every case, and
+  # secret values are still never recorded.
+  default: high
+  observations:
+    secrets: critical
+    config-accessible: high

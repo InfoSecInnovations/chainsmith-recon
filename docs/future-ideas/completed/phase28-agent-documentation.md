@@ -16,7 +16,7 @@ This is distinct from `docs/checks/agent.md`, which documents the agent
 ### 1. Component taxonomy
 
 Document the three component types and their defining traits. See
-[component-taxonomy.md](component-taxonomy.md) for the canonical reference.
+[component-taxonomy.md](../../component-taxonomy.md) for the canonical reference.
 
 | Type | Defining trait | Examples |
 |------|---------------|----------|
@@ -170,7 +170,7 @@ descriptions across multiple files.
   internal pipeline
 - `docs/OPERATING_MODES.md` — covers scan modes, could cross-reference
   pipeline doc for deeper detail
-- [component-taxonomy.md](component-taxonomy.md) — canonical taxonomy
+- [component-taxonomy.md](../../component-taxonomy.md) — canonical taxonomy
   reference; this doc should align with it
 - Phase 26 (model review) — proposes the `ComponentType` enum refactor
   that aligns the code with this taxonomy
@@ -192,5 +192,5 @@ descriptions across multiple files.
 - None hard — this is a documentation-only phase.
 - Best done after Phase 26 (model review) lands, so naming and type
   changes are settled.
-- Should reference [component-taxonomy.md](component-taxonomy.md) as the
+- Should reference [component-taxonomy.md](../../component-taxonomy.md) as the
   authoritative classification.

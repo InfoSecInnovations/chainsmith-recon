@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_network.py."""
+"""Tests for network_dns_enumeration."""
 
 import socket
 from unittest.mock import patch
@@ -54,6 +54,20 @@ class TestDnsEnumerationCheckInit:
         assert len(check.techniques) > 0
 
 
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
+
+
 class TestDnsEnumerationCheckRun:
     """Tests for DnsEnumerationCheck run behavior."""
 
@@ -101,7 +115,7 @@ class TestDnsEnumerationCheckRun:
             }
         )
         with patch("socket.getaddrinfo", side_effect=resolver):
-            result = await check.run({})
+            result = await probe_and_grade(check, {})
 
         assert result.success is True
         assert len(result.observations) == 2
@@ -152,7 +166,7 @@ class TestDnsEnumerationCheckRun:
 
         resolver = _fake_getaddrinfo({"www.example.com": "192.168.1.1"})
         with patch("socket.getaddrinfo", side_effect=resolver):
-            result = await check.run({})
+            result = await probe_and_grade(check, {})
 
         assert len(result.observations) == 1
         observation = result.observations[0]
@@ -167,7 +181,7 @@ class TestDnsEnumerationResolveHost:
     """Tests for _resolve_host method."""
 
     async def test_resolve_host_success(self):
-        """Successful resolution returns IP address."""
+        """Successful resolution puts the IP address on the exchange."""
         check = DnsEnumerationCheck()
 
         # Mock socket.getaddrinfo
@@ -176,13 +190,18 @@ class TestDnsEnumerationResolveHost:
         with patch("socket.getaddrinfo", return_value=mock_result):
             result = await check._resolve_host("example.com")
 
-        assert result == "192.168.1.1"
+        # 57.4 wave 2: the answer is the exchange's response body, which is what
+        # both the probe's outputs and `grade()` read.
+        assert result.response_body == "192.168.1.1"
+        assert result.error is None
+        assert result.protocol == "dns"
 
     async def test_resolve_host_failure(self):
-        """Failed resolution returns None."""
+        """Failed resolution records the failure rather than an address."""
         check = DnsEnumerationCheck()
 
         with patch("socket.getaddrinfo", side_effect=socket.gaierror("Not found")):
             result = await check._resolve_host("nonexistent.example.com")
 
-        assert result is None
+        assert result.response_body == ""
+        assert result.error is not None

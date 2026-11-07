@@ -1,5 +1,5 @@
 """
-Guardian - Scope Enforcement Gate (Phase 56 folder shape, 56.12)
+Guardian - Scope Enforcement Gate
 
 Single authority for "should this check/URL be allowed to run."
 Logic-based checker (not an AI agent) that validates URLs against
@@ -28,8 +28,14 @@ logger = logging.getLogger(__name__)
 class Guardian(BaseGate):
     """Scope enforcement for recon operations."""
 
-    def __init__(self, scope: ScopeDefinition):
+    def __init__(self, scope: ScopeDefinition, scan_id: str | None = None):
         self.scope = scope
+        # Which scan this Guardian is gating. Stamped onto every
+        # violation it logs, so a compliance report can be scoped to one scan
+        # instead of aggregating over whatever else was running. Null when the
+        # Guardian is built before a scan id exists — the pre-flight window gate
+        # in the scan route is the case.
+        self.scan_id = scan_id
         self.approved_urls: set[str] = set()
         self.denied_urls: set[str] = set()
         self.violation_count = 0
@@ -41,6 +47,7 @@ class Guardian(BaseGate):
         target: str,
         exclude: list[str] | None = None,
         forbidden_techniques: list[str] | None = None,
+        scan_id: str | None = None,
     ) -> "Guardian":
         """Build a Guardian from target/exclude (the common case at scan start)."""
         scope = ScopeDefinition(
@@ -48,7 +55,7 @@ class Guardian(BaseGate):
             out_of_scope_domains=exclude or [],
             forbidden_techniques=forbidden_techniques or [],
         )
-        return cls(scope)
+        return cls(scope, scan_id=scan_id)
 
     # ── URL validation ──────────────────────────────────────────
 
@@ -126,6 +133,7 @@ class Guardian(BaseGate):
                 ),
                 blocked=False,
                 user_acknowledged=True,
+                scan_id=self.scan_id,
             )
             return True, "Outside window — operator acknowledged"
 
@@ -137,6 +145,7 @@ class Guardian(BaseGate):
             ),
             blocked=True,
             user_acknowledged=False,
+            scan_id=self.scan_id,
         )
         return False, (
             f"Outside scan window (start={window.start}, end={window.end}). "

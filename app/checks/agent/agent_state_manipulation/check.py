@@ -4,6 +4,20 @@ app/checks/agent/state_manipulation.py - Agent State Manipulation
 For LangGraph agents with /state endpoints, attempt to directly modify
 agent state via PUT/PATCH requests to alter execution behavior.
 
+**Probe/grade.** The probe reads `/state`, writes each
+modification, enumerates threads and writes to each, recording every exchange;
+`grade()` re-reads them, reconstructs which writes the target accepted, and
+rates each. `_reading()` is the one parser both halves call (§0.12): each write
+is attributed by its recorded request path and body, and whether `/state` was
+readable is recovered from the recorded GET, not a probe-time flag.
+
+**Contextual**: whether an accepted write actually subverts
+execution is the attack-compliance question — and the `critical` vs `medium`
+call turns on whether schema validation was absent — so the rule logic runs at
+`GradingTier.RULE`. Confidence states the gap: a 2xx to the write is a concrete
+acceptance, but the write's *effect* on execution is never read back, and "no
+schema validation" is inferred from the absence of a 422.
+
 References:
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
   https://atlas.mitre.org/
@@ -11,10 +25,14 @@ References:
 
 import json
 from typing import Any
+from urllib.parse import urlparse
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 # State modification payloads
 STATE_MODIFICATIONS = [
@@ -43,6 +61,8 @@ THREAD_STATE_PATHS = [
     "/threads/{tid}/state",
     "/threads/{tid}",
 ]
+
+THREAD_WRITE_PAYLOAD = {"state": {"injected": "CHAINSMITH_THREAD_TEST"}}
 
 
 class AgentStateManipulationCheck(ServiceIteratingCheck):
@@ -76,8 +96,11 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
         "execution path alteration",
     ]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         agent_endpoints = context.get("agent_endpoints", [])
         service_endpoints = [
@@ -87,189 +110,284 @@ class AgentStateManipulationCheck(ServiceIteratingCheck):
             return result
 
         cfg = HttpConfig(timeout_seconds=10.0, verify_ssl=False)
-        manipulation_results = []
+        candidate = self.create_candidate(host=service.host, target=service, target_url=service.url)
+
+        def rec_get(resp) -> None:
+            candidate.attach(
+                exchange_from_response(
+                    resp, check_name=self.name, scan_id=scan_id, host=service.host
+                )
+            )
+
+        def rec_post(resp, body) -> None:
+            candidate.attach(
+                exchange_from_response(
+                    resp,
+                    check_name=self.name,
+                    scan_id=scan_id,
+                    host=service.host,
+                    method="POST",
+                    request_headers=JSON_HEADERS,
+                    request_json=body,
+                )
+            )
 
         try:
             async with AsyncHttpClient(cfg) as client:
-                # 1. Test /state endpoint
                 state_url = service.with_path("/state")
-                state_readable = await self._test_state_read(client, state_url)
+                state_get = await client.get(state_url)
+                rec_get(state_get)
+                state_readable = (
+                    None
+                    if state_get.status_code == 404
+                    else not (state_get.error or (state_get.status_code or 0) >= 400)
+                )
 
                 if state_readable:
                     for mod in STATE_MODIFICATIONS:
-                        res = await self._test_state_write(client, state_url, mod)
-                        manipulation_results.append(res)
+                        resp = await client.post(
+                            state_url, json=mod["payload"], headers=JSON_HEADERS
+                        )
+                        rec_post(resp, mod["payload"])
 
-                        if res["writable"]:
-                            severity = "critical" if not res["validated"] else "medium"
-                            result.observations.append(
-                                build_observation(
-                                    check_name=self.name,
-                                    title=f"Agent state writable: {mod['id']}",
-                                    description=(
-                                        f"State endpoint accepted modification: {mod['description']}. "
-                                        f"{'No schema validation — arbitrary state accepted.' if not res['validated'] else 'Schema validation present but state accepted.'}"
-                                    ),
-                                    severity=severity,
-                                    evidence=(
-                                        f"Modification: {mod['id']}\n"
-                                        f"PUT status: {res['status_code']}\n"
-                                        f"Validated: {res['validated']}\n"
-                                        f"Response: {res['response_preview']}"
-                                    ),
-                                    host=service.host,
-                                    discriminator=f"state-{mod['id']}",
-                                    target=service,
-                                    target_url=state_url,
-                                    raw_data=res,
-                                    references=self.references,
-                                )
-                            )
-                elif state_readable is False:
-                    # State endpoint exists but returned error
-                    pass
-                # else: 404, no state endpoint
-
-                # 2. Test thread state endpoints
-                thread_ids = await self._get_thread_ids(client, service)
+                # Thread state endpoints
+                thread_ids = await self._get_thread_ids(client, service, rec_get)
                 for tid in thread_ids[:3]:
                     for path_template in THREAD_STATE_PATHS:
                         path = path_template.replace("{tid}", str(tid))
                         thread_url = service.with_path(path)
-
-                        # Read thread state
                         read_resp = await client.get(thread_url)
+                        rec_get(read_resp)
                         if read_resp.error or read_resp.status_code in (404, 405):
                             continue
-
-                        # Attempt write
                         write_resp = await client.post(
-                            thread_url,
-                            json={"state": {"injected": "CHAINSMITH_THREAD_TEST"}},
-                            headers={"Content-Type": "application/json"},
+                            thread_url, json=THREAD_WRITE_PAYLOAD, headers=JSON_HEADERS
                         )
-                        writable = not write_resp.error and write_resp.status_code in (
-                            200,
-                            201,
-                            204,
-                        )
-
-                        thread_result = {
-                            "type": "thread_state",
-                            "thread_id": tid,
-                            "path": path,
-                            "readable": True,
-                            "writable": writable,
-                            "status_code": write_resp.status_code,
-                        }
-                        manipulation_results.append(thread_result)
-
-                        if writable:
-                            result.observations.append(
-                                build_observation(
-                                    check_name=self.name,
-                                    title=f"Thread state modifiable: thread {tid}",
-                                    description=(
-                                        f"Injected context into active thread {tid}. "
-                                        f"Thread state is writable without authentication."
-                                    ),
-                                    severity="high",
-                                    evidence=(
-                                        f"Thread: {tid}\n"
-                                        f"Path: {path}\n"
-                                        f"Write status: {write_resp.status_code}"
-                                    ),
-                                    host=service.host,
-                                    discriminator=f"thread-{tid}",
-                                    target=service,
-                                    target_url=thread_url,
-                                    raw_data=thread_result,
-                                    references=self.references,
-                                )
-                            )
-
-                # 3. Check if state endpoint is read-only (info observation)
-                if state_readable and not any(r.get("writable") for r in manipulation_results):
-                    result.observations.append(
-                        build_observation(
-                            check_name=self.name,
-                            title="State endpoint is read-only",
-                            description="State endpoint is accessible but read-only.",
-                            severity="info",
-                            evidence="All write attempts were rejected",
-                            host=service.host,
-                            discriminator="state-readonly",
-                            target=service,
-                            target_url=state_url,
-                        )
-                    )
+                        rec_post(write_resp, THREAD_WRITE_PAYLOAD)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        if manipulation_results:
-            result.outputs["state_manipulation_results"] = manipulation_results
+        if candidate.exchanges:
+            result.candidates.append(candidate)
+            reading = self._reading(candidate.exchanges)
+            if reading["results"]:
+                result.outputs["state_manipulation_results"] = reading["results"]
 
         return result
 
-    async def _test_state_read(
-        self,
-        client: AsyncHttpClient,
-        url: str,
-    ) -> bool | None:
-        """Test if /state is readable. Returns True, False, or None (404)."""
-        resp = await client.get(url)
-        if resp.status_code == 404:
-            return None
-        return not (resp.error or resp.status_code >= 400)
-
-    async def _test_state_write(
-        self,
-        client: AsyncHttpClient,
-        url: str,
-        modification: dict,
-    ) -> dict:
-        """Test if state can be modified."""
-        resp = await client.post(
-            url,
-            json=modification["payload"],
-            headers={"Content-Type": "application/json"},
-        )
-
-        writable = not resp.error and resp.status_code in (200, 201, 204)
-        # Check if validation rejected it (422 = schema validation)
-        validated = resp.status_code == 422
-
-        return {
-            "modification_id": modification["id"],
-            "writable": writable,
-            "validated": validated,
-            "status_code": resp.status_code,
-            "response_preview": (resp.body or "")[:200],
-        }
-
-    async def _get_thread_ids(
-        self,
-        client: AsyncHttpClient,
-        service: Service,
-    ) -> list[str]:
-        """Get thread IDs from /threads endpoint."""
+    async def _get_thread_ids(self, client, service: Service, rec_get) -> list[str]:
         url = service.with_path("/threads")
         resp = await client.get(url)
-        if resp.error or resp.status_code != 200:
+        rec_get(resp)
+        return self._thread_ids_from(resp.body or "" if not resp.error else "", resp.status_code)
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        service = ctx.target
+        reading = self._reading(list(evidence))
+        verdicts: list[Verdict] = []
+        any_writable = False
+
+        for entry in reading["state_writes"]:
+            res = entry["res"]
+            if not res["writable"]:
+                continue
+            any_writable = True
+            severity = "critical" if not res["validated"] else "medium"
+            verdicts.append(
+                Verdict(
+                    severity=severity,
+                    confidence=0.6,
+                    discriminator=f"state-{res['modification_id']}",
+                    title=f"Agent state writable: {res['modification_id']}",
+                    description=(
+                        f"State endpoint accepted modification: {entry['description']}. "
+                        f"{'No schema validation — arbitrary state accepted.' if not res['validated'] else 'Schema validation present but state accepted.'}"
+                    ),
+                    evidence=(
+                        f"Modification: {res['modification_id']}\n"
+                        f"PUT status: {res['status_code']}\n"
+                        f"Validated: {res['validated']}\n"
+                        f"Response: {res['response_preview']}"
+                    ),
+                    reasoning=(
+                        "the endpoint returned 2xx to the write — a concrete acceptance — but the "
+                        "write's effect on execution was never read back, and 'no schema "
+                        "validation' is inferred only from the absence of a 422"
+                    ),
+                    signals=res,
+                    references=self.references,
+                    raw_data=res,
+                    tier=ctx.tier,
+                    evidence_ids=[entry["exchange_id"]],
+                )
+            )
+
+        for entry in reading["thread_writes"]:
+            res = entry["res"]
+            if not res["writable"]:
+                continue
+            any_writable = True
+            tid = res["thread_id"]
+            verdicts.append(
+                Verdict(
+                    severity="high",
+                    confidence=0.6,
+                    discriminator=f"thread-{tid}",
+                    title=f"Thread state modifiable: thread {tid}",
+                    description=(
+                        f"Injected context into active thread {tid}. "
+                        "Thread state is writable without authentication."
+                    ),
+                    evidence=(
+                        f"Thread: {tid}\nPath: {res['path']}\nWrite status: {res['status_code']}"
+                    ),
+                    reasoning=(
+                        "the thread endpoint accepted a write (2xx); the injected value's effect "
+                        "on the running thread was not confirmed by a read-back"
+                    ),
+                    signals=res,
+                    references=self.references,
+                    raw_data=res,
+                    tier=ctx.tier,
+                    evidence_ids=[entry["exchange_id"]],
+                )
+            )
+
+        if reading["state_readable"] and not any_writable:
+            state_url = service.with_path("/state") if service else "/state"
+            verdicts.append(
+                Verdict(
+                    severity="info",
+                    confidence=0.55,
+                    discriminator="state-readonly",
+                    title="State endpoint is read-only",
+                    description="State endpoint is accessible but read-only.",
+                    evidence="All write attempts were rejected",
+                    reasoning=(
+                        "every write was rejected; 'read-only' is the benign reading, though the "
+                        "rejection could equally be auth or a method the probe did not try"
+                    ),
+                    signals={"state_readable": True},
+                    raw_data={"target_url": state_url},
+                    tier=ctx.tier,
+                    evidence_ids=reading["state_read_ids"],
+                )
+            )
+
+        return verdicts
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _reading(self, exchanges: list[Exchange]) -> dict:
+        state_read_ids: list[str] = []
+        state_readable: bool | None = None
+        for exchange in exchanges:
+            if exchange.request_method == "GET" and self._path(exchange) == "/state":
+                state_read_ids.append(exchange.id)
+                state_readable = (
+                    None
+                    if exchange.response_status == 404
+                    else not (exchange.error or (exchange.response_status or 0) >= 400)
+                )
+                break
+
+        state_writes: list[dict] = []
+        by_payload = {json.dumps(m["payload"], sort_keys=True): m for m in STATE_MODIFICATIONS}
+        for exchange in exchanges:
+            if exchange.request_method != "POST" or self._path(exchange) != "/state":
+                continue
+            mod = by_payload.get(self._req_body_key(exchange))
+            if mod is None:
+                continue
+            state_writes.append(
+                {
+                    "res": self._state_write_res(exchange, mod),
+                    "description": mod["description"],
+                    "exchange_id": exchange.id,
+                }
+            )
+
+        thread_writes: list[dict] = []
+        for exchange in exchanges:
+            if exchange.request_method != "POST":
+                continue
+            path = self._path(exchange)
+            tid = self._thread_id_of(path)
+            if tid is None:
+                continue
+            if self._req_body_key(exchange) != json.dumps(THREAD_WRITE_PAYLOAD, sort_keys=True):
+                continue
+            writable = not exchange.error and exchange.response_status in (200, 201, 204)
+            thread_writes.append(
+                {
+                    "res": {
+                        "type": "thread_state",
+                        "thread_id": tid,
+                        "path": path,
+                        "readable": True,
+                        "writable": writable,
+                        "status_code": exchange.response_status,
+                    },
+                    "exchange_id": exchange.id,
+                }
+            )
+
+        results = [e["res"] for e in state_writes] + [e["res"] for e in thread_writes]
+        return {
+            "state_readable": state_readable,
+            "state_read_ids": state_read_ids,
+            "state_writes": state_writes,
+            "thread_writes": thread_writes,
+            "results": results,
+        }
+
+    def _state_write_res(self, exchange: Exchange, mod: dict) -> dict:
+        writable = not exchange.error and exchange.response_status in (200, 201, 204)
+        validated = exchange.response_status == 422
+        return {
+            "modification_id": mod["id"],
+            "writable": writable,
+            "validated": validated,
+            "status_code": exchange.response_status,
+            "response_preview": (exchange.response_body or "")[:200],
+        }
+
+    def _thread_ids_from(self, body: str, status_code) -> list[str]:
+        if status_code != 200:
             return []
         try:
-            data = json.loads(resp.body or "")
-            if isinstance(data, list):
-                ids = []
-                for item in data[:10]:
-                    if isinstance(item, dict):
-                        tid = item.get("thread_id") or item.get("id")
-                        if tid:
-                            ids.append(str(tid))
-                    elif isinstance(item, str):
-                        ids.append(item)
-                return ids
+            data = json.loads(body or "")
         except (json.JSONDecodeError, TypeError):
-            pass
-        return []
+            return []
+        if not isinstance(data, list):
+            return []
+        ids: list[str] = []
+        for item in data[:10]:
+            if isinstance(item, dict):
+                tid = item.get("thread_id") or item.get("id")
+                if tid:
+                    ids.append(str(tid))
+            elif isinstance(item, str):
+                ids.append(item)
+        return ids
+
+    @staticmethod
+    def _thread_id_of(path: str) -> str | None:
+        parts = path.strip("/").split("/")
+        if len(parts) >= 2 and parts[0] == "threads":
+            return parts[1]
+        return None
+
+    @staticmethod
+    def _path(exchange: Exchange) -> str:
+        return urlparse(exchange.request_url or "").path
+
+    @staticmethod
+    def _req_body_key(exchange: Exchange) -> str:
+        try:
+            return json.dumps(json.loads(exchange.request_body or "{}"), sort_keys=True)
+        except (ValueError, TypeError):
+            return ""

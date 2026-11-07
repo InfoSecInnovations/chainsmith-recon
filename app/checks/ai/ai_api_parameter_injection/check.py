@@ -1,22 +1,37 @@
 """
-app/checks/ai/param_inject.py - API Parameter Injection (AI Mass Assignment)
+app/checks/ai/ai_api_parameter_injection/check.py - API Parameter Injection (AI Mass Assignment)
 
 Send chat requests with extra/unexpected API parameters beyond the standard
 messages field.  Test which parameters are accepted, forwarded to the
 underlying provider, or change model behaviour.
+
+**Probe/grade.** The probe sends a baseline request and then
+one request per extra parameter, recording all of them; `grade()` re-reads each,
+runs its verifier over baseline-vs-response, and returns per-severity verdicts.
+`_reading()` is the one parser both halves call (§0.12). Which parameter a
+recorded request carried is identified from the request body itself.
+
+**Contextual**: whether an injected parameter *was honoured*
+is the attack-compliance question, so the rule logic runs at `GradingTier.RULE`.
+The per-parameter severities are the rule tier's placement; several verifiers can
+only tell that a parameter was *not rejected*, and the confidence says so.
 """
 
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.grading import Candidate, Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.ai_helpers import (
+    dialect_from_request,
     extract_response_text,
     format_chat_request,
     format_chat_request_with_extra,
 )
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
 from app.lib.parsing import safe_json
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 
 class APIParameterInjectionCheck(BaseCheck):
@@ -106,8 +121,11 @@ class APIParameterInjectionCheck(BaseCheck):
         ),
     ]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def run(self, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         for endpoint_info in context.get("chat_endpoints", []):
             url = endpoint_info.get("url")
@@ -118,156 +136,225 @@ class APIParameterInjectionCheck(BaseCheck):
             api_format = endpoint_info.get("api_format", "unknown")
 
             try:
-                pr = await self._test_params(url, service, api_format)
-                result.observations.extend(pr.observations)
-                result.outputs.update(pr.outputs)
+                candidate = self.create_candidate(host=service.host, target=service, target_url=url)
+                sent = await self._probe_params(url, api_format, candidate, scan_id)
+                if not sent:
+                    result.errors.append(f"{url}: baseline failed")
+                    continue
+                result.candidates.append(candidate)
+
+                result.outputs[f"accepted_params_{service.port}"] = self._reading(
+                    candidate.exchanges
+                )["param_info"]
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
 
         return result
 
-    async def _test_params(self, url: str, service: Service, api_format: str) -> CheckResult:
-        result = CheckResult(success=True)
-        accepted = []
-        rejected = []
-
+    async def _probe_params(
+        self, url: str, api_format: str, candidate: Candidate, scan_id: str
+    ) -> bool:
+        """Send baseline then each param test, recording all. False if baseline fails."""
         cfg = HttpConfig(timeout_seconds=20.0, verify_ssl=False)
-        try:
-            async with AsyncHttpClient(cfg) as client:
-                # Get baseline response
+        async with AsyncHttpClient(cfg) as client:
+            await self._rate_limit()
+            baseline_body = format_chat_request(self.TEST_PROMPT, api_format)
+            baseline_resp = await client.post(url, json=baseline_body, headers=JSON_HEADERS)
+            baseline_exchange = exchange_from_response(
+                baseline_resp,
+                check_name=self.name,
+                scan_id=scan_id,
+                host=candidate.host,
+                method="POST",
+                request_headers=JSON_HEADERS,
+                request_json=baseline_body,
+            )
+            candidate.attach(baseline_exchange)
+            if baseline_exchange.error or baseline_exchange.response_status != 200:
+                return False
+
+            for _param_name, extra_params, _verify, _severity, _desc in self.PARAM_TESTS:
                 await self._rate_limit()
-                baseline_resp = await client.post(
-                    url,
-                    json=format_chat_request(self.TEST_PROMPT, api_format),
-                    headers={"Content-Type": "application/json"},
-                )
-
-                if baseline_resp.error or baseline_resp.status_code != 200:
-                    result.errors.append(f"{url}: baseline failed")
-                    return result
-
-                baseline_body = safe_json(baseline_resp.body) or {}
-                extract_response_text(baseline_body, api_format)
-
-                # Test each parameter
-                for param_name, extra_params, verify_fn_name, severity, desc in self.PARAM_TESTS:
-                    await self._rate_limit()
-
-                    body = format_chat_request_with_extra(
-                        self.TEST_PROMPT, api_format, **extra_params
+                body = format_chat_request_with_extra(self.TEST_PROMPT, api_format, **extra_params)
+                resp = await client.post(url, json=body, headers=JSON_HEADERS)
+                candidate.attach(
+                    exchange_from_response(
+                        resp,
+                        check_name=self.name,
+                        scan_id=scan_id,
+                        host=candidate.host,
+                        method="POST",
+                        request_headers=JSON_HEADERS,
+                        request_json=body,
                     )
-
-                    resp = await client.post(
-                        url,
-                        json=body,
-                        headers={"Content-Type": "application/json"},
-                    )
-
-                    if resp.error:
-                        rejected.append(param_name)
-                        continue
-
-                    if resp.status_code != 200:
-                        rejected.append(param_name)
-                        continue
-
-                    resp_body = safe_json(resp.body) or {}
-                    verify_fn = getattr(self, verify_fn_name)
-                    is_accepted = verify_fn(resp_body, baseline_body, api_format)
-
-                    if is_accepted:
-                        accepted.append(
-                            {
-                                "param": param_name,
-                                "severity": severity,
-                                "description": desc,
-                            }
-                        )
-                    else:
-                        rejected.append(param_name)
-
-        except Exception as e:
-            result.errors.append(f"{url}: {e}")
-            return result
-
-        host = service.host
-        param_info = {
-            "accepted": [a["param"] for a in accepted],
-            "rejected": rejected,
-        }
-
-        # Generate observations per-severity for the most important ones
-        critical = [a for a in accepted if a["severity"] == "critical"]
-        high = [a for a in accepted if a["severity"] == "high"]
-        others = [a for a in accepted if a["severity"] not in ("critical", "high")]
-
-        if critical:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title=f"Critical parameter injection ({len(critical)} params)",
-                    description="; ".join(a["description"] for a in critical),
-                    severity="critical",
-                    evidence=f"Accepted: {', '.join(a['param'] for a in critical)}",
-                    host=host,
-                    discriminator="param-critical",
-                    target=service,
-                    target_url=url,
-                    raw_data=param_info,
-                    references=self.references,
                 )
-            )
 
-        if high:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title=f"High-risk parameter injection ({len(high)} params)",
-                    description="; ".join(a["description"] for a in high),
-                    severity="high",
-                    evidence=f"Accepted: {', '.join(a['param'] for a in high)}",
-                    host=host,
-                    discriminator="param-high",
-                    target=service,
-                    target_url=url,
-                    raw_data=param_info,
+        return True
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Per-severity parameter-injection verdicts, at the rule tier."""
+        reading = self._reading(list(evidence))
+        accepted = reading["accepted_detail"]
+        rejected = reading["param_info"]["rejected"]
+        ids = evidence.ids()
+
+        if not accepted and not rejected:
+            return []
+
+        param_info = reading["param_info"]
+        verdicts: list[Verdict] = []
+
+        buckets = [
+            ("param-critical", "critical", [a for a in accepted if a["severity"] == "critical"]),
+            ("param-high", "high", [a for a in accepted if a["severity"] == "high"]),
+            (
+                "param-medium",
+                "medium",
+                [a for a in accepted if a["severity"] not in ("critical", "high")],
+            ),
+        ]
+
+        for discriminator, severity, group in buckets:
+            if not group:
+                continue
+            confidence, why = self._confidence_for(group)
+            title = {
+                "param-critical": f"Critical parameter injection ({len(group)} params)",
+                "param-high": f"High-risk parameter injection ({len(group)} params)",
+                "param-medium": f"Extra API parameters accepted ({len(group)} params)",
+            }[discriminator]
+            verdicts.append(
+                Verdict(
+                    severity=severity,
+                    confidence=confidence,
+                    discriminator=discriminator,
+                    title=title,
+                    description="; ".join(a["description"] for a in group),
+                    evidence=f"Accepted: {', '.join(a['param'] for a in group)}",
+                    reasoning=why,
+                    signals=dict(param_info),
                     references=self.references,
-                )
-            )
-
-        if others:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title=f"Extra API parameters accepted ({len(others)} params)",
-                    description="; ".join(a["description"] for a in others),
-                    severity="medium",
-                    evidence=f"Accepted: {', '.join(a['param'] for a in others)}",
-                    host=host,
-                    discriminator="param-medium",
-                    target=service,
-                    target_url=url,
-                    raw_data=param_info,
+                    raw_data=dict(param_info),
+                    tier=ctx.tier,
+                    evidence_ids=ids,
                 )
             )
 
         if not accepted:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title=f"Extra parameters rejected or ignored ({len(rejected)}/{len(self.PARAM_TESTS)})",
-                    description="All tested extra parameters were rejected",
+            verdicts.append(
+                Verdict(
                     severity="info",
-                    evidence=f"Rejected: {', '.join(rejected)}",
-                    host=host,
+                    confidence=0.6,
                     discriminator="param-blocked",
-                    target=service,
-                    target_url=url,
+                    title=(
+                        f"Extra parameters rejected or ignored "
+                        f"({len(rejected)}/{len(self.PARAM_TESTS)})"
+                    ),
+                    description="All tested extra parameters were rejected",
+                    evidence=f"Rejected: {', '.join(rejected)}",
+                    reasoning="every extra parameter drew a non-200 or failed its verifier",
+                    signals=dict(param_info),
+                    tier=ctx.tier,
+                    evidence_ids=ids,
                 )
             )
 
-        result.outputs[f"accepted_params_{service.port}"] = param_info
-        return result
+        return verdicts
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _reading(self, exchanges: list[Exchange]) -> dict:
+        """Run each parameter's verifier over baseline-vs-response.
+
+        The baseline is the recorded request with no extra parameter; each other
+        request is matched to a PARAM_TESTS entry by the parameter it carries.
+        """
+        by_param = {
+            name: (verify, severity, desc)
+            for name, _extra, verify, severity, desc in self.PARAM_TESTS
+        }
+        baseline_body = self._baseline_body(exchanges)
+
+        accepted: list[dict] = []
+        rejected: list[str] = []
+
+        for exchange in exchanges:
+            param_name = self._param_of(exchange)
+            if param_name is None:
+                continue
+
+            if exchange.error or exchange.response_status != 200:
+                rejected.append(param_name)
+                continue
+
+            verify_fn_name, severity, desc = by_param[param_name]
+            api_format = dialect_from_request(exchange.request_body or "")
+            resp_body = safe_json(exchange.response_body or "") or {}
+            verify_fn = getattr(self, verify_fn_name)
+            if verify_fn(resp_body, baseline_body, api_format):
+                accepted.append({"param": param_name, "severity": severity, "description": desc})
+            else:
+                rejected.append(param_name)
+
+        return {
+            "accepted_detail": accepted,
+            "param_info": {
+                "accepted": [a["param"] for a in accepted],
+                "rejected": rejected,
+            },
+        }
+
+    def _baseline_body(self, exchanges: list[Exchange]) -> dict:
+        """The recorded baseline response body (the request with no extra param)."""
+        for exchange in exchanges:
+            if self._param_of(exchange) is None and not exchange.error:
+                # A request carrying only the standard fields is the baseline.
+                body = safe_json(exchange.request_body or "")
+                if isinstance(body, dict) and self._is_baseline(body):
+                    return safe_json(exchange.response_body or "") or {}
+        return {}
+
+    def _param_of(self, exchange: Exchange) -> str | None:
+        """Which extra parameter a recorded request carried, if any."""
+        body = safe_json(exchange.request_body or "")
+        if not isinstance(body, dict):
+            return None
+        for name, extra_params, _v, _s, _d in self.PARAM_TESTS:
+            # The parameter is identified by the extra key(s) it introduced.
+            if all(key in body for key in extra_params):
+                return name
+        return None
+
+    def _is_baseline(self, body: dict) -> bool:
+        """True for a request carrying none of the tested extra parameters."""
+        extra_keys = {key for _n, extra, _v, _s, _d in self.PARAM_TESTS for key in extra}
+        return not (extra_keys & set(body))
+
+    def _confidence_for(self, group: list[dict]) -> tuple[float, str]:
+        """How sure the acceptance is, and why it is not 1.0.
+
+        The verifiers split into two kinds. Some read a specific effect out of
+        the response — `logprobs` data present, `tool_calls` returned, a JSON
+        body, a truncating stop — and those are near-certain when they fire.
+        Others (`temperature`, `user`) cannot observe an effect at all and count
+        the parameter accepted merely because the request did not error; a
+        gateway that ignores an unknown field returns 200 exactly the same way,
+        so those are the weak ones.
+        """
+        params = {a["param"] for a in group}
+        observable = params - {"temperature", "user", "seed"}
+        if observable:
+            return 0.8, (
+                f"acceptance of {', '.join(sorted(observable))} was read from a specific effect in "
+                "the response (logprobs / tool_calls / JSON / truncation)"
+            )
+        return 0.4, (
+            f"{', '.join(sorted(params))} counted as accepted only because the request returned "
+            "200 — a gateway that silently ignores an unknown field looks identical, so this needs "
+            "the LLM tier or a side-channel to confirm"
+        )
 
     # ── Verification helpers ─────────────────────────────────────
 

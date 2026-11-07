@@ -171,6 +171,18 @@ class Observation(BaseModel):
     raw_evidence: RawEvidence | None = None
     evidence_summary: str | None = None
 
+    # Grading. An Observation is a graded Candidate; these say
+    # whether it actually was, by whom, and from which evidence. `severity`
+    # above is the effective value — graded once a grader placed it,
+    # provisional until then (design §6.1).
+    provisional_severity: ObservationSeverity | None = None
+    grading_state: str = "ungraded"  # ungraded | graded | grading_failed | superseded
+    grading_tier: str | None = None  # rule | llm | none
+    grading_reasoning: str | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+    evidence_source: str | None = None
+    signals: dict[str, Any] = Field(default_factory=dict)
+
     # Verification
     verified_by: ComponentType | None = None
     verified_at: datetime | None = None
@@ -204,7 +216,7 @@ class AdjudicationApproach(StrEnum):
 
     Only EVIDENCE_RUBRIC is actively used. The others are retained for
     backward compatibility with historical DB records. See
-    docs/future-ideas/adjudicator-strategies-reference.md.
+    docs/adjudicator-strategies-reference.md.
     """
 
     EVIDENCE_RUBRIC = "evidence_rubric"

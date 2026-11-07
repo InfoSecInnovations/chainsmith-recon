@@ -1,5 +1,5 @@
 /**
- * Chainsmith Recon - Guided Mode (Phase 36)
+ * Chainsmith Recon - Guided Mode
  *
  * Injects the "Guided" pill badge into the page header,
  * manages guided mode state, and provides the proactive

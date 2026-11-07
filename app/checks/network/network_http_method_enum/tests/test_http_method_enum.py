@@ -1,10 +1,11 @@
-"""Co-located tests (Phase 56 §3) — split from test_network_http_methods.py."""
+"""Tests for network_http_method_enum."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.checks.base import Service
+from app.checks.network.network_http_method_enum.check import _accepted
 
 
 def _make_mock_client(
@@ -47,10 +48,16 @@ def _make_mock_client(
         client.options = AsyncMock(return_value=options_resp)
 
         # ---- Generic .request(method, url) -----------------------------------
+        # 57.4 wave 2: the probe sends OPTIONS through `.request` too, so that
+        # every method is recorded the same way and `grade()` reads one uniform
+        # set of exchanges.
         def _request(method, url, **kw):
+            if method.upper() == "OPTIONS":
+                return options_resp
             status = method_responses.get(method.upper(), default_status)
             resp = MagicMock()
             resp.status_code = status
+            resp.headers = {}
             return resp
 
         client.request = AsyncMock(side_effect=_request)
@@ -61,6 +68,20 @@ def _make_mock_client(
         return client
 
     return _factory
+
+
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 class TestHttpMethodEnumCheckInit:
@@ -133,7 +154,7 @@ class TestHttpMethodEnumCheckRun:
         svc = Service(
             url="tcp://db.example.com:6379", host="db.example.com", port=6379, scheme="tcp"
         )
-        result = await check.run({"services": [svc]})
+        result = await probe_and_grade(check, {"services": [svc]})
         assert result.success is True
         assert result.outputs["http_methods"] == {}
 
@@ -154,7 +175,7 @@ class TestHttpMethodEnumCheckRun:
         )
 
         with patch("httpx.AsyncClient", side_effect=factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.success is True
         assert "api.example.com:80" in result.outputs["http_methods"]
@@ -183,7 +204,7 @@ class TestHttpMethodEnumCheckRun:
         )
 
         with patch("httpx.AsyncClient", side_effect=factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         trace_obs = [o for o in result.observations if "TRACE" in o.title]
         assert len(trace_obs) == 1
@@ -213,7 +234,7 @@ class TestHttpMethodEnumCheckRun:
         )
 
         with patch("httpx.AsyncClient", side_effect=factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         put_obs = [o for o in result.observations if "PUT" in o.title]
         assert len(put_obs) == 1
@@ -237,7 +258,7 @@ class TestHttpMethodEnumCheckRun:
         )
 
         with patch("httpx.AsyncClient", side_effect=factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         del_obs = [o for o in result.observations if "DELETE" in o.title]
         assert len(del_obs) == 1
@@ -265,7 +286,7 @@ class TestHttpMethodEnumCheckRun:
         )
 
         with patch("httpx.AsyncClient", side_effect=factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         dangerous_obs = [
             o
@@ -300,7 +321,7 @@ class TestHttpMethodEnumCheckRun:
         )
 
         with patch("httpx.AsyncClient", side_effect=factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         webdav_obs = [o for o in result.observations if "webdav" in o.title.lower()]
         assert len(webdav_obs) == 1
@@ -326,7 +347,7 @@ class TestHttpMethodEnumCheckRun:
         factory = _make_mock_client(options_allow=None, method_responses={})
 
         with patch("httpx.AsyncClient", side_effect=factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.success is True
         assert len(result.observations) == 0
@@ -355,7 +376,7 @@ class TestHttpMethodEnumCheckRun:
         )
 
         with patch("httpx.AsyncClient", side_effect=factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.success is True
 
@@ -431,7 +452,7 @@ class TestHttpMethodEnumCheckRun:
         )
 
         with patch("httpx.AsyncClient", side_effect=factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.success is True
         assert "secure.example.com:443" in result.outputs["http_methods"]
@@ -452,7 +473,7 @@ class TestHttpMethodEnumCheckRun:
         )
 
         with patch("httpx.AsyncClient", side_effect=factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         info_obs = [o for o in result.observations if o.severity == "info"]
         assert len(info_obs) == 1
@@ -483,11 +504,12 @@ class TestHttpMethodEnumCheckRun:
 
             if call_index == 1:
                 # First client is for OPTIONS -- simulate connection failure
-                client.options = AsyncMock(side_effect=Exception("Connection refused"))
+                client.request = AsyncMock(side_effect=Exception("Connection refused"))
             else:
                 # Subsequent clients are for _probe_method calls
                 resp = MagicMock()
                 resp.status_code = 405
+                resp.headers = {}
                 client.request = AsyncMock(return_value=resp)
 
             client.__aenter__ = AsyncMock(return_value=client)
@@ -495,7 +517,7 @@ class TestHttpMethodEnumCheckRun:
             return client
 
         with patch("httpx.AsyncClient", side_effect=_factory):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.success is True
         data = result.outputs["http_methods"]["strict.example.com:80"]
@@ -518,6 +540,7 @@ class TestHttpMethodEnumProbe:
 
         mock_resp = MagicMock()
         mock_resp.status_code = 405
+        mock_resp.headers = {}
 
         mock_client = AsyncMock()
         mock_client.request = AsyncMock(return_value=mock_resp)
@@ -525,9 +548,10 @@ class TestHttpMethodEnumProbe:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            accepted = await check._probe_method("http://example.com", "TRACE")
+            exchange = await check._probe_method("http://example.com", "TRACE", "example.com")
 
-        assert accepted is False
+        # 57.4 wave 2: the probe records the response and `_accepted` reads it.
+        assert _accepted(exchange) is False
 
     @pytest.mark.asyncio
     async def test_probe_method_200_means_accepted(self):
@@ -539,6 +563,7 @@ class TestHttpMethodEnumProbe:
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
+        mock_resp.headers = {}
 
         mock_client = AsyncMock()
         mock_client.request = AsyncMock(return_value=mock_resp)
@@ -546,9 +571,9 @@ class TestHttpMethodEnumProbe:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            accepted = await check._probe_method("http://example.com", "PUT")
+            exchange = await check._probe_method("http://example.com", "PUT", "example.com")
 
-        assert accepted is True
+        assert _accepted(exchange) is True
 
     @pytest.mark.asyncio
     async def test_probe_method_501_means_rejected(self):
@@ -560,6 +585,7 @@ class TestHttpMethodEnumProbe:
 
         mock_resp = MagicMock()
         mock_resp.status_code = 501
+        mock_resp.headers = {}
 
         mock_client = AsyncMock()
         mock_client.request = AsyncMock(return_value=mock_resp)
@@ -567,9 +593,9 @@ class TestHttpMethodEnumProbe:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            accepted = await check._probe_method("http://example.com", "TRACE")
+            exchange = await check._probe_method("http://example.com", "TRACE", "example.com")
 
-        assert accepted is False
+        assert _accepted(exchange) is False
 
     @pytest.mark.asyncio
     async def test_probe_method_connection_error(self):
@@ -585,6 +611,9 @@ class TestHttpMethodEnumProbe:
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
-            accepted = await check._probe_method("http://example.com", "TRACE")
+            exchange = await check._probe_method("http://example.com", "TRACE", "example.com")
 
-        assert accepted is False
+        # A probe that never completed is recorded as a failure, and a failure is
+        # not an acceptance.
+        assert exchange.error is not None
+        assert _accepted(exchange) is False

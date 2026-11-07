@@ -8,17 +8,33 @@ Attack vectors:
 - Node identification via response headers
 - Load balancer patterns reveal infrastructure topology
 
+**Probe/grade.** The probe sends `TOPOLOGY_PROBE_COUNT`
+identical requests and records each; `_detect_topology()` is the one parser both
+halves call (§0.12), rebuilding the node observations off the recorded response
+headers, bodies and `elapsed_ms` rather than a live measurement — so a re-grade
+reaches the same topology from the same bytes.
+
+**Fixed**: one candidate per endpoint, the discriminator
+embeds the path, so the contract carries no map and `grade()` places the
+severity (the `ai_model_info_check` pattern). Confidence is where the split
+pays, because both signals are softer than they look: a distinct node header is
+often a CDN or load-balancer id, not a separate *cache*; and "inconsistent
+content across nodes" is indistinguishable from an LLM's own non-determinism at
+this request count.
+
 References:
   https://portswigger.net/web-security/web-cache-poisoning
   OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 """
 
-import time
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 # Headers that reveal cache node identity
 NODE_HEADERS = [
@@ -61,8 +77,11 @@ class DistributedCacheCheck(ServiceIteratingCheck):
     ]
     techniques = ["topology detection", "replication analysis", "node fingerprinting"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
@@ -79,27 +98,18 @@ class DistributedCacheCheck(ServiceIteratingCheck):
             async with AsyncHttpClient(cfg) as client:
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
-                    topo_info = await self._detect_topology(client, url, service)
+                    candidate = self.create_candidate(
+                        host=service.host,
+                        discriminator=f"dist-cache-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
+                        target=service,
+                        target_url=url,
+                    )
+                    await self._probe_topology(client, url, scan_id, service.host, candidate)
 
+                    topo_info = self._detect_topology(candidate.exchanges)
                     if topo_info:
                         dist_results.append(topo_info)
-
-                        severity = self._determine_severity(topo_info)
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title=self._build_title(topo_info),
-                                description=self._build_description(topo_info),
-                                severity=severity,
-                                evidence=self._build_evidence(topo_info),
-                                host=service.host,
-                                discriminator=f"dist-cache-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                                target=service,
-                                target_url=url,
-                                raw_data=topo_info,
-                                references=self.references,
-                            )
-                        )
+                        result.candidates.append(candidate)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -109,63 +119,114 @@ class DistributedCacheCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _detect_topology(
-        self, client: AsyncHttpClient, url: str, service: Service
-    ) -> dict | None:
-        """Detect cache topology by sending multiple requests."""
-        test_query = f"distributed_cache_test_{int(time.time())}"
-        payload = {"input": test_query, "query": test_query}
+    async def _probe_topology(
+        self, client: AsyncHttpClient, url: str, scan_id: str, host: str, candidate
+    ) -> None:
+        """Send the identical requests and record each."""
+        # A stable query across the batch; the point is repeating the same one.
+        payload = {"input": "distributed_cache_test", "query": "distributed_cache_test"}
+        for _ in range(TOPOLOGY_PROBE_COUNT):
+            try:
+                resp = await client.post(url, json=payload, headers=JSON_HEADERS)
+            except Exception:
+                continue
+            candidate.attach(
+                exchange_from_response(
+                    resp,
+                    check_name=self.name,
+                    scan_id=scan_id,
+                    host=host,
+                    method="POST",
+                    request_headers=JSON_HEADERS,
+                    request_json=payload,
+                )
+            )
 
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        topo_info = self._detect_topology(list(evidence))
+        if not topo_info:
+            return []
+
+        severity = self._determine_severity(topo_info)
+        confidence, why = self._confidence(topo_info)
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                discriminator=None,
+                title=self._build_title(topo_info),
+                description=self._build_description(topo_info),
+                evidence=self._build_evidence(topo_info),
+                reasoning=why,
+                signals={
+                    "node_count": topo_info["node_count"],
+                    "content_consistent": topo_info["content_consistent"],
+                    "lb_pattern": topo_info["lb_pattern"],
+                },
+                references=self.references,
+                raw_data=topo_info,
+                tier=ctx.tier,
+                evidence_ids=evidence.ids(),
+            )
+        ]
+
+    @staticmethod
+    def _confidence(topo_info: dict) -> tuple[float, str]:
+        n = topo_info.get("node_count", 0)
+        if not topo_info.get("content_consistent") and n > 1:
+            return 0.4, (
+                f"{n} distinct node ids answered with differing bodies — but at this request "
+                "count differing text is exactly what a non-deterministic model produces on its "
+                "own, so replication inconsistency is inferred, not shown, and the node ids "
+                "themselves may be CDN/LB identifiers rather than separate caches"
+            )
+        if n > 1:
+            return 0.55, (
+                f"{n} distinct values appeared in {', '.join(NODE_HEADERS[:3])}-style headers; "
+                "these are frequently CDN or load-balancer ids, so 'multiple cache nodes' reads "
+                "more topology into a routing header than it proves"
+            )
+        return 0.4, (
+            "the only signal is node-identity headers, and a single value across the batch is "
+            "as consistent with one node as with a sticky balancer hiding several"
+        )
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _detect_topology(self, exchanges: list[Exchange]) -> dict | None:
+        """Rebuild the topology reading off the recorded requests."""
         node_observations = []
         response_bodies = []
 
-        for i in range(TOPOLOGY_PROBE_COUNT):
-            try:
-                start = time.time()
-                resp = await client.post(
-                    url,
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
-                )
-                elapsed = (time.time() - start) * 1000
-
-                if resp.error:
-                    continue
-
-                # Collect node identity from headers
-                node_id = self._extract_node_id(resp.headers)
-                response_bodies.append(resp.body or "")
-
-                node_observations.append(
-                    {
-                        "request_index": i,
-                        "node_id": node_id,
-                        "elapsed_ms": round(elapsed, 2),
-                        "status_code": resp.status_code,
-                    }
-                )
-
-            except Exception:
+        for index, exchange in enumerate(self._probes(exchanges)):
+            if exchange.error:
                 continue
+            node_id = self._extract_node_id(exchange.response_headers or {})
+            response_bodies.append(exchange.response_body or "")
+            node_observations.append(
+                {
+                    "request_index": index,
+                    "node_id": node_id,
+                    "elapsed_ms": round(exchange.elapsed_ms, 2) if exchange.elapsed_ms else 0,
+                    "status_code": exchange.response_status,
+                }
+            )
 
         if len(node_observations) < 3:
             return None
 
-        # Analyze topology
         unique_nodes = {obs["node_id"] for obs in node_observations if obs["node_id"]}
-
-        # Check response consistency
         unique_responses = set(response_bodies)
         content_consistent = len(unique_responses) <= 1
-
-        # Detect load balancing pattern
         lb_pattern = self._detect_lb_pattern(node_observations)
 
         if not unique_nodes and content_consistent:
             return None
 
         return {
-            "url": url,
+            "url": self._probes(exchanges)[0].request_url,
             "total_requests": len(node_observations),
             "unique_nodes": list(unique_nodes),
             "node_count": len(unique_nodes),
@@ -174,6 +235,10 @@ class DistributedCacheCheck(ServiceIteratingCheck):
             "lb_pattern": lb_pattern,
             "node_observations": node_observations,
         }
+
+    @staticmethod
+    def _probes(exchanges: list[Exchange]) -> list[Exchange]:
+        return [e for e in exchanges if e.request_method == "POST"]
 
     def _extract_node_id(self, headers: dict) -> str | None:
         """Extract node identifier from response headers."""

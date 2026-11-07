@@ -28,3 +28,26 @@ references:
 reason: Unexpected HTTP methods on production services indicate misconfiguration.
   TRACE enables cross-site tracing (XST), while PUT/DELETE on AI endpoints may allow
   unauthorized model modification or data deletion.
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Fixed, but the least categorical check
+  # in the suite, and `grade()` now says so: "accepted" here means "the server did
+  # not answer 405, 501 or 400", which a 401 or a redirect to a login page also
+  # satisfies while the method was never actually performed. Hence 0.7 on every
+  # dangerous-method verdict and 0.6 on a lone WebDAV verb — six of them answering
+  # together is a stronger signal (0.75) than any one, because the usual false
+  # positive is a catch-all handler that would light up all six.
+  #
+  # Severities are unchanged from the pre-57.4 code and come from `DANGEROUS_METHODS`
+  # in check.py, which is where the per-method rationale is written. The
+  # discriminators carry the port (`trace-8080`, `webdav-8080`) so one host's two
+  # services stay distinct; that set is unbounded, so the map records the family and
+  # `provisional_for` falls to `default`.
+  default: info
+  observations:
+    methods: info
+    trace: medium
+    put: medium
+    delete: low
+    patch: low
+    webdav: medium

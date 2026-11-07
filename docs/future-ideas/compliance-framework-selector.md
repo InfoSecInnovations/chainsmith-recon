@@ -1,19 +1,19 @@
-Compliance Report -- Framework Selector
-=======================================
-Captured 2026-04-08.
+# Compliance Report — Framework Selector
 
-Status: Ready to implement (co-implement with compliance-framework-badges.md)
+**Status:** Ready. Its prerequisite, the framework badges, has shipped. The selector itself was never built: there is no `GET /api/v1/frameworks`, and the compliance report takes no `frameworks` parameter.
+**Track:** Compliance / reporting
+**Depends on:** nothing open
+**Size:** M
+**Last reviewed:** 2026-10-11
 
-Problem
--------
+## Problem
 The compliance report currently shows a flat view of all findings
 without filtering by specific compliance frameworks. Users who need
 to demonstrate compliance with a particular standard (e.g. OWASP Top
 10, NIST 800-53, MITRE ATT&CK) cannot easily isolate what is and
 isn't in compliance for that framework.
 
-Proposed Change
----------------
+## Proposed Change
 Expand the compliance report to let users select one or more compliance
 frameworks, then display only the checks and findings relevant to those
 frameworks. The report should clearly show:
@@ -23,10 +23,9 @@ frameworks. The report should clearly show:
 - Which are failing (out of compliance).
 - Which are not assessed (no check mapped to that control).
 
-Prerequisites
--------------
+## Prerequisites
 Requires the data-driven framework plugin system described in
-compliance-framework-badges.md. Specifically:
+[`completed/compliance-framework-badges.md`](completed/compliance-framework-badges.md). Specifically:
 
 - Framework definitions loaded from app/checks/frameworks/definitions/
 - parse_all() to map check references to FrameworkTags
@@ -34,8 +33,7 @@ compliance-framework-badges.md. Specifically:
   controls_file can show "not assessed" gaps; those without can only
   show pass/fail for observed mappings)
 
-Implementation
---------------
+## Implementation
 
 ### API changes
 
@@ -99,8 +97,7 @@ When "Compliance" report type is selected, show a framework picker:
     | LLM03    | NOT ASSESSED | --            |
     | ...      |              |               |
 
-Deferrable Items
-----------------
+## Deferrable Items
 These can ship in a follow-up without blocking the core feature:
 
 - CSV/PDF export of the filtered compliance report.
@@ -116,13 +113,12 @@ Files touched:
 - static/reports.html -- framework picker UI
 - static/css/reports.css -- pill selector styling
 
-Considerations
---------------
+## Considerations
 - Multi-select: user may want "OWASP LLM + MITRE ATLAS" in one view.
   Each gets its own section in the report.
 - Gap analysis only works for frameworks with a controls_file.
   The UI should indicate which frameworks support it (e.g. a small
   "gap analysis" indicator on the pill).
 - Performance: parse_all() runs once per report generation against
-  the checks_run list. With ~114 checks and ~5 framework regexes
+  the checks_run list. With 133 checks and ~5 framework regexes
   this is negligible.

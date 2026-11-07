@@ -29,3 +29,12 @@ references:
 - CWE-200 Exposure of Sensitive Information
 reason: Tool schemas may reveal internal infrastructure details useful for targeted
   attacks
+severity:
+  model: fixed
+  # Categorical: the answer is in the analysed schemas (recorded as a `local`
+  # exchange), so no grader above the rule tier is ever called. Every leak
+  # discriminator embeds a tool and parameter name
+  # (`leak-<tool>-<type>-<param>`), an unbounded set, so there is no
+  # `observations:` map (§0.12): `default` is the floor — `info`, the no-leaks
+  # answer — and grade() places the real severity (57.4 wave 7).
+  default: info

@@ -1,12 +1,19 @@
-"""Co-located tests (Phase 56 §3) — split from test_cag_security.py."""
+"""Tests for cag_side_channel.
 
-import time
+This check is split into probe + grade; tests route through
+`probe_and_grade()` and keep their original assertions. Timing is now driven by
+each mock response's `elapsed_ms` (what the probe records on the exchange and
+`grade()` reads back), not by patching `time.time` (§0.12).
+"""
+
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.checks.base import Service
 from app.checks.cag.cag_side_channel import SideChannelCheck
+from app.checks.cag.cag_side_channel.check import BASELINE_PREFIX
 from app.lib.http import HttpResponse
 
 
@@ -46,30 +53,47 @@ def make_response(
     headers: dict = None,
     body: str = "",
     error: str = None,
+    elapsed_ms: float = 50.0,
+    url: str = "http://cag.example.com:8080/test",
 ) -> HttpResponse:
     """Create a mock HTTP response."""
     return HttpResponse(
-        url="http://cag.example.com:8080/test",
+        url=url,
         status_code=status_code,
         headers=headers or {},
         body=body,
-        elapsed_ms=50.0,
+        elapsed_ms=elapsed_ms,
         error=error,
     )
 
 
+def _stamp(response: HttpResponse, url: str | None) -> HttpResponse:
+    return replace(response, url=url) if url else response
+
+
 def make_mock_client(**overrides):
-    """Create a standard mock HTTP client."""
+    """Create a standard mock HTTP client.
+
+    `__aexit__` returns False so a probe exception is not suppressed (§0.14).
+    """
     client = AsyncMock()
     client.get = AsyncMock(return_value=make_response(status_code=404))
     client.post = AsyncMock(return_value=make_response(status_code=200, body='{"answer": "ok"}'))
     client.head = AsyncMock(return_value=make_response(status_code=404))
     client._request = AsyncMock(return_value=make_response(status_code=404))
     client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock()
+    client.__aexit__ = AsyncMock(return_value=False)
     for k, v in overrides.items():
         setattr(client, k, v)
     return client
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 class TestSideChannelCheck:
@@ -79,53 +103,32 @@ class TestSideChannelCheck:
 
     @pytest.mark.asyncio
     async def test_detects_timing_side_channel(self, check, sample_service, cag_endpoint_context):
-        """When sensitive topic queries are faster than baseline, cache hits indicate side channel."""
-        call_index = 0
+        """When sensitive topic queries are faster than baseline, cache hits indicate side channel.
+
+        Baseline queries answer at ~500ms; every sensitive-topic query answers at
+        ~20ms (well under the 250ms cache-hit threshold), so each topic reads as a
+        cache hit — recovered from each response's recorded `elapsed_ms`.
+        """
 
         async def mock_post(url, **kwargs):
-            nonlocal call_index
-            call_index += 1
-            # All queries return a realistic LLM-style answer
-            return make_response(
-                status_code=200,
-                body=f'{{"response": "Here is some information about your query.", "req": {call_index}}}',
+            body = kwargs.get("json", {})
+            query = body.get("input", "")
+            if BASELINE_PREFIX in query:
+                elapsed = 500.0  # baseline: cold, slow
+            else:
+                elapsed = 20.0  # sensitive topic: fast -> cache hit
+            return _stamp(
+                make_response(
+                    status_code=200,
+                    body='{"response": "Here is some information about your query."}',
+                    elapsed_ms=elapsed,
+                ),
+                url,
             )
 
-        # Timing: baseline queries ~500ms each (3 calls), then sensitive topic queries
-        # Each topic is queried 3 times. We want some topics to be fast (cache hit).
-        # baseline: 3 unique queries at ~500ms each
-        # Then 8 topics x 3 requests each = 24 requests
-        # Make all topic requests fast (50ms) to simulate cache hits
-        original_time = time.time
-        time_values = []
-        t = 100.0
-        # 3 baseline queries: ~500ms each
-        for _ in range(3):
-            time_values.append(t)
-            t += 0.5  # 500ms
-            time_values.append(t)
-            t += 0.1
-        # 8 topics x 3 requests each: ~50ms each (cache hit)
-        for _ in range(24):
-            time_values.append(t)
-            t += 0.02  # 20ms << 250ms threshold (500*0.5)
-            time_values.append(t)
-            t += 0.01
-        # Also need stddev to be low for cache hit detection
-        times = iter(time_values)
-
-        def mock_time():
-            try:
-                return next(times)
-            except StopIteration:
-                return original_time()
-
-        client = make_mock_client(post=mock_post)
-        with (
-            patch("app.checks.cag.cag_side_channel.check.AsyncHttpClient", return_value=client),
-            patch("app.checks.cag.cag_side_channel.check.time.time", side_effect=mock_time),
-        ):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+        client = make_mock_client(post=AsyncMock(side_effect=mock_post))
+        with patch("app.checks.cag.cag_side_channel.check.AsyncHttpClient", return_value=client):
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         assert len(result.observations) >= 1
@@ -140,11 +143,14 @@ class TestSideChannelCheck:
         """When all baseline requests error, no side channel analysis is possible."""
 
         async def mock_post(url, **kwargs):
-            return make_response(status_code=500, body='{"error": "server error"}', error="500")
+            return _stamp(
+                make_response(status_code=500, body='{"error": "server error"}', error="500"),
+                url,
+            )
 
-        client = make_mock_client(post=mock_post)
+        client = make_mock_client(post=AsyncMock(side_effect=mock_post))
         with patch("app.checks.cag.cag_side_channel.check.AsyncHttpClient", return_value=client):
-            result = await check.check_service(sample_service, cag_endpoint_context)
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         # No observations when baseline fails
@@ -152,6 +158,6 @@ class TestSideChannelCheck:
 
     @pytest.mark.asyncio
     async def test_no_endpoints_skips(self, check, sample_service):
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service, {})
         assert result.success
         assert len(result.observations) == 0

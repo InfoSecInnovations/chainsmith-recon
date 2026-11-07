@@ -1,5 +1,7 @@
 # Data Protection & Secrets Management
 
+> **Status — proposal, not implemented.** This is a design plan for data-at-rest encryption and secrets management. Nothing described here ships in Chainsmith today unless stated otherwise; the "Phase" headings are a proposed rollout order, not releases. Some sections predate the replacement of engagements by [workspaces](vocabulary.md#workspace).
+
 Plan for encrypting Chainsmith's data at rest and establishing a secrets
 management strategy for credentials and API keys.
 

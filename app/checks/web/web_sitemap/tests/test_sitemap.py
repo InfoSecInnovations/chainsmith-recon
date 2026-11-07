@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_sitemap.py."""
+"""Tests for web_sitemap."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -68,6 +68,20 @@ def mock_client_multi(response_map=None, default=None):
     return mock
 
 
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
+
+
 SITEMAP_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://target.com/page1</loc></url>
@@ -113,7 +127,7 @@ class TestSitemapCheck:
                 response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert result.success
         assert len(result.observations) >= 1
@@ -138,7 +152,7 @@ class TestSitemapCheck:
                 response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert result.success
         discovered = [f for f in result.observations if "sitemap-discovered" in (f.id or "")]
@@ -158,7 +172,7 @@ class TestSitemapCheck:
                 default=resp(404),
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert result.success
         assert len(result.observations) == 0
@@ -175,7 +189,7 @@ class TestSitemapCheck:
                 response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         sensitive = [f for f in result.observations if "sensitive-paths" in (f.id or "")]
         assert len(sensitive) == 1
@@ -198,7 +212,7 @@ class TestSitemapCheck:
                 response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         versioning = [f for f in result.observations if "api-versioning" in (f.id or "")]
         assert len(versioning) == 1
@@ -221,7 +235,7 @@ class TestSitemapCheck:
                 },
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert result.success
         discovered = [f for f in result.observations if "sitemap-discovered" in (f.id or "")]
@@ -247,7 +261,7 @@ class TestSitemapCheck:
                 response_map={("GET", "sitemap.xml"): resp(200, body=SITEMAP_XML)},
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert "sitemap_paths" in result.outputs
         assert len(result.outputs["sitemap_paths"]["all_paths"]) == 6
@@ -264,7 +278,7 @@ class TestSitemapCheck:
                 response_map={("GET", "sitemap.xml"): resp(200, body="")},
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert result.success
         assert len(result.observations) == 0
@@ -281,7 +295,7 @@ class TestSitemapCheck:
                 response_map={("GET", "sitemap.xml"): resp(200, body="<not valid xml!!!")},
             ),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert result.success
         assert len(result.observations) == 0

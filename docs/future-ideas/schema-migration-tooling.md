@@ -1,4 +1,10 @@
-# Future: Schema Migration Tooling
+# Schema Migration Tooling
+
+**Status:** Parked until users hold data worth keeping across upgrades. The evidence table added in phase 57 makes this more pressing.
+**Track:** Ops / maintainability
+**Depends on:** nothing
+**Size:** M
+**Last reviewed:** 2026-10-11
 
 ## Context
 

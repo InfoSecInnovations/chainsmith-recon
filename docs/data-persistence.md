@@ -1,5 +1,7 @@
 # Data Persistence Layer
 
+> **Status — historical design document.** Persistence has since been implemented (SQLite by default, PostgreSQL optional), and the "engagements" grouping proposed here was later removed in favor of [workspaces](vocabulary.md#workspace). The CLI commands and API routes for engagements shown below do not exist. For current behavior see [Working with Saved Scans](working-with-saved-scans.md).
+
 Design guidance for adding persistent storage to Chainsmith. This is a
 prerequisite for reporting, trend analysis, scan history, and engagement
 management.

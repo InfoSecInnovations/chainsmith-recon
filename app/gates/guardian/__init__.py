@@ -1,4 +1,4 @@
-"""Guardian gate component (Phase 56 folder shape, 56.12).
+"""Guardian gate component.
 
 Re-exports the public surface so existing imports
 (`from app.gates.guardian import Guardian`) and the lazy `app.gates` accessor

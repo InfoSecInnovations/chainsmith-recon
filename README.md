@@ -9,13 +9,13 @@ Chainsmith Recon is an open-source reconnaissance framework for security profess
 
 ## How It Works
 
-Every check follows a **stimulus-response** pattern:
+Every check is split into a **probe** and a **grade**:
 
-1. **Stimulus** — Send a probe: HTTP request, DNS query, crafted prompt, API call, etc.
-2. **Response Analysis** — Parse what comes back against signatures, indicators, and known patterns.
-3. **Finding Generation** — Produce structured findings with severity, evidence, and references.
+1. **Probe** — Send a stimulus (HTTP request, DNS query, crafted prompt, API call, etc.), record the exchange, and emit a *candidate* with a provisional severity. The probe makes no judgment.
+2. **Grade** — Re-read the recorded response and return verdicts: severity, confidence, reasoning, and the evidence each verdict rests on. The grader never touches the network.
+3. **Observations** — The grading stage turns verdicts into structured observations with severity, evidence, and references.
 
-The base framework enforces this pattern. `BaseCheck` subclasses implement `run()` for general probes. `ServiceIteratingCheck` subclasses implement `check_service()`, called once per discovered service matching the check's target types. Both base classes handle rate limiting, scope validation, timeouts, and error handling automatically.
+Because grading reads recorded evidence rather than the live target, a scan captured with `--capture` can be re-graded later and give the same answer. The base classes (`BaseCheck`, and `ServiceIteratingCheck` for per-service checks) handle rate limiting, scope validation, timeouts, and error handling automatically. Each check lives in its own folder with a `contract.yaml` declaring its dependencies, outputs, and severity model.
 
 ## Features
 
@@ -25,11 +25,16 @@ The base framework enforces this pattern. `BaseCheck` subclasses implement `run(
 - **REST API** — Programmatic access when running in server mode
 - **Scenario System** — Simulated target environments for training and testing without hitting real systems
 - **Swarm Mode** — Distribute scans across multiple agents for scale, coverage, and OPSEC
-- **Persistence** — Automatic scan history in SQLite with trend analysis and engagement tracking
-- **Multiple Output Formats** — Text, JSON, YAML, Markdown, SARIF, HTML, and PDF
+- **Persistence** — Automatic scan history in SQLite with comparison and trend analysis
+- **Workspaces** — One directory per client or project holding its database, captured evidence, logs, and reports
+- **Evidence Capture** — Optional recording of raw request/response pairs (`--capture`, off by default)
+- **Concurrent Scans** — Run several scans at once, with live progress streamed to the browser
+- **Scan Presets** — `quick`, `thorough`, `passive` (no intrusive checks), and `ai-focused`
+- **Custom Checks** — Drop an organization-specific check folder into `app/checks/custom/`
+- **Multiple Output Formats** — Text, JSON, YAML, Markdown, SARIF, CSV, HTML, and PDF
 - **LLM Chain Analysis** — Automatic attack chain discovery using AI (optional, with graceful degradation)
 - **Scan Profiles** — Built-in profiles (default, aggressive, stealth) and custom profile support
-- **Proof of Scope** — Traffic logging and compliance reporting for engagements
+- **Proof of Scope** — Traffic logging and compliance reporting for each assessment
 
 ## Quick Start
 
@@ -89,8 +94,8 @@ chainsmith --server 127.0.0.1:8100 scan <target>
 |-------|--------|-------|
 | **Network** | 13 | DNS, port scanning, TLS, banner grabbing, traceroute, WHOIS |
 | **Web** | 23 | Headers, CORS, auth, WAF, exposed configs, default creds, open redirects |
-| **AI** | 27 | LLM endpoint discovery, prompt injection, jailbreaks, model enumeration, guardrail testing |
-| **MCP** | 19 | MCP server discovery, tool enumeration, shadow tools, schema leakage, transport security |
+| **AI** | 28 | LLM endpoint discovery, prompt injection, jailbreaks, model enumeration, guardrail testing |
+| **MCP** | 18 | MCP server discovery, tool enumeration, shadow tools, schema leakage, transport security |
 | **Agent** | 17 | Agent discovery, goal injection, memory extraction, privilege escalation, cross-agent injection |
 | **RAG** | 17 | RAG endpoint discovery, indirect injection, corpus poisoning, document exfiltration |
 | **CAG** | 17 | Cache discovery, cache poisoning, cross-user leakage, side-channel, stale context |
@@ -134,9 +139,10 @@ scope:
   in_scope_ports: [80, 443, 8080, 8443]
   port_profile: lab  # web, ai, full, lab
 
+workspace: ~/chainsmith/clients/example   # database, evidence, reports, logs
+
 storage:
   backend: sqlite
-  db_path: ./data/chainsmith.db
   auto_persist: true
   retention_days: 365
 
@@ -145,7 +151,7 @@ swarm:
   max_agents: 50
 ```
 
-Configuration is loaded in layers: hardcoded defaults, then YAML file overrides, then environment variable overrides.
+Configuration is loaded in layers: hardcoded defaults, then YAML file overrides, then environment variable overrides. The workspace can also be set with `--workspace` or `CHAINSMITH_WORKSPACE` (default `~/chainsmith/default`).
 
 ## Swarm Mode
 
@@ -162,7 +168,7 @@ chainsmith serve --coordinator --host 0.0.0.0
 chainsmith swarm agent --coordinator http://coordinator:8000 --key <key>
 
 # 4. Scan as usual -- the coordinator distributes work automatically
-chainsmith scan example.com --server coordinator:8000
+chainsmith --server coordinator:8000 scan example.com
 ```
 
 See [docs/swarm-usage.md](docs/swarm-usage.md) for the full guide and

@@ -28,3 +28,30 @@ references:
 - hstspreload.org
 reason: Domains not on the HSTS preload list are vulnerable to SSL stripping on first
   visit
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # Four mutually exclusive postures over one service, so the probe emits one
+  # undiscriminated candidate and `grade()` names the one that holds — or none,
+  # for an HTTPS service with no HSTS header at all, which this check has always
+  # left to `web_header_analysis`.
+  #
+  # The confidences are the point of this migration. `is_preloaded` was `False`
+  # whether hstspreload.org said the domain is absent from the list, was
+  # unreachable, or answered something unparseable, and the original asserted
+  # "not preloaded" identically in all three. `preload-pending` and
+  # `not-preloaded` now carry 0.9 when the API actually answered and 0.4 when it
+  # did not, with the reason written into the verdict. `preloaded` carries 0.95:
+  # the API *is* the list, but enforcement waits on the browser release that
+  # ships it.
+  default: info
+  observations:
+    no-hsts: info
+    preloaded: info
+    preload-pending: info
+    not-preloaded: low

@@ -1,5 +1,7 @@
 # Instance Authentication & NIST CUI Compliance
 
+> **Status — proposal, not implemented.** This is a design plan for NIST 800-171 / CUI hardening. Nothing described here ships in Chainsmith today unless stated otherwise; the "Phase" headings are a proposed rollout order, not releases. Some sections predate the replacement of engagements by [workspaces](vocabulary.md#workspace).
+
 Plan for hardening Chainsmith's authentication and session management to
 meet NIST 800-171 requirements for Controlled Unclassified Information (CUI).
 

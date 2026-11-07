@@ -35,6 +35,8 @@ try:
 except ImportError:
     _YAML_AVAILABLE = False
 
+from app.lib.observations import partition_by_verdict, suppression_note
+
 logger = logging.getLogger(__name__)
 
 # Fallbacks if the triage spec is absent (disabled) or omits the knob.
@@ -271,7 +273,13 @@ async def run_triage(session: "ScanSession") -> None:
                 )
             )
 
-        verified = [f for f in observations if f.status == ObservationStatus.VERIFIED]
+        # Narrowing is stated, not silent. This stage
+        # only triages what the Verifier confirmed, but what it sets aside
+        # stays in the record and is counted here so a reader can see it.
+        _carried, _suppressed = partition_by_verdict(observations)
+        if _suppressed:
+            logger.info("%s — not triaged, still recorded", suppression_note(_suppressed))
+        verified = [f for f in _carried if f.status == ObservationStatus.VERIFIED]
         if not verified:
             session.triage_status = "complete"
             await _update_triage_status_in_db(scan_id, triage_status="complete")

@@ -1,16 +1,29 @@
 """
-app/checks/ai/model_enum.py - Model Enumeration
+app/checks/ai/ai_model_enumeration/check.py - Model Enumeration
 
 Enumerate available models by sending chat requests with different
 model parameter values.
+
+**Probe/grade.** The probe sends the test prompt under each
+candidate model name and records the answers; `grade()` re-reads them, sorts the
+accepted names from the recognised-but-unavailable ones, and walks the original
+severity ladder. Which model a recorded exchange tested is read back off the
+`model` field of its own request body (§0.13), so the accepted list cannot drift
+from what was actually asked. `_reading()` is the one parser both halves call.
 """
 
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
+from app.grading import Candidate, Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
 from app.lib.parsing import safe_json
+
+JSON_HEADERS = {"Content-Type": "application/json"}
+
+#: Accepted names that mean a non-production model is reachable.
+INTERNAL_MODELS = ("staging", "test", "internal", "base")
 
 
 class ModelEnumerationCheck(BaseCheck):
@@ -79,8 +92,11 @@ class ModelEnumerationCheck(BaseCheck):
 
     TEST_PROMPT = "Say hello in one word."
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def run(self, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         for endpoint_info in context.get("chat_endpoints", []):
             url = endpoint_info.get("url")
@@ -91,109 +107,183 @@ class ModelEnumerationCheck(BaseCheck):
             api_format = endpoint_info.get("api_format", "unknown")
 
             try:
-                er = await self._enumerate_models(url, service, api_format, context)
-                result.observations.extend(er.observations)
-                result.outputs.update(er.outputs)
+                candidate = self.create_candidate(host=service.host, target=service, target_url=url)
+                await self._enumerate(url, service, api_format, context, candidate, scan_id)
+                result.candidates.append(candidate)
+
+                result.outputs["available_models"] = self._reading(candidate.exchanges)["available"]
             except Exception as e:
                 result.errors.append(f"{url}: {e}")
 
         return result
 
-    async def _enumerate_models(
-        self, url: str, service: Service, api_format: str, context: dict
-    ) -> CheckResult:
-        result = CheckResult(success=True)
-        available = []
-        recognized_unavailable = []
-
-        # Select model list based on framework fingerprint
+    async def _enumerate(
+        self,
+        url: str,
+        service: Service,
+        api_format: str,
+        context: dict,
+        candidate: Candidate,
+        scan_id: str,
+    ) -> None:
+        """Send the prompt under each candidate model name, recording each."""
         models_to_test = self._select_models(service, api_format, context)
 
         cfg = HttpConfig(timeout_seconds=15.0, verify_ssl=False)
-        try:
-            async with AsyncHttpClient(cfg) as client:
-                for model_name in models_to_test:
-                    await self._rate_limit()
+        async with AsyncHttpClient(cfg) as client:
+            for model_name in models_to_test:
+                await self._rate_limit()
 
-                    body = self._build_request(model_name, api_format)
+                body = self._build_request(model_name, api_format)
+                resp = await client.post(url, json=body, headers=JSON_HEADERS)
 
-                    resp = await client.post(
-                        url,
-                        json=body,
-                        headers={"Content-Type": "application/json"},
+                candidate.attach(
+                    exchange_from_response(
+                        resp,
+                        check_name=self.name,
+                        scan_id=scan_id,
+                        host=candidate.host,
+                        method="POST",
+                        request_headers=JSON_HEADERS,
+                        request_json=body,
                     )
+                )
 
-                    if resp.error:
-                        continue
+    # ══ Grade ════════════════════════════════════════════════════════
 
-                    if resp.status_code == 200:
-                        available.append(model_name)
-                    elif resp.status_code == 404:
-                        # Model recognized but unavailable
-                        resp_body = safe_json(resp.body) or {}
-                        err_msg = str(resp_body.get("error", ""))
-                        if model_name in err_msg or "model" in err_msg.lower():
-                            recognized_unavailable.append(model_name)
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Walk the original enumeration ladder over the recorded attempts."""
+        reading = self._reading(list(evidence))
+        available = reading["available"]
+        ids = evidence.ids()
 
-        except Exception as e:
-            result.errors.append(f"{url}: {e}")
-            return result
+        verdicts: list[Verdict] = []
 
-        host = service.host
-
-        internal_models = [m for m in available if m in ("staging", "test", "internal", "base")]
-
-        if internal_models:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title=f"Internal/staging model accessible: {', '.join(internal_models)}",
-                    description="Internal or staging models are accessible and may have weaker guardrails",
+        internal = [m for m in available if m in INTERNAL_MODELS]
+        if internal:
+            verdicts.append(
+                Verdict(
                     severity="high",
-                    evidence=f"Models responding: {', '.join(internal_models)}",
-                    host=host,
+                    # A generic name like `internal` accepted with a 200 is a
+                    # reachable model, but the name is our label, not the
+                    # target's — a server that maps every unknown model to its
+                    # default answers `internal` and `staging` identically to
+                    # `gpt-4`. Whether these are genuinely distinct models is
+                    # the doubt, so this is confident but not conclusive.
+                    confidence=0.7,
                     discriminator="internal-model",
-                    target=service,
-                    target_url=url,
-                    raw_data={"internal_models": internal_models},
+                    title=f"Internal/staging model accessible: {', '.join(internal)}",
+                    description=(
+                        "Internal or staging models are accessible and may have weaker guardrails"
+                    ),
+                    evidence=f"Models responding: {', '.join(internal)}",
+                    reasoning=(
+                        f"the model name(s) {', '.join(internal)} were accepted with 200; a "
+                        "server that silently falls back to its default for any unknown model "
+                        "would accept them without their being distinct models"
+                    ),
+                    signals={"internal_models": internal, "available": available},
+                    raw_data={"internal_models": internal},
+                    evidence_ids=ids,
                 )
             )
 
         if available:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            distinct = self._looks_distinct(reading)
+            verdicts.append(
+                Verdict(
+                    severity="medium" if len(available) > 1 else "info",
+                    confidence=0.85 if distinct else 0.5,
+                    discriminator="models-enumerated",
                     title=f"{len(available)} models available",
                     description=f"Enumerated models: {', '.join(available)}",
-                    severity="medium" if len(available) > 1 else "info",
                     evidence=f"Available: {', '.join(available)}",
-                    host=host,
-                    discriminator="models-enumerated",
-                    target=service,
-                    target_url=url,
+                    reasoning=(
+                        f"{len(available)} names answered 200"
+                        + (
+                            "; some names were rejected with 404, so the endpoint discriminates "
+                            "between models and the accepted set is real"
+                            if distinct
+                            else "; but no name was rejected, so the endpoint may accept the "
+                            "`model` field and ignore it — the count could be an artefact of the "
+                            "wordlist rather than an inventory"
+                        )
+                    ),
+                    signals={
+                        "available": available,
+                        "recognized_unavailable": reading["recognized_unavailable"],
+                    },
                     raw_data={
                         "available": available,
-                        "recognized_unavailable": recognized_unavailable,
+                        "recognized_unavailable": reading["recognized_unavailable"],
                     },
+                    evidence_ids=ids,
                 )
             )
         else:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            verdicts.append(
+                Verdict(
+                    severity="info",
+                    confidence=0.8,
+                    discriminator="no-enum",
                     title="Single model available (no enumeration possible)",
                     description="Model parameter is not accepted or only one model is configured",
-                    severity="info",
-                    evidence=f"Tested {len(models_to_test)} model names, none accepted",
-                    host=host,
-                    discriminator="no-enum",
-                    target=service,
-                    target_url=url,
+                    evidence=f"Tested {reading['tested']} model names, none accepted",
+                    reasoning=(
+                        "no candidate model name drew a 200; the endpoint either ignores the "
+                        "model field or exposes a single model"
+                    ),
+                    signals={"tested": reading["tested"]},
+                    evidence_ids=ids,
                 )
             )
 
-        result.outputs["available_models"] = available
-        return result
+        return verdicts
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _reading(self, exchanges: list[Exchange]) -> dict:
+        """Sort recorded attempts by the `model` each requested and its status."""
+        available: list[str] = []
+        recognized_unavailable: list[str] = []
+        tested = 0
+
+        for exchange in exchanges:
+            model_name = self._model_of(exchange)
+            if model_name is None:
+                continue
+            tested += 1
+
+            if exchange.error:
+                continue
+
+            if exchange.response_status == 200:
+                available.append(model_name)
+            elif exchange.response_status == 404:
+                body = safe_json(exchange.response_body or "") or {}
+                err_msg = str(body.get("error", ""))
+                if model_name in err_msg or "model" in err_msg.lower():
+                    recognized_unavailable.append(model_name)
+
+        return {
+            "available": available,
+            "recognized_unavailable": recognized_unavailable,
+            "tested": tested,
+        }
+
+    def _model_of(self, exchange: Exchange) -> str | None:
+        """The model name a recorded request asked for."""
+        body = safe_json(exchange.request_body or "")
+        if isinstance(body, dict):
+            model = body.get("model")
+            if isinstance(model, str):
+                return model
+        return None
+
+    def _looks_distinct(self, reading: dict) -> bool:
+        """True when the endpoint rejected at least one model — evidence that
+        the accepted names are real rather than an ignored parameter."""
+        return bool(reading["recognized_unavailable"])
 
     def _select_models(self, service: Service, api_format: str, context: dict) -> list[str]:
         """Select model names to test based on detected framework."""

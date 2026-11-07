@@ -20,6 +20,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query
 
 from app.api_models import ScanStartInput, ScanStatus
+from app.capture.settings import CaptureSettings
 from app.check_resolver import infer_suite as _infer_suite
 from app.config import get_config
 from app.db.repositories import CheckLogRepository
@@ -86,7 +87,7 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     cfg = get_config()
     max_scans = cfg.concurrency.max_concurrent_scans
     scan_id = uuid.uuid4().hex[:16]
-    guardian = Guardian.from_scope(state.target, exclude=state.exclude)
+    guardian = Guardian.from_scope(state.target, exclude=state.exclude, scan_id=scan_id)
     session = ScanSession(
         id=scan_id,
         target=state.target or "",
@@ -96,7 +97,12 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
         phase="queued",
         guardian=guardian,
         settings=dict(state.settings),
-        proof_settings=state.proof_settings,
+        # Deep copy, not a reference: proof_settings is mutated per scan start
+        # (outside_window_acknowledged above), and sharing one object across
+        # concurrent sessions would let a later scan rewrite an earlier scan's
+        # compliance record.
+        proof_settings=state.proof_settings.model_copy(deep=True),
+        operator_session_id=state.session_id,
     )
     async with _scan_lock:
         active = get_registry().active_count()
@@ -117,6 +123,9 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
             session=session,
             preset=body.preset or None,
             check_overrides=body.check_overrides or None,
+            capture=CaptureSettings.from_request(**body.capture.model_dump())
+            if body.capture
+            else None,
         )
     )
 
@@ -175,7 +184,7 @@ def _do_stop(session):
 
 
 def _status_payload(session) -> ScanStatus:
-    # Phase 51.4: advertise SSE support only when the operator has opted in
+    # Advertise SSE support only when the operator has opted in
     # via `scan_stream.enabled`. The route itself stays live regardless —
     # this flag only controls what clients are told, so the UI falls back
     # to polling until the operator flips it on.

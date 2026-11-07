@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_header_grading.py."""
+"""Tests for web_header_analysis (header_grading cases)."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -64,6 +64,20 @@ def mock_client_multi(response_map=None, default=None):
     return mock
 
 
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
+
+
 class TestHeaderCSPGrading:
     def test_init(self):
         check = HeaderAnalysisCheck()
@@ -84,7 +98,7 @@ class TestHeaderCSPGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         csp_observations = [f for f in result.observations if "csp" in f.id.lower()]
         assert len(csp_observations) == 1
         assert csp_observations[0].severity == "medium"
@@ -105,7 +119,7 @@ class TestHeaderCSPGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         csp_observations = [f for f in result.observations if "csp" in f.id.lower()]
         assert len(csp_observations) == 1
         assert "'unsafe-eval'" in csp_observations[0].description
@@ -125,7 +139,7 @@ class TestHeaderCSPGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         csp_observations = [f for f in result.observations if "csp" in f.id.lower()]
         assert len(csp_observations) == 1
         assert "wildcard" in csp_observations[0].description.lower()
@@ -145,7 +159,7 @@ class TestHeaderCSPGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         csp_observations = [f for f in result.observations if "csp" in f.id.lower()]
         assert len(csp_observations) == 1
         assert "default-src" in csp_observations[0].description
@@ -165,7 +179,7 @@ class TestHeaderCSPGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         csp_observations = [f for f in result.observations if "csp" in (f.id or "").lower()]
         assert len(csp_observations) == 0
 
@@ -186,7 +200,7 @@ class TestHeaderHSTSGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         hsts_observations = [f for f in result.observations if "hsts" in (f.id or "").lower()]
         assert len(hsts_observations) == 1
         assert hsts_observations[0].severity == "low"
@@ -207,7 +221,7 @@ class TestHeaderHSTSGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         hsts_observations = [f for f in result.observations if "hsts" in (f.id or "").lower()]
         assert len(hsts_observations) == 1
         assert "includeSubDomains" in hsts_observations[0].description
@@ -227,7 +241,7 @@ class TestHeaderHSTSGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         hsts_observations = [f for f in result.observations if "hsts" in (f.id or "").lower()]
         assert len(hsts_observations) == 0
 
@@ -248,7 +262,7 @@ class TestHeaderXFOGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         xfo_observations = [f for f in result.observations if "xfo" in (f.id or "").lower()]
         assert len(xfo_observations) == 1
         assert xfo_observations[0].severity == "medium"
@@ -269,7 +283,7 @@ class TestHeaderXFOGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         xfo_observations = [f for f in result.observations if "xfo" in (f.id or "").lower()]
         assert len(xfo_observations) == 0
 
@@ -290,7 +304,7 @@ class TestHeaderReferrerPolicyGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         rp_observations = [f for f in result.observations if "referrer" in (f.id or "").lower()]
         assert len(rp_observations) == 1
         assert rp_observations[0].severity == "low"
@@ -310,7 +324,7 @@ class TestHeaderReferrerPolicyGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         rp_observations = [f for f in result.observations if "referrer" in (f.id or "").lower()]
         assert len(rp_observations) == 0
 
@@ -332,7 +346,7 @@ class TestHeaderPermissionsPolicyGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         pp_observations = [f for f in result.observations if "permissions" in (f.id or "").lower()]
         assert len(pp_observations) == 1
         assert "camera" in pp_observations[0].description
@@ -354,7 +368,7 @@ class TestHeaderPermissionsPolicyGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         pp_observations = [f for f in result.observations if "permissions" in (f.id or "").lower()]
         assert len(pp_observations) == 0
 
@@ -377,7 +391,7 @@ class TestHeaderPermissionsPolicyGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         # No Permissions-Policy grading observation should appear
         pp_observations = [f for f in result.observations if "permissions" in (f.id or "").lower()]
         assert len(pp_observations) == 0
@@ -402,7 +416,7 @@ class TestHeaderPermissionsPolicyGrading:
             "app.checks.web.web_header_analysis.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         missing_obs = [
             f for f in result.observations if "missing-security-headers" in (f.id or "").lower()
         ]

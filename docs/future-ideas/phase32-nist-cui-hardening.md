@@ -1,8 +1,11 @@
 # Phase 32 — NIST 800-171 CUI Hardening for Scan Results and Reports
 
-Captured 2026-04-08.
-
-Status: Design — Open Questions Resolved
+**Status:** Proposed. Design done; open questions resolved 2026-04-08.
+**Track:** Compliance / CUI
+**Depends on:** nothing hard. Phase 57.5 (evidence encryption, one key per workspace) should align with it.
+**Related:** [`../plan-data-protection-secrets.md`](../plan-data-protection-secrets.md), [`../plan-instance-auth-nist-cui.md`](../plan-instance-auth-nist-cui.md). These overlap heavily; merge them when this is scheduled.
+**Size:** L
+**Last reviewed:** 2026-10-11
 
 ---
 

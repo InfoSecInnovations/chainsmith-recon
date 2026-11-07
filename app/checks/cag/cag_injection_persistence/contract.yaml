@@ -30,3 +30,11 @@ references:
 - MITRE ATLAS - AML.T0048 Data Poisoning
 reason: This is the highest-impact CAG observation — a single prompt injection cached
   and served to all users creates persistent multi-user compromise
+severity:
+  model: contextual
+  # Attack-compliance: severity is a continuum the evidence places, not a fact
+  # read off the response, so this check is in phase 58's grading scope (§7.2).
+  # `default` is what `on_critical` reads before a grader has run; `rubric:` and
+  # `signals:` are inert until 58 and are authored with it.
+  default: medium
+  range: [info, critical]

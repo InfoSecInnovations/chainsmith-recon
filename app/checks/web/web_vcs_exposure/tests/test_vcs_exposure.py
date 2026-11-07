@@ -1,5 +1,6 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_security_exposure.py."""
+"""Tests for web_vcs_exposure."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -41,11 +42,13 @@ def mock_client_multi(response_map=None, default=None):
     mock.__aexit__ = AsyncMock()
 
     def _lookup(method, url):
+        # The real client stamps the requested URL onto the response, and a
+        # migrated check records that URL on the exchange its grader reads.
         if response_map:
             for (m, pattern), response in response_map.items():
                 if m == method and pattern in url:
-                    return response
-        return default
+                    return replace(response, url=url)
+        return replace(default, url=url)
 
     async def dispatch_get(url, **kwargs):
         return _lookup("GET", url)
@@ -62,6 +65,20 @@ def mock_client_multi(response_map=None, default=None):
     mock._request = AsyncMock(side_effect=dispatch_request)
 
     return mock
+
+
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
 
 
 def _mock_preferences(intrusive_web=False):
@@ -138,7 +155,7 @@ class TestVCSExposureCheck:
             "app.checks.web.web_vcs_exposure.check.AsyncHttpClient",
             return_value=mock_client_multi(responses),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -165,7 +182,7 @@ class TestVCSExposureCheck:
             "app.checks.web.web_vcs_exposure.check.AsyncHttpClient",
             return_value=mock_client_multi(responses),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert len(result.observations) == 1
         cred_obs = result.observations[0]
@@ -193,7 +210,7 @@ class TestVCSExposureCheck:
             "app.checks.web.web_vcs_exposure.check.AsyncHttpClient",
             return_value=mock_client_multi(responses),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         git_obs = [o for o in result.observations if "git" in o.title.lower() or "Git" in o.title]
         assert len(git_obs) == 0
@@ -220,7 +237,7 @@ class TestVCSExposureCheck:
             "app.checks.web.web_vcs_exposure.check.AsyncHttpClient",
             return_value=mock_client_multi(responses),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         # Only 1 accessible path so severity should be high (not critical)
         if result.observations:
@@ -244,7 +261,7 @@ class TestVCSExposureCheck:
             "app.checks.web.web_vcs_exposure.check.AsyncHttpClient",
             return_value=mock_client_multi(responses),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -264,6 +281,6 @@ class TestVCSExposureCheck:
             "app.checks.web.web_vcs_exposure.check.AsyncHttpClient",
             return_value=mock_client_multi(responses),
         ):
-            result = await check.check_service(service, context)
+            result = await probe_and_grade(check, service, context)
 
         assert len(result.observations) == 0

@@ -28,3 +28,40 @@ techniques:
 references:
 - MITRE ATLAS - ML Supply Chain Compromise
 reason: Knowing the AI framework enables targeted attacks against known vulnerabilities
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: a fingerprint is read
+  # off recorded headers, bodies and paths, so no grader above the rule tier is
+  # ever called. `default` is the pre-grade value a candidate carries (§6.1) and
+  # also the only severity this check emits — every framework is `medium`,
+  # because knowing what is running is leverage rather than a flaw.
+  #
+  # The discriminator set IS enumerable here, unlike the two endpoint-discovery
+  # checks: it is one entry per framework in `FRAMEWORK_SIGNATURES`, a fixed
+  # table in the check rather than an operator-editable path list. So the map is
+  # written out, and adding a signature means adding a line here.
+  #
+  # This is the check where the split had the most to add. The old code already
+  # had a notion of confidence and no way to state it: it graded its own signature
+  # score into the words "high"/"medium"/"low", wrote that into the description,
+  # and then asserted `medium` with no measure attached. That word is now a real
+  # number, and it is derived from WHICH KIND of signal matched rather than from
+  # the score, because the score adds three incomparable things: a vendor
+  # response header (0.9 — nothing but vLLM sends `x-vllm`), an error message
+  # naming the framework (0.8), matching endpoint paths (0.6 — several
+  # frameworks share /v1/models and /health), and a body regex (0.45, the
+  # weakest by a distance: the bundle is 5 KB of root page concatenated with
+  # nine other responses, so `ollama` or `nvidia` scores from anywhere in it,
+  # a footer included). A runner-up within one point caps the result at 0.4,
+  # because the signature sets overlap by construction.
+  default: medium
+  observations:
+    framework-vllm: medium
+    framework-ollama: medium
+    framework-langserve: medium
+    framework-huggingface_tgi: medium
+    framework-triton: medium
+    framework-openai_compatible: medium
+    framework-fastapi_ml: medium
+    framework-gradio: medium
+    framework-streamlit: medium

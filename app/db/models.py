@@ -51,14 +51,14 @@ class Scan(Base):
     # Optimistic locking
     version = Column(Integer, nullable=False, default=1)
 
-    # Phase 31: status fields migrated from AppState
+    # Status fields migrated from AppState
     adjudication_status = Column(String, nullable=True, default="idle")
     adjudication_error = Column(Text, nullable=True)
     chain_status = Column(String, nullable=True, default="idle")
     chain_error = Column(Text, nullable=True)
     chain_llm_analysis = Column(JSON, nullable=True)
 
-    # Phase 33: Triage Agent
+    # Triage Agent
     triage_status = Column(String, nullable=True, default="idle")
     triage_error = Column(Text, nullable=True)
 
@@ -86,13 +86,25 @@ class ObservationRecord(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     fingerprint = Column(String, nullable=True)
     metadata_ = Column("metadata", JSON, nullable=True)
-    # Phase 51.1b: monotonic per-scan sequence stamped at insert from
+    # Monotonic per-scan sequence stamped at insert from
     # ScanSession.next_seq(). Shared id space with the SSE hot ring so the
     # DB-backed replay path can page events older than the ring.
     event_seq = Column(Integer, nullable=True)
+    # An observation is a graded candidate. `severity` above is the
+    # effective value; these record how it got there — the pre-grade assumption,
+    # who graded it, why, and which exchanges the verdict was derived from.
+    # Grading state is per observation and never per scan (design §6.3).
+    provisional_severity = Column(String, nullable=True)
+    grading_state = Column(String, nullable=True, default="ungraded")
+    grading_tier = Column(String, nullable=True)  # rule | llm | none
+    grading_reasoning = Column(Text, nullable=True)
+    evidence_ids = Column(JSON, nullable=True)  # -> evidence.id (D-22 binding)
+    evidence_source = Column(String, nullable=True)  # corpus | memory | empty
+    signals = Column(JSON, nullable=True)
 
     __table_args__ = (
         Index("idx_observations_scan_id", "scan_id"),
+        Index("idx_observations_grading_state", "grading_state"),
         Index("idx_observations_severity", "severity"),
         Index("idx_observations_host", "host"),
         Index("idx_observations_fingerprint", "fingerprint"),
@@ -129,7 +141,7 @@ class CheckLog(Base):
     duration_ms = Column(Integer, nullable=True)
     error_message = Column(Text, nullable=True)
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
-    # Phase 51.1b: see ObservationRecord.event_seq.
+    # See ObservationRecord.event_seq.
     event_seq = Column(Integer, nullable=True)
 
     __table_args__ = (
@@ -138,7 +150,7 @@ class CheckLog(Base):
         Index("idx_check_log_scan_event_seq", "scan_id", "event_seq"),
     )
 
-    # Maps `event` values onto SSE event types for phase 51 streaming.
+    # Maps `event` values onto SSE event types for SSE streaming.
     # Single source of truth shared by the live publisher (51.1c) and the
     # DB-backed replay path (51.3) — design doc §4.
     _SSE_EVENT_TYPE = {
@@ -390,3 +402,59 @@ class TriageActionRecord(Base):
     category = Column(String, nullable=True)
 
     __table_args__ = (Index("idx_triage_actions_plan_id", "plan_id"),)
+
+
+class EvidenceRecord(Base):
+    """One captured exchange.
+
+    The bodies and headers live on disk under the workspace's ``evidence/``;
+    this row holds the scalars, both hashes, and a pointer. Files rather than
+    blobs keeps the database portable and makes a corpus ``rsync``-able for
+    offline re-grading, which is the whole point of capturing it.
+
+    ``candidate_id`` is nullable because capture may precede the candidate it
+    will support, and the HTTP-shaped columns are nullable because a ``dns`` or
+    ``local`` exchange has no method and no URL — ``protocol`` is the
+    discriminator that says how to read them.
+    """
+
+    __tablename__ = "evidence"
+
+    # The exchange id: a uuid4 hex minted by the writer, and also the on-disk
+    # filename. Shared so a row and its document can be found from either side.
+    id = Column(String, primary_key=True)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    check_name = Column(String, nullable=False)
+    host = Column(String, nullable=False)
+    protocol = Column(String, nullable=False)
+
+    candidate_id = Column(String, nullable=True)
+    iteration = Column(Integer, nullable=False, default=0)
+
+    request_method = Column(String, nullable=True)
+    request_url = Column(Text, nullable=True)
+    response_status = Column(Integer, nullable=True)
+    elapsed_ms = Column(Float, nullable=True)
+    error = Column(Text, nullable=True)
+
+    #: SHA-256 over the normalised request alone — "is this the same question?"
+    probe_hash = Column(String, nullable=False)
+    #: SHA-256 over the normalised pair — "is this the same evidence?"
+    content_hash = Column(String, nullable=False)
+    truncated = Column(Boolean, nullable=False, default=False)
+
+    #: Path to the document, relative to the workspace evidence root. Relative
+    #: so a corpus stays valid after it is copied to another machine.
+    document_path = Column(String, nullable=False)
+
+    captured_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("idx_evidence_scan_id", "scan_id"),
+        Index("idx_evidence_scan_check", "scan_id", "check_name"),
+        # Phase 58 §4 groups sampling iterations of one probe by probe_hash, and
+        # §5 keys the grade cache on content_hash. Both are lookup paths, not
+        # scan-scoped scans, so they are indexed on their own.
+        Index("idx_evidence_probe_hash", "probe_hash"),
+        Index("idx_evidence_content_hash", "content_hash"),
+    )

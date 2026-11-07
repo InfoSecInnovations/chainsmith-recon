@@ -1,4 +1,10 @@
-# Future: Guardian Interactive Approval Flow
+# Guardian Interactive Approval
+
+**Status:** Parked. Optional feature; nothing depends on it.
+**Track:** Scope / Guardian
+**Depends on:** nothing. The hook already exists: `Guardian.approve_url` in `app/gates/guardian/gate.py`.
+**Size:** S
+**Last reviewed:** 2026-10-11
 
 ## Context
 

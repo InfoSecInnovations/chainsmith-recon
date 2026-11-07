@@ -9,7 +9,7 @@ from app.lib.payloads import get_payload_library
 
 lib = get_payload_library()
 print(lib.stats())
-# {'total': 50, 'categories': 9, ...}
+# {'total_payloads': 50, 'categories': 9, ...}
 ```
 
 ## Usage in Checks

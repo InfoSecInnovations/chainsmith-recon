@@ -28,3 +28,15 @@ references:
 - OWASP LLM Top 10 - LLM01 Prompt Injection
 reason: Re-rankers may amplify injection documents by ranking them higher due to instruction-like
   content receiving higher relevance scores
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`.
+  default: info
+  observations:
+    # A closed three-value set; the check emits exactly one of them per service.
+    reranker-headers: low
+    reranker-scores: info
+    no-reranker: info

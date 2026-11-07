@@ -1,5 +1,11 @@
 # Phase 49 — Observability Expansion
 
+**Status:** Proposed. Needs a re-scope first: SSE scan streaming (phase 51) and `/health` already cover part of it, and phase 58 §7 covers provenance.
+**Track:** Ops / maintainability
+**Depends on:** nothing
+**Size:** L
+**Last reviewed:** 2026-10-11
+
 ## Goal
 
 Make Chainsmith's runtime behavior legible while it's running and after it's

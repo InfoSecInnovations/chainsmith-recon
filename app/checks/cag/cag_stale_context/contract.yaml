@@ -30,3 +30,16 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Stale cached context enables privilege persistence — revoked access continues
   via cache until entry expires
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`.
+  default: info
+  observations:
+    # A closed two-value set, one per test. Each declares its floor (`info`, the
+    # not-stale answer); `grade()` raises either to `high` when a stale entry is
+    # detected.
+    stale-role_context: info
+    stale-ttl_staleness: info

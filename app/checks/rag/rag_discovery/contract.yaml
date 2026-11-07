@@ -33,3 +33,11 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: RAG pipelines can be exploited for indirect prompt injection, document exfiltration,
   and corpus poisoning attacks
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`. The per-discriminator `observations:` map
+  # lands when this check is split into probe/grade (57.4 wave 2).
+  default: info

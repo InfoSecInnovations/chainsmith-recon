@@ -29,3 +29,13 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Long cache TTL increases the exposure window for cache poisoning attacks and
   stale context exploitation
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`. The discriminator is derived from the
+  # endpoint path (`ttl-<path>`), an unbounded set that cannot be keyed in an
+  # `observations:` map, so there is none — `grade()` places the real severity
+  # (medium / low / info) off the recorded timing.
+  default: info

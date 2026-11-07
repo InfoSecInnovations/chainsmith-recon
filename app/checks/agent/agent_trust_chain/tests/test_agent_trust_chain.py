@@ -1,5 +1,11 @@
-"""Co-located tests (Phase 56 §3) — split from test_agent_multiagent.py."""
+"""Tests for agent_trust_chain.
 
+This check is split into probe + grade; tests route through
+`probe_and_grade()` and assert on the graded observations. The multi-agent flag
+now comes from the grade context, so `probe_and_grade` forwards it.
+"""
+
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -58,9 +64,10 @@ def make_response(
     headers: dict = None,
     body: str = "",
     error: str = None,
+    url: str = "http://agent.example.com:8080",
 ) -> HttpResponse:
     return HttpResponse(
-        url="http://agent.example.com:8080",
+        url=url,
         status_code=status_code,
         headers=headers or {},
         body=body,
@@ -69,14 +76,36 @@ def make_response(
     )
 
 
+def _stamp(response: HttpResponse, url: str | None) -> HttpResponse:
+    return replace(response, url=url) if url else response
+
+
 def _mock_client(get_fn=None, post_fn=None):
-    """Create mock async HTTP client."""
+    """Create mock async HTTP client (`__aexit__` returns False so probe
+    exceptions are not suppressed)."""
     client = AsyncMock()
-    client.get = get_fn or AsyncMock(return_value=make_response(status_code=404))
-    client.post = post_fn or AsyncMock(return_value=make_response(status_code=404))
+
+    async def _get(url=None, **kw):
+        resp = (await get_fn(url, **kw)) if get_fn else make_response(status_code=404)
+        return _stamp(resp, url)
+
+    async def _post(url=None, **kw):
+        resp = (await post_fn(url, **kw)) if post_fn else make_response(status_code=404)
+        return _stamp(resp, url)
+
+    client.get = AsyncMock(side_effect=_get)
+    client.post = AsyncMock(side_effect=_post)
     client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock()
+    client.__aexit__ = AsyncMock(return_value=False)
     return client
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 class TestTrustChain:
@@ -118,7 +147,7 @@ class TestTrustChain:
         client = _mock_client(post_fn=mock_post)
 
         with patch("app.checks.agent.agent_trust_chain.check.AsyncHttpClient", return_value=client):
-            result = await check.check_service(sample_service, multi_agent_context)
+            result = await probe_and_grade(check, sample_service, multi_agent_context)
 
         critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) > 0
@@ -149,7 +178,7 @@ class TestTrustChain:
         client = _mock_client(post_fn=mock_post)
 
         with patch("app.checks.agent.agent_trust_chain.check.AsyncHttpClient", return_value=client):
-            result = await check.check_service(sample_service, agent_context)
+            result = await probe_and_grade(check, sample_service, agent_context)
 
         # Without multi-agent topology, exploited assertions get severity=high
         high = [f for f in result.observations if f.severity == "high"]
@@ -173,7 +202,7 @@ class TestTrustChain:
         client = _mock_client(post_fn=mock_post)
 
         with patch("app.checks.agent.agent_trust_chain.check.AsyncHttpClient", return_value=client):
-            result = await check.check_service(sample_service, multi_agent_context)
+            result = await probe_and_grade(check, sample_service, multi_agent_context)
 
         critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) == 0
@@ -189,7 +218,7 @@ class TestTrustChain:
         client = _mock_client(post_fn=mock_post)
 
         with patch("app.checks.agent.agent_trust_chain.check.AsyncHttpClient", return_value=client):
-            result = await check.check_service(sample_service, agent_context)
+            result = await probe_and_grade(check, sample_service, agent_context)
 
         critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) == 0
@@ -226,7 +255,7 @@ class TestTrustChain:
         client = _mock_client(post_fn=mock_post)
 
         with patch("app.checks.agent.agent_trust_chain.check.AsyncHttpClient", return_value=client):
-            result = await check.check_service(sample_service, multi_agent_context)
+            result = await probe_and_grade(check, sample_service, multi_agent_context)
 
         # Refusal that mentions trust language but doesn't leak data
         # should not produce critical observations

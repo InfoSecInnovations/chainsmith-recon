@@ -24,3 +24,12 @@ references:
 reason: Wildcard DNS records cause subdomain enumeration to report every candidate
   as 'discovered', producing misleading results. Detecting wildcards early prevents
   wasted effort downstream.
+severity:
+  model: fixed
+  # Categorical: the answer is in the resolver's response, so no grader above the
+  # rule tier is ever called. Migrated to probe/grade in 57.4 wave 2 and there is
+  # deliberately no `observations:` map — this check emits one undiscriminated
+  # observation per domain, so `default` *is* its per-observation severity, and a
+  # map would only restate it. A wildcard record is a fact about the zone rather
+  # than a weakness, so `info` is both the floor and the ceiling here.
+  default: info

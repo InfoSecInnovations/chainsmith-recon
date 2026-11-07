@@ -11,6 +11,17 @@ PTR record lookup for each discovered IP address. Reveals:
 
 Depends on: dns_records (needs hostname -> IP mapping from dns_enumeration)
 Feeds: additional hostname discovery, infrastructure context
+
+**Probe/grade.** `run()` looks up PTR records and records one
+exchange per IP; `grade()` reads the records back off the exchange and places
+severity. `reverse_dns` and `reverse_dns_hosts` are outputs the pipeline feeds
+back into discovery, so the probe parses the record list for itself (§6.2's two
+parses).
+
+Three of the four judgements here are *relative* — "new hostname", "outside the
+target domain", "not in the forward map" — and none of them is answerable from
+the PTR answer alone. They are read from `dns_records` and `base_domain` via
+`GradeContext.context`, which is the same place the probe read them.
 """
 
 import asyncio
@@ -18,8 +29,10 @@ import logging
 import socket
 from typing import Any
 
+from app import capture
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.lib.observations import build_observation
+from app.grading import Evidence, GradeContext, Verdict
 
 logger = logging.getLogger(__name__)
 
@@ -97,15 +110,16 @@ class ReverseDnsCheck(BaseCheck):
         for hostname, ip in dns_records.items():
             ip_to_hosts.setdefault(ip, []).append(hostname)
 
-        # Known hostnames (to detect new ones from PTR)
+        # Known hostnames (to detect new ones from PTR). `base_domain` is now
+        # read on the grade side, where the judgement that needs it lives.
         known_hosts: set[str] = set(dns_records.keys())
-        base_domain = context.get("base_domain", "")
 
         reverse_dns_data: dict[str, dict] = {}
         new_hosts: set[str] = set()
 
         for ip, forward_hosts in ip_to_hosts.items():
-            ptr_records = await self._ptr_lookup(ip)
+            exchange = await self._ptr_lookup(ip)
+            ptr_records = _records(exchange)
             is_internal = any(
                 any(pat in ptr.lower() for pat in INTERNAL_PATTERNS) for ptr in ptr_records
             )
@@ -121,15 +135,13 @@ class ReverseDnsCheck(BaseCheck):
             if not ptr_records:
                 continue
 
-            # Generate observations
-            self._generate_observations(
-                result,
-                ip,
-                forward_hosts,
-                ptr_records,
-                is_internal,
-                known_hosts,
-                base_domain,
+            # One candidate per IP, labelled by its forward host the way the
+            # observations always were. The grader names each discriminator, so
+            # the ids stay `...-ptr-<ip>`, `...-internal-<ip>` and so on.
+            result.candidates.append(
+                self.create_candidate(host=forward_hosts[0] if forward_hosts else ip).attach(
+                    exchange
+                )
             )
 
             # Collect genuinely new hostnames
@@ -143,111 +155,145 @@ class ReverseDnsCheck(BaseCheck):
 
         return result
 
-    async def _ptr_lookup(self, ip: str) -> list[str]:
-        """Perform a PTR lookup for a single IP address."""
+    async def _ptr_lookup(self, ip: str) -> Exchange | None:
+        """Perform a PTR lookup for a single IP address.
+
+        Returns the recorded exchange rather than the record list (57.4 wave 2):
+        the records are its comma-joined `response_body`, which is what both
+        `reverse_dns` and `grade()` read.
+        """
         if HAS_DNSPYTHON:
             return await self._ptr_lookup_dnspython(ip)
         return await self._ptr_lookup_socket(ip)
 
-    async def _ptr_lookup_dnspython(self, ip: str) -> list[str]:
+    async def _ptr_lookup_dnspython(self, ip: str) -> Exchange | None:
         """PTR lookup using dnspython for proper multi-record support."""
         loop = asyncio.get_event_loop()
+        prb = None
         try:
             rev_name = dns.reversename.from_address(ip)
-            answers = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None,
-                    lambda: dns.resolver.resolve(rev_name, "PTR"),
-                ),
-                timeout=5.0,
-            )
-            return [str(rdata.target).rstrip(".") for rdata in answers]
+            async with capture.probe("dns", ip, request_body=f"PTR {rev_name}", qtype="PTR") as prb:
+                answers = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: dns.resolver.resolve(rev_name, "PTR"),
+                    ),
+                    timeout=5.0,
+                )
+                records = [str(rdata.target).rstrip(".") for rdata in answers]
+                prb.responded(", ".join(records))
         except (TimeoutError, dns.exception.DNSException, Exception) as exc:
             logger.debug(f"PTR lookup failed for {ip}: {exc}")
-            return []
+        return prb.exchange if prb is not None else None
 
-    async def _ptr_lookup_socket(self, ip: str) -> list[str]:
+    async def _ptr_lookup_socket(self, ip: str) -> Exchange | None:
         """Fallback PTR lookup using socket.gethostbyaddr."""
         loop = asyncio.get_event_loop()
+        prb = None
         try:
-            hostname, aliases, _ = await asyncio.wait_for(
-                loop.run_in_executor(None, socket.gethostbyaddr, ip),
-                timeout=5.0,
-            )
-            records = [hostname] + list(aliases)
-            return [r for r in records if r]
+            async with capture.probe("dns", ip, request_body=f"PTR {ip}", qtype="PTR") as prb:
+                hostname, aliases, _ = await asyncio.wait_for(
+                    loop.run_in_executor(None, socket.gethostbyaddr, ip),
+                    timeout=5.0,
+                )
+                records = [r for r in [hostname] + list(aliases) if r]
+                prb.responded(", ".join(records))
         except (TimeoutError, socket.herror, socket.gaierror, OSError):
+            pass
+        return prb.exchange if prb is not None else None
+
+    # ══ Grade ════════════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Place severity on one IP's recorded PTR answer."""
+        exchange = next((e for e in evidence if _records(e)), None)
+        if exchange is None:
             return []
 
-    def _generate_observations(
-        self,
-        result: CheckResult,
-        ip: str,
-        forward_hosts: list[str],
-        ptr_records: list[str],
-        is_internal: bool,
-        known_hosts: set[str],
-        base_domain: str,
-    ) -> None:
-        """Generate observations from PTR record results."""
-        host_label = forward_hosts[0] if forward_hosts else ip
-        ptr_str = ", ".join(ptr_records)
+        ptr_records = _records(exchange)
+        # The PTR query was addressed to the IP, so the exchange carries it.
+        ip = exchange.host
+        # The forward map and the target domain are upstream outputs, not this
+        # check's evidence — the same two values the probe read.
+        dns_records: dict[str, str] = ctx.context.get("dns_records") or {}
+        base_domain: str = ctx.context.get("base_domain") or ""
+        forward_hosts = [host for host, addr in dns_records.items() if addr == ip]
+        known_hosts = set(dns_records)
 
-        # Base info observation: PTR record(s)
-        result.observations.append(
-            build_observation(
-                check_name=self.name,
+        ptr_str = ", ".join(ptr_records)
+        evidence_ids = [exchange.id]
+        verdicts: list[Verdict] = []
+
+        # ── The PTR record itself ─────────────────────────
+        verdicts.append(
+            Verdict(
+                severity="info",
+                # The resolver either returned a PTR record or it did not.
+                confidence=0.99,
+                discriminator=f"ptr-{ip}",
                 title=f"Reverse DNS: {ip} -> {ptr_records[0]}",
                 description=(
                     f"PTR lookup for {ip} (forward: {', '.join(forward_hosts)}) "
                     f"returned {len(ptr_records)} record(s)."
                 ),
-                severity="info",
                 evidence=f"IP: {ip} | PTR: {ptr_str}",
-                host=host_label,
-                discriminator=f"ptr-{ip}",
+                reasoning=f"PTR query returned {len(ptr_records)} record(s)",
+                signals={"ptr_records": ptr_records, "forward_hosts": forward_hosts},
+                evidence_ids=evidence_ids,
             )
         )
 
-        # Multiple PTR records — possible virtual hosting
+        # ── Several PTR records — possible virtual hosting ───
         if len(ptr_records) > 1:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            verdicts.append(
+                Verdict(
+                    severity="info",
+                    # Counting records is exact; reading the count as virtual
+                    # hosting is the inference, and a reverse zone with stale
+                    # entries looks identical.
+                    confidence=0.7,
+                    discriminator=f"multi-ptr-{ip}",
                     title=f"Multiple PTR records for {ip} (possible virtual hosting)",
                     description=(
                         f"{ip} has {len(ptr_records)} PTR records, suggesting "
                         f"multiple services or virtual hosts share this IP address."
                     ),
-                    severity="info",
                     evidence=f"IP: {ip} | PTR records: {ptr_str}",
-                    host=host_label,
-                    discriminator=f"multi-ptr-{ip}",
+                    reasoning=f"{len(ptr_records)} PTR records on one address",
+                    signals={"record_count": len(ptr_records)},
+                    evidence_ids=evidence_ids,
                 )
             )
 
-        # Internal hostname in PTR — infrastructure leak
-        if is_internal:
-            internal_ptrs = [
-                ptr for ptr in ptr_records if any(pat in ptr.lower() for pat in INTERNAL_PATTERNS)
-            ]
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+        # ── Internal naming convention exposed ────────────
+        internal_ptrs = [
+            ptr for ptr in ptr_records if any(pat in ptr.lower() for pat in INTERNAL_PATTERNS)
+        ]
+        if internal_ptrs:
+            verdicts.append(
+                Verdict(
+                    severity="low",
+                    # A substring match on a naming convention. `ip-` in
+                    # particular matches plenty of hostnames that are not AWS
+                    # internal names.
+                    confidence=0.75,
+                    discriminator=f"internal-{ip}",
                     title=f"Internal hostname in PTR: {ip}",
                     description=(
                         f"PTR record for {ip} reveals internal infrastructure "
                         f"naming convention(s). This exposes details about the "
                         f"hosting environment and internal network structure."
                     ),
-                    severity="low",
                     evidence=f"IP: {ip} | Internal PTR: {', '.join(internal_ptrs)}",
-                    host=host_label,
-                    discriminator=f"internal-{ip}",
+                    reasoning=(
+                        f"{len(internal_ptrs)} PTR record(s) match an internal naming pattern"
+                    ),
+                    signals={"internal_ptrs": internal_ptrs},
+                    evidence_ids=evidence_ids,
                 )
             )
 
-        # PTR mismatch — forward host doesn't match reverse
+        # ── PTR target outside the forward map ────────────
         for ptr in ptr_records:
             cleaned = ptr.rstrip(".")
             if (
@@ -256,9 +302,14 @@ class ReverseDnsCheck(BaseCheck):
                 and base_domain
                 and base_domain not in cleaned
             ):
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
+                verdicts.append(
+                    Verdict(
+                        severity="info",
+                        # "Not a known forward host" means "not in a map built
+                        # from one wordlist", so this is the weakest judgement
+                        # the check makes.
+                        confidence=0.6,
+                        discriminator=f"mismatch-{ip}",
                         title=f"PTR/forward mismatch: {ip}",
                         description=(
                             f"PTR record for {ip} points to {cleaned}, which does "
@@ -266,12 +317,24 @@ class ReverseDnsCheck(BaseCheck):
                             f"the target domain ({base_domain}). This may indicate "
                             f"shared hosting or infrastructure reuse."
                         ),
-                        severity="info",
                         evidence=(
                             f"IP: {ip} | PTR: {cleaned} | Forward hosts: {', '.join(forward_hosts)}"
                         ),
-                        host=host_label,
-                        discriminator=f"mismatch-{ip}",
+                        reasoning=(
+                            f"PTR target {cleaned} is outside {base_domain} and absent "
+                            f"from the forward map"
+                        ),
+                        signals={"ptr": cleaned, "base_domain": base_domain},
+                        evidence_ids=evidence_ids,
                     )
                 )
                 break  # One mismatch observation per IP is sufficient
+
+        return verdicts
+
+
+def _records(exchange: Exchange | None) -> list[str]:
+    """The PTR records one recorded exchange came back with."""
+    if exchange is None or exchange.error is not None or not exchange.response_body:
+        return []
+    return [r for r in (part.strip() for part in exchange.response_body.split(",")) if r]

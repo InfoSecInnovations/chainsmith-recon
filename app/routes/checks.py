@@ -50,6 +50,7 @@ def _disabled_check_entry(meta) -> dict:
         "produces": [],
         "suite": meta.suite,
         "intrusive": False,
+        "severity": dict(meta.severity or {}),
         "on_critical": meta.on_critical,
         # Shape parity with enabled entries (56.16). Disabled checks are never
         # imported, so the numeric knobs aren't resolved — only on_critical (from
@@ -76,7 +77,7 @@ async def get_available_checks(include_disabled: bool = False):
 
     With `?include_disabled=true`, checks/suites turned off via `config.yaml`
     /`suite.yaml` `enabled: false` are appended (marked `enabled: false` with
-    their `reason`), so the WebUI can offer a re-enable toggle (Phase 56.15).
+    their `reason`), so the WebUI can offer a re-enable toggle.
     """
     mgr = get_scenario_manager()
     if mgr.is_active:
@@ -132,8 +133,9 @@ async def save_check_config_default(check_name: str, body: CheckOverride):
     """Persist tunable overrides into a check's `config.yaml` (§5.1 layer 3 — 56.17).
 
     The "save as default" sibling of the per-scan scalpel: the set fields are written
-    into the check's `config.yaml` (`on_critical` at top level; the numeric knobs
-    under `defaults:`), so they become the resolved baseline for every future scan.
+    into the check's `config.yaml` (`on_critical` and `capture` at top level; the
+    numeric knobs under `defaults:`), so they become the resolved baseline for every
+    future scan.
     Other config keys (`enabled`, `reason`, `parameters`) are preserved.
 
     NOTE: the file is rewritten with PyYAML, which does NOT preserve comments — the
@@ -143,7 +145,9 @@ async def save_check_config_default(check_name: str, body: CheckOverride):
     """
     data = body.model_dump(exclude_none=True)
     if not data:
-        raise HTTPException(400, "No fields to save; provide at least one knob or on_critical.")
+        raise HTTPException(
+            400, "No fields to save; provide at least one knob, on_critical, or capture."
+        )
 
     comp_dir = find_component_dir(_CHECKS_ROOT, check_name)
     if comp_dir is None:
@@ -164,6 +168,8 @@ async def save_check_config_default(check_name: str, body: CheckOverride):
         raw["defaults"] = defaults
     if "on_critical" in data:
         raw["on_critical"] = data["on_critical"]
+    if "capture" in data:
+        raw["capture"] = data["capture"]
 
     # Validate the merged document still parses before touching the file.
     try:

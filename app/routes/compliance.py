@@ -44,28 +44,61 @@ async def _resolve_scan_id(scan_id: str | None) -> str | None:
 
 
 @router.get("/api/v1/compliance/traffic")
-async def get_traffic_log(limit: int = 100):
-    """Get traffic log entries."""
-    entries = traffic_logger.get_entries(limit=limit)
-    return {"entries": entries, "total": len(entries)}
+async def get_traffic_log(limit: int = 100, scan_id: str | None = Query(None)):
+    """Get traffic log entries, optionally only one scan's.
+
+    Phase 57.2 put a `scan_id` on every record. Without the filter the log is
+    workspace-wide, which is the right default for an operator reviewing what
+    the tool has done, and the wrong one for "what did this scan send".
+    """
+    entries = traffic_logger.get_entries(limit=limit, scan_id=scan_id)
+    return {"entries": entries, "total": len(entries), "scan_id": scan_id}
 
 
 # ─── Violations ───────────────────────────────────────────────
 
 
 @router.get("/api/v1/compliance/violations")
-async def get_violations():
-    """Get scope violation log."""
-    violations = violation_logger.get_violations()
-    return {"violations": [v.model_dump() for v in violations], "total": len(violations)}
+async def get_violations(scan_id: str | None = Query(None)):
+    """Get the scope violation log, optionally only one scan's."""
+    violations = violation_logger.get_violations(scan_id=scan_id)
+    return {
+        "violations": [v.model_dump() for v in violations],
+        "total": len(violations),
+        "scan_id": scan_id,
+    }
 
 
 # ─── Compliance Reports ───────────────────────────────────────
 
 
 @router.post("/api/v1/compliance/report")
-async def generate_compliance_report():
-    """Generate a compliance report."""
+async def generate_compliance_report(scan_id: str | None = Query(None)):
+    """Generate a compliance report.
+
+    Reports on a specific scan when `scan_id` is given (or when a scan can be
+    resolved as current). The scope recorded is that scan's own snapshot —
+    reading live operator state here made the report describe whatever scope
+    happened to be set at generation time, which is wrong for any scan that
+    has already finished and for every concurrent scan.
+
+    With no resolvable scan, falls back to the operator's current scope prep
+    and leaves `scan_id` null so the report says which it is.
+    """
+    session = resolve_session(scan_id)
+
+    if session is not None:
+        report = compliance_reporter.generate_report(
+            session_id=session.operator_session_id or state.session_id,
+            target=session.target,
+            exclusions=session.exclude,
+            proof_settings=session.proof_settings or state.proof_settings,
+            scan_id=session.id,
+        )
+        return report.model_dump()
+
+    if scan_id:
+        raise HTTPException(404, f"Unknown scan '{scan_id}'")
     if not state.target:
         raise HTTPException(400, "No scope defined")
 

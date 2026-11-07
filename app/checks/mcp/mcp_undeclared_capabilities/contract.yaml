@@ -26,3 +26,25 @@ techniques:
 references:
 - MCP Specification - https://modelcontextprotocol.io/specification
 reason: Servers may implement undeclared capabilities, exposing hidden attack surface
+severity:
+  model: fixed
+  # Categorical: the answer is the JSON-RPC result on the recorded response, so
+  # no grader above the rule tier is ever called. The standard capabilities and
+  # non-standard methods are two closed tables, so the full per-discriminator
+  # map is declared, each entry at the single severity its family emits (57.4
+  # wave 7). `default` is the floor — `info`, the all-rejected answer.
+  default: info
+  observations:
+    undeclared-tools: high
+    undeclared-resources: high
+    undeclared-prompts: high
+    undeclared-sampling: high
+    nonstandard-admin-status: medium
+    nonstandard-debug-info: medium
+    nonstandard-internal-config: medium
+    nonstandard-server-info: medium
+    nonstandard-server-status: medium
+    nonstandard-health: medium
+    nonstandard-metrics: medium
+    nonstandard-logging-setLevel: medium
+    caps-clean: info

@@ -1,5 +1,5 @@
 """
-app/components/base.py - Minimal BaseComponent (Phase 56 §6).
+app/components/base.py - Minimal BaseComponent.
 
 `BaseComponent` is the thin common ancestor of all four component types
 (check/agent/advisor/gate). It holds only what the loader touches uniformly:

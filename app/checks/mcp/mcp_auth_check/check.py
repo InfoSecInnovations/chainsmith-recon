@@ -8,6 +8,29 @@ Tests MCP server auth enforcement at multiple levels:
 - Session reuse/fixation
 - CORS cross-origin access
 
+**Probe/grade.** Five independent tests run per server, and
+each becomes its **own candidate** (one per (server, test)) carrying only that
+test's exchanges. `grade()` never sees the candidate's discriminator (§0.16), so
+it recognises which test it is looking at from the *shape* of the evidence — an
+OPTIONS request is the CORS test, an `Mcp-Session-Id` request header is the
+session-reuse test, an `Authorization`/`X-API-Key` header is the default-key
+test, an `initialize` body alongside a plain `tools/list` is the scope test, and
+a lone plain `tools/list` is the no-auth test. Isolating each test in its own
+candidate is what keeps the two byte-identical plain `tools/list` requests (the
+no-auth probe and the scope probe's second leg) from being confused (§0.15).
+
+Each test's judgement is read back off its recorded request/response — the
+method and `clientInfo` off the request body, the credential off the request
+headers, the session id and CORS origin likewise — never from a value the probe
+remembered.
+
+**Fixed**: several discriminators embed a key value
+(`default-key-<key>`), an unbounded set, so there is no `observations:` map and
+`grade()` places the tier. Confidence is where the split pays: real tool data
+returned without credentials is near-certain, while a 200 with no tool data, or
+a status-code-only scope mismatch, or a session "reused" only across a changed
+User-Agent within one process, each carry their own weakness.
+
 References:
   https://modelcontextprotocol.io/specification
   OWASP LLM Top 10 - LLM07 Insecure Plugin Design
@@ -16,9 +39,12 @@ References:
 import json
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 # Common default API keys to test
 DEFAULT_KEYS = [
@@ -33,6 +59,8 @@ DEFAULT_KEYS = [
     "secret",
     "api-key",
 ]
+
+_AUTH_HEADER_NAMES = ("authorization", "x-api-key", "api-key")
 
 
 class MCPAuthCheck(BaseCheck):
@@ -58,8 +86,11 @@ class MCPAuthCheck(BaseCheck):
     ]
     techniques = ["authentication testing", "authorization bypass", "session analysis"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def run(self, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
         mcp_servers = context.get("mcp_servers", [])
         auth_status = []
 
@@ -73,41 +104,39 @@ class MCPAuthCheck(BaseCheck):
 
             try:
                 async with AsyncHttpClient(cfg) as client:
-                    server_auth = {
-                        "url": server_url,
-                        "host": host,
-                        "tests": {},
+                    tests = {
+                        "no_auth": await self._probe_no_auth(
+                            client, server_url, base_path, host, scan_id
+                        ),
+                        "default_keys": await self._probe_default_keys(
+                            client, server_url, base_path, host, scan_id
+                        ),
+                        "auth_scope": await self._probe_auth_scope(
+                            client, server_url, base_path, host, scan_id
+                        ),
+                        "session_reuse": await self._probe_session_reuse(
+                            client, server_url, base_path, host, scan_id
+                        ),
+                        "cors": await self._probe_cors(
+                            client, server_url, base_path, host, scan_id
+                        ),
                     }
 
-                    # Test 1: No-auth access to tools/list
-                    no_auth_result = await self._test_no_auth(
-                        client, server_url, base_path, host, result
-                    )
-                    server_auth["tests"]["no_auth"] = no_auth_result
+                    server_tests = {}
+                    for test_name, exchanges in tests.items():
+                        if not exchanges:
+                            continue
+                        candidate = self.create_candidate(
+                            host=host,
+                            discriminator=f"authtest-{test_name}",
+                            target_url=server_url,
+                        )
+                        for exchange in exchanges:
+                            candidate.attach(exchange)
+                        result.candidates.append(candidate)
+                        server_tests[test_name] = self._summarise(test_name, exchanges)
 
-                    # Test 2: Default API keys
-                    default_key_result = await self._test_default_keys(
-                        client, server_url, base_path, host, result
-                    )
-                    server_auth["tests"]["default_keys"] = default_key_result
-
-                    # Test 3: Auth scope — initialize vs tools/list
-                    scope_result = await self._test_auth_scope(
-                        client, server_url, base_path, host, result, server
-                    )
-                    server_auth["tests"]["auth_scope"] = scope_result
-
-                    # Test 4: Session reuse
-                    session_result = await self._test_session_reuse(
-                        client, server_url, base_path, host, result
-                    )
-                    server_auth["tests"]["session_reuse"] = session_result
-
-                    # Test 5: CORS on MCP endpoints
-                    cors_result = await self._test_cors(client, server_url, base_path, host, result)
-                    server_auth["tests"]["cors"] = cors_result
-
-                    auth_status.append(server_auth)
+                    auth_status.append({"url": server_url, "host": host, "tests": server_tests})
 
             except Exception as e:
                 result.errors.append(f"{server_url}: {e}")
@@ -117,317 +146,469 @@ class MCPAuthCheck(BaseCheck):
 
         return result
 
-    async def _test_no_auth(
-        self, client, server_url: str, base_path: str, host: str, result: CheckResult
-    ) -> dict:
-        """Test tools/list and initialize with no auth headers."""
-        test_result = {"accessible": False}
-
-        # Try tools/list with no auth
-        tools_path = f"{base_path.rstrip('/')}/tools/list" if base_path else "/mcp/tools/list"
-        url = self._build_url(server_url, tools_path)
-
-        resp = await client.post(
-            url,
-            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
-            headers={"Content-Type": "application/json"},
+    async def _post(
+        self, client, url: str, payload: dict, headers: dict, scan_id: str, host: str
+    ) -> Exchange:
+        resp = await client.post(url, json=payload, headers=headers)
+        return exchange_from_response(
+            resp,
+            check_name=self.name,
+            scan_id=scan_id,
+            host=host,
+            method="POST",
+            request_headers=headers,
+            request_json=payload,
         )
 
-        if not resp.error and resp.status_code == 200:
-            test_result["accessible"] = True
-            test_result["tools_list"] = True
+    async def _probe_no_auth(
+        self, client, server_url: str, base_path: str, host: str, scan_id: str
+    ) -> list[Exchange]:
+        url = self._tools_url(server_url, base_path)
+        ex = await self._post(
+            client,
+            url,
+            {"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+            dict(JSON_HEADERS),
+            scan_id,
+            host,
+        )
+        return [ex]
 
-            # Check if response contains actual tools
-            has_tools = self._response_has_tools(resp.body)
+    async def _probe_default_keys(
+        self, client, server_url: str, base_path: str, host: str, scan_id: str
+    ) -> list[Exchange]:
+        url = self._tools_url(server_url, base_path)
+        exchanges = []
+        for key in DEFAULT_KEYS:
+            for header_name in ("Authorization", "X-API-Key", "Api-Key"):
+                auth_value = f"Bearer {key}" if header_name == "Authorization" and key else key
+                headers = {**JSON_HEADERS, header_name: auth_value}
+                exchanges.append(
+                    await self._post(
+                        client,
+                        url,
+                        {"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+                        headers,
+                        scan_id,
+                        host,
+                    )
+                )
+        return exchanges
 
-            if has_tools:
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
+    async def _probe_auth_scope(
+        self, client, server_url: str, base_path: str, host: str, scan_id: str
+    ) -> list[Exchange]:
+        init_url = self._build_url(server_url, base_path or "/mcp")
+        init_payload = {
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "chainsmith-recon", "version": "1.0"},
+            },
+            "id": 1,
+        }
+        init_ex = await self._post(
+            client, init_url, init_payload, dict(JSON_HEADERS), scan_id, host
+        )
+
+        tools_url = self._tools_url(server_url, base_path)
+        tools_ex = await self._post(
+            client,
+            tools_url,
+            {"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+            dict(JSON_HEADERS),
+            scan_id,
+            host,
+        )
+        return [init_ex, tools_ex]
+
+    async def _probe_session_reuse(
+        self, client, server_url: str, base_path: str, host: str, scan_id: str
+    ) -> list[Exchange]:
+        init_url = self._build_url(server_url, base_path or "/mcp")
+        init_payload = {
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "chainsmith-session-a", "version": "1.0"},
+            },
+            "id": 1,
+        }
+        init_ex = await self._post(
+            client, init_url, init_payload, dict(JSON_HEADERS), scan_id, host
+        )
+
+        session_id = self._header(init_ex.response_headers, "mcp-session-id")
+        if init_ex.error or init_ex.response_status not in (200, 201) or not session_id:
+            return [init_ex]
+
+        tools_url = self._tools_url(server_url, base_path)
+        reuse_headers = {
+            **JSON_HEADERS,
+            "Mcp-Session-Id": session_id,
+            "User-Agent": "different-client/1.0",
+        }
+        reuse_ex = await self._post(
+            client,
+            tools_url,
+            {"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+            reuse_headers,
+            scan_id,
+            host,
+        )
+        return [init_ex, reuse_ex]
+
+    async def _probe_cors(
+        self, client, server_url: str, base_path: str, host: str, scan_id: str
+    ) -> list[Exchange]:
+        url = self._build_url(server_url, base_path or "/mcp")
+        headers = {
+            "Origin": "https://evil.attacker.com",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type",
+        }
+        resp = await client.options(url, headers=headers)
+        ex = exchange_from_response(
+            resp,
+            check_name=self.name,
+            scan_id=scan_id,
+            host=host,
+            method="OPTIONS",
+            request_headers=headers,
+        )
+        return [ex]
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        exchanges = list(evidence)
+        if not exchanges:
+            return []
+        test = self._classify_test(exchanges)
+        grader = {
+            "cors": self._grade_cors,
+            "session_reuse": self._grade_session,
+            "default_keys": self._grade_default_keys,
+            "auth_scope": self._grade_scope,
+            "no_auth": self._grade_no_auth,
+        }[test]
+        return grader(exchanges, ctx)
+
+    def _classify_test(self, exchanges: list[Exchange]) -> str:
+        """Which of the five tests this evidence set is, from its shape alone."""
+        if any(e.request_method == "OPTIONS" for e in exchanges):
+            return "cors"
+        if any(self._header(e.request_headers, "mcp-session-id") for e in exchanges):
+            return "session_reuse"
+        if any(self._has_auth_header(e) for e in exchanges):
+            return "default_keys"
+        if any(self._method_of(e) == "initialize" for e in exchanges):
+            return "auth_scope"
+        return "no_auth"
+
+    def _grade_no_auth(self, exchanges: list[Exchange], ctx: GradeContext) -> list[Verdict]:
+        ex = exchanges[0]
+        url = ex.request_url
+        if ex.error:
+            return []
+        if ex.response_status == 200:
+            if self._response_has_tools(ex.response_body):
+                return [
+                    Verdict(
+                        severity="critical",
+                        confidence=0.9,
+                        discriminator="no-auth-tools",
                         title="MCP server requires no authentication: tools accessible without credentials",
                         description=(
                             "The MCP server responds to tools/list requests without any authentication. "
                             "An unauthenticated attacker can enumerate all available tools and their schemas."
                         ),
-                        severity="critical",
-                        evidence=f"URL: {url}\nStatus: {resp.status_code}\nBody: {(resp.body or '')[:500]}",
-                        host=host,
-                        discriminator="no-auth-tools",
-                        raw_data={"url": url, "status": resp.status_code},
-                    )
-                )
-            else:
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
-                        title="MCP endpoint accessible without authentication",
-                        description=(
-                            "The MCP server responds to requests without authentication headers, "
-                            "though the response may not contain tool data."
+                        evidence=f"URL: {url}\nStatus: 200\nBody: {(ex.response_body or '')[:500]}",
+                        reasoning=(
+                            "real tool data returned to a request carrying no credentials is close to "
+                            "conclusive; the only residue is a server that returns canned tool data on "
+                            "every path regardless of the method"
                         ),
-                        severity="high",
-                        evidence=f"URL: {url}\nStatus: {resp.status_code}",
-                        host=host,
-                        discriminator="no-auth-endpoint",
-                        raw_data={"url": url, "status": resp.status_code},
+                        signals={"status": 200, "has_tools": True},
+                        references=self.references,
+                        raw_data={"url": url, "status": 200},
+                        tier=ctx.tier,
+                        evidence_ids=[ex.id],
                     )
+                ]
+            return [
+                Verdict(
+                    severity="high",
+                    confidence=0.6,
+                    discriminator="no-auth-endpoint",
+                    title="MCP endpoint accessible without authentication",
+                    description=(
+                        "The MCP server responds to requests without authentication headers, "
+                        "though the response may not contain tool data."
+                    ),
+                    evidence=f"URL: {url}\nStatus: 200",
+                    reasoning=(
+                        "a 200 with no tool payload is weaker than one with tools: a catch-all "
+                        "route or SPA index answers 200 to any path without the MCP endpoint "
+                        "actually being open"
+                    ),
+                    signals={"status": 200, "has_tools": False},
+                    references=self.references,
+                    raw_data={"url": url, "status": 200},
+                    tier=ctx.tier,
+                    evidence_ids=[ex.id],
                 )
-
-        elif not resp.error and resp.status_code == 401:
-            test_result["accessible"] = False
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            ]
+        if ex.response_status == 401:
+            return [
+                Verdict(
+                    severity="info",
+                    confidence=0.8,
+                    discriminator="auth-enforced",
                     title="MCP server enforces authentication",
                     description="The MCP server correctly returns 401 for unauthenticated requests.",
-                    severity="info",
                     evidence=f"URL: {url}\nStatus: 401",
-                    host=host,
-                    discriminator="auth-enforced",
+                    reasoning=(
+                        "an explicit 401 is the server itself demanding credentials; the small "
+                        "residual is a 401 from a gateway in front of a path that has no MCP handler"
+                    ),
+                    signals={"status": 401},
+                    references=self.references,
                     raw_data={"url": url, "status": 401},
+                    tier=ctx.tier,
+                    evidence_ids=[ex.id],
+                )
+            ]
+        return []
+
+    def _grade_default_keys(self, exchanges: list[Exchange], ctx: GradeContext) -> list[Verdict]:
+        verdicts = []
+        seen_keys = set()
+        for ex in exchanges:
+            if ex.error or ex.response_status != 200:
+                continue
+            if not self._response_has_tools(ex.response_body):
+                continue
+            header_name, raw_value = self._auth_header(ex)
+            key = raw_value[len("Bearer ") :] if raw_value.startswith("Bearer ") else raw_value
+            key_label = key or "(empty)"
+            if key_label in seen_keys:
+                continue
+            seen_keys.add(key_label)
+            verdicts.append(
+                Verdict(
+                    severity="medium",
+                    confidence=0.75,
+                    discriminator=f"default-key-{key or 'empty'}",
+                    title=f"Default API key accepted: '{key_label}' grants MCP access",
+                    description=(
+                        f"The MCP server accepts the default key '{key_label}' via {header_name} "
+                        "header, granting access to tool enumeration."
+                    ),
+                    evidence=f"Header: {header_name}: {raw_value}\nStatus: 200",
+                    reasoning=(
+                        "tool data returned with a known default credential is strong, but a "
+                        "server that ignores the auth header entirely and serves tools to everyone "
+                        "returns the same 200 — the no-auth test separates the two"
+                    ),
+                    signals={"header": header_name, "key": key},
+                    references=self.references,
+                    raw_data={"header": header_name, "key": key},
+                    tier=ctx.tier,
+                    evidence_ids=[ex.id],
                 )
             )
+        return verdicts
 
-        return test_result
-
-    async def _test_default_keys(
-        self, client, server_url: str, base_path: str, host: str, result: CheckResult
-    ) -> dict:
-        """Test common default API keys."""
-        test_result = {"accepted_keys": []}
-
-        tools_path = f"{base_path.rstrip('/')}/tools/list" if base_path else "/mcp/tools/list"
-        url = self._build_url(server_url, tools_path)
-
-        for key in DEFAULT_KEYS:
-            for header_name in ["Authorization", "X-API-Key", "Api-Key"]:
-                auth_value = f"Bearer {key}" if header_name == "Authorization" and key else key
-                resp = await client.post(
-                    url,
-                    json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
-                    headers={"Content-Type": "application/json", header_name: auth_value},
-                )
-
-                if (
-                    not resp.error
-                    and resp.status_code == 200
-                    and self._response_has_tools(resp.body)
-                ):
-                    test_result["accepted_keys"].append(
-                        {
-                            "header": header_name,
-                            "key": key or "(empty)",
-                        }
-                    )
-
-                    result.observations.append(
-                        build_observation(
-                            check_name=self.name,
-                            title=f"Default API key accepted: '{key or '(empty)'}' grants MCP access",
-                            description=(
-                                f"The MCP server accepts the default key '{key or '(empty)'}' "
-                                f"via {header_name} header, granting access to tool enumeration."
-                            ),
-                            severity="medium",
-                            evidence=f"Header: {header_name}: {auth_value}\nStatus: {resp.status_code}",
-                            host=host,
-                            discriminator=f"default-key-{key or 'empty'}",
-                            raw_data={"header": header_name, "key": key},
-                        )
-                    )
-                    # Found one working key via this header, move to next key
-                    break
-
-        return test_result
-
-    async def _test_auth_scope(
-        self, client, server_url: str, base_path: str, host: str, result: CheckResult, server: dict
-    ) -> dict:
-        """Test if auth scope differs between initialize and tools/list."""
-        test_result = {"scope_mismatch": False}
-
-        init_path = base_path or "/mcp"
-        init_url = self._build_url(server_url, init_path)
-
-        # Send initialize — check if it requires auth
-        init_resp = await client.post(
-            init_url,
-            json={
-                "jsonrpc": "2.0",
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": {"name": "chainsmith-recon", "version": "1.0"},
-                },
-                "id": 1,
-            },
-            headers={"Content-Type": "application/json"},
-        )
-
-        init_requires_auth = not init_resp.error and init_resp.status_code == 401
-
-        # Try tools/list
-        tools_path = f"{base_path.rstrip('/')}/tools/list" if base_path else "/mcp/tools/list"
-        tools_url = self._build_url(server_url, tools_path)
-
-        tools_resp = await client.post(
-            tools_url,
-            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
-            headers={"Content-Type": "application/json"},
-        )
-
-        tools_requires_auth = not tools_resp.error and tools_resp.status_code == 401
-
+    def _grade_scope(self, exchanges: list[Exchange], ctx: GradeContext) -> list[Verdict]:
+        init_ex = next((e for e in exchanges if self._method_of(e) == "initialize"), None)
+        tools_ex = next((e for e in exchanges if self._method_of(e) == "tools/list"), None)
+        if init_ex is None or tools_ex is None:
+            return []
+        init_requires_auth = not init_ex.error and init_ex.response_status == 401
+        tools_requires_auth = not tools_ex.error and tools_ex.response_status == 401
         if init_requires_auth and not tools_requires_auth:
-            test_result["scope_mismatch"] = True
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            return [
+                Verdict(
+                    severity="high",
+                    confidence=0.7,
+                    discriminator="auth-scope-mismatch",
                     title="Auth bypass: initialize requires auth but tools/list does not",
                     description=(
                         "The MCP server requires authentication for the initialize handshake "
                         "but allows unauthenticated access to tools/list. This inconsistency "
                         "allows attackers to enumerate tools without credentials."
                     ),
-                    severity="high",
-                    evidence=f"initialize: 401 at {init_url}\ntools/list: {tools_resp.status_code} at {tools_url}",
-                    host=host,
-                    discriminator="auth-scope-mismatch",
-                    raw_data={
-                        "init_status": init_resp.status_code,
-                        "tools_status": tools_resp.status_code,
+                    evidence=(
+                        f"initialize: 401 at {init_ex.request_url}\n"
+                        f"tools/list: {tools_ex.response_status} at {tools_ex.request_url}"
+                    ),
+                    reasoning=(
+                        "the two paths differ in status, but that can reflect different routing "
+                        "or handlers rather than a real scope gap — the tools/list side was not "
+                        "confirmed to return actual tool data"
+                    ),
+                    signals={
+                        "init_status": init_ex.response_status,
+                        "tools_status": tools_ex.response_status,
                     },
+                    references=self.references,
+                    raw_data={
+                        "init_status": init_ex.response_status,
+                        "tools_status": tools_ex.response_status,
+                    },
+                    tier=ctx.tier,
+                    evidence_ids=[init_ex.id, tools_ex.id],
                 )
-            )
+            ]
+        return []
 
-        return test_result
-
-    async def _test_session_reuse(
-        self, client, server_url: str, base_path: str, host: str, result: CheckResult
-    ) -> dict:
-        """Test if MCP session IDs can be reused from a different client context."""
-        test_result = {"session_reusable": False}
-
-        init_path = base_path or "/mcp"
-        init_url = self._build_url(server_url, init_path)
-
-        # First: get a session ID from initialize
-        resp = await client.post(
-            init_url,
-            json={
-                "jsonrpc": "2.0",
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": {"name": "chainsmith-session-a", "version": "1.0"},
-                },
-                "id": 1,
-            },
-            headers={"Content-Type": "application/json"},
+    def _grade_session(self, exchanges: list[Exchange], ctx: GradeContext) -> list[Verdict]:
+        reuse_ex = next(
+            (e for e in exchanges if self._header(e.request_headers, "mcp-session-id")), None
         )
-
-        if resp.error or resp.status_code not in (200, 201):
-            return test_result
-
-        # Extract session ID from response headers
-        session_id = None
-        for key, value in resp.headers.items():
-            if key.lower() == "mcp-session-id":
-                session_id = value
-                break
-
-        if not session_id:
-            return test_result
-
-        # Try to reuse session ID from a "different client"
-        tools_path = f"{base_path.rstrip('/')}/tools/list" if base_path else "/mcp/tools/list"
-        tools_url = self._build_url(server_url, tools_path)
-
-        reuse_resp = await client.post(
-            tools_url,
-            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
-            headers={
-                "Content-Type": "application/json",
-                "Mcp-Session-Id": session_id,
-                "User-Agent": "different-client/1.0",
-            },
-        )
-
-        if not reuse_resp.error and reuse_resp.status_code == 200:
-            test_result["session_reusable"] = True
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+        if reuse_ex is None:
+            return []
+        session_id = self._header(reuse_ex.request_headers, "mcp-session-id")
+        if not reuse_ex.error and reuse_ex.response_status == 200:
+            return [
+                Verdict(
+                    severity="high",
+                    confidence=0.65,
+                    discriminator="session-reuse",
                     title="Session reuse: MCP session ID accepted from different client context",
                     description=(
                         "The MCP server accepts a session ID obtained from one client context "
                         "when used by a different client. This enables session hijacking if an "
                         "attacker obtains a valid session ID."
                     ),
-                    severity="high",
-                    evidence=f"Session ID: {session_id}\nReuse status: {reuse_resp.status_code}",
-                    host=host,
-                    discriminator="session-reuse",
-                    raw_data={"session_id": session_id, "reuse_status": reuse_resp.status_code},
+                    evidence=f"Session ID: {session_id}\nReuse status: 200",
+                    reasoning=(
+                        "the 'different client' is only a changed User-Agent from the same process "
+                        "and IP; a server that binds sessions to network identity would still accept "
+                        "this, so it overstates how portable the session really is"
+                    ),
+                    signals={"session_id": session_id, "reuse_status": 200},
+                    references=self.references,
+                    raw_data={"session_id": session_id, "reuse_status": 200},
+                    tier=ctx.tier,
+                    evidence_ids=[reuse_ex.id],
                 )
+            ]
+        return []
+
+    def _grade_cors(self, exchanges: list[Exchange], ctx: GradeContext) -> list[Verdict]:
+        ex = exchanges[0]
+        if ex.error:
+            return []
+        acao = self._header(ex.response_headers, "access-control-allow-origin")
+        if acao in ("*", "https://evil.attacker.com"):
+            confidence = 0.85 if acao == "*" else 0.7
+            reasoning = (
+                "an explicit `Access-Control-Allow-Origin: *` is the server declaring open CORS"
+                if acao == "*"
+                else "the server echoed the attacker Origin back, which is open CORS, but an echo "
+                "can also come from a permissive proxy rather than the MCP app itself"
             )
-
-        return test_result
-
-    async def _test_cors(
-        self, client, server_url: str, base_path: str, host: str, result: CheckResult
-    ) -> dict:
-        """Test CORS headers on MCP endpoints."""
-        test_result = {"allows_any_origin": False}
-
-        mcp_path = base_path or "/mcp"
-        url = self._build_url(server_url, mcp_path)
-
-        # Send OPTIONS preflight with a foreign origin
-        resp = await client.options(
-            url,
-            headers={
-                "Origin": "https://evil.attacker.com",
-                "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "Content-Type",
-            },
-        )
-
-        if resp.error:
-            return test_result
-
-        acao = ""
-        for key, value in resp.headers.items():
-            if key.lower() == "access-control-allow-origin":
-                acao = value
-                break
-
-        if acao == "*" or acao == "https://evil.attacker.com":
-            test_result["allows_any_origin"] = True
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            return [
+                Verdict(
+                    severity="high",
+                    confidence=confidence,
+                    discriminator="cors-open",
                     title="MCP endpoint allows cross-origin requests: browser-based MCP access possible",
                     description=(
                         f"The MCP endpoint returns Access-Control-Allow-Origin: {acao}, "
                         "allowing browser-based JavaScript from any origin to interact with "
                         "the MCP server. This enables cross-site MCP attacks."
                     ),
-                    severity="high",
-                    evidence=f"URL: {url}\nAccess-Control-Allow-Origin: {acao}",
-                    host=host,
-                    discriminator="cors-open",
-                    raw_data={"acao": acao, "url": url},
+                    evidence=f"URL: {ex.request_url}\nAccess-Control-Allow-Origin: {acao}",
+                    reasoning=reasoning,
+                    signals={"acao": acao},
+                    references=self.references,
+                    raw_data={"acao": acao, "url": ex.request_url},
+                    tier=ctx.tier,
+                    evidence_ids=[ex.id],
                 )
-            )
+            ]
+        return []
 
-        return test_result
+    # ── Shared readers ───────────────────────────────────────────────
+
+    def _summarise(self, test_name: str, exchanges: list[Exchange]) -> dict:
+        """Rebuild each test's result dict for `mcp_auth_status`, off the record."""
+        if test_name == "no_auth":
+            ex = exchanges[0]
+            return {"accessible": not ex.error and ex.response_status == 200}
+        if test_name == "default_keys":
+            accepted = []
+            for ex in exchanges:
+                if (
+                    not ex.error
+                    and ex.response_status == 200
+                    and self._response_has_tools(ex.response_body)
+                ):
+                    header_name, raw_value = self._auth_header(ex)
+                    key = (
+                        raw_value[len("Bearer ") :]
+                        if raw_value.startswith("Bearer ")
+                        else raw_value
+                    )
+                    accepted.append({"header": header_name, "key": key or "(empty)"})
+            return {"accepted_keys": accepted}
+        if test_name == "auth_scope":
+            init_ex = next((e for e in exchanges if self._method_of(e) == "initialize"), None)
+            tools_ex = next((e for e in exchanges if self._method_of(e) == "tools/list"), None)
+            mismatch = bool(
+                init_ex
+                and tools_ex
+                and init_ex.response_status == 401
+                and tools_ex.response_status != 401
+            )
+            return {"scope_mismatch": mismatch}
+        if test_name == "session_reuse":
+            reuse_ex = next(
+                (e for e in exchanges if self._header(e.request_headers, "mcp-session-id")), None
+            )
+            return {"session_reusable": bool(reuse_ex and reuse_ex.response_status == 200)}
+        if test_name == "cors":
+            acao = self._header(exchanges[0].response_headers, "access-control-allow-origin")
+            return {"allows_any_origin": acao in ("*", "https://evil.attacker.com")}
+        return {}
+
+    def _has_auth_header(self, exchange: Exchange) -> bool:
+        names = {k.lower() for k in (exchange.request_headers or {})}
+        return bool(names & set(_AUTH_HEADER_NAMES))
+
+    def _auth_header(self, exchange: Exchange) -> tuple[str, str]:
+        for k, v in (exchange.request_headers or {}).items():
+            if k.lower() in _AUTH_HEADER_NAMES:
+                return k, v
+        return "", ""
+
+    @staticmethod
+    def _header(headers: dict | None, name: str) -> str:
+        for k, v in (headers or {}).items():
+            if k.lower() == name.lower():
+                return v
+        return ""
+
+    @staticmethod
+    def _method_of(exchange: Exchange) -> str:
+        try:
+            return json.loads(exchange.request_body or "{}").get("method", "")
+        except (json.JSONDecodeError, TypeError):
+            return ""
+
+    def _tools_url(self, server_url: str, base_path: str) -> str:
+        tools_path = f"{base_path.rstrip('/')}/tools/list" if base_path else "/mcp/tools/list"
+        return self._build_url(server_url, tools_path)
 
     def _build_url(self, server_url: str, path: str) -> str:
         """Build URL from server base and path."""
-        # If server_url already contains the base path, use it directly for root-level ops
         base = server_url.rstrip("/")
         if path and not path.startswith("/"):
             path = f"/{path}"

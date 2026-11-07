@@ -1,5 +1,6 @@
-"""Co-located tests (Phase 56 §3) — split from test_web.py."""
+"""Tests for web_path_probe."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -49,17 +50,34 @@ def mock_client(responses: list[HttpResponse] | HttpResponse):
     mock.__aenter__ = AsyncMock(return_value=mock)
     mock.__aexit__ = AsyncMock()
 
-    async def get_response(*args, **kwargs):
+    async def get_response(url=None, *args, **kwargs):
         try:
-            return next(response_iter)
+            response = next(response_iter)
         except StopIteration:
-            return responses[-1]  # Repeat last response
+            response = responses[-1]  # Repeat last response
+        # The real client stamps the requested URL onto the response, and a
+        # migrated check records that URL on the exchange its grader reads.
+        return replace(response, url=url) if url else response
 
     mock.get = AsyncMock(side_effect=get_response)
     mock.options = AsyncMock(side_effect=get_response)
     mock.head = AsyncMock(side_effect=get_response)
 
     return mock
+
+
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
 
 
 class TestPathProbeCheckInit:
@@ -98,7 +116,7 @@ class TestPathProbeCheckService:
             "app.checks.web.web_path_probe.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         accessible_observations = [f for f in result.observations if "Accessible" in f.title]
         assert len(accessible_observations) == 1
@@ -117,7 +135,7 @@ class TestPathProbeCheckService:
             "app.checks.web.web_path_probe.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 1
         assert result.observations[0].severity == "high"
@@ -136,7 +154,7 @@ class TestPathProbeCheckService:
             "app.checks.web.web_path_probe.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 1
         assert result.observations[0].severity == "medium"
@@ -152,7 +170,7 @@ class TestPathProbeCheckService:
             "app.checks.web.web_path_probe.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         forbidden_observations = [f for f in result.observations if "Protected" in f.title]
         assert len(forbidden_observations) == 1
@@ -171,7 +189,7 @@ class TestPathProbeCheckService:
             "app.checks.web.web_path_probe.check.AsyncHttpClient",
             return_value=mock_client(response),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         redirect_observations = [f for f in result.observations if "Redirect" in f.title]
         assert len(redirect_observations) == 1
@@ -191,10 +209,14 @@ class TestPathProbeCheckService:
             m.__aenter__ = AsyncMock(return_value=m)
             m.__aexit__ = AsyncMock()
             response_iter = iter(responses)
-            m.get = AsyncMock(side_effect=lambda *a, **k: next(response_iter, responses[-1]))
+            # The real client stamps the requested URL onto the response, and a
+            # migrated check reads the path back off the recorded exchange.
+            m.get = AsyncMock(
+                side_effect=lambda url, **k: replace(next(response_iter, responses[-1]), url=url)
+            )
             mock_cls.return_value = m
 
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         key = f"paths_{sample_service.port}"
         assert key in result.outputs

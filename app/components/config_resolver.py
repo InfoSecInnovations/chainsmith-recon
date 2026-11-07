@@ -1,5 +1,5 @@
 """
-app/components/config_resolver.py - Load-time config precedence (Phase 56 §5.1).
+app/components/config_resolver.py - Load-time config precedence.
 
 Resolves the load-time baseline (layers 1-4) for a component into a
 `ResolvedConfig`. Scan-time overrides (layer 6: presets / CLI / API / WebUI)
@@ -10,12 +10,19 @@ Precedence, general → specific, last wins:
   2. Suite-level defaults         (suite.yaml)
   3. config.yaml defaults         (per-component — more specific than the suite)
   4. Env var                      CHAINSMITH__<COMPONENT>__<PARAM>  (ambient)
+  5. workspace.yaml defaults      (per-engagement policy)
+
+Layer 5 breaks the general->specific pattern on purpose: a workspace default
+overrides a component's own config.yaml. It is a policy ceiling for one
+engagement ("this client is 2 rps, always"), not a better default, so being
+broad is the point. Per-check surgery stays in layer 6b (scan_overrides, 56.17),
+which is scan-scoped and visible in the UI.
 
 We use Pydantic for the per-source *models/validation* (contracts.py /
 config_models.py) but a thin explicit resolver for the *layering*, because the
 two-stage split and construct-by-key env diverge from pydantic-settings'
-out-of-the-box behavior (§5.1 / §5.3). The user-override file (layer 5) is
-future; scan-time (layer 6) lands in 56.14/56.17.
+out-of-the-box behavior (§5.1 / §5.3). Layer 5 landed in 57.1b as
+`workspace.yaml`; scan-time (layer 6) landed in 56.14/56.17.
 
 Env resolution is **by construction, not by parsing** (§5.1): for each known
 (component, param) we build the expected key and look it up. We never
@@ -30,11 +37,13 @@ import os
 from collections.abc import Iterable, Mapping
 
 from app.components.config_models import (
+    DEFAULT_CAPTURE_POLICY,
     DEFAULT_ON_CRITICAL,
     ComponentConfig,
     Defaults,
     ResolvedConfig,
     SuiteConfig,
+    WorkspaceConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,7 +74,7 @@ ENV_OVERRIDE_PREFIX = f"{ENV_PREFIX}{ENV_DELIM}"  # "CHAINSMITH__"
 def detect_env_problems(
     component_names: Iterable[str], env: Mapping[str, str]
 ) -> list[tuple[str, str, str]]:
-    """Find malformed per-component env overrides (Phase 56.16, strict validation).
+    """Find malformed per-component env overrides.
 
     Scans the `CHAINSMITH__*` namespace and returns `(env_key, code, message)` for
     each var that either (a) matches no known (component, knob) pair — a typo or a
@@ -105,7 +114,7 @@ def active_env_overrides(
 
     Returns `(component, param, raw_value)` for each `CHAINSMITH__<C>__<P>` var that
     names a known pair and coerces cleanly — i.e. the overrides that actually win at
-    layer 4. Used for the startup log summary + `dev show-config` (Phase 56.16).
+    layer 4. Used for the startup log summary + `dev show-config`.
     Sorted for deterministic output.
     """
     active: list[tuple[str, str, str]] = []
@@ -126,9 +135,16 @@ def active_env_overrides(
 class ConfigResolver:
     """Merges the load-time config layers (§5.1) into a `ResolvedConfig`."""
 
-    def __init__(self, env: Mapping[str, str] | None = None):
+    def __init__(
+        self,
+        env: Mapping[str, str] | None = None,
+        workspace_config: WorkspaceConfig | None = None,
+    ):
         # Default to the live environment; injectable for tests.
         self._env: Mapping[str, str] = os.environ if env is None else env
+        # Layer 5 (57.1b). None means "no workspace.yaml", which is the normal
+        # case — an absent file must resolve identically to an empty one.
+        self._workspace_config = workspace_config
 
     def resolve(
         self,
@@ -169,15 +185,32 @@ class ConfigResolver:
                         "Ignoring env %s=%r: not coercible to %s", key, raw, caster.__name__
                     )
 
+        # ── Layer 5: workspace.yaml (per-engagement policy) ────────
+        if self._workspace_config is not None:
+            self._apply_defaults(knobs, self._workspace_config.defaults, provenance, "workspace")
+
         # on_critical: resolve `inherit` against the suite, then global default (§5.2).
         on_critical = self._resolve_on_critical(component_config.on_critical, suite_config)
         provenance["on_critical"] = self._on_critical_source(
             component_config.on_critical, suite_config
         )
 
+        # capture (57.2, D-20): the same inherit chain. Not a `Defaults` knob —
+        # it is a policy about the component, like on_critical, not a tunable an
+        # operator retunes per engagement.
+        capture = self._resolve_inherited(
+            component_config.capture,
+            suite_config.capture if suite_config else "inherit",
+            DEFAULT_CAPTURE_POLICY,
+        )
+        provenance["capture"] = self._inherited_source(
+            component_config.capture, suite_config.capture if suite_config else "inherit"
+        )
+
         return ResolvedConfig(
             enabled=component_config.enabled,
             on_critical=on_critical,
+            capture=capture,
             timeout_seconds=float(knobs["timeout_seconds"]),
             requests_per_second=float(knobs["requests_per_second"]),
             retry_count=int(knobs["retry_count"]),
@@ -196,6 +229,24 @@ class ConfigResolver:
             if value is not None:
                 knobs[param] = value
                 provenance[param] = label
+
+    @staticmethod
+    def _resolve_inherited(component_value: str, suite_value: str, global_default: str) -> str:
+        """component → suite → global, with `inherit` meaning "ask my parent"."""
+        if component_value != "inherit":
+            return component_value
+        if suite_value != "inherit":
+            return suite_value
+        return global_default
+
+    @staticmethod
+    def _inherited_source(component_value: str, suite_value: str) -> str:
+        """Which layer won `_resolve_inherited` — for the provenance block."""
+        if component_value != "inherit":
+            return "config"
+        if suite_value != "inherit":
+            return "suite"
+        return "default"
 
     @staticmethod
     def _resolve_on_critical(component_on_critical: str, suite_config: SuiteConfig | None) -> str:

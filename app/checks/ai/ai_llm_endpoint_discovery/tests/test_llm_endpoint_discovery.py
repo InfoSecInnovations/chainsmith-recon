@@ -1,5 +1,6 @@
-"""Co-located tests (Phase 56 §3) — split from test_ai_endpoints.py."""
+"""Tests for ai_llm_endpoint_discovery."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -54,6 +55,34 @@ def make_response(
     )
 
 
+# Two things this mock has to get right for a migrated check, both of which it
+# once got wrong and neither of which any assertion could
+# see:
+#
+#   * The **response URL**. A migrated check reads the request URL back off the
+#     exchange it recorded (§0.13), so a mock that answers every path with one
+#     hard-coded URL is testing the wrong thing. `_stamp` puts the requested
+#     URL on the response, the way the real client does.
+#
+#   * `__aexit__` **returning False**. An async context manager whose
+#     `__aexit__` returns a truthy value *suppresses* the exception raised
+#     inside its block — and a bare `AsyncMock()` returns a truthy MagicMock.
+#     Every error raised inside `async with AsyncHttpClient(...)` was therefore
+#     swallowed: the check looked like it had completed, its own `except` never
+#     ran, and `result.errors` came back empty. Fix the mock, never the
+#     assertion.
+
+
+def _stamp(response: HttpResponse, url: str | None) -> HttpResponse:
+    """Put the requested URL on the response, the way the real client does.
+
+    A migrated check reads the request URL back off the exchange it recorded
+    (§0.13), so a mock that answers every path with one hard-coded URL is
+    testing the wrong thing. Fix the mock, never the assertion.
+    """
+    return replace(response, url=url) if url else response
+
+
 def mock_client_factory(responses: list[HttpResponse] | HttpResponse | dict = None):
     """Create a mock AsyncHttpClient.
 
@@ -72,12 +101,12 @@ def mock_client_factory(responses: list[HttpResponse] | HttpResponse | dict = No
         async def get_by_path(url, *args, **kwargs):
             for path, resp in path_map.items():
                 if path in url:
-                    return resp
-            return make_response(status_code=404)
+                    return _stamp(resp, url)
+            return make_response(status_code=404, url=url)
 
         mock = AsyncMock()
         mock.__aenter__ = AsyncMock(return_value=mock)
-        mock.__aexit__ = AsyncMock()
+        mock.__aexit__ = AsyncMock(return_value=False)
         mock.get = AsyncMock(side_effect=get_by_path)
         mock.post = AsyncMock(side_effect=get_by_path)
         mock.options = AsyncMock(side_effect=get_by_path)
@@ -85,15 +114,16 @@ def mock_client_factory(responses: list[HttpResponse] | HttpResponse | dict = No
 
     response_iter = iter(responses)
 
-    async def get_next(*args, **kwargs):
+    async def get_next(url=None, *args, **kwargs):
         try:
-            return next(response_iter)
+            resp = next(response_iter)
         except StopIteration:
-            return responses[-1]
+            resp = responses[-1]
+        return _stamp(resp, url)
 
     mock = AsyncMock()
     mock.__aenter__ = AsyncMock(return_value=mock)
-    mock.__aexit__ = AsyncMock()
+    mock.__aexit__ = AsyncMock(return_value=False)
     mock.get = AsyncMock(side_effect=get_next)
     mock.post = AsyncMock(side_effect=get_next)
     mock.options = AsyncMock(side_effect=get_next)
@@ -117,6 +147,30 @@ def embedding_endpoint_context(sample_service):
     }
 
 
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
+
+
+async def run_and_grade(check, context=None):
+    """`probe_and_grade` for a check whose probe is `run()` rather than
+    `check_service()` — most of the ai suite, which iterates the
+    `chat_endpoints` output rather than the service list."""
+    from app.grading import grade_result
+
+    result = await check.run(context or {})
+    return await grade_result(check, result, context or {})
+
+
 class TestLLMEndpointCheckService:
     """Tests for LLMEndpointCheck.check_service."""
 
@@ -134,7 +188,7 @@ class TestLLMEndpointCheckService:
             "app.checks.ai.ai_llm_endpoint_discovery.check.AsyncHttpClient",
             return_value=mock_client_factory(responses),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -170,7 +224,7 @@ class TestLLMEndpointCheckService:
             "app.checks.ai.ai_llm_endpoint_discovery.check.AsyncHttpClient",
             return_value=mock_client_factory(responses),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 0
         assert "chat_endpoints" not in result.outputs
@@ -189,7 +243,7 @@ class TestLLMEndpointCheckService:
             "app.checks.ai.ai_llm_endpoint_discovery.check.AsyncHttpClient",
             return_value=mock_client_factory(responses),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 0
         assert "chat_endpoints" not in result.outputs
@@ -207,7 +261,7 @@ class TestLLMEndpointCheckService:
             "app.checks.ai.ai_llm_endpoint_discovery.check.AsyncHttpClient",
             return_value=mock_client_factory(responses),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 0
         assert "chat_endpoints" not in result.outputs
@@ -225,7 +279,7 @@ class TestLLMEndpointCheckService:
             "app.checks.ai.ai_llm_endpoint_discovery.check.AsyncHttpClient",
             return_value=mock_client_factory(responses),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 0
         assert "chat_endpoints" not in result.outputs
@@ -248,7 +302,7 @@ class TestLLMEndpointCheckService:
             "app.checks.ai.ai_llm_endpoint_discovery.check.AsyncHttpClient",
             return_value=mock_client_factory(responses),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         # The check does NOT inspect response bodies -- any 200 on the path is recorded.
         # This is a known design choice; the observation is still produced.
@@ -273,7 +327,7 @@ class TestLLMEndpointCheckService:
             "app.checks.ai.ai_llm_endpoint_discovery.check.AsyncHttpClient",
             return_value=mock_client_factory(responses),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 2
         titles = [obs.title for obs in result.observations]
@@ -301,7 +355,7 @@ class TestLLMEndpointCheckService:
             "app.checks.ai.ai_llm_endpoint_discovery.check.AsyncHttpClient",
             return_value=mock_client_factory(responses),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 0
         assert "chat_endpoints" not in result.outputs
@@ -320,7 +374,7 @@ class TestLLMEndpointCheckService:
             "app.checks.ai.ai_llm_endpoint_discovery.check.AsyncHttpClient",
             return_value=mock_client_factory(responses),
         ):
-            result = await check.check_service(sample_service, {})
+            result = await probe_and_grade(check, sample_service)
 
         assert len(result.observations) == 1
         obs = result.observations[0]
@@ -392,7 +446,7 @@ class TestAIChecksIntegration:
             "app.checks.ai.ai_llm_endpoint_discovery.check.AsyncHttpClient",
             return_value=mock_client_factory(responses),
         ):
-            endpoint_result = await endpoint_check.check_service(sample_service, {})
+            endpoint_result = await probe_and_grade(endpoint_check, sample_service)
 
         assert "chat_endpoints" in endpoint_result.outputs
         endpoints = endpoint_result.outputs["chat_endpoints"]

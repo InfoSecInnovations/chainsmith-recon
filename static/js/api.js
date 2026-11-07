@@ -159,6 +159,17 @@ const api = {
     async getScanLog(scanId) {
         return (await fetch(`/api/v1/scans/${scanId}/log`)).json();
     },
+    // Captured raw I/O. Redacted unless `unredacted` is asked for,
+    // which the server treats as a privileged read and logs as one.
+    async getScanCheckIO(scanId, { check, protocol, limit, unredacted } = {}) {
+        const params = new URLSearchParams();
+        if (check) params.set('check', check);
+        if (protocol) params.set('protocol', protocol);
+        if (limit != null) params.set('limit', limit);
+        if (unredacted) params.set('unredacted', 'true');
+        const qs = params.toString();
+        return (await fetch(`/api/v1/scans/${scanId}/check-io${qs ? '?' + qs : ''}`)).json();
+    },
     async deleteScan(scanId) {
         return (await fetch(`/api/v1/scans/${scanId}`, { method: 'DELETE' })).json();
     },
@@ -717,22 +728,29 @@ function getCheckConfigSection(check) {
             <span class="cfg-value">${baseline ?? '—'} <span class="cfg-prov">[${layer}]</span></span></div>`;
     }).join('');
 
-    const ocLayer = prov.on_critical || '—';
-    const ocBaseline = cfg.on_critical ?? '—';
-    let ocRow;
-    if (editable) {
-        const sel = pending.on_critical || '';
-        const opts = ['', 'annotate', 'skip_downstream', 'stop', 'inherit'];
-        ocRow = `<div class="cfg-row">
-            <label class="cfg-label" for="cfg-on_critical">On critical <span class="cfg-prov">[${ocLayer}]</span></label>
-            <select class="cfg-input" id="cfg-on_critical">
-                ${opts.map(o => `<option value="${o}" ${o === sel ? 'selected' : ''}>${o || `(baseline: ${ocBaseline})`}</option>`).join('')}
+    // The two policy fields — how a critical observation is handled, and how much
+    // of this check's traffic is recorded. Both resolve through
+    // the same inherit chain, so they render and edit the same way.
+    const selectRow = (key, label, opts) => {
+        const layer = prov[key] || '—';
+        const baseline = cfg[key] ?? '—';
+        if (!editable) {
+            return `<div class="cfg-row"><span class="cfg-label">${label}</span>
+                <span class="cfg-value">${baseline} <span class="cfg-prov">[${layer}]</span></span></div>`;
+        }
+        const sel = pending[key] || '';
+        return `<div class="cfg-row">
+            <label class="cfg-label" for="cfg-${key}">${label} <span class="cfg-prov">[${layer}]</span></label>
+            <select class="cfg-input" id="cfg-${key}">
+                ${opts.map(o => `<option value="${o}" ${o === sel ? 'selected' : ''}>${o || `(baseline: ${baseline})`}</option>`).join('')}
             </select>
         </div>`;
-    } else {
-        ocRow = `<div class="cfg-row"><span class="cfg-label">On critical</span>
-            <span class="cfg-value">${ocBaseline} <span class="cfg-prov">[${ocLayer}]</span></span></div>`;
-    }
+    };
+
+    const ocRow = selectRow('on_critical', 'On critical',
+        ['', 'annotate', 'skip_downstream', 'stop', 'inherit']);
+    const capRow = selectRow('capture', 'Capture evidence',
+        ['', 'all', 'observations_only', 'none', 'inherit']);
 
     const actions = editable ? `
         <div class="cfg-actions">
@@ -750,7 +768,7 @@ function getCheckConfigSection(check) {
     return `<div class="modal-section">
         <div class="modal-section-title">Configuration <span class="cfg-prov">(value [source])</span></div>
         <div class="modal-section-content">
-            ${disabledNote}${rows}${ocRow}${actions}
+            ${disabledNote}${rows}${ocRow}${capRow}${actions}
         </div>
     </div>`;
 }

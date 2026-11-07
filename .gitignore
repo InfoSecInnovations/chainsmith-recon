@@ -29,7 +29,15 @@ dist/
 # Reports output
 /reports/
 
+# Container workspace (database, captured evidence, logs)
+/workspace/
+
 # IDE / editor
 .vscode/
 .idea/
 *.swp
+
+# Local-only: credentials, assistant settings, one-off scratch
+ssh-info.txt
+.claude/settings.local.json
+.phase56/_find_oversweep.py

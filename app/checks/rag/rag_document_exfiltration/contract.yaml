@@ -28,3 +28,11 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: RAG systems may expose credentials, PII, or internal infrastructure details
   through natural language queries — bypassing traditional access controls
+severity:
+  model: contextual
+  # Attack-compliance: severity is a continuum the evidence places, not a fact
+  # read off the response, so this check is in phase 58's grading scope (§7.2).
+  # `default` is what `on_critical` reads before a grader has run; `rubric:` and
+  # `signals:` are inert until 58 and are authored with it.
+  default: medium
+  range: [info, critical]

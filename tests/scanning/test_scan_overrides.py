@@ -22,6 +22,7 @@ class FakeCheck:
         self.retry_count = 1
         self.delay_between_targets = 0.1
         self.on_critical = "annotate"
+        self.capture = "all"
         self.intrusive = intrusive
 
 
@@ -57,6 +58,20 @@ def test_inherit_on_critical_ignored_at_scan_time():
     apply_check_overrides(checks, {"x": {"on_critical": "inherit", "retry_count": 4}})
     assert checks[0].on_critical == "annotate"  # inherit ignored
     assert checks[0].retry_count == 4  # other fields still apply
+
+
+def test_override_sets_the_capture_policy():
+    """Phase 57.2 (D-20): the scalpel reaches `capture:` too, so an operator can
+    silence one noisy check for one scan without editing its config.yaml."""
+    checks = [FakeCheck("web_path_probe")]
+    apply_check_overrides(checks, {"web_path_probe": CheckOverride(capture="none")})
+    assert checks[0].capture == "none"
+
+
+def test_inherit_capture_ignored_at_scan_time():
+    checks = [FakeCheck("x")]
+    apply_check_overrides(checks, {"x": {"capture": "inherit"}})
+    assert checks[0].capture == "all"  # inherit ignored, baseline already resolved
 
 
 def test_empty_overrides_is_noop_same_list():

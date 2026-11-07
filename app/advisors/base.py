@@ -1,4 +1,4 @@
-"""app/advisors/base.py - BaseAdvisor (Phase 56 §6, sub-phase 56.11).
+"""app/advisors/base.py - BaseAdvisor.
 
 The per-type base for `advisor` components, attaching to the minimal
 `BaseComponent` (identity only).

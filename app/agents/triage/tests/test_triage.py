@@ -1,5 +1,5 @@
 """
-Co-located tests for the Triage agent component (Phase 56 folder shape).
+Tests for the Triage agent component.
 
 Covers:
 - Folder-shape discovery + factory construction (discover_agent_specs → create)
@@ -159,7 +159,7 @@ def _triage_response() -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Folder-shape discovery + factory (Phase 56.10)
+# Folder-shape discovery + factory
 # ═══════════════════════════════════════════════════════════════════════════════
 
 

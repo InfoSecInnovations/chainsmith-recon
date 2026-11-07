@@ -28,3 +28,30 @@ references:
 - RFC 9114
 reason: Protocol detection profiles infrastructure maturity and identifies QUIC/HTTP3
   endpoints
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # Four mutually exclusive postures over one service, so the probe emits one
+  # undiscriminated candidate and `grade()` names the one that holds. The
+  # candidate carries mixed evidence — one `tls` exchange and one `http` — and
+  # `grade()` tells them apart by `Exchange.protocol`.
+  #
+  # Every severity is `info`: this check profiles infrastructure, it does not
+  # find a weakness. What `grade()` adds is how well each posture is evidenced.
+  # ALPN is proof (0.99 for `h2-only`), Alt-Svc is only the server advertising a
+  # QUIC port nobody connected to (0.7 for `h3-only`, and 0.7 for `h2-h3`, whose
+  # compound claim is only as strong as its weaker half). `h1-only` is an
+  # absence claim worth 0.85 over TLS, where the handshake really did offer h2
+  # and get http/1.1 back, and 0.5 on a plain-HTTP service, where ALPN never ran
+  # at all. An `h2` read from an `Upgrade: h2c` hint rather than ALPN is 0.6.
+  default: info
+  observations:
+    h2-h3: info
+    h2-only: info
+    h3-only: info
+    h1-only: info

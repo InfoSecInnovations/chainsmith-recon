@@ -13,7 +13,7 @@ AI agent discovery, framework fingerprinting, and adversarial testing.
 
 | Property | Value |
 |----------|-------|
-| Conditions | `services is truthy` |
+| Conditions | `services is truthy` and `services_probed is truthy` |
 | Produces | `agent_endpoints`, `agent_frameworks` |
 
 Probes 25+ common agent endpoint paths (/agent, /run, /invoke, /stream, /batch, /input_schema, /state, /threads, etc.). Detects LangServe, LangGraph, LangChain, AutoGen, and CrewAI via response headers, body patterns, and error signatures. Identifies capabilities: memory, tools, streaming, state, threads.

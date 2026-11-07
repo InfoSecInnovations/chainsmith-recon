@@ -25,6 +25,7 @@ from app.scan_session import ScanSession
 from app.scenarios import get_scenario_manager
 
 if TYPE_CHECKING:
+    from app.capture.settings import CaptureSettings
     from app.state import AppState
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,10 @@ def get_check_info(check) -> dict:
         "produces": getattr(check, "produces", []),
         "suite": getattr(check, "suite", None) or infer_suite(check.name),
         "intrusive": getattr(check, "intrusive", False),
+        # The authored severity model. Contract, not config, so
+        # it sits beside `intrusive` rather than inside the `config` block — the
+        # WebUI must not offer it as an editable knob.
+        "severity": dict(getattr(check, "severity", None) or {}),
         # Resolved tunable config + per-value layer attribution (56.16). Read-only
         # surfacing of the §5.1 load-time baseline; feeds the 56.17 WebUI modal.
         "config": {
@@ -66,6 +71,8 @@ def get_check_info(check) -> dict:
             "retry_count": getattr(check, "retry_count", None),
             "delay_between_targets": getattr(check, "delay_between_targets", None),
             "on_critical": getattr(check, "on_critical", None),
+            # The evidence-capture policy, resolved the same way.
+            "capture": getattr(check, "capture", None),
             "provenance": dict(getattr(check, "config_provenance", {}) or {}),
         },
     }
@@ -103,6 +110,7 @@ async def run_scan(
     session: "ScanSession | None" = None,
     preset: str | None = None,
     check_overrides: dict | None = None,
+    capture: "CaptureSettings | None" = None,
 ):
     """
     Run web reconnaissance checks with progress tracking.
@@ -114,58 +122,68 @@ async def run_scan(
     its status from "queued" to "running"; otherwise we create one here.
     """
     scan_start_time = time.time()
-    scan_id = session.id if session is not None else None
     obs_writer = None
     log_writer = None
 
     try:
-        logger.info(f"Starting scan against {state.target}")
-
-        # Persist scan start (fire-and-forget on failure). If the route
-        # pre-registered the session, reuse that id so the DB row matches.
-        preregistered_id = scan_id
-        scan_id = await on_scan_start(state, scan_id=preregistered_id)
-        if not scan_id:
-            # Persistence disabled or DB write failed. Keep the pre-registered
-            # id if we have one (so the already-in-registry session stays
-            # addressable); otherwise mint a fresh one.
-            scan_id = preregistered_id or uuid.uuid4().hex[:16]
-
-        # Construct and register the session if the caller didn't. Guardian
-        # is built fresh per scan from the operator's scope prep.
-        # state.techniques is the UI allowlist (already applied by
-        # resolve_checks) — it must NOT be passed as forbidden_techniques,
-        # which is the Guardian's denylist.
+        # ── Resolve the session FIRST ────────────────────────────────
+        # Everything below reads scope from `session`, never from `state`.
+        # `state` is the operator's scope *prep* — a process-global that the
+        # next /api/v1/scope call will overwrite, possibly while this scan is
+        # still running. Snapshotting it here and then honouring the snapshot
+        # is what keeps concurrent scans from reading each other's scope.
         if session is None:
-            guardian = Guardian.from_scope(
-                state.target or "",
-                exclude=state.exclude,
-            )
+            # No pre-registered session (CLI / direct callers): take the
+            # snapshot now. Guardian is built fresh per scan from that scope.
+            # state.techniques is the UI allowlist (already applied by
+            # resolve_checks) — it must NOT be passed as forbidden_techniques,
+            # which is the Guardian's denylist.
+            # Minted before the session so the Guardian can be stamped with it
+            # (57.2): a violation with no scan id cannot be scoped to a report.
+            new_scan_id = uuid.uuid4().hex[:16]
             session = ScanSession(
-                id=scan_id,
+                id=new_scan_id,
                 target=state.target or "",
                 exclude=list(state.exclude or []),
                 techniques=list(state.techniques or []),
                 status="running",
                 phase="scanning",
-                guardian=guardian,
+                guardian=Guardian.from_scope(
+                    state.target or "",
+                    exclude=state.exclude,
+                    scan_id=new_scan_id,
+                ),
                 settings=dict(state.settings),
-                proof_settings=state.proof_settings,
+                proof_settings=(
+                    state.proof_settings.model_copy(deep=True)
+                    if state.proof_settings is not None
+                    else None
+                ),
+                operator_session_id=state.session_id,
                 started_at=scan_start_time,
             )
             get_registry().register(session)
         else:
-            # Pre-registered path: flip to running and align start time
-            # with the DB row on_scan_start just wrote. The session id
-            # stays the same (registry keyed off it).
+            # Pre-registered path (route handler): the snapshot was taken at
+            # request time. Flip to running; the session id stays the same
+            # (registry keyed off it).
             session.status = "running"
             session.phase = "scanning"
             session.started_at = scan_start_time
             if session.guardian is None:
                 session.guardian = Guardian.from_scope(
-                    state.target or "",
-                    exclude=state.exclude,
+                    session.target,
+                    exclude=session.exclude,
+                    scan_id=session.id,
                 )
+
+        scan_id = session.id
+        logger.info(f"Starting scan against {session.target}")
+
+        # Persist scan start (fire-and-forget on failure). The DB row is
+        # written from the session, so it records the scope this scan actually
+        # ran with rather than whatever scope prep happens to be current.
+        await on_scan_start(session, scan_id=scan_id)
 
         obs_writer = ObservationWriter(scan_id, session=session)
         log_writer = CheckLogWriter(scan_id, session=session)
@@ -187,7 +205,7 @@ async def run_scan(
         )
 
         checks = resolve_checks(
-            techniques=state.techniques if state.techniques else None,
+            techniques=session.techniques if session.techniques else None,
             scenario_name=scenario_name,
             check_names=eff_check_names,
             suites=eff_suites,
@@ -207,11 +225,28 @@ async def run_scan(
 
         # Build initial context
         context = {
-            "scope_domains": [state.target],
-            "excluded_domains": state.exclude or [],
-            "base_domain": state.target,
+            "scope_domains": [session.target],
+            "excluded_domains": session.exclude or [],
+            "base_domain": session.target,
             "services": [],  # populated by port_scan
+            # BaseCheck.execute() reads these to attribute and
+            # gate captured evidence. The scan id already lives on the session;
+            # putting it in the context is what makes it reachable from inside a
+            # check without every check having to know about ScanSession.
+            "scan_id": session.id,
+            # The posture travels with the scan rather than sitting in a
+            # module-level singleton: concurrent scans share one process, and one
+            # scan's --capture must not change what another scan records.
+            "capture_settings": capture,
         }
+        if capture is not None and capture.enabled:
+            logger.info(
+                "Evidence capture ON for scan %s (protocols=%s, failures=%s, full=%s)",
+                session.id,
+                ",".join(sorted(capture.protocols)),
+                capture.capture_failures,
+                capture.full_capture,
+            )
 
         # Seed DNS enumeration wordlist with scenario-declared known_hosts.
         if mgr.is_active and mgr.active.target.known_hosts:
@@ -337,6 +372,13 @@ async def run_scan(
                 "Some observations were written to scratch space due to DB failure. "
                 "Run scratch-to-db to import them."
             )
+        if obs_writer and obs_writer.collisions:
+            logger.warning(
+                "%d observation(s) repeated an id already stored for this scan and were kept "
+                "in scratch space. That is a check minting a duplicate observation id, not a "
+                "DB failure; importing them would collide again.",
+                obs_writer.collisions,
+            )
 
         # Scan advisor (local CheckLauncher only).
         local_launcher = session.runner if session is not None and not cfg.swarm.enabled else None
@@ -345,7 +387,13 @@ async def run_scan(
         # Guided Mode proactive message.
         await _emit_scan_complete_proactive(state, session, len(observations), scan_id)
 
-        # Final persistence.
+        # Final persistence. Drain capture first: `BaseCheck.execute()` indexes
+        # what each check recorded, but the agent LLM path and anything else
+        # running outside a check has no such boundary of its own.
+        from app import capture
+
+        await capture.flush_index()
+
         await on_scan_complete(session, scan_id, scan_start_time, obs_writer=obs_writer)
 
     except Exception as e:
@@ -436,7 +484,7 @@ async def _emit_scan_complete_proactive(
 
         await maybe_emit_proactive(
             sse_manager=sse_manager,
-            session_id=state.session_id,
+            session_id=session.operator_session_id or state.session_id,
             agent=ComponentType.TRIAGE,
             trigger="scan_complete",
             text=text,

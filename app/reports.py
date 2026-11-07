@@ -20,6 +20,17 @@ from app.db.repositories import (
     ObservationRepository,
     ScanRepository,
     TrendRepository,
+    not_superseded,
+)
+from app.lib.observations import (
+    SUPPRESSED_STATUSES,
+    is_placeholder,
+    partition_by_grading,
+    partition_by_verdict,
+    resolve_superseded_ids,
+    superseded_by,
+    supersession_note,
+    suppression_note,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,7 +111,11 @@ async def generate_technical_report(scan_id: str, fmt: str = "md") -> dict:
     if scan is None:
         raise ValueError(f"Scan '{scan_id}' not found")
 
-    observations = await _observation_repo.get_observations(scan_id)
+    # Superseded rows are read so they can be stated, and split off before
+    # anything is counted: each has a successor among `observations` (57.4).
+    observations, superseded = partition_by_grading(
+        await _observation_repo.get_observations(scan_id, include_superseded=True)
+    )
     chains = await _chain_repo.get_chains(scan_id)
     log_entries = await _check_log_repo.get_log(scan_id)
     overrides = await _override_repo.list_overrides()
@@ -116,18 +131,25 @@ async def generate_technical_report(scan_id: str, fmt: str = "md") -> dict:
     risk = _risk_score(severity_counts)
     coverage = _check_coverage(log_entries)
 
+    # CSV and SARIF carry findings only, so a superseded row is not in them.
     if fmt == "csv":
         content = _observations_csv(observations)
     elif fmt == "json":
-        content = _technical_json(scan, observations, chains, severity_counts, risk, coverage)
+        content = _technical_json(
+            scan, observations, chains, severity_counts, risk, coverage, superseded
+        )
     elif fmt == "sarif":
         content = _technical_sarif(scan, observations, chains, severity_counts, risk, coverage)
     elif fmt in ("html", "pdf"):
-        content = _technical_html(scan, observations, chains, severity_counts, risk, coverage)
+        content = _technical_html(
+            scan, observations, chains, severity_counts, risk, coverage, superseded
+        )
         if fmt == "pdf":
             content = _html_to_pdf(content)
     else:
-        content = _technical_markdown(scan, observations, chains, severity_counts, risk, coverage)
+        content = _technical_markdown(
+            scan, observations, chains, severity_counts, risk, coverage, superseded
+        )
 
     target = scan.get("target_domain", "unknown")
     ext = {"json": "json", "html": "html", "pdf": "pdf", "sarif": "sarif.json", "csv": "csv"}.get(
@@ -139,7 +161,10 @@ async def generate_technical_report(scan_id: str, fmt: str = "md") -> dict:
     return {"content": content, "filename": filename, "format": fmt}
 
 
-def _technical_markdown(scan, observations, chains, severity_counts, risk, coverage) -> str:
+def _technical_markdown(
+    scan, observations, chains, severity_counts, risk, coverage, superseded=None
+) -> str:
+    superseded = superseded or []
     target = scan.get("target_domain", "unknown")
     date = scan.get("started_at", "N/A")
     duration_ms = scan.get("duration_ms")
@@ -171,6 +196,30 @@ def _technical_markdown(scan, observations, chains, severity_counts, risk, cover
         lines.append(f"| {sev.capitalize()} | {severity_counts[sev]} |")
 
     lines.extend(["", f"**Risk Score:** {risk}", ""])
+
+    # Verdicts, stated rather than applied. Nothing is
+    # removed from the report because an agent rejected it: the count is shown,
+    # and each suppressed observation is still listed and marked. A reader who
+    # disagrees with the Verifier can see exactly what it set aside.
+    _carried, _suppressed = partition_by_verdict(observations)
+    if _suppressed:
+        lines.append(f"> {suppression_note(_suppressed)}. They are listed below, marked.")
+        lines.append("")
+
+    if superseded:
+        lines.append(
+            f"> {supersession_note(superseded)}. They are not counted above; see "
+            '"Superseded by Re-grade" for what replaced each one.'
+        )
+        lines.append("")
+
+    _ungraded = [f for f in observations if is_placeholder(f)]
+    if _ungraded and len(_ungraded) != len(observations):
+        lines.append(
+            f"> {len(_ungraded)} observation(s) ungraded — severity shown is the "
+            "probe's provisional value, not a verdict."
+        )
+        lines.append("")
 
     # Observations by severity
     lines.append("## Observations")
@@ -205,7 +254,14 @@ def _technical_markdown(scan, observations, chains, severity_counts, risk, cover
                 reason_text = f" — {reason}" if reason else ""
                 severity_note = f" *(was {original_sev.upper()}{reason_text})*"
 
-            lines.append(f"#### {f.get('title', 'Untitled')}{override_note}{severity_note}")
+            verdict_note = ""
+            status = str(f.get("verification_status") or "").lower()
+            if status in SUPPRESSED_STATUSES:
+                verdict_note = f" *[SUPPRESSED — {status}]*"
+
+            lines.append(
+                f"#### {f.get('title', 'Untitled')}{override_note}{severity_note}{verdict_note}"
+            )
             lines.append("")
             if f.get("description"):
                 lines.append(f"{f['description']}")
@@ -224,6 +280,12 @@ def _technical_markdown(scan, observations, chains, severity_counts, risk, cover
                     lines.append(f"- **References:** {', '.join(refs)}")
             if f.get("fingerprint"):
                 lines.append(f"- **Fingerprint:** `{f['fingerprint']}`")
+            if is_placeholder(f):
+                grading_state = f.get("grading_state") or "ungraded"
+                lines.append(f"- **Grading:** {grading_state} (provisional severity)")
+            elif f.get("confidence") is not None:
+                tier = f.get("grading_tier") or "rule"
+                lines.append(f"- **Grading:** {tier} tier, confidence {f['confidence']:.2f}")
             lines.append("")
 
     # Attack chains
@@ -240,8 +302,28 @@ def _technical_markdown(scan, observations, chains, severity_counts, risk, cover
             if c.get("observation_ids"):
                 ids = c["observation_ids"]
                 if isinstance(ids, list):
+                    # A chain row names what it was built on; render it
+                    # through to the rows that replaced a superseded one.
+                    ids = resolve_superseded_ids(ids, superseded)
                     lines.append(f"- **Observations:** {', '.join(str(oid) for oid in ids)}")
             lines.append("")
+
+    if superseded:
+        lines.append(f"## Superseded by Re-grade ({len(superseded)})")
+        lines.append("")
+        lines.append(
+            "Placeholders an offline re-grade replaced. Kept, never deleted, and not "
+            "counted in this report."
+        )
+        lines.append("")
+        for f in superseded:
+            successors = superseded_by(f)
+            replaced = ", ".join(f"`{s}`" for s in successors) if successors else "no verdict"
+            lines.append(
+                f"- **{f.get('title', 'Untitled')}** (`{f.get('id')}`, "
+                f"{f.get('check_name', 'unknown')}) → {replaced}"
+            )
+        lines.append("")
 
     # Check coverage
     lines.append("## Check Coverage")
@@ -255,7 +337,10 @@ def _technical_markdown(scan, observations, chains, severity_counts, risk, cover
     return "\n".join(lines)
 
 
-def _technical_json(scan, observations, chains, severity_counts, risk, coverage) -> str:
+def _technical_json(
+    scan, observations, chains, severity_counts, risk, coverage, superseded=None
+) -> str:
+    superseded = superseded or []
     report = {
         "report_type": "technical",
         "generated_at": datetime.now(UTC).isoformat(),
@@ -266,6 +351,22 @@ def _technical_json(scan, observations, chains, severity_counts, risk, coverage)
             "total_observations": sum(severity_counts.values()),
         },
         "observations": observations,
+        # The Verifier's verdicts are reported, never applied by removal (§2).
+        "suppressed": len(partition_by_verdict(observations)[1]),
+        "ungraded": sum(1 for f in observations if is_placeholder(f)),
+        # Replaced by an offline re-grade: stated, and outside every count (57.4).
+        "superseded": len(superseded),
+        "superseded_observations": [
+            {
+                "id": f.get("id"),
+                "title": f.get("title"),
+                "check_name": f.get("check_name"),
+                "host": f.get("host"),
+                "severity": f.get("severity"),
+                "superseded_by": superseded_by(f),
+            }
+            for f in superseded
+        ],
         "chains": chains,
         "check_coverage": coverage,
     }
@@ -639,7 +740,10 @@ def _trend_arrow(old: int, new: int) -> str:
 # ─── HTML renderers for existing report types ────────────────────────────────
 
 
-def _technical_html(scan, observations, chains, severity_counts, risk, coverage) -> str:
+def _technical_html(
+    scan, observations, chains, severity_counts, risk, coverage, superseded=None
+) -> str:
+    superseded = superseded or []
     target = _esc(scan.get("target_domain", "unknown"))
     date = _esc(scan.get("started_at", "N/A"))
     duration_ms = scan.get("duration_ms")
@@ -664,6 +768,11 @@ def _technical_html(scan, observations, chains, severity_counts, risk, coverage)
         f'<div class="stat-label">Risk Score</div></div>'
     )
     parts.append("</div>")
+    if superseded:
+        parts.append(
+            f'<p class="meta">{_esc(supersession_note(superseded))} &mdash; not counted '
+            "above; listed under Superseded by Re-grade.</p>"
+        )
 
     # Observations
     parts.append(f"<h2>Observations ({total})</h2>")
@@ -714,6 +823,22 @@ def _technical_html(scan, observations, chains, severity_counts, risk, coverage)
             if c.get("description"):
                 parts.append(f'<div class="card-detail">{_esc(c["description"])}</div>')
             parts.append("</div>")
+
+    if superseded:
+        parts.append(f"<h2>Superseded by Re-grade ({len(superseded)})</h2>")
+        for f in superseded:
+            successors = superseded_by(f)
+            replaced = (
+                ", ".join(f"<code>{_esc(s)}</code>" for s in successors)
+                if successors
+                else "no verdict"
+            )
+            parts.append(
+                f'<div class="card override"><div class="card-title">'
+                f"{_esc(f.get('title', 'Untitled'))}</div>"
+                f'<div class="card-detail"><code>{_esc(f.get("id"))}</code> &rarr; {replaced}</div>'
+                "</div>"
+            )
 
     # Coverage
     parts.append("<h2>Check Coverage</h2>")
@@ -802,7 +927,9 @@ async def generate_executive_report(
     if scan is None:
         raise ValueError(f"Scan '{scan_id}' not found")
 
-    observations = await _observation_repo.get_observations(scan_id)
+    observations, superseded = partition_by_grading(
+        await _observation_repo.get_observations(scan_id, include_superseded=True)
+    )
     overrides = await _override_repo.list_overrides()
     override_map = {o["fingerprint"]: o for o in overrides.get("overrides", [])}
 
@@ -847,6 +974,7 @@ async def generate_executive_report(
         "prev_severity": prev_severity,
         "overridden_count": overridden_count,
         "total_active": len(active_observations),
+        "superseded_count": len(superseded),
     }
 
     if fmt == "csv":
@@ -907,11 +1035,11 @@ def _executive_markdown(d: dict) -> str:
         [
             f"**Active Observations:** {total_active}",
             f"**Overridden (accepted/false positive):** {d['overridden_count']}",
-            "",
-            "| Severity | Count |",
-            "|----------|-------|",
         ]
     )
+    if d.get("superseded_count"):
+        lines.append(f"**Superseded by re-grade (not counted):** {d['superseded_count']}")
+    lines.extend(["", "| Severity | Count |", "|----------|-------|"])
     for s in SEVERITY_ORDER:
         lines.append(f"| {s.capitalize()} | {sev[s]} |")
 
@@ -949,6 +1077,7 @@ def _executive_json(d: dict) -> str:
             "by_severity": d["severity_counts"],
             "active_observations": d["total_active"],
             "overridden_count": d["overridden_count"],
+            "superseded_count": d.get("superseded_count", 0),
         },
         "top_observations": d["top_observations"],
     }
@@ -993,6 +1122,11 @@ def _executive_html(d: dict) -> str:
         f'<div class="stat-label">Overridden</div></div>'
     )
     parts.append("</div>")
+    if d.get("superseded_count"):
+        parts.append(
+            f'<p class="meta">{d["superseded_count"]} observation(s) superseded by re-grade '
+            "&mdash; not counted.</p>"
+        )
 
     # Severity table
     parts.append("<h2>Severity Breakdown</h2>")
@@ -1037,7 +1171,9 @@ async def generate_compliance_report(
     if scan is None:
         raise ValueError(f"Scan '{scan_id}' not found")
 
-    observations = await _observation_repo.get_observations(scan_id)
+    observations, superseded = partition_by_grading(
+        await _observation_repo.get_observations(scan_id, include_superseded=True)
+    )
     log_entries = await _check_log_repo.get_log(scan_id)
     overrides = await _override_repo.list_overrides()
     override_map = {o["fingerprint"]: o for o in overrides.get("overrides", [])}
@@ -1081,6 +1217,7 @@ async def generate_compliance_report(
         "override_audit": override_audit,
         "checks_run": checks_run,
         "overridden_count": len(override_audit),
+        "superseded_count": len(superseded),
     }
 
     if fmt == "csv":
@@ -1150,11 +1287,11 @@ def _compliance_markdown(d: dict) -> str:
             "",
             f"**Total Observations:** {d['total_observations']}",
             f"**Overridden:** {d['overridden_count']}",
-            "",
-            "| Severity | Count |",
-            "|----------|-------|",
         ]
     )
+    if d.get("superseded_count"):
+        lines.append(f"**Superseded by re-grade (not counted):** {d['superseded_count']}")
+    lines.extend(["", "| Severity | Count |", "|----------|-------|"])
     for s in SEVERITY_ORDER:
         lines.append(f"| {s.capitalize()} | {d['severity_counts'][s]} |")
 
@@ -1195,6 +1332,7 @@ def _compliance_json(d: dict) -> str:
             "total": d["total_observations"],
             "by_severity": d["severity_counts"],
             "overridden_count": d["overridden_count"],
+            "superseded_count": d.get("superseded_count", 0),
         },
         "override_audit": d["override_audit"],
     }
@@ -1249,6 +1387,11 @@ def _compliance_html(d: dict) -> str:
             f'<div class="stat"><div class="stat-value">{d["severity_counts"][s]}</div><div class="stat-label">{s}</div></div>'
         )
     parts.append("</div>")
+    if d.get("superseded_count"):
+        parts.append(
+            f'<p class="meta">{d["superseded_count"]} observation(s) superseded by re-grade '
+            "&mdash; not counted.</p>"
+        )
 
     # Override audit
     if d["override_audit"]:
@@ -1787,7 +1930,8 @@ async def generate_targeted_export(
     from app.db.engine import get_session
     from app.db.models import ObservationRecord
 
-    # Look up observations by fingerprint (most recent instance of each)
+    # Look up observations by fingerprint (most recent instance of each). A
+    # superseded placeholder is never the instance: it has a successor.
     observations = []
     _session = db.session() if db is not None else get_session()
     async with _session as session:
@@ -1795,6 +1939,7 @@ async def generate_targeted_export(
             result = await session.execute(
                 select(ObservationRecord)
                 .where(ObservationRecord.fingerprint == fp)
+                .where(not_superseded())
                 .order_by(ObservationRecord.id.desc())
                 .limit(1)
             )

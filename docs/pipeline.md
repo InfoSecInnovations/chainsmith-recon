@@ -47,6 +47,11 @@ Guardian (scope enforcement)                       GATE
     v
 Scanning (check suites execute)
     |
+    +--> Capture (every exchange recorded verbatim)  NO MODEL
+    |
+    v
+Grading (probe output -> severity + confidence)    RULE TIER
+    |
     v
 Verification (Verifier)                            AGENT
     |
@@ -72,6 +77,21 @@ CheckProof (reproduction guidance)                 ADVISOR
 Reporting
 ```
 
+**The capture line** runs between scanning and grading. Everything below it is
+fact — what was sent, what came back, recorded verbatim with no model involved.
+Everything above it is judgment. Capture (`app/capture/`) writes one document per
+exchange under the workspace's `evidence/`, indexed in the `evidence` table; it
+is **off by default** and enabled per scan with `--capture`. Grading
+(`app/grading/`) re-reads those bytes and never touches the network, which is
+what lets it run during a scan or months later against the stored corpus.
+
+A check that has been migrated to probe/grade returns **candidates** rather than
+observations; `CheckLauncher` calls the grading stage immediately after the
+check, and each verdict becomes an observation carrying its grading state, tier,
+confidence and the evidence ids it was derived from. A check that has not been
+migrated returns observations directly and is unaffected — both shapes run side
+by side until the migration finishes.
+
 Two components sit outside the linear pipeline:
 
 - **Coach** — always-available conversational explainer, accessible at any
@@ -85,7 +105,7 @@ Two components sit outside the linear pipeline:
 
 ### Guardian
 
-`app/gates/guardian/gate.py` (folder-shape `gate` component, Phase 56.12;
+`app/gates/guardian/gate.py` (folder-shape `gate` component;
 discovered via `app/gates/registry.py`, per-component `config.yaml`)
 
 - **Role:** Scope enforcement. Validates URLs and techniques against the
@@ -123,7 +143,7 @@ scope:
   in_scope_ports: [80, 443, 8080, 8443]
   allowed_techniques: []       # empty = all allowed
   forbidden_techniques: []
-  time_window: null             # engagement window restriction
+  time_window: null             # optional scan time window
 ```
 
 Port profiles (`--port-profile`): `web`, `ai`, `full`, `lab`.
@@ -453,7 +473,7 @@ the operator clears chat. No persistence across sessions.
 
 ### ScanAdvisor
 
-`app/advisors/scan_analysis/` (folder shape, Phase 56.11)
+`app/advisors/scan_analysis/` (folder shape)
 
 - **Role:** Post-scan analysis — identifies gaps, partial results,
   follow-up opportunities, and coverage shortfalls.
@@ -468,14 +488,14 @@ the operator clears chat. No persistence across sessions.
 1. **Gap analysis** — checks that couldn't run due to missing context.
 2. **Partial results** — checks that failed or were skipped.
 3. **Follow-up rules** — deeper checks triggered by initial observations
-   (e.g. port_scan findings trigger service_probe suggestion).
+   (e.g. network_port_scan findings trigger network_service_probe suggestion).
 4. **Coverage cross-reference** — flags suites with low execution
    relative to available checks.
 
 **Recommendation categories:** `gap_analysis`, `config_suggestion`,
 `context_seed`, `speculative`.
 
-**Configuration** (`app/advisors/scan_analysis/config.yaml` — `enabled` + `parameters`, Phase 56.11):
+**Configuration** (`app/advisors/scan_analysis/config.yaml` — `enabled` + `parameters`):
 
 | Setting | Default |
 |---------|---------|
@@ -488,7 +508,7 @@ the operator clears chat. No persistence across sessions.
 
 ### CheckProof Advisor
 
-`app/advisors/check_proof/` (folder shape, Phase 56.11)
+`app/advisors/check_proof/` (folder shape)
 
 - **Role:** Generates templated reproduction steps and copy-pasteable
   commands for verified findings.
@@ -506,7 +526,7 @@ the operator clears chat. No persistence across sessions.
 
 **Template location:** `app/data/proof_templates/` (YAML files).
 
-**Configuration** (`app/advisors/check_proof/config.yaml` — `enabled` + `parameters`, Phase 56.11):
+**Configuration** (`app/advisors/check_proof/config.yaml` — `enabled` + `parameters`):
 
 | Setting | Default |
 |---------|---------|
@@ -644,7 +664,7 @@ triage:
   context_file: ~/.chainsmith/triage_context.yaml
   kb_path: app/data/remediation_guidance.json
 
-# scan_advisor / check_proof config moved to per-advisor config.yaml in 56.11:
+# scan_advisor / check_proof config moved to per-advisor config.yaml:
 #   app/advisors/scan_analysis/config.yaml, app/advisors/check_proof/config.yaml
 # (these top-level chainsmith.yaml blocks are no longer parsed).
 
@@ -685,5 +705,5 @@ check_proof:
   topology, not the per-node pipeline
 - [Operating Modes](OPERATING_MODES.md) — scan modes; cross-references
   this doc for pipeline detail
-- [Component Taxonomy](future-ideas/completed/component-taxonomy.md) —
+- [Component Taxonomy](component-taxonomy.md) —
   canonical classification of all component types

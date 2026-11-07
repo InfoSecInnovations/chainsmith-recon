@@ -6,6 +6,21 @@ Sends resources/read with crafted URIs to probe for unauthorized access.
 
 Safety: read-only probes, no destructive payloads, response capped.
 
+**Probe/grade.** The probe sends one `resources/read` per
+crafted URI, records each via `exchange_from_response`, and hands one candidate
+per server to the grader. `grade()` re-reads each recorded exchange, recovers
+which payload produced it from the request body's `params.uri` (§0.16 — never
+positional, never the discriminator), and places the severity; when no dangerous
+answer is found it emits the single `resource-safe` verdict. `_probe_result()`
+is the one parser both halves call (§0.12).
+
+**Fixed**: the discriminators are a closed set — the payload
+category crossed with the attack type — so the contract carries the full
+`observations:` map at each entry's severity. Confidence is where the split pays:
+a file-content marker can ride in an error message that quotes the path back, and
+a non-standard protocol answered with a body is not-rejected, not shown to have
+smuggled anything.
+
 References:
   https://modelcontextprotocol.io/specification
   https://spec.modelcontextprotocol.io/specification/server/resources/
@@ -16,10 +31,13 @@ References:
 import json
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult
-from app.checks.mcp.invocation_safety import cap_response, log_invocation
+from app.checks.mcp.invocation_safety import cap_response
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 # Traversal payloads — read-only probes only
 TRAVERSAL_PAYLOADS = [
@@ -49,6 +67,15 @@ PROTOCOL_PAYLOADS = [
     ("dict://localhost:6379/INFO", "protocol_smuggle", "Dict protocol to Redis"),
 ]
 
+# uri -> (category, attack_type), for read-back at grade time.
+_PAYLOAD_INDEX: dict[str, tuple[str, str]] = {}
+for _uri, _atk, _desc in TRAVERSAL_PAYLOADS:
+    _PAYLOAD_INDEX[_uri] = ("traversal", _atk)
+for _uri, _atk, _desc in SSRF_PAYLOADS:
+    _PAYLOAD_INDEX[_uri] = ("ssrf", _atk)
+for _uri, _atk, _desc in PROTOCOL_PAYLOADS:
+    _PAYLOAD_INDEX[_uri] = ("protocol", _atk)
+
 
 class MCPResourceTraversalCheck(BaseCheck):
     """
@@ -75,9 +102,12 @@ class MCPResourceTraversalCheck(BaseCheck):
     ]
     techniques = ["path traversal", "SSRF", "protocol smuggling"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def run(self, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
         mcp_servers = context.get("mcp_servers", [])
+        scan_id = context.get("scan_id") or ""
         traversal_results = []
 
         cfg = HttpConfig(timeout_seconds=10.0, verify_ssl=False)
@@ -86,206 +116,302 @@ class MCPResourceTraversalCheck(BaseCheck):
             server_url = server.get("url", "")
             service_data = server.get("service", {})
             host = service_data.get("host", "unknown")
-            capabilities = server.get("capabilities", [])
 
             if not server_url:
                 continue
 
-            # Only test servers that declare resources capability
-            (
-                any("resource" in str(c).lower() for c in capabilities) if capabilities else True
-            )  # If no caps listed, probe anyway
-
+            exchanges: list[Exchange] = []
             try:
                 async with AsyncHttpClient(cfg) as client:
-                    # First: enumerate resources to understand URI format
-                    await self._enumerate_resources(client, server_url)
+                    # Enumerate resources first (recorded, not graded).
+                    await self._enumerate_resources(client, server_url, host, scan_id)
 
-                    # Test path traversal
-                    for uri, attack_type, _desc in TRAVERSAL_PAYLOADS:
-                        r = await self._probe_resource(client, server_url, uri)
-                        inv = log_invocation(
-                            f"resources/read:{attack_type}",
-                            {"uri": uri},
-                            r.get("status"),
-                            r.get("body", ""),
+                    for uri, _cat, _atk in TRAVERSAL_PAYLOADS + SSRF_PAYLOADS + PROTOCOL_PAYLOADS:
+                        exchange = await self._probe_resource(
+                            client, server_url, uri, host, scan_id
                         )
-                        traversal_results.append(inv)
-
-                        if r["success"] and r["has_content"]:
-                            # Check for actual file content indicators
-                            body = r["body"]
-                            if self._looks_like_file_content(body, attack_type):
-                                result.observations.append(
-                                    build_observation(
-                                        check_name=self.name,
-                                        title=f"Resource path traversal: {uri} returned file contents",
-                                        description=f"The MCP resource endpoint returned actual file contents for traversal URI: {uri}",
-                                        severity="critical",
-                                        evidence=f"URI: {uri}\nResponse: {cap_response(body)[:300]}",
-                                        host=host,
-                                        discriminator=f"traversal-{attack_type}",
-                                        raw_data={"uri": uri, "body": cap_response(body)},
-                                    )
-                                )
-                            elif r.get("error_leaks_path"):
-                                result.observations.append(
-                                    build_observation(
-                                        check_name=self.name,
-                                        title="Resource traversal blocked but error leaks file path",
-                                        description=f"Error message reveals internal path structure for URI: {uri}",
-                                        severity="medium",
-                                        evidence=f"URI: {uri}\nError: {cap_response(body)[:300]}",
-                                        host=host,
-                                        discriminator=f"traversal-leak-{attack_type}",
-                                        raw_data={"uri": uri, "body": cap_response(body)},
-                                    )
-                                )
-
-                    # Test SSRF
-                    for uri, attack_type, _desc in SSRF_PAYLOADS:
-                        r = await self._probe_resource(client, server_url, uri)
-                        inv = log_invocation(
-                            f"resources/read:{attack_type}",
-                            {"uri": uri},
-                            r.get("status"),
-                            r.get("body", ""),
-                        )
-                        traversal_results.append(inv)
-
-                        if r["success"] and r["has_content"]:
-                            if self._looks_like_ssrf_content(r["body"], attack_type):
-                                result.observations.append(
-                                    build_observation(
-                                        check_name=self.name,
-                                        title=f"SSRF via MCP resource: {uri} returned internal data",
-                                        description=f"The MCP resource endpoint fetched an internal URL: {uri}",
-                                        severity="critical",
-                                        evidence=f"URI: {uri}\nResponse: {cap_response(r['body'])[:300]}",
-                                        host=host,
-                                        discriminator=f"ssrf-{attack_type}",
-                                        raw_data={"uri": uri, "body": cap_response(r["body"])},
-                                    )
-                                )
-
-                    # Test protocol smuggling
-                    for uri, attack_type, _desc in PROTOCOL_PAYLOADS:
-                        r = await self._probe_resource(client, server_url, uri)
-                        if r["success"] and r["has_content"]:
-                            result.observations.append(
-                                build_observation(
-                                    check_name=self.name,
-                                    title=f"Resource URI accepts {uri.split(':')[0]}:// protocol",
-                                    description=f"The MCP resource endpoint accepted a non-standard protocol URI: {uri}",
-                                    severity="high",
-                                    evidence=f"URI: {uri}\nResponse: {cap_response(r['body'])[:300]}",
-                                    host=host,
-                                    discriminator=f"protocol-{attack_type}",
-                                    raw_data={"uri": uri},
-                                )
+                        exchanges.append(exchange)
+                        pr = self._probe_result(exchange)
+                        if pr is not None:
+                            traversal_results.append(
+                                {
+                                    "tool": f"resources/read:{pr['attack_type']}",
+                                    "payload": {"uri": uri},
+                                    "response_status": pr["status"],
+                                    "response_preview": cap_response(pr["body"]),
+                                    "safe": True,
+                                }
                             )
-
-                    # If nothing found
-                    if not any(f.check_name == self.name for f in result.observations):
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title="Resource URI validation enforced (traversal attempts rejected)",
-                                description="MCP resource URIs are properly validated against traversal and SSRF.",
-                                severity="info",
-                                evidence=f"Server: {server_url}\nPayloads tested: {len(TRAVERSAL_PAYLOADS) + len(SSRF_PAYLOADS) + len(PROTOCOL_PAYLOADS)}",
-                                host=host,
-                                discriminator="resource-safe",
-                            )
-                        )
 
             except Exception as e:
                 result.errors.append(f"Resource traversal on {server_url}: {e}")
+                continue
+
+            candidate = self.create_candidate(host=host)
+            for exchange in exchanges:
+                candidate.attach(exchange)
+            result.candidates.append(candidate)
 
         if traversal_results:
             result.outputs["mcp_resource_traversal_results"] = traversal_results
 
         return result
 
-    async def _enumerate_resources(self, client, server_url: str) -> list[dict]:
-        """Enumerate available resources via resources/list."""
-        resp = await client.post(
-            server_url,
-            json={"jsonrpc": "2.0", "method": "resources/list", "id": 1},
-            headers={"Content-Type": "application/json"},
+    async def _enumerate_resources(self, client, server_url: str, host: str, scan_id: str) -> None:
+        """Enumerate available resources via resources/list (recorded for the corpus)."""
+        payload = {"jsonrpc": "2.0", "method": "resources/list", "id": 1}
+        resp = await client.post(server_url, json=payload, headers=JSON_HEADERS)
+        exchange_from_response(
+            resp,
+            check_name=self.name,
+            scan_id=scan_id,
+            host=host,
+            method="POST",
+            request_headers=JSON_HEADERS,
+            request_json=payload,
         )
-        if resp.error or resp.status_code != 200 or not resp.body:
-            return []
+
+    async def _probe_resource(
+        self, client, server_url: str, uri: str, host: str, scan_id: str
+    ) -> Exchange:
+        """Send resources/read with a crafted URI and record the exchange."""
+        payload = {"jsonrpc": "2.0", "method": "resources/read", "params": {"uri": uri}, "id": 1}
+        resp = await client.post(server_url, json=payload, headers=JSON_HEADERS)
+        return exchange_from_response(
+            resp,
+            check_name=self.name,
+            scan_id=scan_id,
+            host=host,
+            method="POST",
+            request_headers=JSON_HEADERS,
+            request_json=payload,
+        )
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        # Several payloads share an attack type (passwd and hosts are both
+        # `path_traversal`), and the discriminator is category x attack type, so
+        # hits are grouped and each discriminator yields ONE verdict naming every
+        # URI. One verdict per payload minted the same observation id twice.
+        groups: dict[str, list[tuple[dict, Exchange]]] = {}
+        for exchange in evidence:
+            pr = self._probe_result(exchange)
+            if pr is None:
+                continue
+            discriminator = self._classify(pr)
+            if discriminator is not None:
+                groups.setdefault(discriminator, []).append((pr, exchange))
+
+        verdicts = [
+            self._verdict_for(discriminator, hits, ctx) for discriminator, hits in groups.items()
+        ]
+
+        if not verdicts:
+            # Only emit the safe verdict when this candidate actually probed
+            # (a resources/read exchange is present), matching the pre-split
+            # per-server fallback.
+            probed = [e for e in evidence if self._uri_of(e) is not None]
+            if probed:
+                verdicts.append(
+                    Verdict(
+                        severity="info",
+                        confidence=0.6,
+                        discriminator="resource-safe",
+                        title="Resource URI validation enforced (traversal attempts rejected)",
+                        description="MCP resource URIs are properly validated against traversal and SSRF.",
+                        evidence=f"Payloads tested: {len(TRAVERSAL_PAYLOADS) + len(SSRF_PAYLOADS) + len(PROTOCOL_PAYLOADS)}",
+                        reasoning=(
+                            "no payload returned file content, a leaked path or an accepted "
+                            "protocol; the absence is bounded by the fixed payload list, so a "
+                            "traversal expressed a way not tried would read as safe"
+                        ),
+                        tier=ctx.tier,
+                        evidence_ids=[e.id for e in probed],
+                    )
+                )
+        return verdicts
+
+    def _classify(self, pr: dict) -> str | None:
+        """The discriminator one payload's reading earns, or None when it earns none."""
+        category = pr["category"]
+        atk = pr["attack_type"]
+        body = pr["body"]
+
+        if category == "traversal":
+            if pr["success"] and pr["has_content"] and self._looks_like_file_content(body):
+                return f"traversal-{atk}"
+            if pr.get("error_leaks_path"):
+                return f"traversal-leak-{atk}"
+            return None
+
+        if category == "ssrf":
+            if pr["success"] and pr["has_content"] and self._looks_like_ssrf_content(body, atk):
+                return f"ssrf-{atk}"
+            return None
+
+        # protocol smuggling
+        if pr["success"] and pr["has_content"]:
+            return f"protocol-{atk}"
+        return None
+
+    def _verdict_for(
+        self, discriminator: str, hits: list[tuple[dict, Exchange]], ctx: GradeContext
+    ) -> Verdict:
+        """One verdict for every payload that earned `discriminator`.
+
+        With a single hit the title, description and evidence read exactly as
+        they did when each payload had a verdict of its own.
+        """
+        uris = [pr["uri"] for pr, _ in hits]
+        shown = ", ".join(uris)
+        ids = [exchange.id for _, exchange in hits]
+        first_body = cap_response(hits[0][0]["body"])
+
+        def evidence(label: str) -> str:
+            return "\n\n".join(
+                f"URI: {pr['uri']}\n{label}: {cap_response(pr['body'])[:300]}" for pr, _ in hits
+            )
+
+        if discriminator.startswith("traversal-leak-"):
+            return Verdict(
+                severity="medium",
+                confidence=0.6,
+                discriminator=discriminator,
+                title="Resource traversal blocked but error leaks file path",
+                description=f"Error message reveals internal path structure for URI: {shown}",
+                evidence=evidence("Error"),
+                reasoning=(
+                    "the read was refused, and the confidence rests on an error string "
+                    "containing an absolute path prefix; a message that merely echoes the "
+                    "attacker-supplied URI would match the same prefixes"
+                ),
+                raw_data={"uri": uris[0], "uris": uris, "body": first_body},
+                tier=ctx.tier,
+                evidence_ids=ids,
+            )
+
+        if discriminator.startswith("traversal-"):
+            return Verdict(
+                severity="critical",
+                confidence=0.7,
+                discriminator=discriminator,
+                title=f"Resource path traversal: {shown} returned file contents",
+                description=f"The MCP resource endpoint returned actual file contents for traversal URI: {shown}",
+                evidence=evidence("Response"),
+                reasoning=(
+                    "the response carries a file-content marker (root:, /bin/bash, a hosts "
+                    "entry), but an error message that quotes the requested path back, or a "
+                    "decoy file, can carry the same marker without a real read"
+                ),
+                raw_data={"uri": uris[0], "uris": uris, "body": first_body},
+                tier=ctx.tier,
+                evidence_ids=ids,
+            )
+
+        if discriminator.startswith("ssrf-"):
+            return Verdict(
+                severity="critical",
+                confidence=0.65,
+                discriminator=discriminator,
+                title=f"SSRF via MCP resource: {shown} returned internal data",
+                description=f"The MCP resource endpoint fetched an internal URL: {shown}",
+                evidence=evidence("Response"),
+                reasoning=(
+                    "the response contains a marker for the targeted internal service, but "
+                    "those keywords (version, metadata, cluster_name) also appear in generic "
+                    "pages, so a fetch that reached something benign can look internal"
+                ),
+                raw_data={"uri": uris[0], "uris": uris, "body": first_body},
+                tier=ctx.tier,
+                evidence_ids=ids,
+            )
+
+        # protocol smuggling
+        schemes = ", ".join(dict.fromkeys(f"{uri.split(':')[0]}://" for uri in uris))
+        return Verdict(
+            severity="high",
+            confidence=0.5,
+            discriminator=discriminator,
+            title=f"Resource URI accepts {schemes} protocol",
+            description=f"The MCP resource endpoint accepted a non-standard protocol URI: {shown}",
+            evidence=evidence("Response"),
+            reasoning=(
+                "the endpoint returned a body for a gopher/dict URI, which is not-rejected, "
+                "not shown to have smuggled a payload — any 200 with content passes this bar, "
+                "and no downstream service is observed acting on it"
+            ),
+            raw_data={"uri": uris[0], "uris": uris},
+            tier=ctx.tier,
+            evidence_ids=ids,
+        )
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    @staticmethod
+    def _uri_of(exchange: Exchange) -> str | None:
+        """The `params.uri` of a resources/read request, or None for anything else."""
         try:
-            data = json.loads(resp.body)
-            result = data.get("result", data)
-            if isinstance(result, dict) and "resources" in result:
-                return result["resources"]
-            if isinstance(result, list):
-                return result
-        except (json.JSONDecodeError, TypeError):
-            pass
-        return []
+            body = json.loads(exchange.request_body or "{}")
+        except json.JSONDecodeError:
+            return None
+        if body.get("method") != "resources/read":
+            return None
+        return body.get("params", {}).get("uri")
 
-    async def _probe_resource(self, client, server_url: str, uri: str) -> dict:
-        """Send resources/read with a crafted URI and analyze response."""
-        resp = await client.post(
-            server_url,
-            json={
-                "jsonrpc": "2.0",
-                "method": "resources/read",
-                "params": {"uri": uri},
-                "id": 1,
-            },
-            headers={"Content-Type": "application/json"},
-        )
+    def _probe_result(self, exchange: Exchange) -> dict | None:
+        """The original `_probe_resource` reading, rebuilt off one recorded exchange.
 
-        probe_result = {
+        `None` for a non-read exchange, an unknown URI, or a transport error —
+        the cases the pre-split code produced no observation for.
+        """
+        uri = self._uri_of(exchange)
+        if uri is None or uri not in _PAYLOAD_INDEX:
+            return None
+        category, attack_type = _PAYLOAD_INDEX[uri]
+
+        pr = {
+            "uri": uri,
+            "category": category,
+            "attack_type": attack_type,
             "success": False,
             "has_content": False,
-            "body": "",
-            "status": resp.status_code if not resp.error else None,
+            "body": exchange.response_body or "",
+            "status": exchange.response_status if not exchange.error else None,
             "error_leaks_path": False,
         }
 
-        if resp.error:
-            return probe_result
+        if exchange.error:
+            return pr
 
-        probe_result["body"] = resp.body or ""
-        probe_result["status"] = resp.status_code
-
-        if resp.status_code == 200 and resp.body:
+        if exchange.response_status == 200 and exchange.response_body:
             try:
-                data = json.loads(resp.body)
-                # Check for JSON-RPC error
+                data = json.loads(exchange.response_body)
                 if isinstance(data, dict) and "error" in data:
                     error_msg = str(data["error"])
-                    # Check if error leaks path info
                     if any(p in error_msg for p in ["/opt/", "/var/", "/home/", "C:\\", "/etc/"]):
-                        probe_result["error_leaks_path"] = True
-                        probe_result["has_content"] = True
-                    return probe_result
+                        pr["error_leaks_path"] = True
+                        pr["has_content"] = True
+                    return pr
 
-                # Check for actual content in result
                 result_data = data.get("result", data)
                 if isinstance(result_data, dict) and "contents" in result_data:
                     contents = result_data["contents"]
                     if contents and isinstance(contents, list) and len(contents) > 0:
-                        probe_result["success"] = True
-                        probe_result["has_content"] = True
-                        # Flatten content for analysis
-                        probe_result["body"] = str(contents[0])
+                        pr["success"] = True
+                        pr["has_content"] = True
+                        pr["body"] = str(contents[0])
                 elif result_data and str(result_data) not in ("{}", "[]", "None", ""):
-                    probe_result["success"] = True
-                    probe_result["has_content"] = True
+                    pr["success"] = True
+                    pr["has_content"] = True
             except (json.JSONDecodeError, TypeError):
-                if len(resp.body) > 10:
-                    probe_result["success"] = True
-                    probe_result["has_content"] = True
+                if len(exchange.response_body) > 10:
+                    pr["success"] = True
+                    pr["has_content"] = True
 
-        return probe_result
+        return pr
 
-    def _looks_like_file_content(self, body: str, attack_type: str) -> bool:
+    def _looks_like_file_content(self, body: str) -> bool:
         """Check if response looks like actual file contents."""
         if not body:
             return False

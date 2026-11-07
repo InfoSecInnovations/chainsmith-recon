@@ -13,7 +13,7 @@ Model Context Protocol server discovery, tool analysis, and security testing.
 
 | Property | Value |
 |----------|-------|
-| Conditions | `services is truthy` |
+| Conditions | `services is truthy` and `services_probed is truthy` |
 | Produces | `mcp_servers` |
 
 Probes well-known MCP paths (/.well-known/mcp, /mcp, /mcp/sse, /v1/mcp, /sse, /events). Detects MCP servers via response headers (mcp-session-id, mcp-server-version), JSON-RPC patterns, and SSE content types. Identifies transport type and server capabilities.
@@ -265,7 +265,7 @@ Tests sampling/createMessage endpoint. Checks if sampling is exposed despite not
 
 | Property | Value |
 |----------|-------|
-| Conditions | `mcp_tools is truthy` AND `mcp_servers is truthy` |
+| Conditions | `mcp_tools is truthy` and `mcp_servers is truthy` |
 | Produces | `mcp_rate_limit_status` |
 
 Sends 10 rapid tool invocations within a 2-second window. Prefers low-risk tools for testing. Intrusive check.
@@ -285,7 +285,7 @@ Sends 10 rapid tool invocations within a 2-second window. Prefers low-risk tools
 
 | Property | Value |
 |----------|-------|
-| Conditions | `mcp_tools is truthy` AND `mcp_servers is truthy` |
+| Conditions | `mcp_tools is truthy` and `mcp_servers is truthy` |
 | Produces | `mcp_invocation_results` |
 
 Generates safe, non-destructive payloads per tool type (exec: echo hostname, file: safe system files, fetch: httpbin.org, search: read-only queries). Invokes via tools/call and analyzes responses. Intrusive check.
@@ -345,7 +345,7 @@ Enumerates resource templates, extracts URI parameters, and injects SQL, path tr
 
 | Property | Value |
 |----------|-------|
-| Conditions | `mcp_tools is truthy` AND `mcp_servers is truthy` |
+| Conditions | `mcp_tools is truthy` and `mcp_servers is truthy` |
 | Produces | `mcp_injection_results` |
 
 Identifies text-returning tools (fetch, browse, search, read). Invokes tool and checks if unfiltered external content reaches the LLM context. Tests if chat endpoint is influenced by tool result content. Intrusive check.

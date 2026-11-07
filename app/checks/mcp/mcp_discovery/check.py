@@ -5,16 +5,37 @@ Discovers Model Context Protocol (MCP) server endpoints on target services.
 Probes well-known paths, checks for MCP-specific headers, and identifies
 transport types and capabilities.
 
+**Probe/grade.** The probe walks the MCP paths in order,
+GET then a JSON-RPC `initialize` POST, records every request it sends, and stops
+at the first path that answers like an MCP server — one candidate per service,
+carrying that path's `target_url` (§0.15). `_discover()` is the one parser both
+halves call (§0.12): the probe reads its `mcp_servers` output off the exchanges
+it just recorded, and `grade()` re-reads the same bytes and places severity.
+Which path won is recovered from the exchanges' own request URLs, never a
+remembered value (§0.16).
+
+**Fixed**: the discriminator embeds the path
+(`mcp-<path>`), an unbounded set, so the contract declares no `observations:`
+map and `grade()` places the tier. Confidence comes from *what* matched: an
+`Mcp-Session-Id` header is a header only an MCP server sets, while the
+`mcp-keywords` fallback — the words "tools"/"resources" in any JSON body — is
+what a generic REST API at `/mcp` looks like too.
+
 References:
   https://modelcontextprotocol.io/specification
   https://spec.modelcontextprotocol.io/specification/basic/transports/
 """
 
+import json
 from typing import Any
+from urllib.parse import urlparse
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+JSON_HEADERS = {"Content-Type": "application/json"}
 
 
 class MCPDiscoveryCheck(ServiceIteratingCheck):
@@ -76,9 +97,12 @@ class MCPDiscoveryCheck(ServiceIteratingCheck):
         "notifications/initialized",
     ]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
-        mcp_servers = []
+        scan_id = context.get("scan_id") or ""
+        exchanges: list[Exchange] = []
 
         cfg = HttpConfig(timeout_seconds=10.0, verify_ssl=False)
 
@@ -89,110 +113,208 @@ class MCPDiscoveryCheck(ServiceIteratingCheck):
 
                     # Try GET first (SSE endpoints, well-known)
                     get_resp = await client.get(url)
-
-                    server_info = self._analyze_response(get_resp, path, "GET")
-
-                    if not server_info:
-                        # Try POST with JSON-RPC initialize
-                        post_resp = await client.post(
-                            url,
-                            json={
-                                "jsonrpc": "2.0",
-                                "method": "initialize",
-                                "params": {
-                                    "protocolVersion": "2024-11-05",
-                                    "capabilities": {},
-                                    "clientInfo": {"name": "chainsmith-recon", "version": "1.0"},
-                                },
-                                "id": 1,
-                            },
-                            headers={"Content-Type": "application/json"},
+                    exchanges.append(
+                        exchange_from_response(
+                            get_resp, check_name=self.name, scan_id=scan_id, host=service.host
                         )
-                        server_info = self._analyze_response(post_resp, path, "POST")
+                    )
 
-                    if server_info:
-                        # Determine transport type
-                        transport = self._detect_transport(path, get_resp)
-                        server_info["transport"] = transport
-                        server_info["service"] = service.to_dict()
-
-                        # Build observation
-                        severity = "medium" if server_info.get("capabilities") else "info"
-
-                        result.observations.append(
-                            build_observation(
+                    if self._server_info_from(exchanges[-1]) is None:
+                        # Try POST with JSON-RPC initialize
+                        payload = {
+                            "jsonrpc": "2.0",
+                            "method": "initialize",
+                            "params": {
+                                "protocolVersion": "2024-11-05",
+                                "capabilities": {},
+                                "clientInfo": {"name": "chainsmith-recon", "version": "1.0"},
+                            },
+                            "id": 1,
+                        }
+                        post_resp = await client.post(url, json=payload, headers=JSON_HEADERS)
+                        exchanges.append(
+                            exchange_from_response(
+                                post_resp,
                                 check_name=self.name,
-                                title=f"MCP server discovered: {path}",
-                                description=self._build_description(server_info),
-                                severity=severity,
-                                evidence=self._build_evidence(server_info),
+                                scan_id=scan_id,
                                 host=service.host,
-                                discriminator=f"mcp-{path.strip('/').replace('/', '-')}",
-                                target=service,
-                                target_url=url,
-                                raw_data=server_info,
+                                method="POST",
+                                request_headers=JSON_HEADERS,
+                                request_json=payload,
                             )
                         )
+                        if self._server_info_from(exchanges[-1]) is None:
+                            continue
 
-                        mcp_servers.append(
-                            {
-                                "url": url,
-                                "path": path,
-                                "transport": transport,
-                                "capabilities": server_info.get("capabilities", []),
-                                "auth_required": server_info.get("auth_required", None),
-                                "server_info": server_info.get("server_info", {}),
-                                "service": service.to_dict(),
-                            }
-                        )
-
-                        # Found MCP on this service, don't probe remaining paths
-                        break
+                    # Found MCP on this service, don't probe remaining paths.
+                    break
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
 
-        if mcp_servers:
-            result.outputs["mcp_servers"] = mcp_servers
+        found = self._discover(exchanges)
+        if found is None:
+            return result
+
+        path, url, server_info, transport, _win, _get = found
+        server_info = dict(server_info)
+        server_info["transport"] = transport
+        server_info["service"] = service.to_dict()
+
+        candidate = self.create_candidate(
+            host=service.host,
+            discriminator=f"mcp-{path.strip('/').replace('/', '-')}",
+            target=service,
+            target_url=url,
+        )
+        for exchange in exchanges:
+            candidate.attach(exchange)
+        result.candidates.append(candidate)
+
+        result.outputs["mcp_servers"] = [
+            {
+                "url": url,
+                "path": path,
+                "transport": transport,
+                "capabilities": server_info.get("capabilities", []),
+                "auth_required": server_info.get("auth_required"),
+                "server_info": server_info.get("server_info", {}),
+                "service": service.to_dict(),
+            }
+        ]
 
         return result
 
-    def _analyze_response(self, resp, path: str, method: str) -> dict | None:
-        """Analyze HTTP response for MCP server indicators."""
-        if resp.error or resp.status_code in (404, 405, 502, 503):
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        found = self._discover(list(evidence))
+        if found is None:
+            return []
+        path, url, server_info, transport, win, get_ex = found
+        server_info = dict(server_info)
+        server_info["transport"] = transport
+
+        capabilities = server_info.get("capabilities")
+        severity = "medium" if capabilities else "info"
+        confidence, why = self._confidence(server_info)
+
+        evidence_ids = [win.id]
+        if get_ex is not None and get_ex.id != win.id:
+            evidence_ids.append(get_ex.id)
+
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                discriminator=f"mcp-{path.strip('/').replace('/', '-')}",
+                title=f"MCP server discovered: {path}",
+                description=self._build_description(server_info),
+                evidence=self._build_evidence(server_info),
+                reasoning=why,
+                signals={
+                    "indicators": server_info.get("indicators", []),
+                    "transport": transport,
+                    "auth_required": server_info.get("auth_required"),
+                },
+                references=self.references,
+                raw_data=server_info,
+                tier=ctx.tier,
+                evidence_ids=evidence_ids,
+            )
+        ]
+
+    @staticmethod
+    def _confidence(server_info: dict) -> tuple[float, str]:
+        indicators = server_info.get("indicators", [])
+        if server_info.get("auth_required") and len(indicators) == 1:
+            return 0.55, (
+                "the only signal is a 401, so an MCP server is inferred from a path that "
+                "demands credentials rather than shown; a generic protected endpoint answers "
+                "the same"
+            )
+        if any(i.startswith("header:") for i in indicators):
+            return 0.9, (
+                "an Mcp-* response header is set, which a generic HTTP service has no reason "
+                "to send; nothing was invoked, so capabilities are the server's own claim"
+            )
+        if "jsonrpc-response" in indicators or "sse-transport" in indicators:
+            return 0.75, (
+                "a JSON-RPC result or an event-stream content type matched — strong for MCP "
+                "but shared with any JSON-RPC or SSE service"
+            )
+        if any(i.startswith("body:") for i in indicators):
+            return 0.6, (
+                "an MCP method string appeared in the body; a documentation page or a proxy "
+                "echoing the request carries the same token"
+            )
+        if "mcp-keywords" in indicators:
+            return 0.4, (
+                "only the fallback keywords (tools/resources/prompts in a JSON body) matched, "
+                "which is what a generic REST API living at /mcp looks like"
+            )
+        return 0.5, "matched an MCP indicator with no stronger corroboration"
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _discover(
+        self, exchanges: list[Exchange]
+    ) -> tuple[str, str, dict, str, Exchange, Exchange | None] | None:
+        """The first path that answers like an MCP server, in recorded order.
+
+        Returns (path, url, server_info, transport, winning_exchange,
+        get_exchange). The GET exchange for the winning path carries the
+        content-type transport detection reads, even when a POST is what matched.
+        """
+        get_by_path: dict[str, Exchange] = {}
+        for exchange in exchanges:
+            if exchange.request_method == "GET":
+                get_by_path.setdefault(urlparse(exchange.request_url or "").path, exchange)
+
+        for exchange in exchanges:
+            info = self._server_info_from(exchange)
+            if info is None:
+                continue
+            path = urlparse(exchange.request_url or "").path
+            get_ex = get_by_path.get(path)
+            transport = self._detect_transport(path, get_ex)
+            return path, exchange.request_url or "", info, transport, exchange, get_ex
+        return None
+
+    def _server_info_from(self, exchange: Exchange) -> dict | None:
+        """Analyze one recorded exchange for MCP server indicators."""
+        status = exchange.response_status
+        if exchange.error or status in (404, 405, 502, 503):
             return None
 
-        server_info = {}
-        indicators = []
+        method = exchange.request_method or "GET"
+        path = urlparse(exchange.request_url or "").path
+        headers = exchange.response_headers or {}
+        body = exchange.response_body or ""
 
-        # Check for MCP headers
-        resp_headers_lower = {k.lower(): v for k, v in resp.headers.items()}
+        server_info: dict = {}
+        indicators: list[str] = []
+
+        resp_headers_lower = {k.lower(): v for k, v in headers.items()}
         for header in self.MCP_HEADERS:
             if header in resp_headers_lower:
                 indicators.append(f"header:{header}")
                 server_info["mcp_header"] = {header: resp_headers_lower[header]}
 
-        # Check response body for MCP patterns
-        body = resp.body or ""
         for pattern in self.MCP_BODY_PATTERNS:
             if pattern.lower() in body.lower():
                 indicators.append(f"body:{pattern}")
 
-        # Check for SSE content type (common for MCP streaming)
         content_type = resp_headers_lower.get("content-type", "")
         if "text/event-stream" in content_type:
             indicators.append("sse-transport")
             server_info["transport_hint"] = "sse"
 
-        # Check for JSON-RPC response structure
         if '"jsonrpc"' in body and '"result"' in body:
             indicators.append("jsonrpc-response")
             server_info["protocol"] = "jsonrpc"
 
-            # Try to extract capabilities from initialize response
             try:
-                import json
-
                 data = json.loads(body)
                 if "result" in data:
                     result_data = data["result"]
@@ -206,37 +328,39 @@ class MCPDiscoveryCheck(ServiceIteratingCheck):
             except (json.JSONDecodeError, KeyError, TypeError):
                 pass
 
-        # Check for auth requirement
-        if resp.status_code == 401:
+        if status == 401:
             server_info["auth_required"] = True
             indicators.append("auth-required")
-        elif resp.status_code == 200:
+        elif status == 200:
             server_info["auth_required"] = False
 
-        # Need at least one strong indicator
         if not indicators:
-            # Check for generic API response that might be MCP
-            if resp.status_code == 200 and "application/json" in content_type:
+            if status == 200 and "application/json" in content_type:
                 if any(kw in body.lower() for kw in ["tools", "resources", "prompts"]):
                     indicators.append("mcp-keywords")
 
         if indicators:
             server_info["indicators"] = indicators
-            server_info["status_code"] = resp.status_code
+            server_info["status_code"] = status
             server_info["path"] = path
             server_info["method"] = method
             return server_info
 
         return None
 
-    def _detect_transport(self, path: str, resp) -> str:
-        """Detect MCP transport type from path and response."""
+    def _detect_transport(self, path: str, get_exchange: Exchange | None) -> str:
+        """Detect MCP transport type from path and the GET response headers."""
         path_lower = path.lower()
 
         if "sse" in path_lower or "/events" in path_lower:
             return "sse"
 
-        content_type = resp.headers.get("content-type", "").lower() if resp.headers else ""
+        headers = (get_exchange.response_headers if get_exchange else None) or {}
+        content_type = ""
+        for k, v in headers.items():
+            if k.lower() == "content-type":
+                content_type = v.lower()
+                break
         if "text/event-stream" in content_type:
             return "sse"
 

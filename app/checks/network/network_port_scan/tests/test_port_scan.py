@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_port_profiles.py."""
+"""Tests for network_port_scan."""
 
 from unittest.mock import MagicMock, patch
 
@@ -90,3 +90,80 @@ class TestPortScanCheckResolution:
         assert 443 in ports
         assert 22 not in ports
         assert 8080 not in ports
+
+
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
+
+
+def _open_connection(open_ports: set[int]):
+    """A fake `asyncio.open_connection` where only `open_ports` accept."""
+
+    async def _connect(host, port):
+        if port not in open_ports:
+            raise ConnectionRefusedError(f"{host}:{port} refused")
+        writer = MagicMock()
+        writer.close = MagicMock()
+
+        async def _wait_closed():
+            return None
+
+        writer.wait_closed = _wait_closed
+        return MagicMock(), writer
+
+    return _connect
+
+
+class TestPortScanCheckProbeAndGrade:
+    """The probe records open ports; the grader states that they are open."""
+
+    @patch("app.checks.network.network_port_scan.check.get_config")
+    async def test_open_port_is_graded(self, mock_get_config):
+        from app.checks.network.network_port_scan import PortScanCheck
+
+        cfg = MagicMock()
+        cfg.scope.port_profile = "lab"
+        cfg.scope.in_scope_ports = []
+        mock_get_config.return_value = cfg
+
+        check = PortScanCheck(ports=[80, 9999])
+        with patch("asyncio.open_connection", side_effect=_open_connection({80})):
+            result = await probe_and_grade(check, {"target_hosts": ["10.0.0.1"]})
+
+        assert len(result.services) == 1
+        assert result.services[0].port == 80
+
+        assert len(result.observations) == 1
+        observation = result.observations[0]
+        assert observation.title == "Open port: 10.0.0.1:80"
+        assert observation.severity == "info"
+        assert observation.confidence == 0.99
+        assert observation.grading_state == "graded"
+        # The discriminator keeps two open ports on one host distinct.
+        assert observation.id == "network_port_scan-10.0.0.1-port-80"
+
+    @patch("app.checks.network.network_port_scan.check.get_config")
+    async def test_closed_ports_record_nothing(self, mock_get_config):
+        from app.checks.network.network_port_scan import PortScanCheck
+
+        cfg = MagicMock()
+        cfg.scope.port_profile = "lab"
+        cfg.scope.in_scope_ports = []
+        mock_get_config.return_value = cfg
+
+        check = PortScanCheck(ports=[80, 443])
+        with patch("asyncio.open_connection", side_effect=_open_connection(set())):
+            result = await probe_and_grade(check, {"target_hosts": ["10.0.0.1"]})
+
+        assert result.services == []
+        assert result.observations == []

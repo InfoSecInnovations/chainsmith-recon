@@ -10,6 +10,25 @@ Attack vectors:
 - Path traversal in cache key -> filename mapping
 - Direct cache backend access (Redis without auth)
 
+**Probe/grade.** The probe runs three independent tests —
+direct Redis access, serialization-format fingerprinting, and cache-key path
+traversal — recording every request and emitting one candidate per test that
+finds something. `grade()` never sees the discriminator (§0.16), so it recovers
+which test an exchange belongs to from the recorded request itself: a GET to a
+Redis path, an `octet-stream` POST, or a `?key=` traversal GET. Each test's
+reading is one parser both halves call (§0.12).
+
+The Redis verdict reads `cache_infrastructure` from `GradeContext.context`
+(§0.15) — the same upstream output that let the original escalate a
+no-auth backend to `critical` when Redis was already fingerprinted.
+
+**Fixed**: the `serial-format-<path>` discriminator embeds
+the endpoint path (an unbounded set), so the contract carries no map and
+`grade()` places the severity (the `ai_model_info_check` pattern). Confidence is
+where the split pays: a pickle/type-confusion verdict rests on an *error string*
+in a response body, which a WAF or a generic 500 page can carry without the
+cache using that format at all.
+
 References:
   https://portswigger.net/web-security/deserialization
   OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
@@ -17,10 +36,14 @@ References:
 """
 
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+OCTET_HEADERS = {"Content-Type": "application/octet-stream"}
 
 # Redis detection paths
 REDIS_PATHS = [
@@ -60,6 +83,16 @@ PATH_TRAVERSAL_KEYS = [
     "%2e%2e%2f%2e%2e%2fetc%2fpasswd",
 ]
 
+TRAVERSAL_PATHS = ["/cache/get", "/cache/entry", "/cache/read"]
+
+# Malformed bodies sent to trigger serialization errors. latin-1 keeps the
+# pickle header's bytes intact through the recorded request body.
+MALFORMED_PAYLOADS = [
+    b"\x80\x04\x95",  # Pickle protocol 4 header
+    b'{"__class__": "os.system", "args": ["id"]}',
+    b"not-valid-json-or-pickle",
+]
+
 
 class SerializationCheck(ServiceIteratingCheck):
     """
@@ -86,8 +119,11 @@ class SerializationCheck(ServiceIteratingCheck):
     ]
     techniques = ["deserialization detection", "backend probing", "path traversal"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
@@ -97,86 +133,56 @@ class SerializationCheck(ServiceIteratingCheck):
         if not service_endpoints:
             return result
 
-        cache_infra = context.get("cache_infrastructure", [])
         cfg = HttpConfig(timeout_seconds=10.0, verify_ssl=False)
         serial_results = []
 
         try:
             async with AsyncHttpClient(cfg) as client:
-                # Test 1: Direct Redis access
-                redis_result = await self._check_redis_access(client, service)
+                # Test 1: Direct Redis access.
+                redis_exchanges = await self._probe_redis(client, service, scan_id)
+                redis_result = self._check_redis_access(redis_exchanges)
                 if redis_result:
                     serial_results.append(redis_result)
-                    severity = "medium" if redis_result.get("accessible") else "info"
-                    if redis_result.get("no_auth"):
-                        severity = "critical" if "redis_cache" in cache_infra else "high"
-
-                    result.observations.append(
-                        build_observation(
-                            check_name=self.name,
-                            title=self._build_redis_title(redis_result),
-                            description=self._build_redis_description(redis_result),
-                            severity=severity,
-                            evidence=self._build_evidence(redis_result),
-                            host=service.host,
-                            discriminator="serial-redis",
-                            target=service,
-                            raw_data=redis_result,
-                            references=self.references,
-                        )
+                    candidate = self.create_candidate(
+                        host=service.host, discriminator="serial-redis", target=service
                     )
+                    for e in redis_exchanges:
+                        candidate.attach(e)
+                    result.candidates.append(candidate)
 
-                # Test 2: Pickle/serialization indicators in error responses
+                # Test 2: serialization-format fingerprinting, per endpoint.
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
-
-                    serial_info = await self._check_serialization_format(client, url, service)
+                    fmt_exchanges = await self._probe_serialization(client, url, scan_id, service)
+                    serial_info = self._check_serialization_format(fmt_exchanges, url)
                     if serial_info:
                         serial_results.append(serial_info)
-
-                        severity = self._determine_serialization_severity(serial_info)
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title=self._build_serial_title(serial_info),
-                                description=self._build_serial_description(serial_info),
-                                severity=severity,
-                                evidence=self._build_evidence(serial_info),
-                                host=service.host,
-                                discriminator=f"serial-format-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                                target=service,
-                                target_url=url,
-                                raw_data=serial_info,
-                                references=self.references,
-                            )
+                        candidate = self.create_candidate(
+                            host=service.host,
+                            discriminator=f"serial-format-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
+                            target=service,
+                            target_url=url,
                         )
+                        for e in fmt_exchanges:
+                            candidate.attach(e)
+                        result.candidates.append(candidate)
 
-                # Test 3: Path traversal in cache keys
+                # Test 3: path traversal in cache keys, per endpoint.
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
-
-                    traversal_result = await self._check_path_traversal(client, url, service)
+                    trav_exchanges = await self._probe_traversal(client, service, scan_id)
+                    traversal_result = self._check_path_traversal(trav_exchanges)
                     if traversal_result and traversal_result.get("traversal_detected"):
                         serial_results.append(traversal_result)
-
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title="Path traversal in cache key mapping",
-                                description=(
-                                    "Cache key-to-filename mapping is vulnerable to path traversal. "
-                                    "An attacker can read or write arbitrary files via crafted cache keys."
-                                ),
-                                severity="high",
-                                evidence=self._build_evidence(traversal_result),
-                                host=service.host,
-                                discriminator="serial-path-traversal",
-                                target=service,
-                                target_url=url,
-                                raw_data=traversal_result,
-                                references=self.references,
-                            )
+                        candidate = self.create_candidate(
+                            host=service.host,
+                            discriminator="serial-path-traversal",
+                            target=service,
+                            target_url=url,
                         )
+                        for e in trav_exchanges:
+                            candidate.attach(e)
+                        result.candidates.append(candidate)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -186,124 +192,314 @@ class SerializationCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _check_redis_access(self, client: AsyncHttpClient, service: Service) -> dict | None:
-        """Check for direct Redis access."""
+    async def _probe_redis(
+        self, client: AsyncHttpClient, service: Service, scan_id: str
+    ) -> list[Exchange]:
+        exchanges = []
         for path in REDIS_PATHS:
             url = service.with_path(path)
             try:
                 resp = await client.get(url)
-
-                if resp.error or resp.status_code == 404:
-                    continue
-
-                body_lower = (resp.body or "").lower()
-                is_redis = (
-                    "redis" in body_lower
-                    or "redis_version" in body_lower
-                    or "+ok" in body_lower
-                    or "connected_clients" in body_lower
-                )
-
-                if is_redis or resp.status_code == 200:
-                    return {
-                        "test": "redis_access",
-                        "path": path,
-                        "url": url,
-                        "accessible": resp.status_code in (200, 201),
-                        "no_auth": resp.status_code == 200 and is_redis,
-                        "status_code": resp.status_code,
-                        "redis_indicators": is_redis,
-                        "response_preview": (resp.body or "")[:200],
-                    }
-
             except Exception:
                 continue
+            exchange = exchange_from_response(
+                resp, check_name=self.name, scan_id=scan_id, host=service.host, method="GET"
+            )
+            exchanges.append(exchange)
+            # The original stopped at the first path that looked like Redis or 200.
+            if not exchange.error and (exchange.response_status or 0) != 404:
+                body_lower = (exchange.response_body or "").lower()
+                if self._is_redis(body_lower) or exchange.response_status == 200:
+                    break
+        return exchanges
 
-        return None
+    async def _probe_serialization(
+        self, client: AsyncHttpClient, url: str, scan_id: str, service: Service
+    ) -> list[Exchange]:
+        exchanges = []
+        for payload in MALFORMED_PAYLOADS:
+            try:
+                resp = await client.post(url, headers=OCTET_HEADERS, data=payload)
+            except Exception:
+                continue
+            exchanges.append(
+                exchange_from_response(
+                    resp,
+                    check_name=self.name,
+                    scan_id=scan_id,
+                    host=service.host,
+                    method="POST",
+                    request_headers=OCTET_HEADERS,
+                    request_body=payload.decode("latin-1"),
+                )
+            )
+        return exchanges
 
-    async def _check_serialization_format(
-        self, client: AsyncHttpClient, url: str, service: Service
-    ) -> dict | None:
-        """Check for serialization format indicators in error responses."""
-        # Send malformed data to trigger serialization errors
-        malformed_payloads = [
-            b"\x80\x04\x95",  # Pickle protocol 4 header
-            b'{"__class__": "os.system", "args": ["id"]}',
-            b"not-valid-json-or-pickle",
+    async def _probe_traversal(
+        self, client: AsyncHttpClient, service: Service, scan_id: str
+    ) -> list[Exchange]:
+        exchanges = []
+        for key in PATH_TRAVERSAL_KEYS:
+            for cache_path in TRAVERSAL_PATHS:
+                test_url = service.with_path(f"{cache_path}?key={key}")
+                try:
+                    resp = await client.get(test_url)
+                except Exception:
+                    continue
+                exchanges.append(
+                    exchange_from_response(
+                        resp, check_name=self.name, scan_id=scan_id, host=service.host, method="GET"
+                    )
+                )
+        return exchanges
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        exchanges = list(evidence)
+        ids = evidence.ids()
+        cache_infra = (ctx.context or {}).get("cache_infrastructure", [])
+
+        # Recover which test these exchanges belong to from the requests
+        # themselves — grade() never sees the discriminator (§0.16).
+        redis_exchanges = [e for e in exchanges if self._is_redis_probe(e)]
+        if redis_exchanges:
+            return self._grade_redis(redis_exchanges, cache_infra, ctx, ids)
+
+        traversal_exchanges = [e for e in exchanges if self._is_traversal_probe(e)]
+        if traversal_exchanges:
+            return self._grade_traversal(traversal_exchanges, ctx, ids)
+
+        fmt_exchanges = [e for e in exchanges if self._is_format_probe(e)]
+        if fmt_exchanges:
+            return self._grade_format(fmt_exchanges, ctx, ids)
+
+        return []
+
+    def _grade_redis(
+        self, exchanges: list[Exchange], cache_infra: list, ctx: GradeContext, ids: list[str]
+    ) -> list[Verdict]:
+        redis_result = self._check_redis_access(exchanges)
+        if not redis_result:
+            return []
+
+        severity = "medium" if redis_result.get("accessible") else "info"
+        if redis_result.get("no_auth"):
+            severity = "critical" if "redis_cache" in cache_infra else "high"
+
+        if redis_result.get("no_auth"):
+            confidence, why = (
+                0.7,
+                (
+                    "the response carried Redis INFO markers and returned 200 without auth — a "
+                    "strong signal, softened only because an unauthenticated 200 can be a login or "
+                    "status page echoing the word rather than the backend itself"
+                ),
+            )
+        else:
+            confidence, why = (
+                0.45,
+                (
+                    "a Redis-shaped path answered, but without the no-auth INFO markers this is a "
+                    "route existing, not a reachable backend"
+                ),
+            )
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                discriminator="serial-redis",
+                title=self._build_redis_title(redis_result),
+                description=self._build_redis_description(redis_result),
+                evidence=self._build_evidence(redis_result),
+                reasoning=why,
+                signals={
+                    "no_auth": redis_result.get("no_auth", False),
+                    "accessible": redis_result.get("accessible", False),
+                    "redis_cache_fingerprinted": "redis_cache" in cache_infra,
+                },
+                references=self.references,
+                raw_data=redis_result,
+                tier=ctx.tier,
+                evidence_ids=ids,
+            )
         ]
 
-        indicators_found = []
+    def _grade_format(
+        self, exchanges: list[Exchange], ctx: GradeContext, ids: list[str]
+    ) -> list[Verdict]:
+        url = exchanges[0].request_url
+        serial_info = self._check_serialization_format(exchanges, url)
+        if not serial_info:
+            return []
 
-        for payload in malformed_payloads:
-            try:
-                resp = await client.post(
-                    url,
-                    headers={"Content-Type": "application/octet-stream"},
-                    data=payload,
-                )
+        severity = self._determine_serialization_severity(serial_info)
+        confidence, why = self._format_confidence(serial_info)
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                discriminator=None,
+                title=self._build_serial_title(serial_info),
+                description=self._build_serial_description(serial_info),
+                evidence=self._build_evidence(serial_info),
+                reasoning=why,
+                signals={
+                    "has_pickle": serial_info.get("has_pickle", False),
+                    "has_type_confusion": serial_info.get("has_type_confusion", False),
+                    "indicators": serial_info.get("indicators", []),
+                },
+                references=self.references,
+                raw_data=serial_info,
+                tier=ctx.tier,
+                evidence_ids=ids,
+            )
+        ]
 
-                if resp.error:
-                    continue
+    def _grade_traversal(
+        self, exchanges: list[Exchange], ctx: GradeContext, ids: list[str]
+    ) -> list[Verdict]:
+        traversal_result = self._check_path_traversal(exchanges)
+        if not traversal_result or not traversal_result.get("traversal_detected"):
+            return []
+        return [
+            Verdict(
+                severity="high",
+                confidence=0.65,
+                discriminator="serial-path-traversal",
+                title="Path traversal in cache key mapping",
+                description=(
+                    "Cache key-to-filename mapping is vulnerable to path traversal. "
+                    "An attacker can read or write arbitrary files via crafted cache keys."
+                ),
+                evidence=self._build_evidence(traversal_result),
+                reasoning=(
+                    "a traversal key returned content matching a system-file signature "
+                    "(`root:` / `[extensions]` / `passwd`) — but those substrings can appear in "
+                    "an error page or an echoed request, so file disclosure is strongly "
+                    "suggested rather than confirmed byte-for-byte"
+                ),
+                signals={"indicators": traversal_result.get("indicators", [])},
+                references=self.references,
+                raw_data=traversal_result,
+                tier=ctx.tier,
+                evidence_ids=ids,
+            )
+        ]
 
-                body_lower = (resp.body or "").lower()
+    @staticmethod
+    def _format_confidence(serial_info: dict) -> tuple[float, str]:
+        if serial_info.get("has_pickle"):
+            return 0.5, (
+                "an error body mentioned pickle/marshal after a malformed POST — evidence the "
+                "format is in use, but the string can come from a generic 500 or a WAF, and no "
+                "actual deserialization of attacker bytes was observed"
+            )
+        if serial_info.get("has_type_confusion"):
+            return 0.4, (
+                "type-hint markers (`__class__`, `$type`) appeared in the response, which is "
+                "weaker still — those tokens are echoed straight from the payload this probe sent"
+            )
+        return (
+            0.35,
+            "serialization indicators are substring matches in an error body, easily incidental",
+        )
 
-                # Check for pickle indicators
-                for indicator in PICKLE_INDICATORS:
-                    if indicator in body_lower:
-                        indicators_found.append(f"pickle:{indicator}")
+    # ── The parsers both halves share ────────────────────────────────
 
-                # Check for type confusion indicators
-                for indicator in TYPE_CONFUSION_INDICATORS:
-                    if indicator in body_lower:
-                        indicators_found.append(f"type_confusion:{indicator}")
+    @staticmethod
+    def _is_redis(body_lower: str) -> bool:
+        return (
+            "redis" in body_lower
+            or "redis_version" in body_lower
+            or "+ok" in body_lower
+            or "connected_clients" in body_lower
+        )
 
-            except Exception:
+    @staticmethod
+    def _path_of(exchange: Exchange) -> str:
+        return urlparse(exchange.request_url or "").path
+
+    def _is_redis_probe(self, exchange: Exchange) -> bool:
+        return exchange.request_method == "GET" and self._path_of(exchange) in REDIS_PATHS
+
+    def _is_traversal_probe(self, exchange: Exchange) -> bool:
+        if exchange.request_method != "GET":
+            return False
+        parsed = urlparse(exchange.request_url or "")
+        return parsed.path in TRAVERSAL_PATHS and "key" in parse_qs(parsed.query)
+
+    @staticmethod
+    def _is_format_probe(exchange: Exchange) -> bool:
+        headers = {k.lower(): v for k, v in (exchange.request_headers or {}).items()}
+        return (
+            exchange.request_method == "POST"
+            and headers.get("content-type") == "application/octet-stream"
+        )
+
+    def _check_redis_access(self, exchanges: list[Exchange]) -> dict | None:
+        """Rebuild the Redis reading off the recorded GETs to REDIS_PATHS."""
+        for exchange in exchanges:
+            if exchange.error or exchange.response_status == 404:
                 continue
+            body_lower = (exchange.response_body or "").lower()
+            is_redis = self._is_redis(body_lower)
+            if is_redis or exchange.response_status == 200:
+                return {
+                    "test": "redis_access",
+                    "path": self._path_of(exchange),
+                    "url": exchange.request_url,
+                    "accessible": exchange.response_status in (200, 201),
+                    "no_auth": exchange.response_status == 200 and is_redis,
+                    "status_code": exchange.response_status,
+                    "redis_indicators": is_redis,
+                    "response_preview": (exchange.response_body or "")[:200],
+                }
+        return None
+
+    def _check_serialization_format(self, exchanges: list[Exchange], url: str) -> dict | None:
+        """Rebuild the serialization-format reading off the recorded octet POSTs."""
+        indicators_found = []
+        for exchange in exchanges:
+            if exchange.error:
+                continue
+            body_lower = (exchange.response_body or "").lower()
+            for indicator in PICKLE_INDICATORS:
+                if indicator in body_lower:
+                    indicators_found.append(f"pickle:{indicator}")
+            for indicator in TYPE_CONFUSION_INDICATORS:
+                if indicator in body_lower:
+                    indicators_found.append(f"type_confusion:{indicator}")
 
         if not indicators_found:
             return None
-
-        has_pickle = any("pickle" in i for i in indicators_found)
-        has_type_confusion = any("type_confusion" in i for i in indicators_found)
 
         return {
             "test": "serialization_format",
             "url": url,
             "indicators": indicators_found,
-            "has_pickle": has_pickle,
-            "has_type_confusion": has_type_confusion,
+            "has_pickle": any("pickle" in i for i in indicators_found),
+            "has_type_confusion": any("type_confusion" in i for i in indicators_found),
         }
 
-    async def _check_path_traversal(
-        self, client: AsyncHttpClient, url: str, service: Service
-    ) -> dict | None:
-        """Check for path traversal in cache key mapping."""
+    def _check_path_traversal(self, exchanges: list[Exchange]) -> dict | None:
+        """Rebuild the traversal reading off the recorded key-param GETs."""
         traversal_indicators = []
-
-        for key in PATH_TRAVERSAL_KEYS:
-            try:
-                # Try as cache key in various endpoints
-                for cache_path in ["/cache/get", "/cache/entry", "/cache/read"]:
-                    test_url = service.with_path(f"{cache_path}?key={key}")
-                    resp = await client.get(test_url)
-
-                    if resp.error or resp.status_code in (404, 405):
-                        continue
-
-                    body = resp.body or ""
-                    # Check for file content indicators
-                    if "root:" in body or "[extensions]" in body or "passwd" in body.lower():
-                        traversal_indicators.append(
-                            {
-                                "key": key,
-                                "path": cache_path,
-                                "status_code": resp.status_code,
-                                "response_preview": body[:200],
-                            }
-                        )
-
-            except Exception:
+        for exchange in exchanges:
+            if exchange.error or exchange.response_status in (404, 405):
                 continue
+            body = exchange.response_body or ""
+            if "root:" in body or "[extensions]" in body or "passwd" in body.lower():
+                parsed = urlparse(exchange.request_url or "")
+                key = (parse_qs(parsed.query).get("key") or [""])[0]
+                traversal_indicators.append(
+                    {
+                        "key": key,
+                        "path": parsed.path,
+                        "status_code": exchange.response_status,
+                        "response_preview": body[:200],
+                    }
+                )
 
         if not traversal_indicators:
             return None

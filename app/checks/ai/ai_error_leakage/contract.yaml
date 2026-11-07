@@ -26,3 +26,28 @@ references:
 - CWE-209
 reason: Error messages often reveal internal paths, tool names, and configuration
   details
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: what an error body
+  # discloses is read off the recorded responses, so no grader above the rule
+  # tier is ever called. `default` is the pre-grade value a candidate carries
+  # (§6.1) and the LOWEST of the four judgements, so a deferred grade cannot
+  # present an ungraded candidate as a `medium`.
+  #
+  # Four independent judgements over one candidate (the header-pilot shape), so
+  # the map has one entry per discriminator and grade() emits any subset.
+  #
+  # Confidence separates four signals of very different strength. A stack-trace
+  # marker is specific (0.85 — `traceback`/`exception in` are not in a JSON
+  # envelope). A `.py` path is an unambiguous regex shape (0.9). Leaked tool
+  # names are 0.7 — the quoted-identifier regex also catches ordinary snake_case
+  # JSON keys. Config leakage is the weakest (0.3-0.5, scaled by count): it
+  # substring-matches six ordinary parameter words, and "unknown model" or
+  # "temperature must be <= 2" is an endpoint ECHOING the client's request, not
+  # leaking its own configuration.
+  default: low
+  observations:
+    stack-trace: medium
+    internal-paths: low
+    tools-leaked: medium
+    config-leaked: low

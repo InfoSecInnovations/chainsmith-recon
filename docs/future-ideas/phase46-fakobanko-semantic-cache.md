@@ -1,4 +1,11 @@
-# Phase 46: Fakobanko Semantic Cache Service
+# Phase 46 — Fakobanko Semantic Cache Service
+
+**Status:** Ready
+**Track:** Range / scenarios
+**Depends on:** nothing
+**Note:** the SEC536 lab edition already built a semantic cache in `ml_serving.py`. Porting it ([`lab-backports.md`](lab-backports.md) item 2d) may satisfy most of this doc.
+**Size:** S
+**Last reviewed:** 2026-10-11
 
 ## Overview
 

@@ -1,9 +1,11 @@
 # Phase 54 — Swarm Enhancements
 
-**Status:** Design / backlog
-**Depends on:** concurrent-scans-swarm.md (coordinator session-scoping), phase51-scan-state-streaming.md (in-process event bus)
-**Motivator:** Collect deferred swarm work that becomes relevant once swarm
-moves beyond in-process execution or scales past its current topology.
+**Status:** Backlog (umbrella)
+**Track:** Swarm
+**Depends on:** [`concurrent-scans.md`](concurrent-scans.md) §2.3 (per-scan coordinators). The in-process event bus from phase 51 has landed.
+**Motivator:** collect deferred swarm work that becomes relevant once the swarm moves beyond in-process execution or scales past its current topology.
+**Size:** M per item
+**Last reviewed:** 2026-10-11
 
 This phase is an umbrella: each section below is a candidate sub-phase. Pick
 off individually based on operator demand. Nothing here is blocking the

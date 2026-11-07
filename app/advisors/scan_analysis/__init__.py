@@ -1,4 +1,4 @@
-"""Scan-analysis advisor component (Phase 56 folder shape, 56.11).
+"""Scan-analysis advisor component.
 
 Re-exports the public surface so existing imports
 (`from app.advisors.scan_analysis import ScanAnalysisAdvisor`) and the lazy

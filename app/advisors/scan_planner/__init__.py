@@ -1,4 +1,4 @@
-"""Scan-planner advisor component (Phase 56 folder shape, 56.11).
+"""Scan-planner advisor component.
 
 Re-exports the public surface so existing imports
 (`from app.advisors.scan_planner import ScanPlannerAdvisor`) and the lazy

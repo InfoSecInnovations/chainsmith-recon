@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_security_exposure.py."""
+"""Tests for web_webdav."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -64,6 +64,20 @@ def mock_client_multi(response_map=None, default=None):
     return mock
 
 
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
+
+
 def _mock_preferences(intrusive_web=False):
     """Return a mock get_preferences function with the given intrusive_web setting."""
     prefs = MagicMock()
@@ -120,7 +134,7 @@ class TestWebDAVCheck:
     async def test_skips_when_intrusive_disabled(self, service):
         check = WebDAVCheck()
         with patch("app.preferences.get_preferences", _mock_preferences(intrusive_web=False)):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         assert len(result.observations) == 0
         assert result.outputs.get("webdav_skipped") is True
 
@@ -139,7 +153,7 @@ class TestWebDAVCheck:
                 return_value=mock_client_multi(responses),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         propfind_obs = [f for f in result.observations if "PROPFIND" in f.title]
         assert len(propfind_obs) == 1
@@ -163,7 +177,7 @@ class TestWebDAVCheck:
                 return_value=mock_client_multi(responses),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         critical = [f for f in result.observations if f.severity == "critical"]
         assert len(critical) == 1
@@ -186,7 +200,7 @@ class TestWebDAVCheck:
                 return_value=mock_client_multi(responses),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         medium = [f for f in result.observations if f.severity == "medium"]
         assert len(medium) == 1
@@ -209,6 +223,6 @@ class TestWebDAVCheck:
                 return_value=mock_client_multi(responses),
             ),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
 
         assert len(result.observations) == 0

@@ -29,3 +29,13 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Cache exhaustion enables targeted eviction of legitimate entries and potential
   memory exhaustion on unbounded caches
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`. One candidate per endpoint and the
+  # discriminator embeds the path (`quota-<path>`), an unbounded set, so there
+  # is no `observations:` map — `grade()` places `medium` (eviction or
+  # unbounded) or `low` (limited); `low` is the floor.
+  default: low

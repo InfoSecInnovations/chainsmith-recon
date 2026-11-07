@@ -29,3 +29,30 @@ references:
 reason: TLS certificates reveal additional hostnames via SANs that subdomain enumeration
   may have missed (internal names, staging environments). Weak TLS configurations
   and expired/self-signed certificates are security observations in themselves.
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Up to five handshakes per endpoint — one
+  # for the certificate, one per deprecated protocol version, one modern — recorded
+  # separately and graded as *one* candidate, because the judgements cross them: "TLS
+  # 1.0 supported" is read off a protocol probe and describes the endpoint the
+  # certificate came from.
+  #
+  # **`expired` and `expiring` are the only judgements in the suite that are not
+  # reproducible**, and cannot be: they compare the certificate against *now*, so
+  # re-grading the same stored handshake next month honestly yields a different
+  # verdict. `grade()` puts the grading date in its reasoning rather than hiding the
+  # dependency. Everything else here is the certificate quoted back.
+  #
+  # `sans` carries 0.85 rather than 0.99 because "not yet known" overclaims: the
+  # comparison is against the endpoint's own host and nothing else, so a name the
+  # enumeration already found still counts as new. The discriminators carry the port
+  # (`cert-443`, `self-signed-8443`) so one host's several TLS services stay
+  # distinct, which is why the map below records families rather than keys.
+  default: info
+  observations:
+    cert: info
+    sans: info
+    self-signed: medium
+    expired: medium
+    expiring: low
+    deprecated: low

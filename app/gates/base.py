@@ -1,10 +1,10 @@
-"""app/gates/base.py - BaseGate (Phase 56 §6, sub-phase 56.12).
+"""app/gates/base.py - BaseGate.
 
 The per-type base for `gate` components, attaching to the minimal
 `BaseComponent` (identity only).
 
 Gates are DETERMINISTIC allow/block authorities: they answer "may this
-proceed?" at the scan chokepoint ([[project_guardian_gating]]) — never calling
+proceed?" at the scan chokepoint — never calling
 an LLM, never recommending (that's an advisor), but *deciding*. In that they
 sit alongside checks and advisors, not agents.
 

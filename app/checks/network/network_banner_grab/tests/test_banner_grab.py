@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_network_banner_grab.py."""
+"""Tests for network_banner_grab."""
 
 from unittest.mock import patch
 
@@ -7,6 +7,40 @@ import pytest
 from app.checks.base import Service
 
 _SYNC_TCP_READ = "app.checks.network.network_banner_grab.check.BannerGrabCheck._sync_tcp_read"
+
+
+def _tcp_exchange(data: bytes, host: str = "redis.example.com", port: int = 6379, probe: str = ""):
+    """One recorded TCP read, as `_tcp_read` now hands it back.
+
+    57.4 wave 2: the banner is the exchange's decoded `response_body` plus a
+    verbatim `raw_hex` header, which is what both `banner_data` and `grade()`
+    read.
+    """
+    from app.grading import exchange_from_payload
+
+    return exchange_from_payload(
+        "tcp",
+        host,
+        check_name="network_banner_grab",
+        request_body=probe,
+        response_body=data.decode("utf-8", errors="replace"),
+        response_headers={"raw_hex": data.hex(), "port": str(port)},
+        request_headers={"port": str(port)},
+    )
+
+
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
 
 
 class TestBannerGrabCheckInit:
@@ -73,7 +107,7 @@ class TestBannerGrabCheckRun:
         from app.checks.network.network_banner_grab import BannerGrabCheck
 
         check = BannerGrabCheck()
-        result = await check.run({"services": []})
+        result = await probe_and_grade(check, {"services": []})
         assert result.success is False
         assert any("services" in e.lower() for e in result.errors)
 
@@ -87,7 +121,7 @@ class TestBannerGrabCheckRun:
         svc = Service(
             url="http://web.example.com:80", host="web.example.com", port=80, scheme="http"
         )
-        result = await check.run({"services": [svc]})
+        result = await probe_and_grade(check, {"services": [svc]})
         assert result.success is True
         assert result.outputs["banner_data"] == {}
 
@@ -111,7 +145,7 @@ class TestBannerGrabCheckRun:
         # First call is passive read (no probe) -> returns the SSH banner.
         # SSH has no probe defined, so only one call is made.
         with patch(_SYNC_TCP_READ, return_value=ssh_banner):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.success is True
         assert result.targets_checked == 1
@@ -162,7 +196,7 @@ class TestBannerGrabCheckRun:
             return None
 
         with patch(_SYNC_TCP_READ, side_effect=fake_tcp):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.success is True
         data = result.outputs["banner_data"]["redis.example.com:6379"]
@@ -206,7 +240,7 @@ class TestBannerGrabCheckRun:
             return None
 
         with patch(_SYNC_TCP_READ, side_effect=fake_tcp):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         data = result.outputs["banner_data"]["redis.example.com:6379"]
         assert data["service"] == "Redis"
@@ -238,7 +272,7 @@ class TestBannerGrabCheckRun:
         smtp_banner = b"220 mail.example.com ESMTP Postfix\r\n"
 
         with patch(_SYNC_TCP_READ, return_value=smtp_banner):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.success is True
         data = result.outputs["banner_data"]["mail.example.com:25"]
@@ -271,7 +305,7 @@ class TestBannerGrabCheckRun:
             return None
 
         with patch(_SYNC_TCP_READ, side_effect=fake_tcp):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         data = result.outputs["banner_data"]["cache.example.com:11211"]
         assert data["service"] == "Memcached"
@@ -309,7 +343,7 @@ class TestBannerGrabCheckRun:
         custom_banner = b"CUSTOM-PROTOCOL v3.1 READY\r\n"
 
         with patch(_SYNC_TCP_READ, return_value=custom_banner):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         data = result.outputs["banner_data"]["mystery.example.com:9999"]
         assert data["service"] == "unknown"
@@ -338,7 +372,7 @@ class TestBannerGrabCheckRun:
 
         # All TCP reads return None (no response / connection refused)
         with patch(_SYNC_TCP_READ, return_value=None):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.success is True
         assert result.targets_checked == 1
@@ -363,7 +397,7 @@ class TestBannerGrabCheckRun:
 
         # Connection succeeds but recv returns empty bytes (peer closed)
         with patch(_SYNC_TCP_READ, return_value=b""):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.success is True
         assert result.targets_checked == 1
@@ -389,7 +423,7 @@ class TestBannerGrabCheckRun:
         pg_banner = b"E\x00\x00\x00\x8dSFATAL\x00"
 
         with patch(_SYNC_TCP_READ, return_value=pg_banner):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         data = result.outputs["banner_data"]["db.example.com:5432"]
         assert data["service"] == "PostgreSQL"
@@ -434,7 +468,7 @@ class TestBannerGrabCheckRun:
             return None
 
         with patch(_SYNC_TCP_READ, side_effect=counting_tcp_read):
-            result = await check.run({"services": [svc1, svc2]})
+            result = await probe_and_grade(check, {"services": [svc1, svc2]})
 
         # Only one target should be checked (dedup)
         assert result.targets_checked == 1
@@ -455,7 +489,7 @@ class TestBannerGrabCheckRun:
         )
 
         with patch(_SYNC_TCP_READ, return_value=None):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         assert result.targets_checked == 1
 
@@ -489,7 +523,7 @@ class TestBannerGrabCheckRun:
             return None
 
         with patch(_SYNC_TCP_READ, side_effect=fake_tcp):
-            result = await check.run({"services": [svc_ssh, svc_smtp]})
+            result = await probe_and_grade(check, {"services": [svc_ssh, svc_smtp]})
 
         assert result.targets_checked == 2
         assert result.outputs["banner_data"]["server.example.com:22"]["service"] == "SSH"
@@ -513,7 +547,7 @@ class TestBannerGrabCheckRun:
         ftp_banner = b"220 Welcome to FTP server\r\n"
 
         with patch(_SYNC_TCP_READ, return_value=ftp_banner):
-            result = await check.run({"services": [svc]})
+            result = await probe_and_grade(check, {"services": [svc]})
 
         data = result.outputs["banner_data"]["files.example.com:21"]
         assert data["service"] == "FTP"
@@ -603,8 +637,9 @@ class TestBannerGrabRedisAuth:
 
         check = BannerGrabCheck()
 
-        with patch.object(check, "_tcp_read", return_value=b"-NOAUTH Authentication required.\r\n"):
-            auth_required = await check._check_redis_auth("redis.example.com", 6379)
+        auth_required = check._redis_auth_from(
+            _tcp_exchange(b"-NOAUTH Authentication required.\r\n")
+        )
 
         assert auth_required is True
 
@@ -616,8 +651,7 @@ class TestBannerGrabRedisAuth:
         check = BannerGrabCheck()
 
         info_response = b"# Server\r\nredis_version:7.2.1\r\n"
-        with patch.object(check, "_tcp_read", return_value=info_response):
-            auth_required = await check._check_redis_auth("redis.example.com", 6379)
+        auth_required = check._redis_auth_from(_tcp_exchange(info_response))
 
         assert auth_required is False
 
@@ -628,7 +662,6 @@ class TestBannerGrabRedisAuth:
 
         check = BannerGrabCheck()
 
-        with patch.object(check, "_tcp_read", return_value=None):
-            auth_required = await check._check_redis_auth("redis.example.com", 6379)
+        auth_required = check._redis_auth_from(None)
 
         assert auth_required is True

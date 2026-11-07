@@ -33,3 +33,13 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: CAG systems can be exploited for cache poisoning, stale context attacks, cross-user
   cache leakage, and cache-based denial of service
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade severity one candidate carries
+  # (§6.1) — the lowest this check emits, so a deferred or failed grade can
+  # never over-escalate `on_critical`. The `cag-<path>` / `cached-<path>`
+  # discriminators embed the path (an unbounded set), so there is no
+  # `observations:` map — `grade()` places infra medium/info, endpoint
+  # medium/low/info, cached low. `info` is the floor.
+  default: info

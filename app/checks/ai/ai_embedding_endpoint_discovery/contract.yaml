@@ -28,3 +28,21 @@ techniques:
 references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Embedding endpoints may leak training data or enable inference attacks
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: a path either accepted
+  # the embedding payload or answered 404/405, so no grader above the rule tier
+  # is ever called. This is the PRE-grade value a candidate carries (§6.1) and
+  # the only severity this check emits.
+  #
+  # No `observations:` map, for the same reason as `ai_llm_endpoint_discovery`:
+  # the discriminator is path-derived over an operator-editable list, so the set
+  # is unbounded and `provisional_for()` correctly falls through to `default`.
+  #
+  # Confidence carries more weight here than in the chat check, because this
+  # path list is weaker: `/search` and `/similarity` are ordinary application
+  # routes on any site with a search box, so a 200 there says almost nothing
+  # about embeddings. `grade()` reads the body for a vector field — the only
+  # thing that separates the two — and those two paths without one are 0.3
+  # against 0.9 for a response that actually carries a vector.
+  default: info

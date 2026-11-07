@@ -24,3 +24,28 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 - OWASP API Security Top 10 - API2 Broken Authentication
 reason: Many internal AI services have no auth or accept any key
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: a 200 to a request
+  # carrying a bogus or absent credential is read off the record, so no grader
+  # above the rule tier is ever called. `default` is the pre-grade value a
+  # candidate carries (§6.1) and the LOWEST of the ladder — a deferred or failed
+  # grade can never present an ungraded candidate as one of the two criticals.
+  #
+  # The discriminators enumerate: five mutually-exclusive rungs of one ladder,
+  # and grade() emits exactly one. So the map is written out.
+  #
+  # The shared confidence question is whether the endpoint DISCRIMINATES at all.
+  # Every acceptance rung is a 200 to a request that should have failed, and the
+  # catch-all route reaches here: an endpoint answering 200 to every credential
+  # looks the same as an auth bypass. When at least one bogus state drew 401/403
+  # the acceptance means something (0.9-0.95); when every state was accepted and
+  # none rejected the verdict caps at 0.5 and says the acceptance may not be an
+  # auth decision at all. `auth-enforced` is 0.9 — all attempts cleanly rejected.
+  default: info
+  observations:
+    no-auth-required: critical
+    empty-bearer-bypass: high
+    default-key-accepted: critical
+    basic-test-bypass: high
+    auth-enforced: info

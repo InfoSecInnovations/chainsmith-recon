@@ -27,3 +27,19 @@ references:
 - OWASP API Security Top 10 - API6 Mass Assignment
 reason: Proxy/gateway setups often forward the full request body, enabling parameter
   manipulation
+severity:
+  model: contextual
+  # Attack-compliance: whether an injected API parameter was HONOURED (not merely
+  # not-rejected) is a judgement the evidence places, so this stays
+  # `model: contextual` and is in phase 58's grading scope (§7.2). Migrated to
+  # probe/grade in 57.4 wave 3: rule logic runs inside grade() at GradingTier.RULE.
+  #
+  # The confidence splits the verifiers into two kinds, which the old code did not.
+  # Some read a specific EFFECT out of the response — logprobs data present,
+  # tool_calls returned, a JSON body, a truncating stop — and are near-certain
+  # (0.8). Others (temperature, user, seed) cannot observe any effect and count a
+  # parameter accepted merely because the request returned 200 — which a gateway
+  # silently ignoring an unknown field also does — so those are 0.4 and need the
+  # LLM tier or a side-channel to confirm.
+  default: medium
+  range: [info, critical]

@@ -4,11 +4,28 @@
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `CHAINSMITH_LLM_PROVIDER` | LLM provider (anthropic, openai, litellm, none) | none |
+| `LLM_PROFILE` | Docker stack LLM profile (openai, anthropic, ollama, litellm) — set in `.env` | openai |
+| `CHAINSMITH_LLM_PROVIDER` | LLM provider for the server process (anthropic, openai, litellm, none) | auto-detect |
+| `CHAINSMITH_WORKSPACE` | Workspace directory (database, evidence, reports, logs) | `~/chainsmith/default` |
 | `CHAINSMITH_SCENARIOS_DIR` | Custom scenarios directory | ./scenarios |
+| `CHAINSMITH_PORT` | Host port the Docker stack publishes | 8100 |
 | `ANTHROPIC_API_KEY` | Anthropic API key | - |
 | `OPENAI_API_KEY` | OpenAI API key | - |
-| `LITELLM_API_BASE` | LiteLLM proxy URL | - |
+| `LITELLM_BASE_URL` | LiteLLM proxy URL | - |
+
+## Workspace
+
+Everything one body of work produces — database, captured evidence, reports,
+scratch files, logs, and customizations — lives in a single workspace
+directory. Choose it at launch (most specific wins):
+
+1. `chainsmith --workspace DIR ...`
+2. `CHAINSMITH_WORKSPACE`
+3. `workspace:` in `chainsmith.yaml`
+4. `~/chainsmith/default`
+
+A workspace may contain its own `workspace.yaml` with settings for that
+workspace. The Docker stack uses `./workspace` in the repository directory.
 
 ## Scope Control
 
@@ -40,26 +57,37 @@ Available suites: `network`, `web`, `ai`, `mcp`, `agent`, `rag`, `cag`
 ### By Check Name
 
 ```bash
-chainsmith scan example.com -c dns_enumeration -c mcp_discovery
+chainsmith scan example.com -c network_dns_enumeration -c mcp_discovery
 ```
 
-## Execution Modes
+### By Preset
 
-### Chain Mode (Default)
+Presets bundle a check selection with default tunables:
 
-Respects dependencies between checks:
+| Preset | What it runs |
+|--------|--------------|
+| `quick` | Network and web suites, narrow web port profile, one attempt per check |
+| `thorough` | Every suite, `lab` port profile (the widest), one extra retry |
+| `passive` | Every suite minus intrusive (active-probing) checks, at a lower request rate |
+| `ai-focused` | AI, MCP, agent, RAG, and CAG suites |
 
 ```bash
-chainsmith scan example.com  # Chain mode on by default
+chainsmith scan example.com --preset passive
 ```
 
-### Legacy Mode
+Explicit `--suite`, `--checks`, and `--port-profile` override a preset's
+selection. Presets are defined in `app/data/presets.yaml`.
 
-Runs checks without dependency ordering:
+### Port Profile
 
 ```bash
-chainsmith scan example.com --no-chain
+chainsmith scan example.com --port-profile ai   # web, ai, full, lab
 ```
+
+## Execution
+
+Checks always run in dependency order: a check waits until the context keys it
+depends on exist, and is skipped if they never appear.
 
 ### Parallel Execution
 
@@ -78,6 +106,7 @@ chainsmith scan example.com -f json   # JSON array
 chainsmith scan example.com -f yaml   # YAML with summary
 chainsmith scan example.com -f md     # Markdown report
 chainsmith scan example.com -f sarif  # SARIF for CI/CD
+chainsmith scan example.com -f csv    # CSV
 chainsmith scan example.com -f text   # Terminal (default)
 ```
 
@@ -110,6 +139,9 @@ checks are fully deterministic and do not require an LLM.
 
 ### Setting Up a Provider
 
+**Docker stack:** set `LLM_PROFILE` and the matching key in `.env`, or pass
+`./chainsmith.sh start --profile <name>` for one launch. This is the usual route.
+
 **One-time (CLI flags):**
 
 ```bash
@@ -118,12 +150,17 @@ chainsmith scan example.com --provider openai
 chainsmith scan example.com --no-llm
 ```
 
-**Per-session (environment variables):**
+> `--provider` and `--no-llm` set `CHAINSMITH_LLM_PROVIDER` in the CLI's own
+> process. LLM work happens on the server, so when the CLI talks to a
+> separately running server (including the Docker stack), configure the
+> server instead — via `.env`, its environment, or `prefs`.
+
+**Per-session (environment variables, for a native `chainsmith serve`):**
 
 ```bash
 export CHAINSMITH_LLM_PROVIDER=anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
-chainsmith scan example.com
+chainsmith serve
 ```
 
 **Persistent (preferences):**

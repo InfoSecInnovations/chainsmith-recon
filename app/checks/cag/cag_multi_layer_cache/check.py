@@ -11,18 +11,61 @@ Attack vectors:
 - Application cache: may ignore HTTP cache headers
 - Semantic cache: ignores all HTTP cache semantics
 
+**Probe/grade.** The probe warms the cache and sends the
+four bypass strategies (normal, `Cache-Control: no-cache`, `Pragma: no-cache`,
+cache-buster), records every exchange, and hands them over as one candidate per
+endpoint (the observation's `target_url` is the endpoint — §0.15). `grade()`
+re-reads the recorded exchanges and rebuilds the layer analysis; `_reading()` is
+the one parser both halves call (§0.12). Two conventions it contributes:
+
+- **Timing is read back, not re-measured.** The original wrapped each strategy
+  in `time.time()`; the reading now takes `Exchange.elapsed_ms`, so a re-grade
+  reproduces the same latency profile from the corpus.
+- **Which strategy an exchange used is recovered from its own recorded request**
+  — the `Cache-Control` / `Pragma` request headers and the cache-buster's `_cb`
+  body key (`_strategy_of`) — never from the order the four were sent.
+
+**Fixed**: the discriminator embeds the endpoint path (an
+open set), so the contract declares no `observations:` map and `grade()` places
+the severity. Confidence is where the split pays: layer detection is a pure
+timing heuristic, and `>1.5x`/`<0.7x` latency ratios are as easily produced by
+backend load as by a distinct cache tier.
+
 References:
   https://portswigger.net/web-security/web-cache-poisoning
   OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 """
 
 import hashlib
+import json
 import time
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
+
+BASE_HEADERS = {"Content-Type": "application/json"}
+
+# Strategy -> the extra request headers that identify it on the record. The
+# cache-buster strategy is told apart by its body (`_cb` key), not a header.
+STRATEGY_HEADERS = {
+    "normal": {},
+    "no_cache": {"Cache-Control": "no-cache"},
+    "pragma": {"Pragma": "no-cache"},
+}
+
+CACHE_HEADER_NAMES = [
+    "x-cache",
+    "x-cache-hit",
+    "x-cache-status",
+    "age",
+    "x-served-by",
+    "x-cache-node",
+    "via",
+    "cf-cache-status",
+]
 
 
 class MultiLayerCacheCheck(ServiceIteratingCheck):
@@ -49,8 +92,11 @@ class MultiLayerCacheCheck(ServiceIteratingCheck):
     ]
     techniques = ["cache layer detection", "cache bypass", "timing analysis"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
+        scan_id = context.get("scan_id") or ""
 
         cag_endpoints = context.get("cag_endpoints", [])
         service_endpoints = [
@@ -67,27 +113,18 @@ class MultiLayerCacheCheck(ServiceIteratingCheck):
             async with AsyncHttpClient(cfg) as client:
                 for endpoint in service_endpoints:
                     url = endpoint.get("url", service.url)
-                    layer_info = await self._detect_layers(client, url, service)
-
-                    if layer_info:
-                        layer_results.append(layer_info)
-
-                        severity = self._determine_severity(layer_info)
-                        result.observations.append(
-                            build_observation(
-                                check_name=self.name,
-                                title=self._build_title(layer_info),
-                                description=self._build_description(layer_info),
-                                severity=severity,
-                                evidence=self._build_evidence(layer_info),
-                                host=service.host,
-                                discriminator=f"layers-{endpoint.get('path', 'unknown').strip('/').replace('/', '-')}",
-                                target=service,
-                                target_url=url,
-                                raw_data=layer_info,
-                                references=self.references,
-                            )
-                        )
+                    path = endpoint.get("path", "unknown")
+                    candidate = self.create_candidate(
+                        host=service.host,
+                        discriminator=f"layers-{path.strip('/').replace('/', '-')}",
+                        target=service,
+                        target_url=url,
+                    )
+                    await self._probe_layers(client, url, scan_id, service.host, candidate)
+                    result.candidates.append(candidate)
+                    reading = self._reading(candidate.exchanges, url)
+                    if reading:
+                        layer_results.append(reading)
 
         except Exception as e:
             result.errors.append(f"{service.url}: {e}")
@@ -97,54 +134,118 @@ class MultiLayerCacheCheck(ServiceIteratingCheck):
 
         return result
 
-    async def _detect_layers(
-        self, client: AsyncHttpClient, url: str, service: Service
-    ) -> dict | None:
-        """Detect cache layers by testing different bypass strategies."""
+    async def _probe_layers(
+        self, client: AsyncHttpClient, url: str, scan_id: str, host: str, candidate
+    ) -> None:
+        """Warm the cache, then fire the four bypass strategies and record them."""
         unique_id = hashlib.md5(f"{time.time()}_{url}".encode()).hexdigest()[:12]
         test_query = f"multi_layer_test_{unique_id}"
         payload = {"input": test_query, "query": test_query}
 
-        # Warm the cache first
-        await client.post(url, json=payload, headers={"Content-Type": "application/json"})
+        # Warm the cache first (not graded; carries no strategy marker).
+        await client.post(url, json=payload, headers=BASE_HEADERS)
 
-        # Strategy 1: Normal request (hits all layers)
-        timing_normal = await self._timed_request(client, url, payload, {})
+        for strategy in ("normal", "no_cache", "pragma"):
+            headers = {**BASE_HEADERS, **STRATEGY_HEADERS[strategy]}
+            candidate.attach(await self._send(client, url, payload, headers, scan_id, host))
 
-        # Strategy 2: Cache-Control: no-cache (bypass HTTP cache)
-        timing_no_cache = await self._timed_request(
-            client,
-            url,
-            payload,
-            {"Cache-Control": "no-cache"},
-        )
-
-        # Strategy 3: Pragma: no-cache (bypass older HTTP caches)
-        timing_pragma = await self._timed_request(
-            client,
-            url,
-            payload,
-            {"Pragma": "no-cache"},
-        )
-
-        # Strategy 4: Cache-buster parameter
         buster_payload = dict(payload)
         buster_payload["_cb"] = str(int(time.time()))
-        timing_buster = await self._timed_request(client, url, buster_payload, {})
+        candidate.attach(
+            await self._send(client, url, buster_payload, dict(BASE_HEADERS), scan_id, host)
+        )
 
-        if not all([timing_normal, timing_no_cache, timing_pragma, timing_buster]):
+    async def _send(
+        self,
+        client: AsyncHttpClient,
+        url: str,
+        payload: dict,
+        headers: dict,
+        scan_id: str,
+        host: str,
+    ) -> Exchange:
+        resp = await client.post(url, json=payload, headers=headers)
+        return exchange_from_response(
+            resp,
+            check_name=self.name,
+            scan_id=scan_id,
+            host=host,
+            method="POST",
+            request_headers=headers,
+            request_json=payload,
+        )
+
+    # ══ Grade (rule tier) ════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        layer_info = self._reading(list(evidence), ctx.target_url or "")
+        if layer_info is None:
+            return []
+
+        severity = self._determine_severity(layer_info)
+        confidence, why = self._confidence(layer_info)
+        return [
+            Verdict(
+                severity=severity,
+                confidence=confidence,
+                discriminator=None,  # inherit the candidate's path discriminator
+                title=self._build_title(layer_info),
+                description=self._build_description(layer_info),
+                evidence=self._build_evidence(layer_info),
+                reasoning=why,
+                signals={
+                    "layers_detected": layer_info["layers_detected"],
+                    "layer_types": [layer.get("type") for layer in layer_info["layers"]],
+                },
+                references=self.references,
+                raw_data=layer_info,
+                tier=ctx.tier,
+                evidence_ids=evidence.ids(),
+            )
+        ]
+
+    @staticmethod
+    def _confidence(layer_info: dict) -> tuple[float, str]:
+        types = [layer.get("type") for layer in layer_info.get("layers", [])]
+        if "cdn" in types and layer_info["layers_detected"] == 1:
+            return 0.85, (
+                "the single layer is a CDN identified by an explicit cache header "
+                "(cf-cache-status / x-cache / via), which is a named signal rather than a "
+                "timing guess"
+            )
+        if layer_info["layers_detected"] > 1:
+            return 0.35, (
+                "multiple layers are inferred purely from latency ratios (>1.5x on bypass, "
+                "<0.7x between strategies); backend load, cold-start and queueing produce the "
+                "same ratios with a single cache, and no per-layer header confirms the split"
+            )
+        return 0.4, (
+            "a single cache layer is inferred from timing alone; the fast, uniform responses "
+            "are consistent with a cache but equally with a cheap endpoint under no load"
+        )
+
+    # ── The parser both halves share ─────────────────────────────────
+
+    def _reading(self, exchanges: list[Exchange], url: str) -> dict | None:
+        """Rebuild the layer reading off the recorded exchanges' latencies/headers."""
+        timings: dict[str, dict] = {}
+        for exchange in exchanges:
+            strategy = self._strategy_of(exchange)
+            if strategy is None or exchange.error:
+                continue
+            timings[strategy] = {
+                "elapsed_ms": round(exchange.elapsed_ms, 2)
+                if exchange.elapsed_ms is not None
+                else 0.0,
+                "status_code": exchange.response_status,
+                "cache_headers": self._cache_headers(exchange),
+                "response_length": len(exchange.response_body or ""),
+            }
+
+        if not all(k in timings for k in ("normal", "no_cache", "pragma", "cache_buster")):
             return None
 
-        # Analyze timing patterns to detect layers
-        timings = {
-            "normal": timing_normal,
-            "no_cache": timing_no_cache,
-            "pragma": timing_pragma,
-            "cache_buster": timing_buster,
-        }
-
         layers = self._analyze_layers(timings)
-
         if not layers:
             return None
 
@@ -155,46 +256,35 @@ class MultiLayerCacheCheck(ServiceIteratingCheck):
             "layers": layers,
         }
 
-    async def _timed_request(
-        self, client: AsyncHttpClient, url: str, payload: dict, extra_headers: dict
-    ) -> dict | None:
-        """Send a request and measure timing."""
-        headers = {"Content-Type": "application/json"}
-        headers.update(extra_headers)
+    @staticmethod
+    def _strategy_of(exchange: Exchange) -> str | None:
+        """Which bypass strategy an exchange used, off its recorded request.
 
+        The cache-buster carries a `_cb` body key; the others are told apart by
+        their `Cache-Control` / `Pragma` request headers. The warm-up request
+        carries neither marker and returns None (it is not graded).
+        """
         try:
-            start = time.time()
-            resp = await client.post(url, json=payload, headers=headers)
-            elapsed_ms = (time.time() - start) * 1000
+            body = json.loads(exchange.request_body or "{}")
+        except (ValueError, TypeError):
+            body = {}
+        if isinstance(body, dict) and "_cb" in body:
+            return "cache_buster"
 
-            if resp.error:
-                return None
+        headers = {k.lower(): v.lower() for k, v in (exchange.request_headers or {}).items()}
+        if headers.get("cache-control") == "no-cache":
+            return "no_cache"
+        if headers.get("pragma") == "no-cache":
+            return "pragma"
+        # A plain request with no cache-busting marker is the "normal" strategy.
+        # The warm-up request is byte-identical but is never attached to the
+        # candidate, so only the graded "normal" reaches here.
+        return "normal"
 
-            # Collect cache-related headers
-            cache_headers = {}
-            for h in [
-                "x-cache",
-                "x-cache-hit",
-                "x-cache-status",
-                "age",
-                "x-served-by",
-                "x-cache-node",
-                "via",
-                "cf-cache-status",
-            ]:
-                val = resp.headers.get(h) or resp.headers.get(h.title())
-                if val:
-                    cache_headers[h] = val
-
-            return {
-                "elapsed_ms": round(elapsed_ms, 2),
-                "status_code": resp.status_code,
-                "cache_headers": cache_headers,
-                "response_length": len(resp.body or ""),
-            }
-
-        except Exception:
-            return None
+    @staticmethod
+    def _cache_headers(exchange: Exchange) -> dict:
+        resp = {k.lower(): v for k, v in (exchange.response_headers or {}).items()}
+        return {h: resp[h] for h in CACHE_HEADER_NAMES if h in resp}
 
     def _analyze_layers(self, timings: dict) -> list[dict]:
         """Analyze timing patterns to identify cache layers."""

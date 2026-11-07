@@ -384,43 +384,42 @@ output: {}
 
 
 class TestRealSimulationFiles:
-    """Tests using actual simulation files from the project."""
+    """Tests using the simulation files shipped in app/checks/simulator/simulations.
+
+    The shipped DNS simulations still use the pre-rename ``emulates`` name
+    (``dns_enumeration``), so names are matched by suffix.
+    """
 
     def test_load_dns_success(self, simulations_dir: Path):
         """Load actual dns_success.yaml file."""
         yaml_file = simulations_dir / "network" / "dns_success.yaml"
-
-        if not yaml_file.exists():
-            pytest.skip("dns_success.yaml not found")
+        assert yaml_file.exists(), f"missing simulation fixture: {yaml_file}"
 
         check = load_simulated_check(yaml_file)
 
-        assert check.name == "network_dns_enumeration"
+        assert check.name.endswith("dns_enumeration")
         assert check.suite == "network"
 
     async def test_run_dns_success(self, simulations_dir: Path):
         """Run actual dns_success simulation."""
         yaml_file = simulations_dir / "network" / "dns_success.yaml"
-
-        if not yaml_file.exists():
-            pytest.skip("dns_success.yaml not found")
+        assert yaml_file.exists(), f"missing simulation fixture: {yaml_file}"
 
         check = load_simulated_check(yaml_file)
         result = await check.run({})
 
         assert result.success is True
-        assert len(result.services) >= 1, "DNS success should discover at least 1 service"
+        # DNS enumeration only maps hostnames to IPs; it discovers no services.
+        assert result.services == []
+        assert result.outputs["target_hosts"], "DNS success should report target hosts"
         assert len(result.observations) >= 1, "DNS success should produce at least 1 observation"
-        # Verify observations have expected check_name from the simulation
         for obs in result.observations:
-            assert obs.check_name == "network_dns_enumeration"
+            assert obs.check_name == check.name
 
     def test_load_dns_exception(self, simulations_dir: Path):
         """Load actual dns_exception.yaml file."""
         yaml_file = simulations_dir / "network" / "dns_exception.yaml"
-
-        if not yaml_file.exists():
-            pytest.skip("dns_exception.yaml not found")
+        assert yaml_file.exists(), f"missing simulation fixture: {yaml_file}"
 
         check = load_simulated_check(yaml_file)
 
@@ -429,9 +428,7 @@ class TestRealSimulationFiles:
     async def test_run_dns_exception(self, simulations_dir: Path):
         """Run actual dns_exception simulation."""
         yaml_file = simulations_dir / "network" / "dns_exception.yaml"
-
-        if not yaml_file.exists():
-            pytest.skip("dns_exception.yaml not found")
+        assert yaml_file.exists(), f"missing simulation fixture: {yaml_file}"
 
         check = load_simulated_check(yaml_file)
 
@@ -440,10 +437,7 @@ class TestRealSimulationFiles:
 
     def test_load_all_network_simulations(self, simulations_dir: Path):
         """Load all network simulations without error."""
-        network_dir = simulations_dir / "network"
-
-        if not network_dir.exists():
-            pytest.skip("network simulations directory not found")
+        assert (simulations_dir / "network").is_dir()
 
         checks = load_simulated_checks_from_dir(simulations_dir, suite="network")
 
@@ -458,4 +452,6 @@ class TestRealSimulationFiles:
             names.add(check.name)
 
         # Verify known simulation names are present
-        assert "network_dns_enumeration" in names, "dns_enumeration simulation should be loaded"
+        assert any(n.endswith("dns_enumeration") for n in names), (
+            "dns_enumeration simulation should be loaded"
+        )

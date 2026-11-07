@@ -1,5 +1,5 @@
 """
-app/dev/registry_diff.py - Check-registry snapshot + diff (Phase 56 §8.1).
+app/dev/registry_diff.py - Check-registry snapshot + diff.
 
 The migration safety check. Confirms every pre-existing check still loads with
 the same `(name, suite, conditions, produces)` identity across a structural

@@ -2,11 +2,21 @@
 Service Probing Checks
 
 Deep inspection of discovered services to determine type and gather fingerprints.
+
+**Probe/grade.** `check_service()` connects, classifies, and
+records; `grade()` re-reads the recorded response and places severity on what the
+headers disclosed. The split is uneven here on purpose: `_classify_service` stays
+on the probe side because `service_type` is what routes the rest of the scan —
+every suite's conditions read it — so it cannot wait for a grader. This is §6.2's
+"a probe that branches on a parsed value parses twice", and the two halves read
+different things out of the same response: the probe asks *what is this*, the
+grader asks *what did it give away*.
 """
 
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
 
 
@@ -91,9 +101,19 @@ class ServiceProbeCheck(ServiceIteratingCheck):
                         headers, content_type, response.body[:2000]
                     )
 
-                    # Create observations for interesting discoveries
-                    observations = self._analyze_response(service, headers, response)
-                    result.observations.extend(observations)
+                    # What the headers gave away is the grader's question. The
+                    # exchange is handed over in memory as well as recorded,
+                    # because capture is off by default (§0.4).
+                    result.candidates.append(
+                        self.create_candidate(host=service.host, target=service).attach(
+                            exchange_from_response(
+                                response,
+                                check_name=self.name,
+                                scan_id=context.get("scan_id") or "",
+                                host=service.host,
+                            )
+                        )
+                    )
 
                     result.services.append(service)
                     return result
@@ -149,77 +169,113 @@ class ServiceProbeCheck(ServiceIteratingCheck):
 
         return "http"
 
-    def _analyze_response(self, service: Service, headers: dict, response) -> list:
-        """Extract observations from initial response."""
-        observations = []
+    # ══ Grade ════════════════════════════════════════════════════
+
+    #: Headers that are either standard or too common to be worth reporting as a
+    #: custom one. `x-powered-by` is excluded because it has its own verdict.
+    STANDARD_HEADERS = {
+        "x-powered-by",
+        "x-content-type-options",
+        "x-frame-options",
+        "x-xss-protection",
+        "x-request-id",
+        "x-correlation-id",
+        "x-cache",
+        "x-cache-hits",
+        "x-served-by",
+    }
+
+    #: Substrings in a custom header's *name* that raise it from noise to a leak.
+    SENSITIVE_HEADER_HINTS = ("model", "token", "key", "secret", "internal", "debug")
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Place severity on what one recorded response's headers disclosed."""
+        exchange = next(iter(evidence.completed()), None)
+        if exchange is None:
+            return []
+
+        headers = exchange.response_headers or {}
         headers_lower = {k.lower(): v for k, v in headers.items()}
+        evidence_ids = [exchange.id]
+        verdicts: list[Verdict] = []
 
-        # Server header
-        if "server" in headers_lower:
-            server_value = headers_lower["server"]
-            # Check if version info is present
-            if any(c.isdigit() for c in server_value):
-                observations.append(
-                    self.create_observation(
-                        title=f"Server version disclosed: {server_value}",
-                        description="Server header reveals version information that could aid targeted attacks",
-                        severity="low",
-                        evidence=f"Server: {server_value}",
-                        target=service,
-                        references=["CWE-200"],
-                    )
-                )
-
-        # X-Powered-By
-        if "x-powered-by" in headers_lower:
-            value = headers_lower["x-powered-by"]
-            severity = "low"
-
-            # Higher severity for AI/ML tech disclosure
-            if any(ai in value.lower() for ai in self.AI_POWERED_BY):
-                severity = "medium"
-
-            observations.append(
-                self.create_observation(
-                    title=f"Technology disclosed: {value}",
-                    description="X-Powered-By header reveals technology stack",
-                    severity=severity,
-                    evidence=f"X-Powered-By: {value}",
-                    target=service,
+        # ── Server version disclosure ─────────────────────
+        server_value = headers_lower.get("server", "")
+        if server_value and any(c.isdigit() for c in server_value):
+            verdicts.append(
+                Verdict(
+                    severity="low",
+                    # A digit in the Server header is usually a version and
+                    # sometimes a CDN's build number, which discloses nothing.
+                    confidence=0.8,
+                    discriminator="server-version-disclosure",
+                    title=f"Server version disclosed: {server_value}",
+                    description=(
+                        "Server header reveals version information that could aid targeted attacks"
+                    ),
+                    evidence=f"Server: {server_value}",
+                    reasoning="Server header contains digits, read as a version",
+                    signals={"server": server_value},
                     references=["CWE-200"],
+                    evidence_ids=evidence_ids,
                 )
             )
 
-        # Custom headers (potential info leaks)
-        standard_headers = {
-            "x-powered-by",
-            "x-content-type-options",
-            "x-frame-options",
-            "x-xss-protection",
-            "x-request-id",
-            "x-correlation-id",
-            "x-cache",
-            "x-cache-hits",
-            "x-served-by",
-        }
+        # ── X-Powered-By ──────────────────────────────────
+        powered_by = headers_lower.get("x-powered-by")
+        if powered_by:
+            ai_tech = [t for t in self.AI_POWERED_BY if t in powered_by.lower()]
+            verdicts.append(
+                Verdict(
+                    # Naming an inference runtime is worth more than naming a web
+                    # framework: it tells an attacker which model-layer attacks
+                    # are even applicable.
+                    severity="medium" if ai_tech else "low",
+                    # The header is self-declared and unambiguous.
+                    confidence=0.95,
+                    discriminator="technology-disclosure",
+                    title=f"Technology disclosed: {powered_by}",
+                    description="X-Powered-By header reveals technology stack",
+                    evidence=f"X-Powered-By: {powered_by}",
+                    reasoning=(
+                        f"X-Powered-By names an AI/ML runtime ({', '.join(ai_tech)})"
+                        if ai_tech
+                        else "X-Powered-By names the technology stack"
+                    ),
+                    signals={"powered_by": powered_by, "ai_tech": ai_tech},
+                    references=["CWE-200"],
+                    evidence_ids=evidence_ids,
+                )
+            )
 
+        # ── Custom headers (potential info leaks) ─────────
         for key, value in headers.items():
             key_lower = key.lower()
-            if key_lower.startswith("x-") and key_lower not in standard_headers:
-                severity = "info"
-                if any(
-                    s in key_lower for s in ["model", "token", "key", "secret", "internal", "debug"]
-                ):
-                    severity = "medium"
+            if not key_lower.startswith("x-") or key_lower in self.STANDARD_HEADERS:
+                continue
 
-                observations.append(
-                    self.create_observation(
-                        title=f"Custom header: {key}",
-                        description="Custom header may leak internal information",
-                        severity=severity,
-                        evidence=f"{key}: {value[:100]}",
-                        target=service,
-                    )
+            hints = [s for s in self.SENSITIVE_HEADER_HINTS if s in key_lower]
+            verdicts.append(
+                Verdict(
+                    severity="medium" if hints else "info",
+                    # The header's presence is certain; that its *name* implies a
+                    # leak is an inference from a substring, and a weaker one —
+                    # `x-model-version` on a CDN means nothing.
+                    confidence=0.6 if hints else 0.9,
+                    # Per-header, so several custom headers on one service stay
+                    # distinct observations rather than collapsing onto one id.
+                    discriminator=f"custom-header-{key_lower}",
+                    title=f"Custom header: {key}",
+                    description="Custom header may leak internal information",
+                    evidence=f"{key}: {value[:100]}",
+                    reasoning=(
+                        f"Header name contains {', '.join(hints)}"
+                        if hints
+                        else "Non-standard X- header present"
+                    ),
+                    signals={"header": key, "hints": hints},
+                    evidence_ids=evidence_ids,
                 )
+            )
 
-        return observations
+        return verdicts

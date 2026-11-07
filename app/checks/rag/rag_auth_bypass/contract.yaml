@@ -29,3 +29,13 @@ references:
 - CWE-287 Improper Authentication
 reason: Many vector store deployments use no authentication or default keys. Auth
   bypass gives full read/write access to the knowledge base
+severity:
+  model: fixed
+  # Categorical: the answer is in the response, so no grader above the rule tier
+  # is ever called. No `observations:` map — the discriminator embeds the store
+  # type and credential kind (`default-qdrant-default_key`), so
+  # `provisional_for()` falls to `default` and `grade()` places the real severity
+  # (the ai_model_info_check pattern). `default` is the lowest severity this
+  # check emits, so a deferred or failed grade can never over-escalate
+  # `on_critical`.
+  default: info

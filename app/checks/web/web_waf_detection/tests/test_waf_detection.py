@@ -1,5 +1,6 @@
-"""Co-located tests (Phase 56 §3) — split from test_web_security_detection.py."""
+"""Tests for web_waf_detection."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -48,11 +49,13 @@ def mock_client_multi(response_map=None, default=None):
     mock.__aexit__ = AsyncMock()
 
     def _lookup(method, url):
+        # The real client stamps the requested URL onto the response, and a
+        # migrated check records that URL on the exchange its grader reads.
         if response_map:
             for (m, pattern), response in response_map.items():
                 if m == method and pattern in url:
-                    return response
-        return default
+                    return replace(response, url=url)
+        return replace(default, url=url)
 
     async def dispatch_get(url, **kwargs):
         return _lookup("GET", url)
@@ -66,6 +69,20 @@ def mock_client_multi(response_map=None, default=None):
     mock._request = AsyncMock(side_effect=lambda m, url, **kw: _lookup(m, url))
 
     return mock
+
+
+async def probe_and_grade(check, service, context=None):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `check_service()`
+    now returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context or {})
+    return await grade_result(check, result, context or {})
 
 
 class TestWAFDetectionCheck:
@@ -93,7 +110,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         cf_observations = [f for f in result.observations if "cloudflare" in f.title.lower()]
         assert len(cf_observations) == 1
         assert cf_observations[0].title == "WAF detected: Cloudflare"
@@ -117,7 +134,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         aws_observations = [f for f in result.observations if "aws waf" in f.title.lower()]
         assert len(aws_observations) == 1
         assert aws_observations[0].title == "WAF detected: AWS WAF"
@@ -143,7 +160,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         imperva = [
             f
             for f in result.observations
@@ -180,7 +197,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(response_map=responses, default=block_resp),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         cf_observations = [f for f in result.observations if "cloudflare" in f.title.lower()]
         assert len(cf_observations) >= 1
         # At least one detection method found Cloudflare
@@ -206,7 +223,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         azure_observations = [f for f in result.observations if "azure" in f.title.lower()]
         assert len(azure_observations) == 1
         assert azure_observations[0].title == "CDN detected: Azure Front Door"
@@ -227,7 +244,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         assert result.observations == []
         assert result.outputs["waf_detected"] == {}
 
@@ -245,7 +262,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         # Sucuri is a WAF product, so accuracy warning should fire
         warn = [f for f in result.observations if "accuracy" in f.title.lower()]
         assert len(warn) == 1
@@ -269,7 +286,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(error="Connection refused")),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         assert result.success is True
         assert result.observations == []
         assert result.outputs["waf_detected"] == {}
@@ -292,7 +309,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         cf_observations = [f for f in result.observations if "cloudflare" in f.title.lower()]
         assert cf_observations == [], (
             "cf-connecting-ip alone should not trigger Cloudflare detection"
@@ -317,7 +334,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(403, body=generic_body, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         assert result.observations == [], (
             "A generic 403 page with no WAF signatures should produce zero observations"
         )
@@ -340,7 +357,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         assert result.observations == []
         assert result.outputs["waf_detected"] == {}
 
@@ -358,7 +375,7 @@ class TestWAFDetectionCheck:
             "app.checks.web.web_waf_detection.check.AsyncHttpClient",
             return_value=mock_client_multi(default=resp(200, headers=headers)),
         ):
-            result = await check.check_service(service, {})
+            result = await probe_and_grade(check, service)
         # Azure Front Door is classified as CDN, not WAF
         azure_observations = [f for f in result.observations if "azure" in f.title.lower()]
         assert len(azure_observations) == 1

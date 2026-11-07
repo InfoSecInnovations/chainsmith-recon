@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_mcp.py."""
+"""Tests for mcp_discovery."""
 
 import json
 from unittest.mock import AsyncMock, patch
@@ -8,6 +8,14 @@ import pytest
 from app.checks.base import Service
 from app.checks.mcp.mcp_discovery import MCPDiscoveryCheck
 from app.lib.http import HttpResponse
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 @pytest.fixture
@@ -111,10 +119,10 @@ class TestMCPDiscoveryCheck:
         mock_client.get = mock_get
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.mcp.mcp_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
 
@@ -163,10 +171,10 @@ class TestMCPDiscoveryCheck:
         mock_client.get = mock_get
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.mcp.mcp_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         servers = result.outputs["mcp_servers"]
@@ -203,10 +211,10 @@ class TestMCPDiscoveryCheck:
         mock_client.get = mock_get
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.mcp.mcp_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         servers = result.outputs["mcp_servers"]
@@ -240,10 +248,10 @@ class TestMCPDiscoveryCheck:
         mock_client.get = mock_get
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.mcp.mcp_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         servers = result.outputs["mcp_servers"]
@@ -261,10 +269,10 @@ class TestMCPDiscoveryCheck:
         mock_client.get = AsyncMock(return_value=make_response(status_code=404))
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.mcp.mcp_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         assert result.outputs.get("mcp_servers") is None
@@ -305,10 +313,10 @@ class TestMCPDiscoveryCheck:
         mock_client.get = mock_get
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.mcp.mcp_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         # No MCP indicators -> no servers discovered
@@ -340,10 +348,10 @@ class TestMCPDiscoveryCheck:
         mock_client.get = mock_get
         mock_client.post = AsyncMock(return_value=make_response(status_code=404))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("app.checks.mcp.mcp_discovery.check.AsyncHttpClient", return_value=mock_client):
-            result = await check.check_service(sample_service, {"services": [sample_service]})
+            result = await probe_and_grade(check, sample_service, {"services": [sample_service]})
 
         assert result.success
         # HTML page with no MCP indicators should not produce any servers

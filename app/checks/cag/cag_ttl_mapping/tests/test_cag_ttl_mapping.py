@@ -1,4 +1,16 @@
-"""Co-located tests (Phase 56 §3) — split from test_cag_enhanced.py."""
+"""Tests for cag_ttl_mapping.
+
+This check is split into probe + grade; tests route through
+`probe_and_grade()`. The three timing tests used to `patch.object` the internal
+`_map_ttl` to hand it a pre-built `ttl_info` dict — but in the split there is no
+such return value to intercept: the probe records exchanges and `grade()`
+re-derives the reading off their recorded `elapsed_ms`. So those tests now drive
+the real timing sequence through a call-counting HTTP mock that returns faithful
+`elapsed_ms` per request, which is what the directive asks for (make the mock
+produce faithful timing rather than weaken the assertion). Titles and severities
+are asserted verbatim; the old exact-`ttl_info`-dict equality is replaced by
+assertions on the meaningful derived fields.
+"""
 
 from unittest.mock import AsyncMock, patch
 
@@ -45,30 +57,50 @@ def make_response(
     headers: dict = None,
     body: str = "",
     error: str = None,
+    elapsed_ms: float = 50.0,
 ) -> HttpResponse:
-    """Create a mock HTTP response."""
+    """Create a mock HTTP response with a controllable elapsed time."""
     return HttpResponse(
-        url="http://cag.example.com:8080/test",
+        url="http://cag.example.com:8080/cache",
         status_code=status_code,
         headers=headers or {},
         body=body,
-        elapsed_ms=50.0,
+        elapsed_ms=elapsed_ms,
         error=error,
     )
 
 
-def make_mock_client(**overrides):
-    """Create a standard mock HTTP client."""
+def timed_client(timings):
+    """A mock client whose Nth POST returns the Nth `(elapsed_ms, headers)` pair.
+
+    Requests past the list reuse the last pair, which models a cache that keeps
+    hitting. `__aexit__` returns False so a probe exception is not suppressed
+    (§0.14).
+    """
     client = AsyncMock()
+    state = {"i": 0}
+
+    async def _post(url=None, **kwargs):
+        i = min(state["i"], len(timings) - 1)
+        elapsed, headers = timings[i]
+        state["i"] += 1
+        return make_response(
+            status_code=200, body='{"answer": "ok"}', headers=headers, elapsed_ms=elapsed
+        )
+
+    client.post = AsyncMock(side_effect=_post)
     client.get = AsyncMock(return_value=make_response(status_code=404))
-    client.post = AsyncMock(return_value=make_response(status_code=200, body='{"answer": "ok"}'))
-    client.head = AsyncMock(return_value=make_response(status_code=404))
-    client._request = AsyncMock(return_value=make_response(status_code=404))
     client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock()
-    for k, v in overrides.items():
-        setattr(client, k, v)
+    client.__aexit__ = AsyncMock(return_value=False)
     return client
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 class TestTTLMappingCheck:
@@ -78,72 +110,72 @@ class TestTTLMappingCheck:
 
     @pytest.mark.asyncio
     async def test_no_endpoints_skips(self, check, sample_service):
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service, {})
         assert result.success
         assert len(result.observations) == 0
 
     @pytest.mark.asyncio
     async def test_detects_unbounded_ttl(self, check, sample_service, cag_endpoint_context):
-        """When _map_ttl finds no expiry, observation reports unbounded TTL."""
-        ttl_info = {
-            "url": "http://cag.example.com:8080/cache",
-            "caching_detected": True,
-            "initial_request_ms": 200.0,
-            "cached_request_ms": 30.0,
-            "speedup_ratio": 0.85,
-            "header_ttl_seconds": None,
-            "observed_ttl_seconds": None,
-            "last_cache_hit_interval": 60,
-            "ttl_unbounded": True,
-            "ttl_mismatch": False,
-        }
-        with patch.object(check, "_map_ttl", return_value=ttl_info):
-            client = make_mock_client()
-            with patch("app.checks.cag.cag_ttl_mapping.check.AsyncHttpClient", return_value=client):
-                result = await check.check_service(sample_service, cag_endpoint_context)
+        """Every re-query stays fast (a cache hit), so no expiry is found."""
+        # initial slow, then every subsequent request is a hit -> unbounded.
+        timings = [(200.0, {})] + [(30.0, {})] * 5
+        client = timed_client(timings)
+        with (
+            patch("app.checks.cag.cag_ttl_mapping.check.AsyncHttpClient", return_value=client),
+            patch("asyncio.sleep", return_value=None),
+        ):
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         assert len(result.observations) == 1
         obs = result.observations[0]
         assert obs.title == "Unbounded cache TTL (no expiry detected within test window)"
         assert obs.severity == "medium"
-        assert result.outputs["cache_ttl"] == [ttl_info]
+        reading = result.outputs["cache_ttl"][0]
+        assert reading["caching_detected"]
+        assert reading["ttl_unbounded"]
+        assert reading["initial_request_ms"] == 200.0
+        assert reading["cached_request_ms"] == 30.0
 
     @pytest.mark.asyncio
     async def test_detects_ttl_mismatch(self, check, sample_service, cag_endpoint_context):
-        """When header TTL and observed TTL differ, report mismatch."""
-        ttl_info = {
-            "url": "http://cag.example.com:8080/cache",
-            "caching_detected": True,
-            "initial_request_ms": 200.0,
-            "cached_request_ms": 30.0,
-            "speedup_ratio": 0.85,
-            "header_ttl_seconds": 60,
-            "observed_ttl_seconds": 15,
-            "last_cache_hit_interval": 5,
-            "ttl_unbounded": False,
-            "ttl_mismatch": True,
-        }
-        with patch.object(check, "_map_ttl", return_value=ttl_info):
-            client = make_mock_client()
-            with patch("app.checks.cag.cag_ttl_mapping.check.AsyncHttpClient", return_value=client):
-                result = await check.check_service(sample_service, cag_endpoint_context)
+        """Header says max-age=60 but the entry expires at the 15s probe."""
+        # initial (with header), confirm hit, 5s hit, 15s miss.
+        timings = [
+            (200.0, {"cache-control": "max-age=60"}),
+            (30.0, {"cache-control": "max-age=60"}),
+            (30.0, {"cache-control": "max-age=60"}),  # 5s: hit
+            (200.0, {"cache-control": "max-age=60"}),  # 15s: miss
+        ]
+        client = timed_client(timings)
+        with (
+            patch("app.checks.cag.cag_ttl_mapping.check.AsyncHttpClient", return_value=client),
+            patch("asyncio.sleep", return_value=None),
+        ):
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         assert len(result.observations) == 1
         obs = result.observations[0]
         assert "mismatch" in obs.title.lower()
         assert obs.severity == "low"
+        reading = result.outputs["cache_ttl"][0]
+        assert reading["header_ttl_seconds"] == 60
+        assert reading["observed_ttl_seconds"] == 15
+        assert reading["ttl_mismatch"]
 
     @pytest.mark.asyncio
     async def test_no_caching_detected_produces_no_observations(
         self, check, sample_service, cag_endpoint_context
     ):
-        """When _map_ttl returns None (no caching), no observations."""
-        with patch.object(check, "_map_ttl", return_value=None):
-            client = make_mock_client()
-            with patch("app.checks.cag.cag_ttl_mapping.check.AsyncHttpClient", return_value=client):
-                result = await check.check_service(sample_service, cag_endpoint_context)
+        """Second request is no faster than the first -> no caching, no obs."""
+        timings = [(200.0, {}), (200.0, {})]
+        client = timed_client(timings)
+        with (
+            patch("app.checks.cag.cag_ttl_mapping.check.AsyncHttpClient", return_value=client),
+            patch("asyncio.sleep", return_value=None),
+        ):
+            result = await probe_and_grade(check, sample_service, cag_endpoint_context)
 
         assert result.success
         assert len(result.observations) == 0

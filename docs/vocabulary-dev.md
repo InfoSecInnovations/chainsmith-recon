@@ -57,7 +57,7 @@ The repository layer bridges these — repository methods accept/return dicts, n
 
 ### Repositories
 
-Data access layer (`app/db/repositories.py`). Each domain object has a repository with async CRUD methods. Key repositories: `ScanRepository`, `ObservationRepository`, `ChainRepository`, `CheckLogRepository`, `EngagementRepository`, `TrendRepository`, `AdjudicationRepository`.
+Data access layer (`app/db/repositories.py`). Each domain object has a repository with async CRUD methods. Key repositories: `ScanRepository`, `ObservationRepository`, `ChainRepository`, `CheckLogRepository`, `EvidenceRepository`, `TrendRepository`, `AdjudicationRepository`.
 
 ### Observation Fingerprinting
 
@@ -127,7 +127,7 @@ Aggregated view of the swarm: agents online, task counts by status, current phas
 
 ### ChainsmithConfig
 
-Top-level config object (`app/config.py`). Composed of nested configs: `ScopeConfig`, `LiteLLMConfig`, `PathsConfig`, `StorageConfig`, `SwarmConfig`. Loaded from YAML with environment variable overrides. (Agent configs — adjudicator/triage/researcher/coach — moved to per-agent `app/agents/<name>/config.yaml` in Phase 56.10c; advisor configs — scan_analysis/check_proof — moved to per-advisor `app/advisors/<name>/config.yaml` in Phase 56.11.)
+Top-level config object (`app/config.py`). Composed of nested configs: `ScopeConfig`, `LiteLLMConfig`, `PathsConfig`, `StorageConfig`, `SwarmConfig`. Loaded from YAML with environment variable overrides. (Agent configs — adjudicator/triage/researcher/coach — live in per-agent `app/agents/<name>/config.yaml`; advisor configs — scan_analysis/check_proof — live in per-advisor `app/advisors/<name>/config.yaml`.)
 
 ### Port Profiles
 

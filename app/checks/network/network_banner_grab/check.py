@@ -9,6 +9,20 @@ message queues, and custom protocols.
 
 Depends on: services (needs open ports from port_scan)
 Feeds: service version identification, vulnerability correlation
+
+**Probe/grade.** `run()` connects, sends whatever probe the
+port suggests, and records each read; `grade()` reads the banner back and says
+what the service is and whether it is asking for a password. `banner_data` is an
+output, so both halves call the same `_banner_from()` over the same exchanges —
+§6.2's two parses with one parser.
+
+**The exchange now carries the banner twice, on purpose.** `response_body` holds
+the decoded text, because that is what a reader — human or, with the planned LLM tier, a model
+— actually reads; `response_headers["raw_hex"]` holds the bytes verbatim, because
+a binary handshake does not survive `decode(errors="replace")` and two of the
+signatures here match on raw bytes. Before wave 2 the hex was computed in
+`_grab_banner` and thrown away; keeping it on the exchange is what lets a stored
+banner be identified as exactly as a live one.
 """
 
 import asyncio
@@ -16,8 +30,10 @@ import logging
 import socket
 from typing import Any
 
+from app import capture
+from app.capture.models import Exchange
 from app.checks.base import BaseCheck, CheckCondition, CheckResult, Service
-from app.lib.observations import build_observation
+from app.grading import Evidence, GradeContext, Verdict
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +136,10 @@ BANNER_SIGNATURES = [
     },
 ]
 
+#: The command `_grab_banner` sends to ask Redis whether it wants a password.
+#: Named because `_redis_auth_from` identifies its exchange by this payload.
+REDIS_AUTH_PROBE = b"INFO\r\n"
+
 # Ports that are clearly HTTP and should be skipped
 HTTP_PORTS = {80, 443, 8080, 8443, 8081, 8082, 8083, 8000, 8888, 3000, 5000, 8501, 7860, 4000, 9090}
 
@@ -197,88 +217,133 @@ class BannerGrabCheck(BaseCheck):
 
         for svc in targets:
             endpoint = f"{svc.host}:{svc.port}"
-            banner_info = await self._grab_banner(svc.host, svc.port)
+            banner_info, exchanges = await self._grab_banner(svc.host, svc.port)
             if banner_info:
                 banner_data[endpoint] = banner_info
-                self._generate_observations(result, svc, banner_info)
+                candidate = self.create_candidate(host=svc.host, target=svc)
+                for exchange in exchanges:
+                    candidate.attach(exchange)
+                result.candidates.append(candidate)
             result.targets_checked += 1
 
         result.outputs["banner_data"] = banner_data
         return result
 
-    async def _grab_banner(self, host: str, port: int) -> dict[str, Any] | None:
-        """Connect to host:port and grab the banner."""
-        asyncio.get_event_loop()
+    async def _grab_banner(
+        self, host: str, port: int
+    ) -> tuple[dict[str, Any] | None, list[Exchange]]:
+        """Connect to host:port and grab the banner.
+
+        Returns the summary `banner_data` carries *and* every read it was taken
+        from, so the grader reads the same banner from the same bytes.
+        """
+        exchanges: list[Exchange] = []
+
+        def _answered() -> bool:
+            return any(_responded(e) for e in exchanges)
+
+        # Step 1: Try passive read (server-speaks-first)
+        exchanges.append(await self._tcp_read(host, port, probe=None))
+
+        # Step 2: If no passive banner, try protocol-specific probes.
+        #
+        # Two attempts. The pre-57.4 code had this block written out twice,
+        # verbatim and under identical conditions, so its second copy only ever
+        # acted as a retry — named here rather than duplicated.
+        for _attempt in range(2):
+            if _answered():
+                break
+            for sig in BANNER_SIGNATURES:
+                if sig.get("probe") and port in sig.get("default_ports", []):
+                    exchanges.append(await self._tcp_read(host, port, probe=sig["probe"]))
+                    if _responded(exchanges[-1]):
+                        break
+
+        info = self._banner_from(exchanges, port)
+        if info is None:
+            return None, exchanges
+
+        # Step 3: For Redis, ask whether it wants a password. The answer is read
+        # out of the exchange by `_banner_from`, so the summary is recomputed
+        # once the probe exists rather than patched in place.
+        if info["service"] == "Redis":
+            exchanges.append(await self._tcp_read(host, port, probe=REDIS_AUTH_PROBE))
+            info = self._banner_from(exchanges, port)
+
+        return info, exchanges
+
+    def _banner_from(self, exchanges: list[Exchange], port: int) -> dict[str, Any] | None:
+        """Read one endpoint's service identity out of its recorded reads.
+
+        The single parser behind §6.2's two parses: `_grab_banner` calls it to
+        populate `banner_data`, and `grade()` calls it again over the stored
+        copies.
+        """
+        auth_probe = next((e for e in exchanges if _is_auth_probe(e)), None)
+        banner_exchange = next(
+            (e for e in exchanges if e is not auth_probe and _responded(e)), None
+        )
+        if banner_exchange is None:
+            return None
+
+        banner_bytes = _raw_bytes(banner_exchange)
+        banner_text = banner_exchange.response_body.strip()
 
         info: dict[str, Any] = {
             "service": "unknown",
-            "banner": "",
+            "banner": banner_text[:500],  # Cap length
             "version": None,
             "auth_required": None,
-            "raw_bytes": None,
+            "raw_bytes": banner_bytes[:200].hex(),
         }
 
-        # Step 1: Try passive read (server-speaks-first)
-        banner_bytes = await self._tcp_read(host, port, probe=None)
-
-        # Step 2: If no passive banner, try protocol-specific probes
-        if not banner_bytes:
-            for sig in BANNER_SIGNATURES:
-                if sig.get("probe") and port in sig.get("default_ports", []):
-                    banner_bytes = await self._tcp_read(host, port, probe=sig["probe"])
-                    if banner_bytes:
-                        break
-
-        if not banner_bytes:
-            # Try generic probes for common services by port
-            for sig in BANNER_SIGNATURES:
-                if port in sig.get("default_ports", []) and sig.get("probe"):
-                    banner_bytes = await self._tcp_read(host, port, probe=sig["probe"])
-                    if banner_bytes:
-                        break
-
-        if not banner_bytes:
-            return None
-
-        # Decode banner (best effort)
-        try:
-            banner_text = banner_bytes.decode("utf-8", errors="replace").strip()
-        except Exception:
-            banner_text = repr(banner_bytes[:200])
-
-        info["banner"] = banner_text[:500]  # Cap length
-        info["raw_bytes"] = banner_bytes[:200].hex()
-
-        # Step 3: Identify service from banner
         identified = self._identify_service(banner_text, banner_bytes, port)
         info["service"] = identified["service"]
         info["version"] = identified.get("version")
 
-        # Step 4: For Redis, check auth requirement
         if info["service"] == "Redis":
-            auth_required = await self._check_redis_auth(host, port)
-            info["auth_required"] = auth_required
+            info["auth_required"] = self._redis_auth_from(auth_probe)
 
-        # Step 5: For Memcached, check auth
         if info["service"] == "Memcached":
+            # A VERSION answer means the command ran, so nothing asked us for a
+            # password.
             info["auth_required"] = not banner_text.startswith("VERSION")
-            # If we got VERSION response, no auth is required
-            if banner_text.startswith("VERSION"):
-                info["auth_required"] = False
 
         return info
 
-    async def _tcp_read(self, host: str, port: int, probe: bytes | None = None) -> bytes | None:
-        """Raw TCP connect, optionally send probe, read response."""
+    async def _tcp_read(self, host: str, port: int, probe: bytes | None = None) -> Exchange | None:
+        """Raw TCP connect, optionally send probe, read response.
+
+        Returns the recorded exchange (57.4 wave 2). The banner is its
+        `response_body` as text and its `raw_hex` header as bytes.
+        """
         loop = asyncio.get_event_loop()
+        prb = None
         try:
-            return await asyncio.wait_for(
-                loop.run_in_executor(None, self._sync_tcp_read, host, port, probe),
-                timeout=self.CONNECT_TIMEOUT + self.BANNER_READ_TIMEOUT,
-            )
+            # `request_body` carries the protocol-native payload —
+            # here, the bytes written to the socket. A port that accepts the
+            # connection and says nothing records an empty response, which is
+            # the honest record of what happened.
+            async with capture.probe(
+                "tcp",
+                host,
+                request_body=probe.decode("utf-8", errors="replace") if probe else "",
+                port=port,
+            ) as prb:
+                data = await asyncio.wait_for(
+                    loop.run_in_executor(None, self._sync_tcp_read, host, port, probe),
+                    timeout=self.CONNECT_TIMEOUT + self.BANNER_READ_TIMEOUT,
+                )
+                # Text for reading, hex for matching. See the module docstring:
+                # two of these signatures match on raw bytes, and a binary
+                # handshake does not survive a lossy decode.
+                prb.responded(
+                    data.decode("utf-8", errors="replace") if data else "",
+                    raw_hex=data.hex() if data else "",
+                )
         except (TimeoutError, Exception) as exc:
             logger.debug(f"TCP read failed {host}:{port}: {exc}")
-            return None
+        return prb.exchange if prb is not None else None
 
     def _sync_tcp_read(self, host: str, port: int, probe: bytes | None) -> bytes | None:
         """Synchronous TCP connect + read."""
@@ -359,51 +424,71 @@ class BannerGrabCheck(BaseCheck):
 
         return result
 
-    async def _check_redis_auth(self, host: str, port: int) -> bool:
-        """Check if Redis requires authentication."""
-        # Send INFO command — if auth is required, Redis returns -NOAUTH
-        response = await self._tcp_read(host, port, probe=b"INFO\r\n")
-        if response:
-            text = response.decode("utf-8", errors="replace")
+    def _redis_auth_from(self, exchange: Exchange | None) -> bool:
+        """Whether Redis asked for a password, read off the INFO probe.
+
+        The I/O half of this lives in `_grab_banner`, which sends
+        `REDIS_AUTH_PROBE`; this is the reading, so a stored exchange answers the
+        same question without a socket. Unclear still means "assume auth
+        required": claiming an open Redis on an ambiguous answer is the expensive
+        mistake.
+        """
+        if exchange is not None and _responded(exchange):
+            text = exchange.response_body
             if "-NOAUTH" in text or "DENIED" in text.upper():
                 return True
             if "redis_version" in text or "# Server" in text:
                 return False
-        return True  # Assume auth required if unclear
+        return True
 
-    def _generate_observations(
-        self,
-        result: CheckResult,
-        svc: Service,
-        banner_info: dict[str, Any],
-    ) -> None:
-        """Generate observations from banner grabbing results."""
-        endpoint = f"{svc.host}:{svc.port}"
+    # ══ Grade ════════════════════════════════════════════════════
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Place severity on one endpoint's recorded banner."""
+        exchanges = list(evidence)
+        port = ctx.target.port if ctx.target else _port_of(exchanges)
+        banner_info = self._banner_from(exchanges, port if isinstance(port, int) else 0)
+        if banner_info is None:
+            return []
+
+        host = ctx.host
+        endpoint = f"{host}:{port}"
         service_name = banner_info["service"]
         version = banner_info.get("version")
         banner = banner_info.get("banner", "")[:200]
         auth_required = banner_info.get("auth_required")
-
         version_str = f" {version}" if version else ""
 
-        # Info observation: service identified
-        result.observations.append(
-            build_observation(
-                check_name=self.name,
+        evidence_ids = [e.id for e in exchanges]
+        verdicts: list[Verdict] = []
+
+        # ── What is listening here ──────────────────────────
+        verdicts.append(
+            Verdict(
+                severity="info",
+                # The banner is verbatim; naming the service from it is a
+                # signature match, and these signatures are short — "220 " is
+                # shared by SMTP and FTP and separated only by port number.
+                confidence=0.9 if service_name != "unknown" else 0.99,
+                discriminator=f"banner-{port}",
                 title=f"{service_name}{version_str} detected: {endpoint}",
                 description=(
                     f"{service_name}{version_str} service identified on {endpoint} "
                     f"via banner grabbing."
                 ),
-                severity="info",
                 evidence=f"Banner: {banner}",
-                host=svc.host,
-                discriminator=f"banner-{svc.port}",
+                reasoning=(
+                    f"Banner matched the {service_name} signature"
+                    if service_name != "unknown"
+                    else "A banner was returned but matched no known signature"
+                ),
+                signals={"service": service_name, "version": version},
                 raw_data=banner_info,
+                evidence_ids=evidence_ids,
             )
         )
 
-        # Critical: Database/cache with no authentication
+        # ── No authentication at all ───────────────────────
         if auth_required is False:
             # Find the severity for this service
             severity = "high"
@@ -413,9 +498,14 @@ class BannerGrabCheck(BaseCheck):
                     break
 
             if severity in ("critical", "high"):
-                result.observations.append(
-                    build_observation(
-                        check_name=self.name,
+                verdicts.append(
+                    Verdict(
+                        severity=severity,
+                        # The strongest verdict in the suite, and it is earned:
+                        # the check ran a command and the service answered it.
+                        # This is compliance, not a guess.
+                        confidence=0.95,
+                        discriminator=f"noauth-{port}",
                         title=(
                             f"{service_name} accepting commands without authentication: {endpoint}"
                         ),
@@ -425,51 +515,104 @@ class BannerGrabCheck(BaseCheck):
                             f"read, modify, or delete data. This is a critical "
                             f"security misconfiguration."
                         ),
-                        severity=severity,
                         evidence=(
                             f"Service: {service_name}{version_str} | "
                             f"Auth required: False | Banner: {banner}"
                         ),
-                        host=svc.host,
-                        discriminator=f"noauth-{svc.port}",
+                        reasoning=(
+                            f"{service_name} answered a command without being sent credentials"
+                        ),
+                        signals={"service": service_name, "auth_required": False},
                         references=[
                             "CWE-306 — Missing Authentication for Critical Function",
                         ],
+                        evidence_ids=evidence_ids,
                     )
                 )
 
-        # Version disclosure observation (if version detected on non-standard ports)
+        # ── Version disclosure ────────────────────────────
         if version and service_name != "unknown":
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            verdicts.append(
+                Verdict(
+                    severity="low",
+                    # Read from a documented position in the banner.
+                    confidence=0.95,
+                    discriminator=f"version-{port}",
                     title=f"Service version disclosed: {service_name}{version_str} on {endpoint}",
                     description=(
                         f"{service_name} on {endpoint} discloses its version "
                         f"({version}) in the connection banner. Version information "
                         f"aids attackers in identifying known vulnerabilities."
                     ),
-                    severity="low",
                     evidence=f"Version: {version} | Banner: {banner}",
-                    host=svc.host,
-                    discriminator=f"version-{svc.port}",
+                    reasoning=f"Version string followed the {service_name} banner prefix",
+                    signals={"version": version},
+                    evidence_ids=evidence_ids,
                 )
             )
 
-        # Unknown service with banner — worth investigating
+        # ── A banner nothing recognises ────────────────────
         if service_name == "unknown" and banner:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
+            verdicts.append(
+                Verdict(
+                    severity="medium",
+                    # "Matches none of nine signatures" is a statement about the
+                    # signature list, not about the service. It is `medium`
+                    # because it asks for a human, not because it found one.
+                    confidence=0.6,
+                    discriminator=f"unknown-{port}",
                     title=f"Unidentified service with banner: {endpoint}",
                     description=(
                         f"An unidentified service on {endpoint} returned a banner "
                         f"that does not match known service signatures. Manual "
                         f"investigation is recommended."
                     ),
-                    severity="medium",
                     evidence=f"Banner (first 200 chars): {banner}",
-                    host=svc.host,
-                    discriminator=f"unknown-{svc.port}",
+                    reasoning=f"Banner matched none of the {len(BANNER_SIGNATURES)} signatures",
+                    signals={"banner": banner},
+                    evidence_ids=evidence_ids,
                 )
             )
+
+        return verdicts
+
+
+def _responded(exchange: Exchange | None) -> bool:
+    """True when this read came back with bytes."""
+    return exchange is not None and exchange.error is None and bool(exchange.response_body)
+
+
+def _is_auth_probe(exchange: Exchange | None) -> bool:
+    """True for the Redis INFO probe, which is a question and not a banner."""
+    if exchange is None:
+        return False
+    return (exchange.request_body or "") == REDIS_AUTH_PROBE.decode()
+
+
+def _raw_bytes(exchange: Exchange) -> bytes:
+    """The banner exactly as it arrived.
+
+    `raw_hex` is written by `_tcp_read` and is the lossless copy; the decoded
+    body is the readable one. Falling back to re-encoding the text keeps an
+    exchange recorded before wave 2 — or by a test that builds one by hand —
+    usable, at the cost of the bytes a lossy decode already dropped.
+    """
+    raw_hex = (exchange.response_headers or {}).get("raw_hex", "")
+    if raw_hex:
+        try:
+            return bytes.fromhex(raw_hex)
+        except ValueError:
+            pass
+    return exchange.response_body.encode("utf-8", errors="replace")
+
+
+def _port_of(exchanges: list[Exchange]) -> int | str:
+    """The port these reads were made against, off their request metadata."""
+    for exchange in exchanges:
+        port = (exchange.request_headers or {}).get("port", "")
+        if port:
+            try:
+                return int(port)
+            except (TypeError, ValueError):
+                return port
+    return ""

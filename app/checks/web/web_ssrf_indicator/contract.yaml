@@ -29,3 +29,27 @@ references:
 - CWE-918
 reason: AI services frequently accept URLs for document processing, creating classic
   SSRF vectors
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in the
+  # response, so no grader above the rule tier is ever called. These are the
+  # PRE-grade values a candidate carries (§6.1) — `grade()` places the real one
+  # — and `default` is the lowest severity this check emits, so a deferred or
+  # failed grade can never over-escalate `on_critical`.
+  #
+  # One candidate for the service (the probe GETs of the SSRF-prone paths); the
+  # OpenAPI and discovered sources are read from the scan context, which the
+  # grader also holds, so no exchange stands behind them. `grade()` re-derives
+  # all three via `_collect()` and returns one verdict per unique path.
+  # `ssrf-<path>-<param>` is unbounded, so the map records the `ssrf` family and
+  # `provisional_for` falls to `default`.
+  #
+  # The severities never claimed an SSRF and the confidence says so: these are
+  # the strength of evidence that a parameter *takes a URL*, and every verdict's
+  # reasoning adds that no SSRF request was attempted. OpenAPI-declared 0.8,
+  # a URL param seen in a real query string 0.7, a probe body merely mentioning
+  # a URL field 0.5. `default` is `low` — the lowest emitted — so a deferred
+  # grade never presents an ungraded candidate as one of the `medium`s.
+  default: low
+  observations:
+    ssrf: low

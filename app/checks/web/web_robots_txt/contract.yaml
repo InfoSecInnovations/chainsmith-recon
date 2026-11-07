@@ -28,3 +28,17 @@ references:
 - RFC 9309
 reason: robots.txt often reveals hidden paths that admins want to keep from search
   engines
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2. Categorical: the answer is in
+  # the response, so no grader above the rule tier
+  # is ever called. These are the PRE-grade values a candidate carries
+  # (§6.1) — `grade()` places the real one. `default` is the lowest severity
+  # this check emits, so a deferred or failed grade can never over-escalate
+  # `on_critical`.
+  # Both judgements read the same recorded file and can both fire, so the
+  # probe emits one undiscriminated candidate and `grade()` names each.
+  default: info
+  observations:
+    sensitive-paths: low
+    sitemaps-disclosed: info

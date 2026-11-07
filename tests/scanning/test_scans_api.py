@@ -317,6 +317,14 @@ class TestObservationRepositoryReads:
             "confidence",
             "fingerprint",
             "created_at",
+            # Phase 57.3: how the severity above was arrived at.
+            "provisional_severity",
+            "grading_state",
+            "grading_tier",
+            "grading_reasoning",
+            "evidence_ids",
+            "evidence_source",
+            "signals",
         }
         assert expected_keys == set(f.keys())
 

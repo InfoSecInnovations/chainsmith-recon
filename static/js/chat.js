@@ -1,5 +1,5 @@
 /**
- * Chainsmith Recon - Chat Panel (Phase 35a)
+ * Chainsmith Recon - Chat Panel
  *
  * Slide-out chat panel with SSE streaming, agent attribution,
  * and prompt router integration.

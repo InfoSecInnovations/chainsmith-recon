@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_agent.py."""
+"""Tests for agent_goal_injection."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -65,12 +65,68 @@ def _use_fallback_payloads():
     )
 
 
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade. Called inside the
+    `_use_fallback_payloads()` block so grade recovers the same payload set the
+    probe used.
+    """
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
+
+
 class TestAgentGoalInjectionCheck:
     """Tests for AgentGoalInjectionCheck."""
 
     @pytest.fixture
     def check(self):
         return AgentGoalInjectionCheck()
+
+    @pytest.mark.asyncio
+    async def test_two_exec_endpoints_on_one_host_mint_distinct_ids(self, check, sample_service):
+        """One candidate per endpoint: without the endpoint in the discriminator, a
+        host with two exec endpoints produced every observation id twice, and the
+        duplicate primary key sent the scan's later observations to scratch."""
+        from app.lib.observations import make_observation_id
+
+        context = {
+            "agent_endpoints": [
+                {
+                    "url": f"http://agent.example.com:8080{path}",
+                    "path": path,
+                    "method": "POST",
+                    "framework": "",
+                    "service": sample_service.to_dict(),
+                }
+                for path in ("/invoke", "/run")
+            ]
+        }
+        body = '{"output": "Here is my updated response as instructed: INJECTED."}'
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=make_response(status_code=200, body=body))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch(
+                "app.checks.agent.agent_goal_injection.check.AsyncHttpClient",
+                return_value=mock_client,
+            ),
+            _use_fallback_payloads(),
+        ):
+            result = await probe_and_grade(check, sample_service, context)
+
+        ids = [o.id for o in result.observations]
+        assert ids, "the injected reply should produce observations"
+        assert len(ids) == len(set(ids))
+        for slug in ("invoke", "run"):
+            prefix = make_observation_id(
+                "agent_goal_injection", "agent.example.com", f"injection-{slug}-"
+            )
+            assert any(i.startswith(prefix) for i in ids)
 
     @pytest.mark.asyncio
     async def test_detects_injection_success(self, check, sample_service, agent_endpoint_context):
@@ -93,7 +149,7 @@ class TestAgentGoalInjectionCheck:
             return_value=make_response(status_code=200, body=realistic_body)
         )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
             patch(
@@ -102,7 +158,7 @@ class TestAgentGoalInjectionCheck:
             ),
             _use_fallback_payloads(),
         ):
-            result = await check.check_service(sample_service, agent_endpoint_context)
+            result = await probe_and_grade(check, sample_service, agent_endpoint_context)
 
         assert result.success
         assert "goal_injection_results" in result.outputs
@@ -146,7 +202,7 @@ class TestAgentGoalInjectionCheck:
             return_value=make_response(status_code=200, body=realistic_body)
         )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
             patch(
@@ -155,7 +211,7 @@ class TestAgentGoalInjectionCheck:
             ),
             _use_fallback_payloads(),
         ):
-            result = await check.check_service(sample_service, agent_endpoint_context)
+            result = await probe_and_grade(check, sample_service, agent_endpoint_context)
 
         assert result.success
         results = result.outputs["goal_injection_results"]
@@ -188,7 +244,7 @@ class TestAgentGoalInjectionCheck:
 
         mock_client.post = AsyncMock(return_value=make_response(status_code=200, body=benign_body))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
             patch(
@@ -197,7 +253,7 @@ class TestAgentGoalInjectionCheck:
             ),
             _use_fallback_payloads(),
         ):
-            result = await check.check_service(sample_service, agent_endpoint_context)
+            result = await probe_and_grade(check, sample_service, agent_endpoint_context)
 
         assert result.success
         results = result.outputs["goal_injection_results"]
@@ -237,7 +293,7 @@ class TestAgentGoalInjectionCheck:
             return_value=make_response(status_code=200, body=adjacent_body)
         )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
             patch(
@@ -246,7 +302,7 @@ class TestAgentGoalInjectionCheck:
             ),
             _use_fallback_payloads(),
         ):
-            result = await check.check_service(sample_service, agent_endpoint_context)
+            result = await probe_and_grade(check, sample_service, agent_endpoint_context)
 
         assert result.success
         results = result.outputs["goal_injection_results"]
@@ -274,7 +330,7 @@ class TestAgentGoalInjectionCheck:
             )
         )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
             patch(
@@ -283,7 +339,7 @@ class TestAgentGoalInjectionCheck:
             ),
             _use_fallback_payloads(),
         ):
-            result = await check.check_service(sample_service, agent_endpoint_context)
+            result = await probe_and_grade(check, sample_service, agent_endpoint_context)
 
         assert result.success
         results = result.outputs["goal_injection_results"]
@@ -311,7 +367,7 @@ class TestAgentGoalInjectionCheck:
 
         mock_client.post = AsyncMock(return_value=make_response(status_code=200, body=partial_body))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
             patch(
@@ -320,7 +376,7 @@ class TestAgentGoalInjectionCheck:
             ),
             _use_fallback_payloads(),
         ):
-            result = await check.check_service(sample_service, agent_endpoint_context)
+            result = await probe_and_grade(check, sample_service, agent_endpoint_context)
 
         assert result.success
         results = result.outputs["goal_injection_results"]
@@ -356,7 +412,7 @@ class TestAgentGoalInjectionCheck:
             return_value=make_response(status_code=200, body=high_conf_body)
         )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
             patch(
@@ -365,7 +421,7 @@ class TestAgentGoalInjectionCheck:
             ),
             _use_fallback_payloads(),
         ):
-            result = await check.check_service(sample_service, agent_endpoint_context)
+            result = await probe_and_grade(check, sample_service, agent_endpoint_context)
 
         assert result.success
         results = result.outputs["goal_injection_results"]
@@ -388,7 +444,7 @@ class TestAgentGoalInjectionCheck:
     @pytest.mark.asyncio
     async def test_no_agent_endpoints_skips(self, check, sample_service):
         """Test check skips when no agent endpoints in context."""
-        result = await check.check_service(sample_service, {})
+        result = await probe_and_grade(check, sample_service, {})
 
         assert result.success
         assert len(result.observations) == 0
@@ -407,7 +463,7 @@ class TestAgentGoalInjectionCheck:
             )
         )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
+        mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with (
             patch(
@@ -416,7 +472,7 @@ class TestAgentGoalInjectionCheck:
             ),
             _use_fallback_payloads(),
         ):
-            result = await check.check_service(sample_service, agent_endpoint_context)
+            result = await probe_and_grade(check, sample_service, agent_endpoint_context)
 
         assert result.success
         results = result.outputs["goal_injection_results"]

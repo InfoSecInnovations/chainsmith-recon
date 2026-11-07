@@ -24,3 +24,24 @@ references:
 - OWASP LLM Top 10 - LLM06 Sensitive Information Disclosure
 reason: Reveals the full model inventory; internal/staging models often have weaker
   guardrails
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 3. Categorical: which model names a
+  # 200 came back for is read off the record, so no grader above the rule tier
+  # is ever called. `default` is the pre-grade value a candidate carries (§6.1)
+  # and the LOWEST of the ladder — a deferred grade cannot present an ungraded
+  # candidate as the `high` internal-model finding.
+  #
+  # Confidence carries the real doubt. The model NAME is our label, not the
+  # target's: a server that silently falls back to its default for any unknown
+  # model accepts `internal`, `staging` and `gpt-4` identically, so the
+  # enumerated "inventory" may be one model answering to every name. The
+  # discriminator is whether any name was REJECTED (404) — if so the endpoint
+  # discriminates and the accepted set is real (0.85), if not the count could be
+  # a wordlist artefact (0.5). internal-model is 0.7 throughout for the same
+  # fallback reason.
+  default: info
+  observations:
+    internal-model: high
+    models-enumerated: info
+    no-enum: info

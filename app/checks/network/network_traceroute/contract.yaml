@@ -28,3 +28,19 @@ references:
 reason: Network path analysis reveals CDN/WAF/reverse proxy presence in the path to
   target hosts, which affects what service_probe results mean. Geographic routing
   reveals data path for compliance analysis.
+severity:
+  model: fixed
+  # Migrated to probe/grade in 57.4 wave 2, and 57.2 had already done most of the
+  # work: the whole trace was recorded as one `icmp` exchange with the path as JSON
+  # in `response_body`, so `grade()` re-reads exactly the structure the probe built.
+  #
+  # Everything this check produces is context for reading *other* checks' results —
+  # "your web findings may be the CDN, not the origin" — so `info` is the ceiling as
+  # well as the floor. The uncertainty lives in `confidence` instead, and this is the
+  # check where it matters most: a filtered path's hop count is a floor rather than a
+  # length (0.7 unreached against 0.95 reached), and CDN attribution is a substring
+  # match against patterns as short as `cf-` and as generic as `google` (0.8).
+  default: info
+  observations:
+    route: info
+    cdn: info

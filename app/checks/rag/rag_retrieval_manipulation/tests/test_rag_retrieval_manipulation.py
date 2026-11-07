@@ -1,6 +1,11 @@
-"""Co-located tests (Phase 56 §3) — split from test_rag_retrieval.py."""
+"""Tests for rag_retrieval_manipulation.
+
+This check is split into probe + grade; tests route through
+`probe_and_grade()` and keep their original assertions.
+"""
 
 import json
+from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -105,9 +110,10 @@ def make_response(
     headers: dict = None,
     body: str = "",
     error: str = None,
+    url: str = "http://rag.example.com:8080",
 ) -> HttpResponse:
     return HttpResponse(
-        url="http://rag.example.com:8080",
+        url=url,
         status_code=status_code,
         headers=headers or {},
         body=body,
@@ -116,16 +122,48 @@ def make_response(
     )
 
 
+def _stamp(response: HttpResponse, url: str | None) -> HttpResponse:
+    """Report the response as coming from the URL it was requested from.
+
+    A probe records `HttpResponse.url` as the exchange's `request_url`, and a
+    grader attributes each exchange back to its path from there. A mock that
+    stamps one fixed url onto every response makes every exchange look like the
+    same request (§0.13).
+    """
+    return replace(response, url=url) if url else response
+
+
 def _mock_client(get_fn=None, post_fn=None, delete_fn=None, options_fn=None):
-    """Create mock async HTTP client."""
+    """Create mock async HTTP client.
+
+    `__aexit__` returns False: a bare `AsyncMock()` returns a truthy MagicMock,
+    which suppresses every exception raised inside the `async with` and makes a
+    probe that blew up mid-flight look like one that completed (§0.14).
+    """
     client = AsyncMock()
-    client.get = get_fn or AsyncMock(return_value=make_response(status_code=404))
-    client.post = post_fn or AsyncMock(return_value=make_response(status_code=404))
-    client.delete = delete_fn or AsyncMock(return_value=make_response(status_code=204))
-    client.options = options_fn or AsyncMock(return_value=make_response(status_code=404))
+
+    def _dispatch(fn, fallback_status):
+        async def _call(url=None, **kw):
+            resp = await fn(url, **kw) if fn else make_response(status_code=fallback_status)
+            return _stamp(resp, url)
+
+        return AsyncMock(side_effect=_call)
+
+    client.get = _dispatch(get_fn, 404)
+    client.post = _dispatch(post_fn, 404)
+    client.delete = _dispatch(delete_fn, 204)
+    client.options = _dispatch(options_fn, 404)
     client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock()
+    client.__aexit__ = AsyncMock(return_value=False)
     return client
+
+
+async def probe_and_grade(check, service, context):
+    """Run the probe, then the grading stage, and return the graded result."""
+    from app.grading import grade_result
+
+    result = await check.check_service(service, context)
+    return await grade_result(check, result, context)
 
 
 class TestRetrievalManipulation:
@@ -155,7 +193,7 @@ class TestRetrievalManipulation:
         with patch(
             "app.checks.rag.rag_retrieval_manipulation.check.AsyncHttpClient", return_value=client
         ):
-            result = await check.check_service(sample_service, rag_context)
+            result = await probe_and_grade(check, sample_service, rag_context)
 
         assert result.success
         assert "retrieval_control" in result.outputs
@@ -180,7 +218,7 @@ class TestRetrievalManipulation:
         with patch(
             "app.checks.rag.rag_retrieval_manipulation.check.AsyncHttpClient", return_value=client
         ):
-            result = await check.check_service(sample_service, rag_context)
+            result = await probe_and_grade(check, sample_service, rag_context)
 
         assert result.success
         assert "retrieval_control" in result.outputs

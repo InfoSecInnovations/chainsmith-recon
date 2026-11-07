@@ -63,7 +63,7 @@ Scans are triggered exactly as before -- via CLI, API, or the web UI:
 
 ```bash
 # CLI
-chainsmith scan example.com --server coordinator-host:8000
+chainsmith --server coordinator-host:8000 scan example.com
 
 # API
 curl -X POST http://coordinator-host:8000/api/v1/scan \
@@ -150,7 +150,7 @@ variable. You can also enable it via config (see below).
 ### Status
 
 ```bash
-chainsmith swarm status [--server HOST:PORT]
+chainsmith [--server HOST:PORT] swarm status
 ```
 
 Shows: running state, connected agents, task progress by status
@@ -274,8 +274,8 @@ full scope, only what they need.
   once at creation time and never stored.
 - **Agents receive minimum data**: scoped domains/ports and upstream
   context, not the full scope, other agents' observations, or LLM config.
-- **mTLS** is planned for Phase 3 (production deployments on untrusted
-  networks). For now, deploy the coordinator behind a VPN or firewall.
+- **mTLS** is planned but not yet implemented. For now, deploy the
+  coordinator behind a VPN or firewall on untrusted networks.
 - **Key management**: Revoke keys immediately if an agent is compromised.
   Use `chainsmith swarm revoke-key <id>`.
 
@@ -308,8 +308,8 @@ curl -H "Authorization: Bearer <key>" http://coordinator-host:8000/api/swarm/age
 
 ### Agent disconnects mid-scan
 
-In Phase 1, assigned tasks for a disconnected agent are re-queued only
+Currently, assigned tasks for a disconnected agent are re-queued only
 if the agent explicitly deregisters (e.g., Ctrl+C shutdown). If the
 agent crashes without deregistering, its tasks remain in `assigned`
 state. Heartbeat-based timeout and automatic reassignment are planned
-for Phase 2.
+but not yet implemented.

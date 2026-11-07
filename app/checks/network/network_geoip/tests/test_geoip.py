@@ -1,4 +1,4 @@
-"""Co-located tests (Phase 56 §3) — split from test_network_geoip.py."""
+"""Tests for network_geoip."""
 
 from unittest.mock import MagicMock, patch
 
@@ -70,6 +70,20 @@ def _find_db_asn_only(filename):
     return f"/fake/{filename}" if "ASN" in filename else None
 
 
+async def probe_and_grade(check, context):
+    """Run the probe, then the grading stage, and return the graded result.
+
+    This check is split into probe + grade, so `run()` now
+    returns candidates rather than observations. Tests assert on what an
+    operator sees, which is what the grading stage produces — the same thing
+    `CheckLauncher` calls immediately after `execute()`.
+    """
+    from app.grading import grade_result
+
+    result = await check.run(context)
+    return await grade_result(check, result, context)
+
+
 class TestGeoIpCheckInit:
     """Tests for GeoIpCheck initialization."""
 
@@ -95,20 +109,20 @@ class TestGeoIpCheckEarlyExits:
     @patch("app.checks.network.network_geoip.check._find_db_file", side_effect=_find_db_stub)
     async def test_no_dns_records(self, _mock_find):
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {}})
+        result = await probe_and_grade(check, {"dns_records": {}})
         assert any("dns_records" in e for e in result.errors)
 
     @patch("app.checks.network.network_geoip.check.HAS_GEOIP2", False)
     async def test_missing_geoip2_library(self):
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {"example.com": "1.2.3.4"}})
+        result = await probe_and_grade(check, {"dns_records": {"example.com": "1.2.3.4"}})
         assert result.success is False
         assert any("geoip2 not installed" in e for e in result.errors)
 
     @patch("app.checks.network.network_geoip.check._find_db_file", return_value=None)
     async def test_missing_db_files(self, _mock_find):
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {"example.com": "1.2.3.4"}})
+        result = await probe_and_grade(check, {"dns_records": {"example.com": "1.2.3.4"}})
         assert result.success is False
         assert any("GeoLite2" in e for e in result.errors)
 
@@ -125,7 +139,7 @@ class TestGeoIpClassification:
         _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {"api.example.com": "54.239.28.85"}})
+        result = await probe_and_grade(check, {"dns_records": {"api.example.com": "54.239.28.85"}})
 
         assert result.success is True
         data = result.outputs["geoip_data"]["54.239.28.85"]
@@ -153,7 +167,7 @@ class TestGeoIpClassification:
         _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {"dev.example.com": "73.100.50.25"}})
+        result = await probe_and_grade(check, {"dns_records": {"dev.example.com": "73.100.50.25"}})
 
         data = result.outputs["geoip_data"]["73.100.50.25"]
         assert data["classification"] != "hosting"
@@ -176,7 +190,7 @@ class TestGeoIpClassification:
         _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {"ml.example.com": "185.1.2.3"}})
+        result = await probe_and_grade(check, {"dns_records": {"ml.example.com": "185.1.2.3"}})
 
         data = result.outputs["geoip_data"]["185.1.2.3"]
         assert data["classification"] == "other"
@@ -207,7 +221,7 @@ class TestGeoIpClassification:
         _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {"svc.example.com": "10.0.0.1"}})
+        result = await probe_and_grade(check, {"dns_records": {"svc.example.com": "10.0.0.1"}})
 
         data = result.outputs["geoip_data"]["10.0.0.1"]
         assert data["classification"] == "hosting"
@@ -228,7 +242,7 @@ class TestGeoIpObservations:
         _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {"dev.example.com": "73.100.50.25"}})
+        result = await probe_and_grade(check, {"dns_records": {"dev.example.com": "73.100.50.25"}})
 
         # Should have info geo obs + medium residential obs
         assert len(result.observations) == 2
@@ -263,7 +277,7 @@ class TestGeoIpObservations:
         _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {"ml.example.com": "185.1.2.3"}})
+        result = await probe_and_grade(check, {"dns_records": {"ml.example.com": "185.1.2.3"}})
 
         low_obs = [o for o in result.observations if o.severity == "low"]
         assert len(low_obs) == 1
@@ -283,7 +297,7 @@ class TestGeoIpObservations:
         _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {"api.example.com": "54.239.28.85"}})
+        result = await probe_and_grade(check, {"dns_records": {"api.example.com": "54.239.28.85"}})
 
         severities = {o.severity for o in result.observations}
         assert severities == {"info"}, f"Expected only info observations, got {severities}"
@@ -301,13 +315,14 @@ class TestGeoIpEdgeCases:
         _setup_readers(MockReader, city_resp, asn_resp)
 
         check = GeoIpCheck()
-        result = await check.run(
+        result = await probe_and_grade(
+            check,
             {
                 "dns_records": {
                     "api.example.com": "54.1.2.3",
                     "www.example.com": "54.1.2.3",
                 },
-            }
+            },
         )
 
         assert result.targets_checked == 1
@@ -322,7 +337,7 @@ class TestGeoIpEdgeCases:
         _setup_readers(MockReader, city_resp=None, asn_resp=asn_resp, city_available=False)
 
         check = GeoIpCheck()
-        result = await check.run({"dns_records": {"cdn.example.com": "104.16.1.1"}})
+        result = await probe_and_grade(check, {"dns_records": {"cdn.example.com": "104.16.1.1"}})
 
         assert result.success is True
         data = result.outputs["geoip_data"]["104.16.1.1"]

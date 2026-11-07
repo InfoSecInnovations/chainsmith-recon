@@ -4,6 +4,25 @@ app/checks/web/favicon.py - Favicon Fingerprinting
 Downloads /favicon.ico (and favicons referenced in HTML <link> tags),
 computes MD5 hash, and compares against known framework/application
 signatures from the OWASP favicon database.
+
+**Probe/grade.** `check_service()` fetches the landing page,
+resolves up to three favicon URLs from it, records each fetch, and judges
+nothing; `grade()` re-reads the recorded bodies, hashes them again, and names
+whatever the table matches.
+
+`favicon_info` is an output, so the probe has to know the identified frameworks
+before a grader runs. Both halves call `_identify()` over the same exchanges
+(§6.2's two parses, with one parser) — which here means the MD5 is computed
+twice over the same bytes rather than computed once and carried. That is the
+right way round: a hash carried from the probe would be a claim about the
+evidence, and a hash recomputed from the evidence *is* the evidence. It holds
+because a favicon is far below the 256 KB capture body cap, so the recorded body
+is the whole file.
+
+The confidence says what an exact hash match does and does not establish: the
+table holds the *default* favicon shipped by each project, so a match means the
+default was left in place — not which version is running, and not that the
+fingerprint table itself is current.
 """
 
 import hashlib
@@ -11,9 +30,10 @@ import logging
 import re
 from typing import Any
 
+from app.capture.models import Exchange
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict, exchange_from_response
 from app.lib.http import AsyncHttpClient, HttpConfig
-from app.lib.observations import build_observation
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +106,17 @@ class FaviconCheck(ServiceIteratingCheck):
     references = ["OWASP WSTG-INFO-08", "OWASP Favicon Database"]
     techniques = ["favicon fingerprinting", "technology identification"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+    # Fetch, record, publish the output. Judge nothing.
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
-        identified: dict[str, str] = {}
+        scan_id = context.get("scan_id") or ""
+
+        # One candidate per service: every framework match is a separate
+        # judgement over the same subject, so the candidate stays
+        # undiscriminated and `grade()` names each one.
+        candidate = self.create_candidate(host=service.host, target=service)
 
         cfg = HttpConfig(timeout_seconds=10.0, verify_ssl=False)
 
@@ -120,7 +148,7 @@ class FaviconCheck(ServiceIteratingCheck):
                         seen.add(u)
                         unique_urls.append(u)
 
-                # Fetch each favicon and hash it
+                # Fetch each favicon and record it
                 for fav_url in unique_urls[:3]:  # Cap at 3 URLs
                     await self._rate_limit()
                     fav_resp = await client.get(fav_url)
@@ -129,56 +157,135 @@ class FaviconCheck(ServiceIteratingCheck):
                     if not fav_resp.body:
                         continue
 
-                    # Compute MD5 hash of the favicon content
-                    body_bytes = (
-                        fav_resp.body.encode("latin-1")
-                        if isinstance(fav_resp.body, str)
-                        else fav_resp.body
+                    candidate.attach(
+                        exchange_from_response(
+                            fav_resp,
+                            check_name=self.name,
+                            scan_id=scan_id,
+                            host=service.host,
+                        )
                     )
-                    md5_hash = hashlib.md5(body_bytes).hexdigest()
-
-                    match_info = FAVICON_HASHES.get(md5_hash)
-                    if match_info:
-                        framework, detail = match_info
-                        if framework not in identified:
-                            identified[framework] = detail
-                            result.observations.append(
-                                build_observation(
-                                    check_name=self.name,
-                                    title=f"Framework identified via favicon: {framework}",
-                                    description=f"{detail}. Identified by matching favicon hash against known signatures.",
-                                    severity="info",
-                                    evidence=f"GET {fav_url} -> MD5: {md5_hash} matches {framework}",
-                                    host=service.host,
-                                    discriminator=f"favicon-{framework.lower().replace(' ', '-')}",
-                                    target=service,
-                                    target_url=fav_url,
-                                    references=["OWASP WSTG-INFO-08"],
-                                )
-                            )
-                    else:
-                        # Unknown favicon — still record the hash for manual review
-                        if "unknown" not in identified:
-                            identified["unknown"] = md5_hash
 
         except Exception as e:
             result.errors.append(f"Favicon check error: {e}")
 
-        if not identified:
-            result.observations.append(
-                build_observation(
-                    check_name=self.name,
-                    title=f"No favicon found: {service.host}",
-                    description="No favicon was accessible or returned a valid response",
+        result.candidates.append(candidate)
+        result.outputs["favicon_info"] = {
+            "identified": _identify(candidate.exchanges),
+        }
+        return result
+
+    # ══ Grade ════════════════════════════════════════════════════════
+    # Re-hash the recorded favicons. Never the network.
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        """Name the frameworks one service's favicons identify."""
+        exchanges = list(evidence)
+        verdicts: list[Verdict] = []
+        named: set[str] = set()
+
+        for exchange in exchanges:
+            md5_hash = _md5_of(exchange)
+            if md5_hash is None:
+                continue
+            match_info = FAVICON_HASHES.get(md5_hash)
+            if match_info is None:
+                # An unrecognised favicon is recorded in `favicon_info` for
+                # manual review and, as before, says nothing on its own.
+                continue
+
+            framework, detail = match_info
+            if framework in named:
+                continue
+            named.add(framework)
+
+            verdicts.append(
+                Verdict(
                     severity="info",
-                    evidence="GET /favicon.ico returned non-200 or no body",
-                    host=service.host,
-                    discriminator="no-favicon",
-                    target=service,
+                    # An exact MD5 match against a curated table, so the *match*
+                    # is not in doubt. What it establishes is narrower than it
+                    # looks: the table holds each project's default favicon, so
+                    # this says the default was left in place — not which
+                    # version runs, and not that the table is still current.
+                    confidence=0.95,
+                    discriminator=f"favicon-{framework.lower().replace(' ', '-')}",
+                    title=f"Framework identified via favicon: {framework}",
+                    description=(
+                        f"{detail}. Identified by matching favicon hash against known signatures."
+                    ),
+                    evidence=(f"GET {exchange.request_url} -> MD5: {md5_hash} matches {framework}"),
+                    reasoning=(
+                        f"MD5 of the recorded favicon matches the {framework} default "
+                        "favicon exactly; the match identifies the shipped default, not a "
+                        "version"
+                    ),
+                    signals={"md5": md5_hash, "framework": framework},
+                    references=["OWASP WSTG-INFO-08"],
+                    evidence_ids=[exchange.id],
                 )
             )
 
-        result.outputs["favicon_info"] = {
-            "identified": identified,
-        }
-        return result
+        if not _identify(exchanges):
+            verdicts.append(
+                Verdict(
+                    severity="info",
+                    # An absence claim over a bounded search: `/favicon.ico`
+                    # plus whatever the landing page declared, capped at three
+                    # URLs. An icon declared fourth, or served only to a browser
+                    # sending a particular `Accept`, would be missed.
+                    confidence=0.8,
+                    discriminator="no-favicon",
+                    title=f"No favicon found: {ctx.host}",
+                    description="No favicon was accessible or returned a valid response",
+                    evidence="GET /favicon.ico returned non-200 or no body",
+                    reasoning=(
+                        "none of the favicon URLs tried (at most three: /favicon.ico plus "
+                        "any declared in the landing page) returned a body"
+                    ),
+                    signals={"urls_with_body": 0},
+                    evidence_ids=evidence.ids(),
+                )
+            )
+
+        return verdicts
+
+
+# ── The one parser, called by both halves ────────────────────────────
+
+
+def _md5_of(exchange: Exchange) -> str | None:
+    """The MD5 of one recorded favicon, or `None` if there is no body.
+
+    Recomputed from the recorded bytes rather than carried from the probe, so a
+    verdict is derived from the evidence and not from a claim about it. `latin-1`
+    round-trips every byte, which is why the original chose it.
+    """
+    body = exchange.response_body
+    if not body:
+        return None
+    body_bytes = body.encode("latin-1") if isinstance(body, str) else body
+    return hashlib.md5(body_bytes).hexdigest()
+
+
+def _identify(exchanges: list[Exchange]) -> dict[str, str]:
+    """What one service's recorded favicons identify.
+
+    The single parser behind §6.2's two parses: `check_service()` calls it to
+    populate `favicon_info`, and `grade()` calls it again to decide whether the
+    `no-favicon` absence claim holds. `unknown` carries the first unrecognised
+    hash, exactly as before — a favicon that was found but not named is not the
+    same as no favicon at all.
+    """
+    identified: dict[str, str] = {}
+    for exchange in exchanges:
+        md5_hash = _md5_of(exchange)
+        if md5_hash is None:
+            continue
+        match_info = FAVICON_HASHES.get(md5_hash)
+        if match_info:
+            framework, detail = match_info
+            if framework not in identified:
+                identified[framework] = detail
+        elif "unknown" not in identified:
+            identified["unknown"] = md5_hash
+    return identified

@@ -38,8 +38,6 @@ In `chainsmith.yaml`:
 ```yaml
 storage:
   backend: sqlite              # sqlite or postgresql
-  sqlite:
-    path: ~/.chainsmith/chainsmith.db
   postgresql:
     url: postgresql://user:pass@host:5432/chainsmith
   auto_persist: true           # set false to disable persistence entirely
@@ -50,10 +48,14 @@ Environment variable overrides:
 
 ```bash
 CHAINSMITH_STORAGE_BACKEND=sqlite
-CHAINSMITH_SQLITE_PATH=~/.chainsmith/chainsmith.db
 CHAINSMITH_POSTGRESQL_URL=postgresql://...
 CHAINSMITH_STORAGE_RETENTION_DAYS=365
 ```
+
+The SQLite database always lives in the active workspace (see
+[Database Location](#database-location)). Older path settings
+(`storage.db_path`, `storage.sqlite.path`, `CHAINSMITH_SQLITE_PATH`,
+`RECON_DB_PATH`) still parse, but the workspace wins when they disagree.
 
 ---
 
@@ -220,7 +222,7 @@ chainsmith report compliance --scan <scan-id> -f md
 # Delta report (comparison between two scans)
 chainsmith report delta --scan-a <id-a> --scan-b <id-b> -f html -o delta.html
 
-# Trend report (across all scans for a target or engagement)
+# Trend report (across all scans of a target)
 chainsmith report trend -t example.com -f html
 ```
 
@@ -244,49 +246,6 @@ formats are available:
 ```
 GET /api/v1/capabilities
 ```
-
----
-
-## Engagements
-
-Engagements group related scans for the same client or assessment.
-
-### CLI
-
-```bash
-# Create an engagement
-chainsmith engagements create --name "Q1 Pentest" --target example.com
-
-# List engagements
-chainsmith engagements list
-
-# View engagement details and its scans
-chainsmith engagements show <engagement-id>
-
-# Run a scan linked to an engagement
-chainsmith scan example.com --engagement <engagement-id>
-
-# View engagement-level trend
-chainsmith engagements trend <engagement-id>
-
-# Delete engagement (scans are kept, just unlinked)
-chainsmith engagements delete <engagement-id> --yes
-```
-
-### API
-
-```
-GET    /api/v1/engagements
-POST   /api/v1/engagements
-GET    /api/v1/engagements/{id}
-GET    /api/v1/engagements/{id}/scans
-GET    /api/v1/engagements/{id}/trend
-PUT    /api/v1/engagements/{id}
-DELETE /api/v1/engagements/{id}
-```
-
-Deleting an engagement does **not** delete its scans — they become
-standalone historical records with `engagement_id` set to null.
 
 ---
 
@@ -322,10 +281,19 @@ forever.
 
 ## Database Location
 
-By default, Chainsmith stores data in an SQLite file at
-`./data/chainsmith.db` (relative to the working directory). To back up
-your scan history, copy this file. To start fresh, delete it — tables are
-recreated automatically on startup.
+Chainsmith stores its SQLite database at `chainsmith.db` inside the active
+**workspace** — a directory that also holds captured evidence, reports, scratch
+files, and logs for one body of work. The workspace is chosen at launch:
+
+1. `--workspace DIR` on the CLI
+2. the `CHAINSMITH_WORKSPACE` environment variable
+3. `workspace:` in `chainsmith.yaml`
+4. the default, `~/chainsmith/default`
+
+The Docker stack mounts `./workspace` from the repository directory as its
+workspace. To back up your scan history, copy the workspace directory. To
+start fresh, point at a new workspace — tables are created automatically on
+startup.
 
 For team deployments, switch to PostgreSQL by setting the `backend` and
 `postgresql_url` config values. The schema is identical.

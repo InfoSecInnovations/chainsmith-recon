@@ -5,6 +5,9 @@ Layered configuration system:
   1. Hardcoded defaults (in ChainsmithConfig dataclass)
   2. YAML config file  (CHAINSMITH_CONFIG env var or ./chainsmith.yaml)
   3. Environment variable overrides (CHAINSMITH_* prefix)
+  4. Workspace rooting - the workspace directory determines
+     storage.db_path and the log/report/scratch/customization roots, and wins
+     over any legacy path setting that disagrees. See app/workspace.py.
 
 Usage:
     from app.config import get_config
@@ -123,14 +126,16 @@ class ConcurrencyConfig:
 
 @dataclass
 class ScanStreamConfig:
-    """Phase 51.4 — gates advertisement of the SSE streaming capability."""
+    """Gates advertisement of the SSE streaming capability."""
 
     enabled: bool = False
 
 
 @dataclass
 class PathsConfig:
-    db_path: Path = Path("/data/recon.sqlite")  # Legacy - prefer storage.db_path
+    # NOTE: no `db_path`. It was a second, unread database path that nothing
+    # opened a connection from; `storage.db_path` is the live one and is rooted
+    # off the workspace. Removed rather than left to drift.
     attack_patterns: Path = Path("/app/data/attack_patterns.json")
     hallucinations: Path = Path("/app/data/hallucinations.json")
 
@@ -148,6 +153,9 @@ class ChainsmithConfig:
     """
 
     target_domain: str = ""
+    # Workspace root. Populated by load_config(); the paths in
+    # `storage` and the log/report/scratch roots are derived from it.
+    workspace: Path | None = None
     scope: ScopeConfig = field(default_factory=ScopeConfig)
     litellm: LiteLLMConfig = field(default_factory=LiteLLMConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
@@ -227,11 +235,17 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
         if "model_triage" in ll:
             llm.model_triage = str(ll["model_triage"])
 
+    if "workspace" in data and data["workspace"]:
+        cfg.workspace = Path(str(data["workspace"]))
+
     if "paths" in data and isinstance(data["paths"], dict):
         p = data["paths"]
         pc = cfg.paths
+        # `paths.db_path` was removed in 57.1a; route the legacy key to the
+        # live setting so an old config file still parses. Workspace rooting
+        # below overrides it either way.
         if "db_path" in p:
-            pc.db_path = Path(p["db_path"])
+            cfg.storage.db_path = Path(p["db_path"])
         if "attack_patterns" in p:
             pc.attack_patterns = Path(p["attack_patterns"])
         if "hallucinations" in p:
@@ -336,10 +350,13 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     if v := env.get("LITELLM_MODEL_TRIAGE") or env.get("CHAINSMITH_LITELLM_MODEL_TRIAGE"):
         cfg.litellm.model_triage = v
 
-    # Paths overrides (backward-compatible names kept)
+    # Paths overrides (backward-compatible names kept).
+    # RECON_DB_PATH / CHAINSMITH_DB_PATH still parse, but workspace rooting in
+    # load_config() overrides them — app.workspace.legacy_conflicts() reports
+    # the disagreement rather than letting a database land outside its
+    # workspace.
     if v := env.get("RECON_DB_PATH") or env.get("CHAINSMITH_DB_PATH"):
-        cfg.paths.db_path = Path(v)
-        cfg.storage.db_path = Path(v)  # Ensure init_db uses the same path
+        cfg.storage.db_path = Path(v)
     if v := env.get("ATTACK_PATTERNS_PATH") or env.get("CHAINSMITH_ATTACK_PATTERNS_PATH"):
         cfg.paths.attack_patterns = Path(v)
     if v := env.get("HALLUCINATIONS_PATH") or env.get("CHAINSMITH_HALLUCINATIONS_PATH"):
@@ -391,7 +408,7 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
 def load_config(config_path: Path | None = None) -> ChainsmithConfig:
     """
     Build a ChainsmithConfig from the layered sources:
-      defaults → YAML file → env vars
+      defaults → YAML file → env vars → workspace rooting
     """
     cfg = ChainsmithConfig()
 
@@ -406,8 +423,40 @@ def load_config(config_path: Path | None = None) -> ChainsmithConfig:
     yaml_data = _load_yaml_file(config_path)
     _apply_yaml(cfg, yaml_data)
     _apply_env(cfg)
+    _apply_workspace(cfg)
 
     return cfg
+
+
+def _apply_workspace(cfg: ChainsmithConfig) -> None:
+    """
+    Root the storage paths off the workspace.
+
+    Runs last because the workspace wins: a legacy `storage.db_path` or
+    `RECON_DB_PATH` that disagrees would put the database outside the workspace
+    and defeat the physical separation workspaces exist to provide. The
+    disagreement is reported by `app.workspace.legacy_conflicts()` at startup
+    rather than silently applied.
+
+    SQLite only — a `postgresql` backend has no file path to root, so its
+    workspace still owns evidence, reports, and logs while the database lives
+    wherever `postgresql_url` points.
+    """
+    from app import workspace as ws
+
+    # An entry point that already chose a workspace wins. Without this, the
+    # first get_config() after `chainsmith --workspace ~/clients/acme` would
+    # re-resolve from env/default and silently discard the flag — the operator
+    # would be told one workspace and scanned into another.
+    resolved = ws.active()
+    if resolved is None:
+        resolved, _source = ws.resolve(explicit=cfg.workspace)
+        ws.set_workspace(resolved)
+
+    cfg.workspace = resolved.root
+
+    if cfg.storage.backend == "sqlite":
+        cfg.storage.db_path = resolved.db_path
 
 
 # ── Module-level cached instance ─────────────────────────────────
@@ -431,7 +480,7 @@ def get_config(reload: bool = False) -> ChainsmithConfig:
 def __getattr__(name: str):
     """Lazy backward-compat shim for old-style module-level access."""
     _compat = {
-        "RECON_DB_PATH": lambda c: c.paths.db_path,
+        "RECON_DB_PATH": lambda c: c.storage.db_path,
         "LITELLM_BASE_URL": lambda c: c.litellm.base_url,
         "LITELLM_MODEL_VERIFIER": lambda c: c.litellm.model_verifier,
         "LITELLM_MODEL_CHAINSMITH": lambda c: c.litellm.model_chainsmith,

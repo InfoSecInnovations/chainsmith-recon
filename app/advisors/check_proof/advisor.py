@@ -1,5 +1,5 @@
 """
-app/advisors/check_proof/advisor.py - Check Proof Advisor (foldered Phase 56.11)
+app/advisors/check_proof/advisor.py - Check Proof Advisor
 
 Deterministic advisor that generates templated reproduction steps for verified
 findings. Maps check types to YAML proof command templates and populates them
