@@ -47,7 +47,7 @@ Written 2026-10-11 after the cleanup pass. The detail behind each item is in
 Work in this order. Each item links to its doc.
 
 ### Correctness first
-- [ ] **Lab backports §1–2:** range session activation, the `internal.py` crash, scenario hosts, and the `expected_findings` key. See [`lab-backports.md`](docs/future-ideas/lab-backports.md). Until this lands, fakobanko scans undercount.
+- [x] **Lab backports §1–2** (2026-11-07; validate on the VM): range session activation, the `internal.py` crash, scenario hosts, and the `expected_findings` key. See [`lab-backports.md`](docs/future-ideas/lab-backports.md). Until this lands, fakobanko scans undercount.
 - [ ] **B-9:** rename simulation `emulates:` names to the current check names (84 of 133 match nothing). Add a test that every name resolves, and a warning in `apply_scenario`.
 - [x] **B-3** (2026-11-07): `ServiceIteratingCheck` keeps only the last service's list outputs (`app/checks/base.py`).
 - [x] **B-4** (2026-11-07): `web_favicon` crashes on non-latin-1 bodies.

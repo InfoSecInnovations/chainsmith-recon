@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Guardian enforcement of the scope's scan time window
 - Per-check severity and scan customizations
 - Expanded `fakobanko` and `demo-domain` scenarios
+- A semantic cache on fakobanko's ML service (`/semantic-cache`, `/cache/stats`) for the CAG suite, with planted cross-session leakage and timing observations
 
 ### Changed
 - Check names now carry their suite prefix (e.g. `dns_enumeration` → `network_dns_enumeration`, `cors_check` → `web_cors`); MCP, agent, RAG, and CAG checks keep their existing `mcp_`/`agent_`/`rag_`/`cag_` names. Update any `-c`/`--checks` arguments, saved presets, and simulation `emulates:` fields
@@ -51,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Checks that iterate over services kept only the last service's list outputs (`chat_endpoints`, `rag_endpoints`, `cag_endpoints`, `mcp_servers`); downstream checks now see every service
 - `web_favicon` no longer fails grading on pages with non-latin-1 characters
 - `chainsmith.sh start` no longer exits 1 before the health wait on non-ollama profiles
+- The fakobanko range now activates its planted observations: range sessions derive them, seeded by the session id, so every container agrees; `start-range.sh` resumes an existing session and creates it before containers start; the internal portal no longer crashes when wildcard CORS is active; range scripts ignore inherited `COMPOSE_FILE`/`COMPOSE_PROJECT_NAME`
+- Scenario `expected_findings` are loaded (the loader only read `expected_observations`), fakobanko's host list matches its containers, and simulations that match no check are logged
 
 ### Removed
 - Engagements, replaced by workspaces and scan history

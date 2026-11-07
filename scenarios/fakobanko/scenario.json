@@ -11,10 +11,12 @@
       "chat",
       "api",
       "docs",
-      "mcp",
+      "ml",
+      "internal",
+      "admin",
+      "vector",
       "agent",
-      "rag",
-      "cache"
+      "mcp"
     ]
   },
   "observations": {
@@ -260,41 +262,41 @@
     "agent_cross_injection-agent.fakobanko.local",
     "agent_goal_injection-agent.fakobanko.local-prompt-leaked",
     "agent_goal_injection-agent.fakobanko.local-tool-disclosure",
-    "rag_discovery-rag.fakobanko.local-chroma",
-    "rag_vector_store_access-rag.fakobanko.local",
-    "rag_indirect_injection-rag.fakobanko.local-context-extraction",
-    "rag_indirect_injection-rag.fakobanko.local-data-exfil",
-    "rag_corpus_poisoning-rag.fakobanko.local",
-    "rag_cross_collection-rag.fakobanko.local",
-    "rag_document_exfiltration-rag.fakobanko.local",
-    "rag_chunk_boundary-rag.fakobanko.local",
-    "rag_metadata_injection-rag.fakobanko.local",
-    "rag_auth_bypass-rag.fakobanko.local",
-    "rag_cache_poisoning-rag.fakobanko.local",
-    "rag_collection_enumeration-rag.fakobanko.local",
-    "rag_adversarial_embedding-rag.fakobanko.local",
-    "rag_embedding_fingerprint-rag.fakobanko.local",
-    "rag_fusion_reranker-rag.fakobanko.local",
-    "rag_retrieval_manipulation-rag.fakobanko.local",
-    "rag_source_attribution-rag.fakobanko.local",
-    "rag_multimodal_injection-rag.fakobanko.local",
-    "cag_discovery-cache.fakobanko.local-semantic-cache",
-    "cag_cache_probe-cache.fakobanko.local-cross-session-leak",
-    "cag_cross_user_leakage-cache.fakobanko.local",
-    "cag_cache_poisoning-cache.fakobanko.local",
-    "cag_injection_persistence-cache.fakobanko.local",
-    "cag_cache_warming-cache.fakobanko.local",
-    "cag_cache_eviction-cache.fakobanko.local",
-    "cag_ttl_mapping-cache.fakobanko.local",
-    "cag_semantic_threshold-cache.fakobanko.local",
-    "cag_cache_key_reverse-cache.fakobanko.local",
-    "cag_stale_context-cache.fakobanko.local",
-    "cag_serialization-cache.fakobanko.local",
-    "cag_side_channel-cache.fakobanko.local",
-    "cag_distributed_cache-cache.fakobanko.local",
-    "cag_multi_layer_cache-cache.fakobanko.local",
-    "cag_provider_caching-cache.fakobanko.local",
-    "cag_cache_quota-cache.fakobanko.local"
+    "rag_discovery-vector.fakobanko.local-chroma",
+    "rag_vector_store_access-vector.fakobanko.local",
+    "rag_indirect_injection-vector.fakobanko.local-context-extraction",
+    "rag_indirect_injection-vector.fakobanko.local-data-exfil",
+    "rag_corpus_poisoning-vector.fakobanko.local",
+    "rag_cross_collection-vector.fakobanko.local",
+    "rag_document_exfiltration-vector.fakobanko.local",
+    "rag_chunk_boundary-vector.fakobanko.local",
+    "rag_metadata_injection-vector.fakobanko.local",
+    "rag_auth_bypass-vector.fakobanko.local",
+    "rag_cache_poisoning-vector.fakobanko.local",
+    "rag_collection_enumeration-vector.fakobanko.local",
+    "rag_adversarial_embedding-vector.fakobanko.local",
+    "rag_embedding_fingerprint-vector.fakobanko.local",
+    "rag_fusion_reranker-vector.fakobanko.local",
+    "rag_retrieval_manipulation-vector.fakobanko.local",
+    "rag_source_attribution-vector.fakobanko.local",
+    "rag_multimodal_injection-vector.fakobanko.local",
+    "cag_discovery-ml.fakobanko.local-semantic-cache",
+    "cag_cache_probe-ml.fakobanko.local-cross-session-leak",
+    "cag_cross_user_leakage-ml.fakobanko.local",
+    "cag_cache_poisoning-ml.fakobanko.local",
+    "cag_injection_persistence-ml.fakobanko.local",
+    "cag_cache_warming-ml.fakobanko.local",
+    "cag_cache_eviction-ml.fakobanko.local",
+    "cag_ttl_mapping-ml.fakobanko.local",
+    "cag_semantic_threshold-ml.fakobanko.local",
+    "cag_cache_key_reverse-ml.fakobanko.local",
+    "cag_stale_context-ml.fakobanko.local",
+    "cag_serialization-ml.fakobanko.local",
+    "cag_side_channel-ml.fakobanko.local",
+    "cag_distributed_cache-ml.fakobanko.local",
+    "cag_multi_layer_cache-ml.fakobanko.local",
+    "cag_provider_caching-ml.fakobanko.local",
+    "cag_cache_quota-ml.fakobanko.local"
   ],
   "expected_chains": [
     "api_documentation_recon",
@@ -375,15 +377,25 @@
       "description": "LangServe agent",
       "template": "ai/agent"
     },
-    "rag": {
+    "vector": {
       "port": 8087,
       "type": "ai",
-      "description": "RAG knowledge base"
+      "description": "Vector store / RAG knowledge base"
     },
-    "cache": {
+    "ml": {
       "port": 8084,
       "type": "ai",
-      "description": "Semantic cache service"
+      "description": "ML model serving, with the semantic cache"
+    },
+    "internal": {
+      "port": 8085,
+      "type": "http",
+      "description": "Employee internal portal"
+    },
+    "admin": {
+      "port": 8086,
+      "type": "http",
+      "description": "Admin console"
     }
   },
   "vulnerabilities": {

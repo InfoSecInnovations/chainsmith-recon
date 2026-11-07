@@ -158,7 +158,12 @@ def _parse_scenario(data: dict, source_path: Path) -> Scenario:
         version=str(data.get("version", "1.0.0")),
         target=target,
         simulations=[str(s) for s in simulations],
-        expected_observations=list(data.get("expected_observations", [])),
+        # Every shipped scenario.json still says `expected_findings` (the pre-rename
+        # key), so reading only `expected_observations` loaded nothing (lab
+        # backport 2b). Accept either; the new name wins if both are present.
+        expected_observations=list(
+            data.get("expected_observations", data.get("expected_findings", [])) or []
+        ),
         expected_chains=list(data.get("expected_chains", [])),
         source_path=source_path,
     )

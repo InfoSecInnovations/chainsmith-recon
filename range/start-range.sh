@@ -17,6 +17,10 @@
 
 set -e
 
+# Compose settings inherited from the caller's shell would point `docker compose`
+# at a different project or file than the scenario's own (lab backport 1e).
+unset COMPOSE_FILE COMPOSE_PROJECT_NAME
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SCENARIOS_DIR="$REPO_ROOT/scenarios"
@@ -156,80 +160,86 @@ check_ports "$SCENARIO_DIR/docker-compose.yml"
 echo "[+] Ensuring chainsmith-shared network exists..."
 docker network create chainsmith-shared 2>/dev/null || true
 
-# ─── Apply Randomization ─────────────────────────────────────────
-if [ "$RANDOMIZE" = true ]; then
-    RANDOMIZE_FILE="$SCENARIO_DIR/randomize.json"
-    SESSION_FILE="$SCENARIO_DIR/data/session.json"
-    
-    if [ ! -f "$RANDOMIZE_FILE" ]; then
+# ─── Session ─────────────────────────────────────────────────────
+# The session file is the one source of truth every container reads. It holds
+# the session id, the selected chain packages and the services they need, and
+# nothing else: each service derives its active observations from the id
+# (`resolve_active_observations` in app/scenario_services/common/config.py),
+# seeded, so they all agree without a lock.
+#
+# An existing session is resumed, not re-rolled. Use ./range/reset-range.sh to
+# start a new one. The file is created here, before any container starts, so two
+# containers can never race to create different sessions.
+SESSION_FILE="$SCENARIO_DIR/data/session.json"
+RANDOMIZE_FILE="$SCENARIO_DIR/randomize.json"
+mkdir -p "$SCENARIO_DIR/data"
+
+if [ -f "$SESSION_FILE" ]; then
+    echo "[+] Resuming existing session ($SESSION_FILE)"
+    if [ "$RANDOMIZE" = true ]; then
+        echo "    --randomize ignored: a session already exists."
+        echo "    Run ./range/reset-range.sh $SCENARIO to roll a new one."
+    fi
+else
+    if [ "$RANDOMIZE" = true ] && [ ! -f "$RANDOMIZE_FILE" ]; then
         echo "⚠️  Warning: No randomize.json found for $SCENARIO"
-        echo "   Skipping randomization."
+        echo "   Creating a session without chain packages."
+    fi
+    if [ "$RANDOMIZE" = true ] && [ -f "$RANDOMIZE_FILE" ]; then
+        echo "[+] Creating a randomized session..."
     else
-        echo "[+] Applying randomization..."
-        mkdir -p "$SCENARIO_DIR/data"
-        
-        # Generate randomized session using Python
-        python3 << EOF
+        echo "[+] Creating a session..."
+    fi
+
+    RANGE_RANDOMIZE="$RANDOMIZE" RANGE_RANDOMIZE_FILE="$RANDOMIZE_FILE" \
+    RANGE_SESSION_FILE="$SESSION_FILE" RANGE_SCENARIO="$SCENARIO" \
+    python3 << 'EOF'
 import json
+import os
 import random
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
-randomize_file = Path("$RANDOMIZE_FILE")
-session_file = Path("$SESSION_FILE")
+randomize_file = Path(os.environ["RANGE_RANDOMIZE_FILE"])
+session_file = Path(os.environ["RANGE_SESSION_FILE"])
 
-with open(randomize_file) as f:
-    config = json.load(f)
+selected = []
+if os.environ["RANGE_RANDOMIZE"] == "true" and randomize_file.exists():
+    config = json.loads(randomize_file.read_text())
+    packages = config.get("chain_packages", [])
+    rules = config.get("selection_rules", {})
+    num_chains = random.randint(rules.get("min_chains", 2), rules.get("max_chains", 4))
+    selected = random.sample(packages, min(num_chains, len(packages)))
 
-packages = config.get('chain_packages', [])
-rules = config.get('selection_rules', {})
+services = sorted({svc for chain in selected for svc in chain.get("required_services", [])})
 
-# Select random chains
-min_chains = rules.get('min_chains', 2)
-max_chains = rules.get('max_chains', 4)
-num_chains = random.randint(min_chains, max_chains)
-selected = random.sample(packages, min(num_chains, len(packages)))
-
-# Determine required services
-services = set()
-for chain in selected:
-    services.update(chain.get('required_services', []))
-
-# Add random extra findings
-pool = config.get('random_findings_pool', [])
-extra_min = rules.get('extra_findings_min', 0)
-extra_max = rules.get('extra_findings_max', 3)
-num_extra = random.randint(extra_min, min(extra_max, len(pool)))
-extra_findings = random.sample(pool, num_extra) if pool else []
-
+# No `active_observations` (and no `extra_findings`): the services derive the
+# observations from the session id. See resolve_active_observations().
 session = {
-    'session_id': str(uuid.uuid4())[:8],
-    'scenario': "$SCENARIO",
-    'created_at': datetime.now().isoformat(),
-    'selected_chains': selected,
-    'active_services': sorted(services),
-    'extra_findings': extra_findings
+    "session_id": uuid.uuid4().hex[:16],
+    "scenario": os.environ["RANGE_SCENARIO"],
+    "created_at": datetime.now(timezone.utc).isoformat(),
+    "selected_chains": selected,
+    "active_services": services,
 }
-
-with open(session_file, 'w') as f:
-    json.dump(session, f, indent=2)
+session_file.write_text(json.dumps(session, indent=2))
 
 print(f"    Session ID: {session['session_id']}")
 print(f"    Chains: {len(selected)}")
-print(f"    Services: {', '.join(sorted(services)) or 'base only'}")
+print(f"    Services: {', '.join(services) or 'base only'}")
 EOF
-        
-        # Read profiles from session
-        if [ -f "$SESSION_FILE" ] && command -v jq &> /dev/null; then
-            SERVICES=$(jq -r '.active_services[]' "$SESSION_FILE" 2>/dev/null || echo "")
-            for svc in $SERVICES; do
-                PROFILE_ARGS="$PROFILE_ARGS --profile $svc"
-            done
-        fi
-        echo ""
-    fi
 fi
+
+# Profiles for the session's services. Runs on resume too, so a resumed
+# randomized session brings back the services its chains need.
+if [ -f "$SESSION_FILE" ] && command -v jq &> /dev/null; then
+    SERVICES=$(jq -r '.active_services[]?' "$SESSION_FILE" 2>/dev/null || echo "")
+    for svc in $SERVICES; do
+        PROFILE_ARGS="$PROFILE_ARGS --profile $svc"
+    done
+fi
+echo ""
 
 # ─── Start Scenario ──────────────────────────────────────────────
 echo "[+] Starting $SCENARIO services..."

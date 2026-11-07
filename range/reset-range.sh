@@ -15,6 +15,10 @@
 
 set -e
 
+# Compose settings inherited from the caller's shell would point `docker compose`
+# at a different project or file than the scenario's own (lab backport 1e).
+unset COMPOSE_FILE COMPOSE_PROJECT_NAME
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SCENARIOS_DIR="$REPO_ROOT/scenarios"

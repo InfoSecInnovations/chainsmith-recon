@@ -241,41 +241,94 @@ def _generate_session_id() -> str:
     return hashlib.sha256(os.urandom(32)).hexdigest()[:16]
 
 
-def _select_random_observations(config: ScenarioConfig) -> list[str]:
-    """Select random observations from the pool based on config."""
+def resolve_active_observations(
+    config: ScenarioConfig,
+    session_id: str,
+    selected_chains: list[dict] | None = None,
+    *,
+    randomize: bool | None = None,
+) -> list[str]:
+    """The observations a session plants, derived from its id (lab backport 1b).
+
+    In order:
+    1. the scenario's `certain` observations;
+    2. a sample from `random_pool`, sized within `random_count`;
+    3. every selected chain package's `required_findings`, so a chain the range
+       picked can actually be completed.
+
+    Then an order-stable dedupe.
+
+    The RNG is seeded with the session id, never the global `random`. Every
+    container derives the same list from the same session file without a lock,
+    and a session id reproduces its range. `range/start-range.sh` writes only
+    the id, the chains and the services, and leaves this list to Python.
+    """
+    if randomize is None:
+        randomize = RANDOMIZE_OBSERVATIONS
+    rng = random.Random(session_id)
     observations = list(config.observations.certain)
 
-    pool = config.observations.random_pool
-    if pool and RANDOMIZE_OBSERVATIONS:
-        count = random.randint(
-            config.observations.random_min, min(config.observations.random_max, len(pool))
-        )
+    pool = list(config.observations.random_pool)
+    if pool and randomize:
+        high = min(config.observations.random_max, len(pool))
+        low = min(config.observations.random_min, high)
+        count = rng.randint(low, high) if high > 0 else 0
         if count > 0:
-            observations.extend(random.sample(pool, k=count))
+            observations.extend(rng.sample(pool, k=count))
 
-    return observations
+    for chain in selected_chains or []:
+        observations.extend(chain.get("required_findings", []) or [])
+
+    return list(dict.fromkeys(observations))
 
 
-def _select_hallucinations() -> list[str]:
-    """Select random hallucination IDs."""
-    count = random.randint(2, 5)
+def resolve_active_hallucinations(session_id: str) -> list[str]:
+    """Hallucination ids for a session, seeded by its id like the observations."""
+    rng = random.Random(f"{session_id}:hallucinations")
     hallucination_ids = [f"H{i:02d}" for i in range(1, 21)]
-    return random.sample(hallucination_ids, k=count)
+    return rng.sample(hallucination_ids, k=rng.randint(2, 5))
 
 
 def _create_session() -> SessionState:
     """Create a new session with randomized observations."""
     config = get_scenario_config()
+    session_id = _generate_session_id()
 
     session = SessionState(
-        session_id=_generate_session_id(),
-        active_observations=_select_random_observations(config),
-        active_hallucinations=_select_hallucinations(),
+        session_id=session_id,
+        active_observations=resolve_active_observations(config, session_id),
+        active_hallucinations=resolve_active_hallucinations(session_id),
         created_at=datetime.now(UTC).isoformat(),
         range_mode=RANGE_MODE,
         active_services=[SERVICE_NAME] if SERVICE_NAME else [],
     )
 
+    return session
+
+
+def session_from_file_data(data: dict, config: ScenarioConfig | None = None) -> SessionState:
+    """Build a session from a session file's contents, deriving what it leaves out.
+
+    `range/start-range.sh` writes `session_id`, `selected_chains` and
+    `active_services`, and no `active_observations` (lab backport 1a). That
+    list, and the hallucinations, are derived here from the session id. A file
+    that does carry the keys is taken as written, even if a list is empty.
+
+    A legacy file's `extra_findings` (what start-range used to write, and what
+    no service ever read) is folded in, so an old session still plants those.
+    """
+    session = SessionState.from_dict(data)
+    if not session.session_id:
+        # Derived from the file, not random, so every container still agrees.
+        digest = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+        session.session_id = digest[:16]
+    if "active_observations" not in data:
+        config = config or get_scenario_config()
+        derived = resolve_active_observations(config, session.session_id, session.selected_chains)
+        derived.extend(data.get("extra_findings", []) or [])
+        session.active_observations = list(dict.fromkeys(derived))
+    if "active_hallucinations" not in data:
+        session.active_hallucinations = resolve_active_hallucinations(session.session_id)
     return session
 
 
@@ -287,9 +340,11 @@ def _load_session() -> SessionState | None:
     try:
         with open(SESSION_STATE_PATH) as f:
             data = json.load(f)
-        return SessionState.from_dict(data)
     except (json.JSONDecodeError, OSError):
         return None
+    if not isinstance(data, dict):
+        return None
+    return session_from_file_data(data)
 
 
 def _save_session(session: SessionState) -> None:

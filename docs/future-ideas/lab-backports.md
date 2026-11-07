@@ -1,6 +1,6 @@
 # Lab Edition Backports
 
-**Status:** Ready. Each item has a known minimal fix.
+**Status:** Partial. §1 and §2 done 2026-11-07, plus 4c (vendored d3) and 4f (D-6). §3 and the rest of §4 remain. Not yet validated on the VM
 **Track:** Range / checks correctness
 **Depends on:** nothing
 **Related:** [`lab-edition.md`](lab-edition.md), which is the longer-term fix: generating the lab from main so this drift cannot recur
@@ -18,6 +18,15 @@ Main renamed *findings* to *observations* in the range services (`active_observa
 
 ## 1. Range: planted observations never activate (port together)
 
+**Done 2026-11-07.** The lab's fixed code was not available (only the March pre-fix snapshot
+under `536/pre-alpha/Labs/Labs/1.2`), so each item was built from this table. 1a/1b:
+`resolve_active_observations` and `session_from_file_data` in
+`app/scenario_services/common/config.py`. A session file with no `active_observations` key
+derives one, and a legacy `extra_findings` list is folded in, so the old committed
+`scenarios/fakobanko/data/session.json` plants observations too. 1c: start-range creates the session
+before any container starts, resumes an existing one, and loads profiles on resume. 1d: done at
+import time. 1e: all three scripts. Tests: `tests/scanning/test_range_backports.py`.
+
 This is the headline lab bug. Without it, the fakobanko range runs with almost every planted
 vulnerability switched off, and the guided walkthrough hides that because it mostly exercises surface
 that is always on.
@@ -31,6 +40,11 @@ that is always on.
 | 1e | `range/*.sh` inherit `COMPOSE_FILE` / `COMPOSE_PROJECT_NAME` from the caller's shell. | `unset` them at the top of start, stop and reset. |
 
 ## 2. Scenario data
+
+**Done 2026-11-07.** 2a: `rag`→`vector` and `cache`→`ml` (going by the compose ports; both stay as network
+aliases), `internal` and `admin` added to `services`. 2d was built from the spec, not ported: a
+token-overlap cache on `ml` at `/semantic-cache` and `/cache/stats`. Phase 46 asked for a separate
+container instead, see that doc.
 
 | Item | Problem in main | Fix |
 |---|---|---|
@@ -67,6 +81,16 @@ that is always on.
 - Expected observations are reachable.
 - `known_hosts` matches the compose hostnames.
 - Chain rules fire against a recorded real scan.
+
+## Found while doing §1–2 (not in the lab)
+
+- **Observation-id vocabulary drift.** `scenario.json`'s `certain`/`random_pool` and the ids the
+  services gate on (`is_observation_active(...)`) have diverged. Many pool ids gate nothing, and
+  dozens of gated ids are in no list, so nothing can switch them on. `randomize.json`'s
+  `random_findings_pool` is no longer read. Some of its gated ids (`cookie_security_missing`,
+  `customer_lookup_tool`, `namespace_leak`, …) should move into `scenario.json`'s `random_pool`. Needs
+  a reconciliation pass and a test that every pool id gates something.
+- Simulation YAMLs still name `rag.`/`cache.` hosts (part of B-9).
 
 ## Not fixed in either edition
 

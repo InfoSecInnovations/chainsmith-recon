@@ -18,8 +18,10 @@ chainsmith scan fakobanko.local --scenario fakobanko
 | docs.fakobanko.local | Documentation | Path disclosure |
 | mcp.fakobanko.local | MCP server | Dangerous tools |
 | agent.fakobanko.local | LangServe agent | Goal injection |
-| rag.fakobanko.local | RAG knowledge base | Indirect injection |
-| cache.fakobanko.local | Semantic cache | Cross-session leak |
+| vector.fakobanko.local | Vector store / RAG knowledge base (alias `rag.fakobanko.local`) | Indirect injection |
+| ml.fakobanko.local | ML model serving and semantic cache (alias `cache.fakobanko.local`) | Cross-session leak |
+| internal.fakobanko.local | Employee internal portal | Wildcard CORS, no auth, exposed employee directory |
+| admin.fakobanko.local | Admin console | Debug mode, stack traces, config dump with credentials |
 
 ## Vulnerability Summary
 

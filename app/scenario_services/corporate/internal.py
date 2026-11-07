@@ -169,20 +169,22 @@ def _get_employees() -> list[Employee]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-@app.on_event("startup")
-async def configure_cors():
-    """
-    Observation: cors_wildcard
-    When active, adds dangerous CORS configuration with credentials.
-    """
-    if is_observation_active("cors_wildcard"):
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+# Observation: cors_wildcard. When active, adds a dangerous CORS configuration
+# with credentials.
+#
+# Done at import time, not in a startup handler: Starlette refuses
+# `add_middleware` once the app has started ("Cannot add middleware after an
+# application has started"), so the old handler crash-looped the container
+# whenever cors_wildcard was active (lab backport 1d). The session is read once
+# here; a reset that changes it needs a container restart, which reset-range does.
+if is_observation_active("cors_wildcard"):
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

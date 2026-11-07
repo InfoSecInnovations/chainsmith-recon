@@ -124,6 +124,19 @@ def apply_scenario(real_checks: list, scenario_name: str) -> list:
         f"Scenario '{scenario_name}' has {len(simulations)} simulations: {list(sim_by_name.keys())}"
     )
 
+    # A simulation whose `emulates:` names no current check never applies; the
+    # real check runs instead. Silent before (lab backport 2c), which hid ~84
+    # stale pre-rename names (B-9). Say so.
+    unmatched = sorted(set(sim_by_name) - {check.name for check in real_checks})
+    if unmatched:
+        logger.warning(
+            "Scenario '%s': %d simulation(s) match no check and will not apply "
+            "(stale or misspelled `emulates:`, or the check is disabled): %s",
+            scenario_name,
+            len(unmatched),
+            ", ".join(unmatched),
+        )
+
     # Build hybrid list
     result = []
     for check in real_checks:

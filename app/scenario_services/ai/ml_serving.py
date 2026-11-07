@@ -19,6 +19,11 @@ Planted observations:
     embedding_endpoint_exposed  Embedding endpoint with debug info
     no_rate_limit               No rate limiting on embeddings
     bulk_query_allowed          Bulk embedding queries allowed
+    no_session_isolation        Semantic cache serves one session's answers to another
+    cache_timing_leak           Semantic cache hits are measurably faster than misses
+
+Also serves an ungated semantic cache (lab backport 2d): GET/POST /semantic-cache,
+GET /cache/stats. See the SEMANTIC CACHE section.
 
 Usage in docker-compose.yml:
     command: >
@@ -29,10 +34,15 @@ Usage in docker-compose.yml:
       - MODEL_ID=fakobanko-llm-v2
 """
 
+import asyncio
 import os
 import random
+import re
+import time
+from collections import OrderedDict
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.scenario_services.common.config import (
@@ -117,7 +127,7 @@ async def root():
     return {
         "service": f"{brand} ML Service",
         "version": ML_VERSION,
-        "endpoints": ["/v1/models", "/v1/embeddings", "/v1/completions"],
+        "endpoints": ["/v1/models", "/v1/embeddings", "/v1/completions", "/semantic-cache"],
     }
 
 
@@ -318,3 +328,221 @@ ml_gpu_memory_bytes{{device="0"}} 15032385536
     from fastapi.responses import PlainTextResponse
 
     return PlainTextResponse(metrics_text, media_type="text/plain")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SEMANTIC CACHE (CAG)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Lab backport 2d: a small token-overlap "semantic" cache in front of the
+# completion model, so the CAG suite has something real to probe. Phase 46 asked
+# for a separate container; this lives on `ml` instead (alias
+# `cache.fakobanko.local`), as the lab did.
+#
+#   Ungated (discoverable on every session):
+#     GET  /semantic-cache   cache info, `X-Semantic-Cache` header
+#     GET  /cache/stats      entry count, hit rate, ttl
+#     POST /semantic-cache   {input, query} -> cached or freshly "generated" answer
+#
+#   Planted observations:
+#     no_session_isolation   lookups ignore `X-Session-Id`, so one session's
+#                            cached answer is served to another
+#     cache_timing_leak      hits return immediately while misses take the
+#                            "generation" time; when inactive, hits are padded
+#                            to the same latency
+
+CACHE_SIMILARITY_THRESHOLD = 0.5
+CACHE_MAX_ENTRIES = 500
+CACHE_TTL_SECONDS = 3600
+_GENERATION_SECONDS = 0.25
+_SHARED_SESSION = "shared"
+
+_STOPWORDS = frozenset(
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "do",
+        "does",
+        "for",
+        "from",
+        "how",
+        "i",
+        "in",
+        "is",
+        "it",
+        "me",
+        "my",
+        "of",
+        "on",
+        "or",
+        "our",
+        "please",
+        "tell",
+        "the",
+        "this",
+        "to",
+        "was",
+        "we",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "with",
+        "you",
+        "your",
+    ]
+)
+
+
+def _tokens(text: str) -> frozenset[str]:
+    return frozenset(t for t in re.findall(r"[a-z0-9_]+", text.lower()) if t not in _STOPWORDS)
+
+
+def _similarity(a: frozenset[str], b: frozenset[str]) -> float:
+    """Overlap coefficient: shared tokens over the smaller set.
+
+    Deliberately loose, as real semantic caches tuned for hit rate are. A short
+    query that shares one keyword with a cached prompt can hit.
+    """
+    if not a or not b:
+        return 0.0
+    return len(a & b) / min(len(a), len(b))
+
+
+class CacheQuery(BaseModel):
+    input: str | None = None
+    query: str | None = None
+
+
+# key -> {"session": str, "prompt": str, "tokens": frozenset, "response": str, "created": float}
+_cache: OrderedDict[str, dict] = OrderedDict()
+_cache_stats = {"hits": 0, "misses": 0}
+
+
+def _seed_cache() -> None:
+    """Public banking FAQ answers, visible to every session."""
+    brand = get_brand_name()
+    for prompt, answer in [
+        ("What are your branch opening hours?", "Branches open 9am to 5pm, Monday to Friday."),
+        ("How do I reset my online banking password?", "Use 'Forgot password' on the login page."),
+        ("What is the daily ATM withdrawal limit?", "The standard daily ATM limit is $500."),
+        (f"Does {brand} charge for international transfers?", "International wires cost $25."),
+    ]:
+        _store(_SHARED_SESSION, prompt, answer)
+
+
+def _store(session: str, prompt: str, response: str) -> None:
+    key = f"{session}:{prompt}"
+    _cache[key] = {
+        "session": session,
+        "prompt": prompt,
+        "tokens": _tokens(prompt),
+        "response": response,
+        "created": time.time(),
+    }
+    _cache.move_to_end(key)
+    while len(_cache) > CACHE_MAX_ENTRIES:
+        _cache.popitem(last=False)
+
+
+def _lookup(session: str, prompt: str) -> tuple[dict | None, float]:
+    """Best cached entry for `prompt` that this session may see."""
+    cross_session = is_observation_active("no_session_isolation")
+    wanted = _tokens(prompt)
+    now = time.time()
+    best, best_score = None, 0.0
+    for entry in _cache.values():
+        if now - entry["created"] > CACHE_TTL_SECONDS:
+            continue
+        if not cross_session and entry["session"] not in (session, _SHARED_SESSION):
+            continue
+        score = _similarity(wanted, entry["tokens"])
+        if score > best_score:
+            best, best_score = entry, score
+    if best is not None and best_score >= CACHE_SIMILARITY_THRESHOLD:
+        return best, best_score
+    return None, best_score
+
+
+def _cache_info() -> dict:
+    total = _cache_stats["hits"] + _cache_stats["misses"]
+    return {
+        "cache_type": "semantic_cache",
+        "backend": "in-memory embedding_match",
+        "entries": len(_cache),
+        "cache_hit_rate": round(_cache_stats["hits"] / total, 3) if total else 0.0,
+        "similarity_threshold": CACHE_SIMILARITY_THRESHOLD,
+        "ttl": CACHE_TTL_SECONDS,
+    }
+
+
+_seed_cache()
+
+
+@app.get("/semantic-cache")
+async def semantic_cache_info():
+    """Cache description. Ungated, so `cag_discovery` always finds the cache."""
+    return JSONResponse(_cache_info(), headers={"X-Semantic-Cache": "enabled"})
+
+
+@app.get("/cache/stats")
+async def cache_stats():
+    """Entry count and hit rate. Ungated."""
+    return {**_cache_info(), "hits": _cache_stats["hits"], "misses": _cache_stats["misses"]}
+
+
+@app.post("/semantic-cache")
+async def semantic_cache_query(
+    body: CacheQuery,
+    x_session_id: str | None = Header(default=None),
+):
+    """Answer from the cache when a similar prompt is cached, else "generate" and store."""
+    session = x_session_id or "anonymous"
+    prompt = " ".join(p for p in (body.input, body.query) if p).strip()
+    if not prompt:
+        raise HTTPException(422, "input or query is required")
+
+    started = time.monotonic()
+    entry, score = _lookup(session, prompt)
+
+    if entry is not None:
+        _cache_stats["hits"] += 1
+        if not is_observation_active("cache_timing_leak"):
+            # Constant-time: pad a hit to the generation latency.
+            await asyncio.sleep(max(0.0, _GENERATION_SECONDS - (time.monotonic() - started)))
+        payload = {
+            "cached": True,
+            "cache_hit": True,
+            "response": entry["response"],
+            "similarity_score": round(score, 3),
+            "cache_age": int(time.time() - entry["created"]),
+        }
+        if is_observation_active("no_session_isolation"):
+            payload["session_id"] = entry["session"]  # whose answer this was
+        status = "HIT"
+    else:
+        _cache_stats["misses"] += 1
+        await asyncio.sleep(_GENERATION_SECONDS)  # the "model" generating
+        answer = f"Noted. You said: {body.input or body.query}"
+        _store(session, prompt, answer)
+        payload = {
+            "cached": False,
+            "cache_hit": False,
+            "response": answer,
+            "similarity_score": round(score, 3),
+        }
+        status = "MISS"
+
+    return JSONResponse(
+        payload,
+        headers={"X-Cache": status, "X-Semantic-Cache": status.lower(), "X-Session-Id": session},
+    )

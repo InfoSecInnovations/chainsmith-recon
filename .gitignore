@@ -32,6 +32,9 @@ dist/
 # Container workspace (database, captured evidence, logs)
 /workspace/
 
+# Range session state (written by range/start-range.sh, resumed on restart)
+scenarios/*/data/session.json
+
 # IDE / editor
 .vscode/
 .idea/

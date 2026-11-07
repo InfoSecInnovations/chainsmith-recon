@@ -5,6 +5,9 @@
 **Depends on:** nothing
 **Note:** the SEC536 lab edition already built a semantic cache in `ml_serving.py`. Porting it ([`lab-backports.md`](lab-backports.md) item 2d) may satisfy most of this doc.
 **Size:** S
+**Update 2026-11-07:** lab-backports 2d landed a semantic cache on `ml` (`/semantic-cache`, `/cache/stats`,
+alias `cache.fakobanko.local`). What is left here is the decision on whether a separate `cache-server`
+container is still wanted.
 **Last reviewed:** 2026-10-11
 
 ## Overview
