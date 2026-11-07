@@ -307,7 +307,14 @@ class TestInternalPortalCors:
         assert any(m.cls is CORSMiddleware for m in internal.app.user_middleware)
 
         with TestClient(internal.app) as client:  # startup used to raise here
-            resp = client.get("/health", headers={"Origin": "https://evil.test"})
+            # Send a cookie: the pinned Starlette (0.37.x, via fastapi==0.111.0) only
+            # reflects the origin under `*` when the request carries one; newer
+            # releases reflect it whenever credentials are allowed. A credentialed
+            # request is the case the weakness is about, so it holds on both.
+            resp = client.get(
+                "/health",
+                headers={"Origin": "https://evil.test", "Cookie": "session=victim"},
+            )
         # Starlette answers `*` + credentials by reflecting the caller's origin,
         # which is the planted weakness: any site can make credentialed requests.
         assert resp.headers.get("access-control-allow-origin") == "https://evil.test"
