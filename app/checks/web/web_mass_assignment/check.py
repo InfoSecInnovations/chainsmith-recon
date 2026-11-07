@@ -9,9 +9,10 @@ This targets standard REST data models — distinct from AI-specific
 API parameter injection checks.
 
 **Probe/grade.** `check_service()` gathers the writable
-endpoints from context, sends each field-injection request and records it — the
-name of the injected field stamped into a request header so the grader can tell
-it from the base body — and judges nothing; `grade()` re-reads each recorded
+endpoints from context, sends each field-injection request and records it, and
+judges nothing. The injected field is always the request body's last key, which
+is how the grader tells it from the base body. Nothing extra is sent, so the
+recorded copy matches the corpus copy (D-3). `grade()` re-reads each recorded
 response and decides what happened.
 
 The injection requests are side effects and stay in the probe. One candidate for
@@ -118,9 +119,8 @@ for f in IDENTITY_FIELDS:
 for f in INTERNAL_FIELDS:
     FIELD_RISK[f] = "internal"
 
-#: The request header the probe stamps the injected field name into, so the
-#: grader can tell it from the base-body fields on the same request.
-INJECTED_FIELD_HEADER = "x-chainsmith-injected-field"
+#: Methods the probe injects with. `grade()` treats only these as attempts.
+_WRITE_METHODS = frozenset({"POST", "PUT", "PATCH"})
 
 
 class MassAssignmentCheck(ServiceIteratingCheck):
@@ -174,7 +174,9 @@ class MassAssignmentCheck(ServiceIteratingCheck):
                     for field_name in injection_fields[:6]:  # Cap per endpoint
                         await self._rate_limit()
 
-                        test_body = dict(base_body)
+                        # The injected field is always the body's LAST key; that
+                        # is how `grade()` tells it from the base-body fields.
+                        test_body = {k: v for k, v in base_body.items() if k != field_name}
                         test_body[field_name] = FIELD_VALUES.get(field_name, "injected")
                         body_json = json.dumps(test_body)
 
@@ -192,10 +194,9 @@ class MassAssignmentCheck(ServiceIteratingCheck):
                                 scan_id=scan_id,
                                 host=service.host,
                                 method=method,
-                                request_headers={
-                                    "Content-Type": "application/json",
-                                    INJECTED_FIELD_HEADER: field_name,
-                                },
+                                # Exactly the headers sent, so this in-memory
+                                # copy hashes the same as the corpus copy.
+                                request_headers={"Content-Type": "application/json"},
                                 request_body=body_json,
                             )
                         )
@@ -212,11 +213,7 @@ class MassAssignmentCheck(ServiceIteratingCheck):
 
     def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
         """Place severity on one service's mass-assignment attempts."""
-        attempts = [
-            e
-            for e in evidence
-            if INJECTED_FIELD_HEADER in {k.lower() for k in (e.request_headers or {})}
-        ]
+        attempts = [e for e in evidence if _injected_field(e) is not None]
 
         if not attempts:
             # Nothing was tested. Distinguish "no endpoints" (the probe found
@@ -524,11 +521,22 @@ class MassAssignmentCheck(ServiceIteratingCheck):
 
 
 def _injected_field(exchange: Exchange) -> str | None:
-    """The field this attempt injected, read back off its request header."""
-    for key, value in (exchange.request_headers or {}).items():
-        if key.lower() == INJECTED_FIELD_HEADER:
-            return value
-    return None
+    """The field this attempt injected, read back off its recorded request body.
+
+    The probe always adds the injected field as the body's last key (D-3). The
+    key must also be one the probe injects. That keeps unrelated JSON requests
+    in the same evidence from counting as attempts.
+    """
+    if (exchange.request_method or "").upper() not in _WRITE_METHODS:
+        return None
+    try:
+        body = json.loads(exchange.request_body or "")
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if not isinstance(body, dict) or not body:
+        return None
+    last = next(reversed(body))
+    return last if last in FIELD_RISK else None
 
 
 def _path_of(exchange: Exchange) -> str:

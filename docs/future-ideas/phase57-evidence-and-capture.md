@@ -32,9 +32,12 @@ where they disagree with the log, the log wins.
 
 **Still to do** (also tracked in [`open-issues.md`](open-issues.md)):
 
-1. **Hash mismatches** that make three checks unreproducible from the corpus:
-   `rag_corpus_poisoning` and `rag_multimodal_injection` (the interceptor records bytes as `str(data)`), and
-   `web_mass_assignment` (an in-memory header that is never sent). The last one needs a decision.
+1. **Hash mismatches** that make two checks unreproducible from the corpus:
+   `rag_corpus_poisoning` and `rag_multimodal_injection` (the interceptor records bytes as `str(data)`).
+   The fix is mechanical: one shared bytes-decoding rule, and pass the headers actually sent.
+   `web_mass_assignment` is **fixed (D-3 option A, 2026-11-07)**. It no longer sets an
+   `x-chainsmith-injected-field` header in memory. `grade()` reads the injected field back as the
+   recorded request body's last key. Not yet re-measured on the VM.
 2. **`web_favicon` grader crash** on non-latin-1 bodies.
 3. **Retention.** `EvidenceStore.delete_scan` / `EvidenceRepository.delete_scan` exist; nothing schedules
    them. Capture stays off by default until this lands.
@@ -42,6 +45,10 @@ where they disagree with the log, the log wins.
 5. Grading records do not save check config, so a re-grade uses today's config.
 6. Smaller items: compact exchange JSON (drop `indent=2`), the `mcp_sampling_abuse` missing exchange, a test
    for the scratch import's superseded-row dedupe, and `TrafficLogger.log_request`, which has no callers.
+
+**Closed:** criterion 6 (D-4, 2026-11-07). It is accepted on the 2026-09-15 `--capture-failures` pair,
+where it held both as written and over completed probes. A pair that includes a transient failure was
+never captured. That case is argued, not observed.
 
 **Deferred on purpose:** 57.5 encryption; criterion 3 (`workspace.yaml` rejects `scope:`); O-4 swarm
 capture posture; O-5 severity for custom checks; O-7 workspace lock.

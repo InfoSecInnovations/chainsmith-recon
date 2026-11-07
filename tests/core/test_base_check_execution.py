@@ -325,3 +325,48 @@ class TestServiceIteratingCheck:
         # Should still complete, with one failure recorded
         assert result.targets_failed == 1
         assert any("AI service failed" in e for e in result.errors)
+
+
+class EndpointListingCheck(ServiceIteratingCheck):
+    """Emits one list output per service, the way the discovery checks do."""
+
+    name = "listing_check"
+    description = "Lists endpoints per service"
+    service_types = []
+    delay_between_targets = 0
+
+    async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
+        return CheckResult(
+            success=True,
+            outputs={
+                "chat_endpoints": [{"url": f"{service.url}/chat"}, {"url": "shared"}],
+                "last_host": service.host,
+            },
+        )
+
+
+class TestServiceOutputMerging:
+    """B-3: list outputs accumulate across services instead of overwriting."""
+
+    async def test_list_outputs_from_every_service_survive(self, sample_services):
+        result = await EndpointListingCheck().run({"services": sample_services})
+
+        urls = [e["url"] for e in result.outputs["chat_endpoints"]]
+        for service in sample_services:
+            assert f"{service.url}/chat" in urls
+        assert urls.count("shared") == 1  # an entry both services report is kept once
+
+    async def test_scalar_outputs_keep_last_service_wins(self, sample_services):
+        result = await EndpointListingCheck().run({"services": sample_services})
+        assert result.outputs["last_host"] == sample_services[-1].host
+
+    def test_merge_does_not_mutate_a_service_list(self):
+        from app.checks.base import merge_service_outputs
+
+        first = [1]
+        into: dict = {}
+        merge_service_outputs(into, {"xs": first})
+        merge_service_outputs(into, {"xs": [2]})
+
+        assert into["xs"] == [1, 2]
+        assert first == [1]

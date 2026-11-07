@@ -259,11 +259,22 @@ def _md5_of(exchange: Exchange) -> str | None:
     Recomputed from the recorded bytes rather than carried from the probe, so a
     verdict is derived from the evidence and not from a claim about it. `latin-1`
     round-trips every byte, which is why the original chose it.
+
+    A body with characters outside latin-1 (B-4: an HTML page full of emoji
+    served at `/favicon.ico`) is encoded as UTF-8 instead. That text is not a
+    real icon, so its hash matches no known favicon. It still grades, as
+    unidentified, rather than failing the grade.
     """
     body = exchange.response_body
     if not body:
         return None
-    body_bytes = body.encode("latin-1") if isinstance(body, str) else body
+    if isinstance(body, str):
+        try:
+            body_bytes = body.encode("latin-1")
+        except UnicodeEncodeError:
+            body_bytes = body.encode("utf-8", errors="surrogateescape")
+    else:
+        body_bytes = body
     return hashlib.md5(body_bytes).hexdigest()
 
 

@@ -107,9 +107,13 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     async with _scan_lock:
         active = get_registry().active_count()
         if active >= max_scans:
+            # D-5: reject rather than queue, so a scan's traffic starts when the
+            # operator asked for it or not at all. Retry-After tells clients
+            # when to try again.
             raise HTTPException(
                 429,
                 f"Concurrent scan limit reached ({active}/{max_scans}). Retry later.",
+                headers={"Retry-After": str(max(1, cfg.concurrency.retry_after_seconds))},
             )
         get_registry().register(session)
 

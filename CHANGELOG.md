@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Scan presets** — `quick`, `thorough`, `passive`, and `ai-focused` (`scan --preset`), defined in `app/data/presets.yaml`
 - **Custom checks** — organization-specific check folders in `app/checks/custom/`, discovered like built-in checks
 - **Developer tooling** — `chainsmith dev new-check`, `verify-contracts`, `show-config`, `diff-registry`, and `migrate-check`
-- **Concurrent scans** — several scans can run at once (default cap 4), with per-scan pause/resume/stop endpoints and a scan selector in the web UI
+- **Concurrent scans** — several scans can run at once (`concurrency.max_concurrent_scans`, default 1 until scope moves inline onto the scan request), with per-scan pause/resume/stop endpoints and a scan selector in the web UI
 - **Live scan streaming** — Server-Sent Events at `GET /api/v1/scans/{scan_id}/stream`
 - Adjudicator agent for evidence-based severity review
 - Triage agent for prioritized remediation planning
@@ -41,6 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Timestamps handled as UTC throughout
 - Agent and advisor configuration moved into each component's own `config.yaml`
 - Scout agent replaced by the scan advisor; steward agent folded into the Chainsmith agent
+- Observations whose ids would collide within one check (for example, one per chat endpoint on the same host) are now kept and renamed with a stable suffix, with a warning. Previously the database dropped all but the first
+- A custom check that fails its contract or fails to import is logged and skipped. It no longer stops all check discovery
+- `web_mass_assignment` no longer records a request header it never sent, so it can be re-graded from captured evidence
+- A scan rejected at the concurrent-scan cap (429) now carries a `Retry-After` header (`concurrency.retry_after_seconds`, default 30)
+- `chainsmith dev new-check` scaffolds a probe/grade check with a `severity:` block, so it passes `verify-contracts` and the coverage tests
+
+### Fixed
+- Checks that iterate over services kept only the last service's list outputs (`chat_endpoints`, `rag_endpoints`, `cag_endpoints`, `mcp_servers`); downstream checks now see every service
+- `web_favicon` no longer fails grading on pages with non-latin-1 characters
+- `chainsmith.sh start` no longer exits 1 before the health wait on non-ollama profiles
 
 ### Removed
 - Engagements, replaced by workspaces and scan history

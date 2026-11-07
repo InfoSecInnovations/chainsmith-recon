@@ -183,6 +183,22 @@ class TestFaviconCheck:
         assert not any("Framework identified" in f.title for f in result.observations)
 
     @pytest.mark.asyncio
+    async def test_non_latin1_body_grades_instead_of_failing(self, service):
+        """B-4: an emoji page served at /favicon.ico hashes as UTF-8 and grades."""
+        emoji_body = "<html>Welcome to FakoBanko 🏦✨</html>"
+        expected_hash = hashlib.md5(emoji_body.encode("utf-8")).hexdigest()
+
+        client = mock_client_multi(
+            response_map={("GET", "favicon.ico"): resp(200, body=emoji_body)},
+            default=resp(200, body="<html></html>"),
+        )
+        with patch("app.checks.web.web_favicon.check.AsyncHttpClient", return_value=client):
+            result = await probe_and_grade(FaviconCheck(), service)
+
+        assert result.outputs["favicon_info"]["identified"]["unknown"] == expected_hash
+        assert not any(o.grading_state == "grading_failed" for o in result.observations)
+
+    @pytest.mark.asyncio
     async def test_favicon_from_html_link(self, service):
         """Favicon URL extracted from HTML <link> tag."""
         test_body = "custom-icon-content"

@@ -25,13 +25,13 @@ Written 2026-10-11 after the cleanup pass. The detail behind each item is in
 
 | # | Decision | Recommendation |
 |---|---|---|
-| D-1 | Set `max_concurrent_scans: 1` until inline scope lands, or accept the residual mis-scope risk? | Set it to 1 if more than one person or script shares an instance |
-| D-2 | Duplicate observation ids (~36 checks): a grading-stage guard, per-check fixes, or rely on the writer? | Grading-stage guard |
-| D-3 | `web_mass_assignment` reproducibility: read the injected field from the body (A), or actually send the header (B)? | A |
-| D-4 | Phase 57 criterion 6: close it on the `--capture-failures` pair, or wait for a transient failure? | Close it |
-| D-5 | Concurrent scans at the cap: queue, or reject with 429 (current behavior)? | — |
-| D-6 | A custom check that fails to import: stop all discovery (current), or log and skip it like the lab? | Log and skip |
-| — | Version: release as 1.3.0? The CLI already says 1.3.0; `pyproject.toml` says 1.2.0. | Bump `pyproject.toml` and cut `[Unreleased]` → `[1.3.0]` |
+| D-1 | ~~Set `max_concurrent_scans: 1`?~~ | **Done 2026-11-07:** default is 1 |
+| D-2 | ~~Duplicate observation ids~~ | **Done 2026-11-07:** grading-stage guard built |
+| D-3 | ~~`web_mass_assignment` reproducibility~~ | **Done 2026-11-07:** A built |
+| D-4 | ~~Phase 57 criterion 6~~ | **Closed 2026-11-07** |
+| D-5 | ~~Concurrent scans at the cap~~ | **Done 2026-11-07:** keep 429, plus `Retry-After` |
+| D-6 | ~~Custom check import failure~~ | **Done 2026-11-07:** log and skip |
+| — | Version: `pyproject.toml` bumped to 1.3.0 (2026-11-07). Still to do: cut `[Unreleased]` → `[1.3.0]` when you release | — |
 | — | Is `docs.chainsmith.io` real? Three UI pages link to it. | If not, point the links at the repo docs |
 | — | Web UI has 6 nav pages; the lab's 3 feel tighter. Merge trend and scan-history into reports? | — |
 
@@ -49,12 +49,12 @@ Work in this order. Each item links to its doc.
 ### Correctness first
 - [ ] **Lab backports §1–2:** range session activation, the `internal.py` crash, scenario hosts, and the `expected_findings` key. See [`lab-backports.md`](docs/future-ideas/lab-backports.md). Until this lands, fakobanko scans undercount.
 - [ ] **B-9:** rename simulation `emulates:` names to the current check names (84 of 133 match nothing). Add a test that every name resolves, and a warning in `apply_scenario`.
-- [ ] **B-3:** `ServiceIteratingCheck` keeps only the last service's list outputs (`app/checks/base.py`).
-- [ ] **B-4:** `web_favicon` crashes on non-latin-1 bodies.
-- [ ] **B-5:** `chainsmith.sh start` exits 1 for non-ollama profiles.
+- [x] **B-3** (2026-11-07): `ServiceIteratingCheck` keeps only the last service's list outputs (`app/checks/base.py`).
+- [x] **B-4** (2026-11-07): `web_favicon` crashes on non-latin-1 bodies.
+- [x] **B-5** (2026-11-07): `chainsmith.sh start` exits 1 for non-ollama profiles.
 - [ ] **B-10:** `--provider` / `--no-llm` only affect the CLI process, not the server.
-- [ ] **B-12:** `dev new-check` scaffold has no `severity:` block, so it fails `verify-contracts`.
-- [ ] Implement the D-2 choice.
+- [x] **B-12** (2026-11-07): `dev new-check` scaffold has no `severity:` block, so it fails `verify-contracts`.
+- [x] Implement the D-2 choice (2026-11-07).
 - [ ] **Lab backports §3–4:**
   - MCP JSON-RPC `tools/list`, plus SQL and money-movement risk patterns.
   - `ai` service type on the web checks.

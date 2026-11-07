@@ -29,6 +29,7 @@ replay this very call later, from the workspace alone.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 import logging
 from typing import TYPE_CHECKING, Any
@@ -64,6 +65,7 @@ async def grade_result(
     stored: list[Exchange] | None = None,
     bind: bool = True,
     persist: bool = True,
+    seen_ids: set[str] | None = None,
 ) -> CheckResult:
     """
     Grade every candidate on one check result, in place.
@@ -74,11 +76,20 @@ async def grade_result(
     The keyword arguments belong to the offline re-grade and a scan never passes
     them: it hands over the corpus it already read (`stored`), must not stamp
     bindings while it is only computing a diff (`bind`), and must not overwrite
-    the grading record it is replaying (`persist`).
+    the grading record it is replaying (`persist`). The re-grade also grades one
+    candidate per call, so it passes one `seen_ids` set per check across those
+    calls. That way the collision guard (`claim_observation_id`) gives the same
+    ids it gave at scan time.
     """
     candidates = list(getattr(result, "candidates", None) or [])
     if not candidates:
         return result
+
+    # Ids already taken in this check's result. Seeded with any observations the
+    # check appended directly (a legacy or custom check), which keep their ids.
+    if seen_ids is None:
+        seen_ids = set()
+    seen_ids.update(o.id for o in result.observations if getattr(o, "id", None))
 
     context = context or {}
     scan_id = context.get("scan_id") or ""
@@ -108,7 +119,9 @@ async def grade_result(
         )
 
         if grader is None:
-            result.observations.append(_ungraded(candidate, GradingState.UNGRADED, evidence))
+            observation = _ungraded(candidate, GradingState.UNGRADED, evidence)
+            claim_observation_id(observation, seen_ids)
+            result.observations.append(observation)
             continue
 
         try:
@@ -119,13 +132,16 @@ async def grade_result(
             logger.warning(
                 "Grading failed for %s (%s): %s", check_name, candidate.id, exc, exc_info=True
             )
-            result.observations.append(
-                _ungraded(candidate, GradingState.GRADING_FAILED, evidence, reason=str(exc))
+            observation = _ungraded(
+                candidate, GradingState.GRADING_FAILED, evidence, reason=str(exc)
             )
+            claim_observation_id(observation, seen_ids)
+            result.observations.append(observation)
             continue
 
         for verdict in verdicts or []:
             observation = _observation_from(candidate, verdict, evidence)
+            claim_observation_id(observation, seen_ids)
             result.observations.append(observation)
             ids = verdict.evidence_ids or evidence.ids()
             if ids:
@@ -137,6 +153,54 @@ async def grade_result(
         await _bind(scan_id, bindings)
 
     return result
+
+
+def claim_observation_id(observation: Observation, seen: set[str]) -> str:
+    """Give `observation` an id no earlier observation in this check has taken.
+
+    This is the D-2 guard. Observation ids are `check-host-discriminator`. A check
+    that emits one candidate per endpoint with a discriminator that does not name
+    the endpoint, or the same hostname on two ports, mints the same id twice. The
+    database rejects the second row, so before this guard the writer kept it out
+    of the scan.
+
+    The first observation keeps its bare id, so ids that never collide do not
+    change. A later one gets a suffix. The suffix is a short hash of its target
+    URL when it has one, so the suffix names the endpoint. Which observation keeps
+    the bare id still depends on grading order. If that is also taken (one grade() returned
+    two verdicts with the same discriminator on the same URL), the suffix is an
+    ordinal, `-2`, `-3`, in grading order. Grading order is the recorded
+    candidate order, so the offline re-grade reproduces it.
+
+    Mutates `observation.id`, records the id in `seen`, and returns it.
+    """
+    base = observation.id
+    if base not in seen:
+        seen.add(base)
+        return base
+
+    new_id = None
+    url = getattr(observation, "target_url", None) or ""
+    if url:
+        hashed = f"{base}-{hashlib.sha256(url.encode()).hexdigest()[:6]}"
+        if hashed not in seen:
+            new_id = hashed
+    n = 2
+    while new_id is None:
+        if f"{base}-{n}" not in seen:
+            new_id = f"{base}-{n}"
+        n += 1
+
+    logger.warning(
+        "Observation id collision in %s: %r already used; renamed to %r. "
+        "The check's discriminator does not tell these observations apart.",
+        observation.check_name,
+        base,
+        new_id,
+    )
+    observation.id = new_id
+    seen.add(new_id)
+    return new_id
 
 
 async def _invoke(grader: Any, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:

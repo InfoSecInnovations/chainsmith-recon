@@ -552,3 +552,48 @@ class TestCli:
         assert "severity: 'medium' -> 'high'" in result.output
         assert "Dry run" in result.output
         assert _evidence_snapshot(workspace.evidence_dir) == before
+
+
+# ── the D-2 id-collision guard ───────────────────────────────────────
+
+
+class TwoEndpointCheck(FakeCheck):
+    """Two candidates on one host whose verdicts share a discriminator, so the
+    second observation id collides with the first at scan time."""
+
+    async def execute(self, context):
+        candidates = []
+        for path in ("/chat", "/v1/chat"):
+            exchange = exchange_from_payload(
+                "http",
+                HOST,
+                check_name=self.name,
+                scan_id=context.get("scan_id", ""),
+                request_body=f"POST {path}",
+                response_body="leaked",
+            )
+            EvidenceStore().write(exchange)
+            url = f"https://{HOST}{path}"
+            candidate = Candidate(
+                check_name=self.name,
+                host=HOST,
+                provisional_severity="low",
+                discriminator="subject",
+                target=Service(url=url, host=HOST, port=443, scheme="https"),
+                target_url=url,
+            )
+            candidate.attach(exchange)
+            candidates.append(candidate)
+        return CheckResult(success=True, candidates=candidates)
+
+
+class TestIdCollisionGuard:
+    async def test_a_regrade_reproduces_the_renamed_ids(self):
+        check = TwoEndpointCheck()
+        stored = await _scan(check)
+        assert len({row["id"] for row in stored}) == 2
+
+        report = await _regrade(check, stored)
+
+        assert _kinds(report) == ["unchanged", "unchanged"]
+        assert report.has_changes is False

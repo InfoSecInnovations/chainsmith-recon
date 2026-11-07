@@ -115,11 +115,18 @@ class ConcurrencyConfig:
     """
     Concurrent-scan limits.
 
-    Introduced in the concurrent-scans overhaul (Phase A). Values are parsed
-    and surfaced here but not yet enforced — Phase C flips enforcement on.
+    `max_concurrent_scans` is enforced in `POST /api/v1/scan`, which answers 429
+    at the cap. It defaults to 1 (decision D-1). Scope is still set globally by
+    `POST /api/v1/scope` before a scan starts, so a second scan can pick up the
+    wrong scope (B-1). Raise the cap only on a single-operator instance, or once
+    scope moves inline onto `POST /api/v1/scan` (concurrent-scans.md §2.1).
     """
 
-    max_concurrent_scans: int = 4
+    max_concurrent_scans: int = 1
+    # Seconds sent in the 429's `Retry-After` header when the cap is reached
+    # (D-5: reject, do not queue). A hint only: the server cannot know when the
+    # running scan will finish.
+    retry_after_seconds: int = 30
     completed_scan_ttl_seconds: int = 300
     rate_limit_scope: str = "per_scan"  # "per_scan" | "global"
 
@@ -301,6 +308,8 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
         ccc = cfg.concurrency
         if "max_concurrent_scans" in cc:
             ccc.max_concurrent_scans = int(cc["max_concurrent_scans"])
+        if "retry_after_seconds" in cc:
+            ccc.retry_after_seconds = int(cc["retry_after_seconds"])
         if "completed_scan_ttl_seconds" in cc:
             ccc.completed_scan_ttl_seconds = int(cc["completed_scan_ttl_seconds"])
         if "rate_limit_scope" in cc:

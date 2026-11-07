@@ -422,3 +422,67 @@ class TestMassAssignmentCheck:
         # With errors on every request, no vulnerabilities should be reported
         vuln = [o for o in result.observations if o.severity in ("critical", "high")]
         assert len(vuln) == 0
+
+
+class TestReproducibleFromCorpus:
+    """D-3: the grader reads the injected field off the recorded body, so a
+    corpus copy grades the same as the probe's in-memory copy."""
+
+    @pytest.mark.asyncio
+    async def test_probe_sends_and_records_only_the_real_headers(self, service):
+        client = mock_client(default=resp(200, body=REALISTIC_USER_RESPONSE_CLEAN))
+
+        with patch("app.checks.web.web_mass_assignment.check.AsyncHttpClient", return_value=client):
+            result = await MassAssignmentCheck().check_service(service, {})
+
+        for call in client._request.call_args_list:
+            assert call.kwargs["headers"] == {"Content-Type": "application/json"}
+        [candidate] = result.candidates
+        assert candidate.exchanges
+        for exchange in candidate.exchanges:
+            assert exchange.request_headers == {"Content-Type": "application/json"}
+
+    @pytest.mark.asyncio
+    async def test_a_corpus_exchange_grades_from_its_body(self, service):
+        from app.checks.base import CheckResult
+        from app.grading import Candidate, grade_result
+        from app.grading.evidence import exchange_from_payload
+
+        check = MassAssignmentCheck()
+        exchange = exchange_from_payload(
+            "http",
+            service.host,
+            check_name=check.name,
+            request_method="POST",
+            request_url="http://target.com:80/api/users",
+            request_headers={"Content-Type": "application/json"},
+            request_body=json.dumps({"name": "test", "email": "t@x", "is_admin": True}),
+            response_status=200,
+            response_body=REALISTIC_USER_RESPONSE,
+        )
+        candidate = Candidate(
+            check_name=check.name, host=service.host, provisional_severity="info", target=service
+        )
+        candidate.attach(exchange)
+        result = CheckResult(success=True, candidates=[candidate])
+
+        await grade_result(check, result, {})
+
+        assert any(
+            o.title == "Mass assignment: 'is_admin' accepted and reflected at POST /api/users"
+            for o in result.observations
+        )
+
+    def test_a_body_not_ending_in_an_injection_field_is_not_an_attempt(self):
+        from app.checks.web.web_mass_assignment.check import _injected_field
+        from app.grading.evidence import exchange_from_payload
+
+        def ex(method, body):
+            return exchange_from_payload(
+                "http", "h", check_name="c", request_method=method, request_body=body
+            )
+
+        assert _injected_field(ex("POST", json.dumps({"name": "a", "role": "x"}))) == "role"
+        assert _injected_field(ex("POST", json.dumps({"role": "x", "name": "a"}))) is None
+        assert _injected_field(ex("GET", json.dumps({"role": "x"}))) is None
+        assert _injected_field(ex("POST", "not json")) is None

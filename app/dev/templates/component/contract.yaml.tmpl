@@ -23,3 +23,13 @@ side_effects: [network]
 techniques: []
 references: []
 reason: ""
+
+# Severity model (Phase 57 §7), required for built-in checks by verify-contracts.
+# `fixed`: each discriminator's severity is known up front; list them under
+# `observations:` as you add verdicts in grade(). `default` is the lowest
+# severity this check emits, so a failed or deferred grade never over-escalates
+# `on_critical`. Use `model: contextual` (with a `default`) when the grader
+# decides severity from context.
+severity:
+  model: fixed
+  default: info

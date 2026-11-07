@@ -1,10 +1,16 @@
 """
 {suite}/{name} - {description}
+
+**Probe/grade** (Phase 57). `check_service()` sends traffic, records each
+exchange on a candidate, and judges nothing. `grade()` reads only that recorded
+evidence and returns verdicts, so the same grader works during a scan and on a
+stored corpus later (`chainsmith dev regrade`).
 """
 
 from typing import Any
 
 from app.checks.base import CheckCondition, CheckResult, Service, ServiceIteratingCheck
+from app.grading import Evidence, GradeContext, Verdict
 
 
 class {class_name}(ServiceIteratingCheck):
@@ -20,7 +26,47 @@ class {class_name}(ServiceIteratingCheck):
     produces = []
     service_types = ["http", "html", "api"]
 
+    # ══ Probe ════════════════════════════════════════════════════════
+    # Send requests and record them. Judge nothing.
+
     async def check_service(self, service: Service, context: dict[str, Any]) -> CheckResult:
         result = CheckResult(success=True)
-        # TODO: implement the check.
+        candidate = self.create_candidate(host=service.host, target=service)
+
+        # TODO: send requests and attach each recorded exchange, for example:
+        #
+        #     from app.grading import exchange_from_response
+        #     from app.lib.http import AsyncHttpClient, HttpConfig
+        #
+        #     async with AsyncHttpClient(HttpConfig(timeout_seconds=10.0)) as client:
+        #         resp = await client.get(service.with_path("/"))
+        #     candidate.attach(
+        #         exchange_from_response(
+        #             resp,
+        #             check_name=self.name,
+        #             scan_id=context.get("scan_id") or "",
+        #             host=service.host,
+        #         )
+        #     )
+
+        result.candidates.append(candidate)
         return result
+
+    # ══ Grade ════════════════════════════════════════════════════════
+    # Re-read the recorded evidence. Never the network.
+
+    def grade(self, evidence: Evidence, ctx: GradeContext) -> list[Verdict]:
+        # TODO: read `evidence` (e.g. `evidence.first().response_body`) and return
+        # one Verdict per judgement, for example:
+        #
+        #     Verdict(
+        #         severity="info",
+        #         confidence=0.9,
+        #         discriminator="something-found",
+        #         title=f"Something found: {{ctx.host}}",
+        #         reasoning="why the recorded response supports this",
+        #         evidence_ids=evidence.ids(),
+        #     )
+        #
+        # Declare each discriminator's severity under `severity:` in contract.yaml.
+        return []

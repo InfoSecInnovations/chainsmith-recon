@@ -621,6 +621,59 @@ def discover_component_metadata(
     return out
 
 
+_CUSTOM_SUITE = "custom"
+
+
+def _custom_component_dir(root: Path, component_type: str, path: Path) -> Path | None:
+    """The `custom/<check>` folder `path` sits in, or None if it is not in one.
+
+    Only the check root has a custom suite.
+    """
+    if component_type != "check":
+        return None
+    try:
+        parts = Path(path).resolve().relative_to(root.resolve()).parts
+    except ValueError:
+        return None
+    if len(parts) < 2 or parts[0] != _CUSTOM_SUITE:
+        return None
+    return (root / parts[0] / parts[1]).resolve()
+
+
+def _is_custom_check(root: Path, component_type: str, comp_dir: Path) -> bool:
+    return _custom_component_dir(root, component_type, comp_dir) is not None
+
+
+def _split_custom_violations(
+    root: Path, component_type: str, violations: list[Violation]
+) -> tuple[set[Path], list[Violation]]:
+    """Separate violations that belong to a custom check from the rest (D-6).
+
+    Returns the custom folders to skip, and the violations that must still
+    raise. A duplicate name or UUID between a custom check and a built-in one is
+    blamed on the custom check, whichever folder sorts first. A custom check may
+    not shadow a built-in one.
+    """
+    skip: set[Path] = set()
+    remaining: list[Violation] = []
+    custom_root = (root / _CUSTOM_SUITE).resolve()
+
+    for violation in violations:
+        comp = _custom_component_dir(root, component_type, violation.path)
+        if comp is None and violation.code in ("duplicate-uuid", "duplicate-name"):
+            # The message names the other folder: "... also used by <path>".
+            other = violation.message.rsplit(" also used by ", 1)[-1]
+            if str(custom_root) in str(Path(other).resolve()):
+                comp = _custom_component_dir(root, component_type, Path(other))
+        if comp is None:
+            remaining.append(violation)
+            continue
+        skip.add(comp)
+        logger.error("Skipping custom check at %s: %s", comp.name, violation)
+
+    return skip, remaining
+
+
 def discover_components(root: Path, component_type: ComponentType = "check") -> list:
     """Discover, validate, and instantiate every enabled component under `root` (§6).
 
@@ -630,6 +683,10 @@ def discover_components(root: Path, component_type: ComponentType = "check") -> 
     """
     root = Path(root)
     violations = verify_contracts(root, component_type)
+    # D-6: a broken *custom* check (operator- or student-written) is logged and
+    # skipped, so it costs only itself. A built-in violation is a bug in the tree
+    # and still stops discovery. `dev verify-contracts` and CI report both.
+    skipped_custom, violations = _split_custom_violations(root, component_type, violations)
     if violations:
         raise ComponentLoadError(violations)
 
@@ -645,6 +702,8 @@ def discover_components(root: Path, component_type: ComponentType = "check") -> 
 
     for contract_path in sorted(root.rglob("contract.yaml")):
         comp_dir = contract_path.parent
+        if comp_dir.resolve() in skipped_custom:
+            continue
         contract = model_cls(**yaml.safe_load(contract_path.read_text(encoding="utf-8")))
 
         # config.yaml (per-component) — disabled components are skipped (§6).
@@ -665,13 +724,22 @@ def discover_components(root: Path, component_type: ComponentType = "check") -> 
             logger.info("Skipping component in disabled suite '%s': %s", suite, contract.name)
             continue
 
-        filename, class_name = parse_entry(contract.entry)
-        module_name = _module_for(comp_dir, filename)
-        mod = importlib.import_module(module_name)
-        entry_cls = getattr(mod, class_name)
+        try:
+            filename, class_name = parse_entry(contract.entry)
+            module_name = _module_for(comp_dir, filename)
+            mod = importlib.import_module(module_name)
+            entry_cls = getattr(mod, class_name)
 
-        resolved = resolver.resolve(contract.name, entry_cls, comp_cfg, suite_cfg)
-        instance = entry_cls.from_config(contract, resolved)
+            resolved = resolver.resolve(contract.name, entry_cls, comp_cfg, suite_cfg)
+            instance = entry_cls.from_config(contract, resolved)
+        except Exception:
+            if not _is_custom_check(root, component_type, comp_dir):
+                raise
+            # D-6: an import or construction error in one custom check skips it.
+            logger.error(
+                "Skipping custom check '%s': it failed to load", contract.name, exc_info=True
+            )
+            continue
         built.append((suite, contract.name, instance))
 
     built.sort(key=lambda t: (t[0], t[1]))

@@ -58,7 +58,7 @@ that is always on.
 | 4c | `observations.html` and `trend.html` load D3 from a CDN, so they break offline (classrooms, air-gapped engagements). | Vendor `d3.v7.min.js` and `d3-sankey.min.js` under `static/js/vendor/`. |
 | 4d | Observation references render as plain text (`static/js/api.js`). | Render them as links. |
 | 4e | `scan.html` never shows `skip_reason` (the API sends it), and `determineCurrentPhase` does not count `skipped` as reached. | Show the reason in the check row, and treat skipped as reached. |
-| 4f | A custom check that fails to import raises `ComponentLoadError` and stops **all** discovery. | For the `custom` suite only, log and skip the bad component (decision D-6 in [`open-issues.md`](open-issues.md)). |
+| 4f | **Done 2026-11-07 (D-6).** A custom check that fails to import, or fails its contract, used to stop **all** discovery. | `discover_components` now logs and skips the bad `custom` check. A custom check that reuses a built-in name or UUID is the one skipped. Built-in failures still raise. |
 
 ## 5. Tests the lab has and main lacks
 

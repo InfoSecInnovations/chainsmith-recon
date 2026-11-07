@@ -22,7 +22,7 @@ limiting, Guardian, OPSEC), and nothing in that reasoning has changed.
 | `AppState` shrunk to operator scope | `app/state.py` |
 | Per-scan runtime state on a session | `app/scan_session.py` |
 | Routes resolve by `scan_id` | `app/routes/scan.py` |
-| Concurrency cap, 429 when over it | `max_concurrent_scans` (default 4), `app/routes/scan.py` |
+| Concurrency cap, 429 when over it | `max_concurrent_scans` (default 1 since D-1; was 4), `app/routes/scan.py` |
 | Scoped control endpoints | `POST /api/v1/scans/{scan_id}/pause\|resume\|stop` (unscoped aliases retained) |
 | `scan_id` threaded into chat, advisor, adjudication, chains, observations | the five route modules |
 | `run_scan()` reads scope from the `ScanSession`, not global state | fixed 2026-09-10; `tests/scanning/test_scan_scope_isolation.py` |
@@ -52,7 +52,8 @@ requires it. `POST /api/v1/scope` is removed. This breaks the scope-then-scan fl
 - Web UI: the scope form submits with the start-scan button.
 - `module-scope-wizard.md`: `--apply` becomes "apply and start".
 
-**Interim mitigation, pending an operator decision:** set `max_concurrent_scans: 1`.
+**Interim mitigation (D-1, applied 2026-11-07):** `max_concurrent_scans` now defaults to 1
+(`app/config.py`). Restore a higher default once inline scope lands.
 
 ### 2.2 Finish the UI
 

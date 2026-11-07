@@ -19,7 +19,7 @@ What you expected to happen.
 **Environment**
 - OS: [e.g. Ubuntu 22.04]
 - Python version: [e.g. 3.11.8]
-- Chainsmith version: [e.g. 1.2.0]
+- Chainsmith version: [e.g. 1.3.0]
 - Deployment: [Docker / local]
 
 **Logs / stack trace**

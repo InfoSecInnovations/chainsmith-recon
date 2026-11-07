@@ -632,6 +632,27 @@ class BaseCheck(BaseComponent, ABC):
         }
 
 
+def merge_service_outputs(into: dict[str, Any], new: dict[str, Any]) -> None:
+    """Fold one service's outputs into the check's accumulated outputs (B-3).
+
+    A list output (`chat_endpoints`, `rag_endpoints`, `cag_endpoints`,
+    `mcp_servers`, ...) is concatenated across services, skipping entries
+    already present, so downstream checks see every service's entries and not
+    just the last one's. Before this fix, `dict.update` overwrote the list. Any
+    other value keeps the old behaviour: the last service's value wins.
+    """
+    for key, value in new.items():
+        existing = into.get(key)
+        if isinstance(existing, list) and isinstance(value, list):
+            for item in value:
+                if item not in existing:
+                    existing.append(item)
+        elif isinstance(value, list):
+            into[key] = list(value)  # a copy, so later merges never mutate a service's list
+        else:
+            into[key] = value
+
+
 class ServiceIteratingCheck(BaseCheck):
     """
     Base class for checks that iterate over multiple services.
@@ -691,7 +712,7 @@ class ServiceIteratingCheck(BaseCheck):
                 # stage sees them all at once after the check returns.
                 result.candidates.extend(service_result.candidates)
                 result.services.extend(service_result.services)
-                result.outputs.update(service_result.outputs)
+                merge_service_outputs(result.outputs, service_result.outputs)
                 result.errors.extend(service_result.errors)
 
             except Exception as e:

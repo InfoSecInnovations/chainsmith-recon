@@ -257,6 +257,9 @@ async def regrade_scan(
         context = restore_context(snapshot)
         context["scan_id"] = scan_id
         graded_any = False
+        # One set per check across its candidates, so the D-2 id-collision guard
+        # renames the same observations it renamed at scan time.
+        seen_ids: set[str] = set()
 
         for doc in record.get("candidates") or []:
             candidate, missing = candidate_from_dict(doc, by_hash)
@@ -275,7 +278,15 @@ async def regrade_scan(
             # One candidate per call, so each verdict is attributable to the
             # candidate it came from — which is what decides "superseded".
             result = CheckResult(success=True, check_name=name, candidates=[candidate])
-            await grade_result(check, result, context, stored=stored, bind=False, persist=False)
+            await grade_result(
+                check,
+                result,
+                context,
+                stored=stored,
+                bind=False,
+                persist=False,
+                seen_ids=seen_ids,
+            )
             graded_any = True
 
             ids = []

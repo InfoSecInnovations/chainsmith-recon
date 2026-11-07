@@ -208,7 +208,9 @@ check_ports() {
     step "Checking ports"
 
     local ports=("${CHAINSMITH_PORT:-8100}")
-    [ "${LLM_PROFILE:-openai}" = "ollama" ] && ports+=(11434)
+    if [ "${LLM_PROFILE:-openai}" = "ollama" ]; then
+        ports+=(11434)
+    fi
 
     local conflicts=()
     for port in "${ports[@]}"; do
@@ -263,7 +265,9 @@ start_services() {
     step "Starting Chainsmith"
 
     local compose_profiles=()
-    [ "${LLM_PROFILE:-openai}" = "ollama" ] && compose_profiles=(--profile ollama)
+    if [ "${LLM_PROFILE:-openai}" = "ollama" ]; then
+        compose_profiles=(--profile ollama)
+    fi
 
     $DOCKER_COMPOSE \
         --project-name "$PROJECT_NAME" \
@@ -273,7 +277,12 @@ start_services() {
         up -d --remove-orphans \
         || die "docker compose up failed. Check output above."
 
-    [ "${LLM_PROFILE:-openai}" = "ollama" ] && pull_ollama_model
+    # An `if`, not `[ ... ] && pull_ollama_model`: as the function's last
+    # command, a false test made start_services return 1, and `set -e` then
+    # exited before the health wait ran (B-5).
+    if [ "${LLM_PROFILE:-openai}" = "ollama" ]; then
+        pull_ollama_model
+    fi
 }
 
 # ── Health polling ────────────────────────────────────────────────
