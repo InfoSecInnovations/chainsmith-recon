@@ -2,7 +2,7 @@
 # Fakobanko scenario: Traceroute reveals network path
 
 suite: network
-emulates: traceroute
+emulates: network_traceroute
 target: "fakobanko.local"
 disposition: path_found
 

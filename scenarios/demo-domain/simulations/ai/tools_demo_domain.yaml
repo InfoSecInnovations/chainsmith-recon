@@ -1,6 +1,6 @@
 # Tool discovery — tools found on chat service
 suite: ai
-emulates: tool_discovery
+emulates: ai_tool_discovery
 target: "localhost"
 disposition: tools_discovered
 

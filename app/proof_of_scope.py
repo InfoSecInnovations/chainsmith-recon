@@ -20,9 +20,10 @@ from app.lib.timeutils import iso_utc, now_utc, parse_iso_utc
 # evaluated here would freeze the pre-workspace path. `_resolve_data_dir()`
 # defers the lookup to first write instead.
 #
-# Note this only gives the logs a home. They are still process-global with no
-# `scan_id` on records, so concurrent scans pool into one file; that is tracked
-# separately in 57.2 (see doc-status-audit-2026-09-10.md F-3).
+# The loggers are process-global and every scan appends to the same two files,
+# but each record carries its `scan_id` (57.2), and a report for one scan
+# filters to that scan. Traffic is written by `AsyncHttpClient._log_traffic`
+# for every request a check sends, and blocked attempts by Guardian (B-2).
 
 
 def _resolve_data_dir(explicit: Path | None = None) -> Path:

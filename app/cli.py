@@ -126,9 +126,82 @@ def _get_client(ctx) -> ChainsmithClient:
     return client
 
 
+_SCOPE_FILE_KEYS = {
+    "target",
+    "exclude",
+    "techniques",
+    "scan_window",
+    "proof_of_scope",
+    "acknowledge_outside_window",
+}
+
+
+def _load_scope_file(path: str, target: str) -> dict:
+    """Read a `--scope` file into `start_scan` keyword arguments.
+
+    YAML or JSON. An unknown key is an error rather than ignored, and a
+    `target` that disagrees with the TARGET argument is an error, so an
+    operator never scans a scope other than the one they wrote.
+    """
+    import yaml
+
+    text = Path(path).read_text(encoding="utf-8")
+    data = json.loads(text) if path.lower().endswith(".json") else yaml.safe_load(text)
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        raise click.BadParameter("scope file must be a mapping", param_hint="--scope")
+    unknown = sorted(set(data) - _SCOPE_FILE_KEYS)
+    if unknown:
+        raise click.BadParameter(
+            f"unknown key(s) {', '.join(unknown)}; allowed: {', '.join(sorted(_SCOPE_FILE_KEYS))}",
+            param_hint="--scope",
+        )
+    file_target = data.pop("target", None)
+    if file_target and str(file_target).strip() != target:
+        raise click.BadParameter(
+            f"scope file target {file_target!r} does not match TARGET {target!r}",
+            param_hint="--scope",
+        )
+    exclude = data.get("exclude") or []
+    if isinstance(exclude, str):
+        exclude = [exclude]
+    data["exclude"] = [str(e) for e in exclude]
+    return data
+
+
+def _warn_if_llm_flags_ignored(ctx, *, no_llm: bool, provider: str | None, style) -> bool:
+    """Warn when `--no-llm` / `--provider` cannot take effect (B-10).
+
+    The flags set `CHAINSMITH_LLM_PROVIDER` in this process. A server the CLI
+    starts inherits it. A server that was already running does not, and keeps
+    its own LLM setting, so the flags would otherwise be silently ignored.
+    Returns True when it warned.
+    """
+    if not (no_llm or provider):
+        return False
+    mgr = ctx.obj.get("server_mgr")
+    if mgr is None or getattr(mgr, "started_server", False):
+        return False
+    flag = "--no-llm" if no_llm or provider == "none" else f"--provider {provider}"
+    click.echo(
+        style(
+            f"Warning: {flag} has no effect: the Chainsmith server at {ctx.obj.get('server')} "
+            "was already running and keeps its own LLM setting. Use "
+            "`chainsmith prefs set llm.provider <name|none>`, or restart the server "
+            "with CHAINSMITH_LLM_PROVIDER set.",
+            fg="yellow",
+        ),
+        err=True,
+    )
+    return True
+
+
 def _handle_api_error(e: ChainsmithAPIError):
     """Print an API error and exit."""
     click.echo(click.style(f"Error: {e.detail}", fg="red"), err=True)
+    if e.status_code == 429 and getattr(e, "retry_after", None) is not None:
+        click.echo(f"The server asks to retry in {e.retry_after}s.", err=True)
     sys.exit(1)
 
 
@@ -140,6 +213,13 @@ def _handle_api_error(e: ChainsmithAPIError):
 @cli.command()
 @click.argument("target")
 @click.option("--exclude", "-e", multiple=True, help="Exclude domains from scope")
+@click.option(
+    "--scope",
+    "scope_file",
+    type=click.Path(exists=True, dir_okay=False),
+    help="YAML/JSON scope file: exclude, techniques, scan_window {start, end}, "
+    "proof_of_scope, acknowledge_outside_window. Sent with the scan request.",
+)
 @click.option("--checks", "-c", multiple=True, help="Run specific checks (by name)")
 @click.option(
     "--suite",
@@ -206,6 +286,7 @@ def scan(
     ctx,
     target: str,
     exclude: tuple,
+    scope_file: str | None,
     checks: tuple,
     suite: tuple,
     scenario: str,
@@ -289,6 +370,8 @@ def scan(
         click.echo(style(f"Error: {e}", fg="red"), err=True)
         sys.exit(1)
 
+    _warn_if_llm_flags_ignored(ctx, no_llm=no_llm, provider=provider, style=style)
+
     # Collect check/suite filters for start_scan
     scan_checks = list(checks) if checks else None
     scan_suites = list(suite) if suite else None
@@ -304,8 +387,10 @@ def scan(
                 # Profile may not exist on server yet (e.g., first run)
                 pass
 
-        # 1. Set scope
-        client.set_scope(target, list(exclude))
+        # 1. Scope travels with the scan request (step 5), so another client
+        #    cannot change it in between (B-1).
+        scope_extra = _load_scope_file(scope_file, target) if scope_file else {}
+        scan_exclude = list(dict.fromkeys(list(exclude) + scope_extra.pop("exclude", [])))
 
         # 2. Update settings
         client.update_settings(parallel=parallel)
@@ -372,11 +457,14 @@ def scan(
             }
 
         client.start_scan(
+            target,
+            exclude=scan_exclude,
             checks=scan_checks,
             suites=scan_suites,
             port_profile=port_profile if port_profile else None,
             preset=preset if preset else None,
             capture=capture_block,
+            **scope_extra,
         )
 
         # 6. Poll until complete
@@ -2004,6 +2092,29 @@ def serve(host: str, port: int, reload: bool, coordinator: bool):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+def _unclaimed_observation_id(scan_id: str, obs: dict, taken: set[str]) -> str:
+    """The observation's id, or a stable variant of it no stored row uses.
+
+    Mirrors `app.grading.stage.claim_observation_id`: a short hash of the target
+    URL (or, without one, the evidence) first, then an ordinal.
+    """
+    import hashlib
+
+    from app.db.repositories import scoped_observation_id
+
+    base = obs["id"]
+    if scoped_observation_id(scan_id, base) not in taken:
+        return base
+    seed = obs.get("target_url") or obs.get("evidence") or obs.get("title") or ""
+    hashed = f"{base}-{hashlib.sha256(str(seed).encode()).hexdigest()[:6]}"
+    if scoped_observation_id(scan_id, hashed) not in taken:
+        return hashed
+    n = 2
+    while scoped_observation_id(scan_id, f"{base}-{n}") in taken:
+        n += 1
+    return f"{base}-{n}"
+
+
 @cli.command("scratch-to-db")
 @click.argument("scan_id", required=False)
 @click.option("--all", "import_all", is_flag=True, help="Import all scratch directories")
@@ -2054,7 +2165,11 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
     async def _import():
         from app.config import get_config
         from app.db import init_db
-        from app.db.repositories import ObservationRepository, _generate_fingerprint
+        from app.db.repositories import (
+            ObservationRepository,
+            observation_fingerprint,
+            scoped_observation_id,
+        )
 
         cfg = get_config()
         await init_db(
@@ -2094,26 +2209,34 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
             # rows count: unseen, their scratch copies would be imported again.
             existing = await repo.get_observations(sid, include_superseded=True)
             existing_fps = {obs.get("fingerprint") for obs in existing if obs.get("fingerprint")}
+            existing_ids = {obs.get("id") for obs in existing if obs.get("id")}
 
-            # Compute fingerprints for scratch observations and filter duplicates
+            # Filter duplicates by fingerprint, the same one a stored row gets.
             new_observations = []
+            renamed = 0
             for obs in observations:
-                host = obs.get("host") or obs.get("target_url", "")
-                fp = _generate_fingerprint(
-                    check_name=obs.get("check_name", obs.get("check", "")),
-                    host=host,
-                    title=obs.get("title", ""),
-                    evidence=obs.get("evidence", ""),
-                )
-                if fp not in existing_fps:
-                    new_observations.append(obs)
-                    existing_fps.add(fp)  # prevent intra-batch dupes
+                fp = observation_fingerprint(obs)
+                if fp in existing_fps:
+                    continue
+                existing_fps.add(fp)  # prevent intra-batch dupes
+                # A different observation under an id already stored: the
+                # writer sends exactly these to scratch when their id collides,
+                # so importing them as-is failed the whole import on the unique
+                # key. Rename like the grading-stage guard (D-2).
+                if obs.get("id"):
+                    new_id = _unclaimed_observation_id(sid, obs, existing_ids)
+                    if new_id != obs["id"]:
+                        obs = {**obs, "id": new_id}
+                        renamed += 1
+                    existing_ids.add(scoped_observation_id(sid, obs["id"]))
+                new_observations.append(obs)
 
             skipped = len(observations) - len(new_observations)
 
             click.echo(
                 f"  {sid}: {len(obs_files)} files, "
                 f"{len(new_observations)} new, {skipped} duplicates"
+                + (f", {renamed} renamed (id already stored)" if renamed else "")
             )
 
             if dry_run or not new_observations:
@@ -2159,6 +2282,66 @@ def scratch_to_db(scan_id: str | None, import_all: bool, dry_run: bool, keep: bo
                 f"\nImported {imported} observations ({skipped} duplicates skipped).", fg="green"
             )
         )
+
+
+@cli.group("evidence")
+def evidence():
+    """Captured evidence in the active workspace."""
+
+
+@evidence.command("prune")
+@click.option(
+    "--older-than",
+    "older_than",
+    type=int,
+    default=None,
+    help="Days. Defaults to storage.evidence_retention_days (0 = keep for the workspace's life).",
+)
+@click.option("--dry-run", is_flag=True, help="List what would be removed; remove nothing")
+def evidence_prune(older_than: int | None, dry_run: bool):
+    """Remove captured evidence older than a number of days.
+
+    Deletes exchange documents and grading records, and their index rows. The
+    scans and their observations stay, but a pruned scan can no longer be
+    re-graded.
+    """
+    import asyncio
+
+    from app.capture.retention import prune_evidence
+    from app.config import get_config
+
+    days = older_than if older_than is not None else get_config().storage.evidence_retention_days
+    if days <= 0:
+        click.echo(
+            "Evidence retention is off (keep for the workspace's lifetime). "
+            "Pass --older-than N or set storage.evidence_retention_days."
+        )
+        return
+
+    async def _run():
+        if not dry_run:
+            from app.db import init_db
+
+            cfg = get_config()
+            try:
+                await init_db(
+                    backend=cfg.storage.backend,
+                    db_path=cfg.storage.db_path,
+                    postgresql_url=cfg.storage.postgresql_url,
+                )
+            except Exception as e:  # documents still go; index rows are best-effort
+                click.echo(
+                    click.style(f"Database unavailable ({e}); pruning files only", fg="yellow")
+                )
+        return await prune_evidence(days, dry_run=dry_run)
+
+    result = asyncio.run(_run())
+    verb = "Would remove" if dry_run else "Removed"
+    click.echo(f"{verb} evidence for {len(result.scans)} scan(s) older than {days} day(s).")
+    for scan_id in result.scans:
+        click.echo(f"  {scan_id}")
+    if not dry_run and result.scans:
+        click.echo(f"  {result.documents} document(s), {result.index_rows} index row(s)")
 
 
 @cli.command("scratch-list")

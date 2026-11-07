@@ -91,7 +91,14 @@ class StorageConfig:
     db_path: Path = Path("./data/chainsmith.db")  # SQLite file path
     postgresql_url: str = ""  # PostgreSQL connection string
     auto_persist: bool = True  # Write scan results to DB automatically
-    retention_days: int = 365  # Auto-delete scans older than this (0 = forever)
+    # NOT ENFORCED: nothing deletes scans by age. Enforcing it would delete scan
+    # data automatically, which is an operator decision (see open-issues.md).
+    retention_days: int = 365
+    # Captured evidence (exchange documents, grading records) older than this is
+    # pruned at server start and by `chainsmith evidence prune`. Observations and
+    # the scan row stay. 0 keeps evidence for the workspace's lifetime, which is
+    # the phase 57 default (D-5).
+    evidence_retention_days: int = 0
 
 
 @dataclass
@@ -129,6 +136,15 @@ class ConcurrencyConfig:
     retry_after_seconds: int = 30
     completed_scan_ttl_seconds: int = 300
     rate_limit_scope: str = "per_scan"  # "per_scan" | "global"
+
+
+@dataclass
+class ChainsConfig:
+    """Attack-chain analysis."""
+
+    # Upper bound on the LLM chain pass (lab backport 4b). Rule-based chains are
+    # saved before it starts, so a slow or hung model only costs the LLM chains.
+    llm_timeout_seconds: int = 300
 
 
 @dataclass
@@ -173,6 +189,7 @@ class ChainsmithConfig:
     # adjudicator / triage / researcher / coach moved to per-agent config.yaml (56.10c).
     concurrency: ConcurrencyConfig = field(default_factory=ConcurrencyConfig)
     scan_stream: ScanStreamConfig = field(default_factory=ScanStreamConfig)
+    chains: ChainsConfig = field(default_factory=ChainsConfig)
 
     # Raw seed URLs (optional - scanner can discover these itself)
     seed_urls: list[str] = field(default_factory=list)
@@ -278,6 +295,8 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
             stc.auto_persist = bool(st["auto_persist"])
         if "retention_days" in st:
             stc.retention_days = int(st["retention_days"])
+        if "evidence_retention_days" in st:
+            stc.evidence_retention_days = int(st["evidence_retention_days"])
 
     if "swarm" in data and isinstance(data["swarm"], dict):
         sw = data["swarm"]
@@ -302,6 +321,11 @@ def _apply_yaml(cfg: ChainsmithConfig, data: dict) -> None:
     # app/advisors/check_proof/config.yaml now.
 
     # coach YAML block removed in 56.10c — read from app/agents/coach/config.yaml.
+
+    if "chains" in data and isinstance(data["chains"], dict):
+        ch = data["chains"]
+        if "llm_timeout_seconds" in ch:
+            cfg.chains.llm_timeout_seconds = int(ch["llm_timeout_seconds"])
 
     if "concurrency" in data and isinstance(data["concurrency"], dict):
         cc = data["concurrency"]
@@ -383,6 +407,9 @@ def _apply_env(cfg: ChainsmithConfig) -> None:
     if v := env.get("CHAINSMITH_STORAGE_RETENTION_DAYS"):
         with contextlib.suppress(ValueError):
             cfg.storage.retention_days = int(v)
+    if v := env.get("CHAINSMITH_STORAGE_EVIDENCE_RETENTION_DAYS"):
+        with contextlib.suppress(ValueError):
+            cfg.storage.evidence_retention_days = int(v)
 
     # Scan analysis advisor env overrides removed in 56.11 — knobs live in
     # app/advisors/scan_analysis/config.yaml now (the CHAINSMITH_SCAN_ANALYSIS_ADVISOR_*

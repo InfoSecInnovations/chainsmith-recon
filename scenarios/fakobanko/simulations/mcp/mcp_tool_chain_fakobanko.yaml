@@ -2,7 +2,7 @@
 # Fakobanko scenario: Tool chain analysis
 
 suite: mcp
-emulates: tool_chain_analysis
+emulates: mcp_tool_chain_analysis
 target: "mcp.fakobanko.local"
 disposition: chain_exploitable
 

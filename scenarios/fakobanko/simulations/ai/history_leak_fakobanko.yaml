@@ -2,7 +2,7 @@
 # Fakobanko scenario: Conversation history leaked
 
 suite: ai
-emulates: history_leak
+emulates: ai_conversation_history_leak
 target: "chat.fakobanko.local"
 disposition: history_leaked
 

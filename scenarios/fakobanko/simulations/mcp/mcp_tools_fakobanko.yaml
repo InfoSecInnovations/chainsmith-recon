@@ -2,7 +2,7 @@
 # Fakobanko scenario: MCP tool enumeration
 
 suite: mcp
-emulates: tool_enumeration
+emulates: mcp_tool_enumeration
 target: "mcp.fakobanko.local"
 disposition: tools_found
 

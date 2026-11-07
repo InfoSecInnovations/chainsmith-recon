@@ -1,5 +1,5 @@
 suite: ai
-emulates: llm_endpoint_discovery
+emulates: ai_llm_endpoint_discovery
 target: "www.example.local"
 disposition: no_endpoints
 

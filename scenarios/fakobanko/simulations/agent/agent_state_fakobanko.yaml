@@ -2,7 +2,7 @@
 # Fakobanko scenario: Agent state manipulation
 
 suite: agent
-emulates: agent_state
+emulates: agent_state_manipulation
 target: "agent.fakobanko.local"
 disposition: state_manipulated
 

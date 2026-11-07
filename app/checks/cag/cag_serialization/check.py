@@ -230,7 +230,8 @@ class SerializationCheck(ServiceIteratingCheck):
                     host=service.host,
                     method="POST",
                     request_headers=OCTET_HEADERS,
-                    request_body=payload.decode("latin-1"),
+                    # The interceptor's own text rule, so the hashes pair (B-8).
+                    request_data=payload,
                 )
             )
         return exchanges

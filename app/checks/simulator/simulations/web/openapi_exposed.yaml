@@ -1,7 +1,7 @@
 # simulations/web/openapi_exposed.yaml
 # Smoke test: OpenAPI spec exposed with sensitive admin endpoints
 suite: web
-emulates: openapi_discovery
+emulates: web_openapi_discovery
 target: "api.example.local"
 disposition: spec_found
 

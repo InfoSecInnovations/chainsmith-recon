@@ -2,7 +2,7 @@
 # Fakobanko scenario: Notification injection
 
 suite: mcp
-emulates: notification_injection
+emulates: mcp_notification_injection
 target: "mcp.fakobanko.local"
 disposition: injection_possible
 

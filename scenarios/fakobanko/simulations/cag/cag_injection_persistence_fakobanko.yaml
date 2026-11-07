@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_injection_persistence
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: injection_persisted
 
 behavior:

@@ -84,8 +84,13 @@ class EvidenceStore:
         """Persist one exchange. Returns the path written."""
         path = self.path_for(exchange.scan_id, exchange.id)
         path.parent.mkdir(parents=True, exist_ok=True)
+        # Compact, like the grading records: an exchange document is read by
+        # `json.loads`, never by eye (`dev` tooling and the API pretty-print), and
+        # `indent=2` was a measurable share of the ~4.8 MB of exchange documents
+        # per full fakobanko scan (D-21). Hashes cover fields, not file text, so
+        # older indented documents still read and pair the same.
         path.write_text(
-            json.dumps(exchange.to_dict(), indent=2, ensure_ascii=False),
+            json.dumps(exchange.to_dict(), separators=(",", ":"), ensure_ascii=False),
             encoding="utf-8",
         )
         return path

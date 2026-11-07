@@ -37,6 +37,41 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def request_body_text(json_body: Any | None = None, data: Any | None = None) -> str:
+    """The text a recorded exchange stores for a request body (B-8).
+
+    One rule, used by both the capture interceptor below and
+    `app.grading.evidence.exchange_from_response`. A probe's in-memory copy then
+    hashes the same as the corpus copy, and `evidence_for` can pair them.
+
+    - `json=`: `json.dumps(..., ensure_ascii=False)`, as before.
+    - `data=` text: as-is.
+    - `data=` bytes: UTF-8 if the bytes decode cleanly, otherwise latin-1, which
+      round-trips every byte (a PDF inside a multipart upload). The old rule was
+      `str(data)`, which stored the literal repr `"b'--boundary...'"`.
+    - `data=` a mapping: form-encoded, which is what httpx sends.
+    """
+    if json_body is not None:
+        import json as _json
+
+        return _json.dumps(json_body, ensure_ascii=False)
+    if data is None:
+        return ""
+    if isinstance(data, str):
+        return data
+    if isinstance(data, (bytes, bytearray, memoryview)):
+        raw = bytes(data)
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return raw.decode("latin-1")
+    if isinstance(data, dict):
+        from urllib.parse import urlencode
+
+        return urlencode(data, doseq=True)
+    return str(data)
+
+
 @dataclass
 class HttpConfig:
     """Configuration for the HTTP client."""
@@ -194,6 +229,7 @@ class AsyncHttpClient:
                 )
                 logger.debug(f"{method} {url} -> {resp.status_code} ({elapsed_ms:.0f}ms)")
                 self._capture(method, url, headers, json, data, result)
+                self._log_traffic(method, url, result)
                 return result
 
             except httpx.TimeoutException as e:
@@ -220,7 +256,65 @@ class AsyncHttpClient:
         )
         # Recorded only when `capture_failures` is on; the writer decides.
         self._capture(method, url, headers, json, data, failed)
+        self._log_traffic(method, url, failed)
         return failed
+
+    @staticmethod
+    def _log_traffic(method: str, url: str, response: HttpResponse) -> None:
+        """Record one sent request in the proof-of-scope traffic log (B-2).
+
+        Only inside a check (the ambient capture context carries the scan id),
+        and only when the scan's `traffic_logging` setting is on. The scope
+        status comes from the scan's own Guardian. A request that left the box
+        is `in_scope` or `out_of_scope`; one Guardian blocked before sending is
+        logged by Guardian itself as `excluded`. Before this, nothing called the
+        traffic logger, and every compliance report claimed zero requests.
+        Never raises.
+        """
+        try:
+            from urllib.parse import urlparse
+
+            from app.capture.context import current
+
+            active = current()
+            if active is None or not active.scan_id:
+                return
+
+            from app.proof_of_scope import ScopeStatus, traffic_logger
+            from app.scan_registry import get_registry
+
+            session = get_registry().get(active.scan_id)
+            if session is None:
+                # Not a scan this process runs: a check driven directly by a
+                # test, or a swarm worker. Swarm traffic is therefore not in
+                # the coordinator's compliance report yet (same gap as swarm
+                # evidence capture, phase 57 O-4).
+                return
+            settings = getattr(session, "proof_settings", None)
+            if settings is not None and not getattr(settings, "traffic_logging", True):
+                return
+
+            status = ScopeStatus.UNKNOWN
+            guardian = getattr(session, "guardian", None)
+            if guardian is not None:
+                allowed, _ = guardian.check_url(url)
+                status = ScopeStatus.IN_SCOPE if allowed else ScopeStatus.OUT_OF_SCOPE
+
+            parsed = urlparse(url)
+            traffic_logger.log_request(
+                dst_host=parsed.hostname or url,
+                method=method,
+                path=parsed.path or "/",
+                port=parsed.port or (443 if parsed.scheme == "https" else 80),
+                protocol=(parsed.scheme or "http").upper(),
+                check_name=active.check_name or None,
+                scope_status=status,
+                status_code=response.status_code or None,
+                response_time_ms=response.elapsed_ms,
+                scan_id=active.scan_id,
+            )
+        except Exception:  # pragma: no cover - logging must never break a request
+            logger.debug("Traffic logging skipped for %s %s", method, url, exc_info=True)
 
     @staticmethod
     def _capture(
@@ -242,13 +336,7 @@ class AsyncHttpClient:
 
             from app.capture.writer import record
 
-            body = ""
-            if json_body is not None:
-                import json as _json
-
-                body = _json.dumps(json_body, ensure_ascii=False)
-            elif data is not None:
-                body = data if isinstance(data, str) else str(data)
+            body = request_body_text(json_body, data)
 
             record(
                 "http",

@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Guardian enforcement of the scope's scan time window
 - Per-check severity and scan customizations
 - Expanded `fakobanko` and `demo-domain` scenarios
+- Evidence retention: `storage.evidence_retention_days` (off by default) prunes old captured evidence at server start and daily; `chainsmith evidence prune [--older-than N] [--dry-run]`
+- `dev regrade` reports `CONFIG DRIFT` when a check's config, especially its severity block, changed since the scan
+- Check references render as links in the check detail view, and skipped checks show why
 - A semantic cache on fakobanko's ML service (`/semantic-cache`, `/cache/stats`) for the CAG suite, with planted cross-session leakage and timing observations
 
 ### Changed
@@ -53,6 +56,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `web_favicon` no longer fails grading on pages with non-latin-1 characters
 - `chainsmith.sh start` no longer exits 1 before the health wait on non-ollama profiles
 - The fakobanko range now activates its planted observations: range sessions derive them, seeded by the session id, so every container agrees; `start-range.sh` resumes an existing session and creates it before containers start; the internal portal no longer crashes when wildcard CORS is active; range scripts ignore inherited `COMPOSE_FILE`/`COMPOSE_PROJECT_NAME`
+- Request bodies sent as bytes are captured as text, not their Python repr, and multipart probes record the headers they send, so `rag_corpus_poisoning`, `rag_multimodal_injection` and `cag_serialization` can be re-graded from captured evidence
+- Errors a check reports for individual targets are now logged
+- Rule-based attack chains are saved before the LLM chain pass, which now times out (`chains.llm_timeout_seconds`, default 300), so a slow model no longer hides every chain
+- `POST /api/v1/scan` takes the scope inline and requires `target`; a scan never reads the global scope, so concurrent clients cannot mis-scope each other (`POST /api/v1/scope` remains, as planning input for the advisor and chat). `chainsmith scan --scope FILE` sends a YAML/JSON scope with the scan
+- The proof-of-scope traffic log is written (it never was): every request a check sends, with its scope status, and every attempt Guardian blocks, per scan
+- Deleting a scan deletes its captured evidence documents; `scratch-to-db` no longer fails on rows diverted for an id collision
+- The web UI's "block exclusions" and "log violations" settings take effect; one-sided scan windows are accepted
+- MCP tool enumeration posts `tools/list` as a JSON-RPC method to `/mcp` (and similar) first, and classifies raw-SQL and money-movement tools as critical; 12 web checks now also run on `ai` hosts; `cag_discovery` no longer lists an endpoint twice
+- `--provider`/`--no-llm` warn when a running server will ignore them; a 429 at the scan cap prints when to retry
+- Scenario simulations use current check names, so they apply again; fakobanko and demo-domain observation lists match what their services actually plant, and demo-domain containers share one session
 - Scenario `expected_findings` are loaded (the loader only read `expected_observations`), fakobanko's host list matches its containers, and simulations that match no check are logged
 
 ### Removed

@@ -2,7 +2,7 @@
 # Fakobanko scenario: Port scan finds open ports 8080-8089
 
 suite: network
-emulates: port_scan
+emulates: network_port_scan
 target: "fakobanko.local"
 disposition: open_ports_found
 

@@ -260,6 +260,20 @@ class CheckLauncher:
             # Run the check through execute() for timeout protection
             result = await check.execute(self.context)
 
+            # A check reports per-target failures (timeouts, out-of-scope URLs,
+            # exceptions it caught) in `result.errors` and still "succeeds".
+            # Nothing logged them on this path, only the swarm path forwarded
+            # them, so a check that failed on every target looked identical to
+            # one that found nothing (lab backport 4a).
+            errors = list(getattr(result, "errors", None) or [])
+            if errors:
+                logger.warning(
+                    "  %s reported %d error(s); first: %s",
+                    name,
+                    len(errors),
+                    str(errors[0])[:500],
+                )
+
             # Grading stage. Deliberately here and not inside
             # `execute()`: grading is its own pass over recorded evidence, and
             # the function called here is the same one that will grade a stored

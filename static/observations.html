@@ -768,6 +768,8 @@
             const labels = {
                 idle: 'Idle', analyzing: 'Analyzing', complete: 'Complete',
                 error: 'Error', partial: 'Partial', failed: 'Failed',
+                // Rule chains saved, LLM pass never finished (e.g. the server restarted mid-pass)
+                rules_done: 'Rules only',
                 rejected: 'Rejected', retrying: 'Retrying...'
             };
             badge.className = 'status-badge status-' + status;
@@ -830,7 +832,9 @@
                 updateChainErrorDetail(lastLlmAnalysis, data.status);
                 renderChains();
 
-                var doneStates = ['complete', 'error', 'partial'];
+                // rules_done is only reported once the analysing session is gone;
+                // while the LLM pass runs the API reports "analyzing".
+                var doneStates = ['complete', 'error', 'partial', 'rules_done'];
                 if (doneStates.indexOf(data.status) !== -1) {
                     clearInterval(chainPollInterval);
                     chainPollInterval = null;

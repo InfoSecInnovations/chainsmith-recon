@@ -168,13 +168,47 @@ def encode_value(value: Any) -> tuple[str, str]:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest(), encoded
 
 
+#: Check attributes saved as the scan-time `check_config`. `severity` is the
+#: only one a grader reads (`GradeContext.severity`); the tunables shape the
+#: probe, and are kept so a re-grade can say what differed.
+CHECK_CONFIG_ATTRS = (
+    "severity",
+    "timeout_seconds",
+    "requests_per_second",
+    "retry_count",
+    "delay_between_targets",
+    "on_critical",
+    "capture",
+)
+
+
+def check_config_of(check: Any) -> dict[str, Any]:
+    """The JSON-safe config a check graded under, for its grading record."""
+    config: dict[str, Any] = {}
+    for attr in CHECK_CONFIG_ATTRS:
+        if not hasattr(check, attr):
+            continue
+        try:
+            config[attr] = _jsonable(getattr(check, attr))
+        except TypeError:
+            # Called from the grading stage: an odd attribute must not cost the
+            # scan its grade. It is simply not recorded.
+            continue
+    return config
+
+
 def build_record(
     scan_id: str,
     check_name: str,
     candidates: list[Candidate],
     context: dict[str, Any],
+    check_config: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, str]]:
-    """The record document, and the context values it references (sha256 -> JSON)."""
+    """The record document, and the context values it references (sha256 -> JSON).
+
+    `check_config` is the check's scan-time config (`check_config_of`). Readers
+    that predate it ignore the key, so the record version is unchanged.
+    """
     from app.lib.timeutils import now_utc
 
     snapshot, dropped = snapshot_context(context)
@@ -193,6 +227,8 @@ def build_record(
         "dropped_context_keys": dropped,
         "candidates": [candidate_to_dict(candidate) for candidate in candidates],
     }
+    if check_config is not None:
+        record["check_config"] = check_config
     return record, values
 
 
@@ -237,6 +273,7 @@ def record_grading(
     candidates: list[Candidate],
     context: dict[str, Any],
     store: EvidenceStore | None = None,
+    check_config: dict[str, Any] | None = None,
 ) -> Path | None:
     """Write one check's grading record, if this scan has a corpus to pair it
     with. Returns the path written, or None. Never raises."""
@@ -246,7 +283,7 @@ def record_grading(
         from app.capture.store import EvidenceStore
 
         store = store or EvidenceStore()
-        record, values = build_record(scan_id, check_name, candidates, context)
+        record, values = build_record(scan_id, check_name, candidates, context, check_config)
         # Values first: a record must never reference something not yet written.
         for digest, encoded in values.items():
             store.write_context_value(scan_id, digest, encoded)

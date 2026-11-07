@@ -2,7 +2,7 @@
 # Fakobanko scenario: Sitemap.xml found
 
 suite: web
-emulates: sitemap
+emulates: web_sitemap
 target: "www.fakobanko.local"
 disposition: sitemap_found
 

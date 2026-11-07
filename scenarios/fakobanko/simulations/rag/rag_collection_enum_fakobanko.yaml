@@ -2,7 +2,7 @@
 # Fakobanko scenario: Collection enumeration
 
 suite: rag
-emulates: rag_collection_enum
+emulates: rag_collection_enumeration
 target: "vector.fakobanko.local"
 disposition: collections_listed
 

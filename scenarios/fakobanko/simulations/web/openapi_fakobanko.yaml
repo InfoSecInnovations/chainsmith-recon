@@ -2,7 +2,7 @@
 # Fakobanko scenario: OpenAPI spec publicly exposed
 
 suite: web
-emulates: openapi_discovery
+emulates: web_openapi_discovery
 target: "api.fakobanko.local"
 disposition: spec_found
 

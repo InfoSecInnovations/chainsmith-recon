@@ -2,7 +2,7 @@
 # Fakobanko scenario: WAF detection
 
 suite: web
-emulates: waf_detection
+emulates: web_waf_detection
 target: "www.fakobanko.local"
 disposition: waf_detected
 

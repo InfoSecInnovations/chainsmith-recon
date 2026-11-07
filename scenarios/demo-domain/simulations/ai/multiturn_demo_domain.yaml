@@ -1,6 +1,6 @@
 # Multi-turn injection — attack succeeds
 suite: ai
-emulates: multiturn_injection
+emulates: ai_multi_turn_injection
 target: "localhost"
 disposition: multiturn_injectable
 

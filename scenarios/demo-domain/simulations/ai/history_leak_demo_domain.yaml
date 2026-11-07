@@ -1,6 +1,6 @@
 # History leak — conversation history leaked
 suite: ai
-emulates: history_leak
+emulates: ai_conversation_history_leak
 target: "localhost"
 disposition: history_leaked
 

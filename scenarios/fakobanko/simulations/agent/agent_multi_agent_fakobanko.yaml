@@ -2,7 +2,7 @@
 # Fakobanko scenario: Multi-agent system detected
 
 suite: agent
-emulates: agent_multi_agent
+emulates: agent_multi_agent_detection
 target: "agent.fakobanko.local"
 disposition: multi_agent_found
 

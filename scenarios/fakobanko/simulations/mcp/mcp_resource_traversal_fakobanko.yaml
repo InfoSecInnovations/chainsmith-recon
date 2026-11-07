@@ -2,7 +2,7 @@
 # Fakobanko scenario: Resource traversal
 
 suite: mcp
-emulates: resource_traversal
+emulates: mcp_resource_traversal
 target: "mcp.fakobanko.local"
 disposition: traversal_success
 

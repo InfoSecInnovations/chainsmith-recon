@@ -2,8 +2,8 @@
 # Fakobanko scenario: Cross-user cache access
 
 suite: cag
-emulates: cag_cross_user
-target: "cache.fakobanko.local"
+emulates: cag_cross_user_leakage
+target: "ml.fakobanko.local"
 disposition: cross_user_leak
 
 behavior:
@@ -15,7 +15,7 @@ output:
   isolation: false
 
 findings:
-  - title: "Cross-user cache leak on cache.fakobanko.local"
+  - title: "Cross-user cache leak on ml.fakobanko.local"
     description: "Cache entries are shared across users. User B received User A's cached account balance response for semantically similar query."
     severity: "critical"
     evidence: |

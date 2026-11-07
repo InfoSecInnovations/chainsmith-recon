@@ -2,7 +2,7 @@
 # Fakobanko scenario: MCP auth check
 
 suite: mcp
-emulates: auth_check
+emulates: mcp_auth_check
 target: "mcp.fakobanko.local"
 disposition: no_auth
 

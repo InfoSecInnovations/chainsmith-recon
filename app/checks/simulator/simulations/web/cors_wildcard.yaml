@@ -1,7 +1,7 @@
 # simulations/web/cors_wildcard.yaml
 # Smoke test: CORS wildcard with credentials (critical observation)
 suite: web
-emulates: cors_check
+emulates: web_cors
 target: "api.example.local"
 disposition: cors_misconfiguration
 

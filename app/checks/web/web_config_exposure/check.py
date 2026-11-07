@@ -54,7 +54,7 @@ class ConfigExposureCheck(ServiceIteratingCheck):
 
     conditions = [CheckCondition("services", "truthy")]
     produces = ["config_observations"]
-    service_types = ["http", "html", "api"]
+    service_types = ["http", "html", "api", "ai"]
 
     reason = "An accessible .env with API keys is game over — no need to probe for prompt leakage when you have the key"
     references = ["OWASP WSTG-CONF-05", "CWE-200", "CWE-540"]

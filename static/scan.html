@@ -587,7 +587,9 @@
             let highestPhase = 'mcp_discovery';
             
             for (const check of checks) {
-                if (check.status === 'running' || check.status === 'completed') {
+                // A skipped check was reached too (lab backport 4e); without it, a
+                // phase whose checks were all skipped never counted as reached.
+                if (check.status === 'running' || check.status === 'completed' || check.status === 'skipped') {
                     // Use suite from backend if available
                     let checkPhase = null;
                     if (check.suite && suiteToPhase[check.suite]) {
@@ -778,6 +780,7 @@
                         <div class="check-info">
                             <div class="check-name">${check.simulated ? '<span class="simulated-badge">sim</span>' : ''}${check.name}</div>
                             <div class="check-desc">${check.description || ''}</div>
+                            <div class="check-desc check-skip-reason" style="display:none"></div>
                         </div>
                     `;
                     item.addEventListener('click', () => {
@@ -785,8 +788,19 @@
                     });
                     container.appendChild(item);
                 } else {
-                    item.querySelector('.check-status-icon').className = 
+                    item.querySelector('.check-status-icon').className =
                         'check-status-icon ' + check.status;
+                }
+                // Why it was skipped (lab backport 4e). The API sends `skip_reason`;
+                // set as text, never HTML.
+                const reasonEl = item.querySelector('.check-skip-reason');
+                if (reasonEl) {
+                    if (check.status === 'skipped' && check.skip_reason) {
+                        reasonEl.textContent = 'Skipped: ' + check.skip_reason;
+                        reasonEl.style.display = '';
+                    } else {
+                        reasonEl.style.display = 'none';
+                    }
                 }
             });
         }

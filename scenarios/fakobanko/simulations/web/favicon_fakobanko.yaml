@@ -2,7 +2,7 @@
 # Fakobanko scenario: Default favicon reveals framework
 
 suite: web
-emulates: favicon
+emulates: web_favicon
 target: "www.fakobanko.local"
 disposition: default_favicon
 

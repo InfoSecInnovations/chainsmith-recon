@@ -2,7 +2,7 @@
 # Fakobanko scenario: Agent reflection/introspection
 
 suite: agent
-emulates: agent_reflection
+emulates: agent_reflection_abuse
 target: "agent.fakobanko.local"
 disposition: reflection_exposed
 

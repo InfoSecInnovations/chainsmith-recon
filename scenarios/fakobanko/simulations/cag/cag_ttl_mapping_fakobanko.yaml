@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_ttl_mapping
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: ttl_mapped
 
 behavior:
@@ -16,7 +16,7 @@ output:
     - {category: "auth", ttl_seconds: 60}
 
 findings:
-  - title: "Cache TTL values mapped on cache.fakobanko.local"
+  - title: "Cache TTL values mapped on ml.fakobanko.local"
     description: "TTL mapping reveals cache durations: general (1h), account (5min), auth (1min). Timing reveals query categorization logic."
     severity: "low"
     evidence: |

@@ -38,6 +38,13 @@ routes read from it authoritatively.
 
 ### 2.1 Scope inline on `POST /api/v1/scan`; remove `POST /api/v1/scope`
 
+**Done 2026-11-07, with one deviation.** `POST /api/v1/scan` requires `target` and takes `exclude`,
+`techniques`, `scan_window`, `proof_of_scope` and `scan_behavior` inline; the session is built from the body
+alone. The CLI (`chainsmith scan --scope FILE`) and web UI send scope with the scan. **`POST /api/v1/scope`
+was kept** as planning input: the scan planner advisor and chat need a scope before any scan exists,
+which this section did not account for. It no longer affects scans. See open-issues D-7. Tests:
+`tests/scanning/test_inline_scope.py`, `tests/cli/test_cli_scope_file.py`.
+
 **Why:** the CLI's two-step flow (set scope, then start the scan) is still process-global. Two operators,
 or a script and an operator, can interleave and start a scan with the wrong scope. This is the residual
 half of audit finding F-3 (`audits/doc-status-audit-2026-09-10.md`).

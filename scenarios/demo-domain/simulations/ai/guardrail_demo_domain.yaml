@@ -1,6 +1,6 @@
 # Guardrail consistency — inconsistent guardrails
 suite: ai
-emulates: guardrail_consistency
+emulates: ai_guardrail_consistency
 target: "localhost"
 disposition: inconsistent_guardrails
 

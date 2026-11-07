@@ -40,7 +40,7 @@ class DirectoryListingCheck(ServiceIteratingCheck):
 
     conditions = [CheckCondition("services", "truthy")]
     produces = ["directory_listing_observations"]
-    service_types = ["http", "html", "api"]
+    service_types = ["http", "html", "api", "ai"]
 
     reason = "Directory listing exposes the full filesystem structure including model files, training data, and configs"
     references = ["OWASP WSTG-CONF-04", "CWE-548"]

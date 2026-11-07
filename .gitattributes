@@ -1,0 +1,4 @@
+# Shell scripts run on Linux (the dev VM, containers built from this tree), where
+# a CRLF line ending breaks bash. Force LF for them regardless of core.autocrlf.
+# Deliberately narrow: a repo-wide `* text=auto` would renormalise many files.
+*.sh text eol=lf

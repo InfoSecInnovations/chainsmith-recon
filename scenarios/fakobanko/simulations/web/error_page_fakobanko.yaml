@@ -2,7 +2,7 @@
 # Fakobanko scenario: Information leakage in error pages
 
 suite: web
-emulates: error_page
+emulates: web_error_page
 target: "api.fakobanko.local"
 disposition: info_leak
 

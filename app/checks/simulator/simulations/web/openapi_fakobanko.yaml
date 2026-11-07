@@ -1,7 +1,7 @@
 # simulations/web/openapi_fakobanko.yaml
 # Fakobanko scenario: API docs exposed with admin and internal endpoints
 suite: web
-emulates: openapi_discovery
+emulates: web_openapi_discovery
 target: "api.fakobanko.local"
 disposition: spec_found
 

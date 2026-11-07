@@ -863,6 +863,38 @@ async def _persist_chains(scan_id: str | None, chains: list[dict]) -> None:
     await ChainRepository().bulk_create(scan_id, chains)
 
 
+async def _detect_llm_chains_bounded(
+    session: "ScanSession", observations: list[dict], existing_chain_count: int
+) -> ChainAnalysisResult:
+    """`detect_llm_chains` with an upper bound (lab backport 4b).
+
+    A timeout is reported as a failed, retryable LLM pass, so the scan ends as
+    "partial" with its rule chains kept, and the UI offers a retry.
+    """
+    from app.config import get_config
+
+    timeout = max(1, get_config().chains.llm_timeout_seconds)
+    try:
+        return await asyncio.wait_for(
+            detect_llm_chains(session, observations, existing_chain_count), timeout=timeout
+        )
+    except TimeoutError:
+        logger.warning("LLM chain analysis timed out after %ss; keeping rule chains", timeout)
+        return ChainAnalysisResult(
+            llm_status="failed",
+            llm_response=LLMResponse(
+                content="",
+                model="",
+                provider="",
+                success=False,
+                error=f"LLM chain analysis timed out after {timeout}s",
+                error_type=LLMErrorType.TIMEOUT,
+                retryable=True,
+            ),
+            attempts=0,
+        )
+
+
 async def run_chain_analysis(session: "ScanSession", llm_only: bool = False):
     """
     Run two-pass chain analysis: rule-based then LLM.
@@ -889,6 +921,14 @@ async def run_chain_analysis(session: "ScanSession", llm_only: bool = False):
             rule_chains = detect_rule_based_chains(observations)
             logger.info(f"Rule-based analysis found {len(rule_chains)} chains")
             chains.extend(rule_chains)
+            # Lab backport 4b: save the rule chains before the LLM pass, which
+            # can take minutes or hang. GET /api/v1/chains reads the database,
+            # so they show at once. The DB status says "rules_done" from here
+            # on; the session stays "analyzing", which is the concurrency
+            # guard the routes check. bulk_create replaces a scan's chains, so
+            # the final save below rewrites this set rather than duplicating it.
+            await _persist_chains(scan_id, chains)
+            await _update_chain_status_in_db(scan_id, chain_status="rules_done")
         else:
             try:
                 from app.db.repositories import ChainRepository
@@ -900,7 +940,7 @@ async def run_chain_analysis(session: "ScanSession", llm_only: bool = False):
                 logger.warning("Failed to load existing chains for retry", exc_info=True)
                 rule_chains = []
 
-        result = await detect_llm_chains(session, observations, len(chains))
+        result = await _detect_llm_chains_bounded(session, observations, len(chains))
         chain_llm_analysis = result.to_analysis_dict()
 
         logger.info(

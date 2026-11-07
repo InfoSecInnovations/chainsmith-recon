@@ -2,7 +2,7 @@
 # Fakobanko scenario: System prompt leaked
 
 suite: ai
-emulates: prompt_leakage
+emulates: ai_prompt_leakage
 target: "chat.fakobanko.local"
 disposition: prompt_leaked
 

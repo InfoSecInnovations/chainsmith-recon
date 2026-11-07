@@ -2,7 +2,7 @@
 # Fakobanko scenario: No tool rate limiting
 
 suite: mcp
-emulates: tool_rate_limit
+emulates: mcp_tool_rate_limit
 target: "mcp.fakobanko.local"
 disposition: no_rate_limit
 

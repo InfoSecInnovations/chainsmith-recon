@@ -2,7 +2,7 @@
 # Fakobanko scenario: Shadow tool detection
 
 suite: mcp
-emulates: shadow_tool_detection
+emulates: mcp_shadow_tool_detection
 target: "mcp.fakobanko.local"
 disposition: shadow_found
 

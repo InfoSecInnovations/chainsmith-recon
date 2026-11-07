@@ -100,7 +100,44 @@ class Guardian(BaseGate):
             self.violation_count += 1
             self.violations.append({"url": url, "reason": reason, "type": "url"})
             logger.warning(f"Guardian blocked URL: {url} — {reason}")
+            self._record_blocked(url, reason)
         return ok
+
+    def _record_blocked(self, url: str, reason: str) -> None:
+        """Put a blocked attempt on the proof-of-scope record (B-2).
+
+        The request was never sent. It is logged as `excluded` traffic (which
+        the compliance report counts as blocked) and as a blocked violation, both
+        stamped with this scan and the check that asked. Never raises: the
+        block itself already happened.
+        """
+        try:
+            from app.capture.context import current
+            from app.proof_of_scope import ScopeStatus, traffic_logger
+
+            active = current()
+            check_name = active.check_name if active else None
+            parsed = urlparse(url)
+            traffic_logger.log_request(
+                dst_host=parsed.hostname or url,
+                path=parsed.path or "/",
+                port=parsed.port or (443 if parsed.scheme == "https" else 80),
+                protocol=(parsed.scheme or "http").upper(),
+                check_name=check_name,
+                scope_status=ScopeStatus.EXCLUDED,
+                scan_id=self.scan_id,
+            )
+            violation_logger.log_violation(
+                violation_type="out_of_scope",
+                reason=reason,
+                target_host=parsed.hostname,
+                target_path=parsed.path or "/",
+                check_name=check_name,
+                blocked=True,
+                scan_id=self.scan_id,
+            )
+        except Exception:
+            logger.debug("Could not record blocked URL %s", url, exc_info=True)
 
     # ── Scan window gate ────────────────────────────────────────
 

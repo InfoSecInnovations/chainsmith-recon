@@ -2,7 +2,7 @@
 # Fakobanko scenario: Model enumeration
 
 suite: ai
-emulates: model_enumeration
+emulates: ai_model_enumeration
 target: "chat.fakobanko.local"
 disposition: models_found
 

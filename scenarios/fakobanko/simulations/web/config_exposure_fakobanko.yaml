@@ -2,7 +2,7 @@
 # Fakobanko scenario: .env file accessible
 
 suite: web
-emulates: config_exposure
+emulates: web_config_exposure
 target: "api.fakobanko.local"
 disposition: config_found
 

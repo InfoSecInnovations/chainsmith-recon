@@ -1,6 +1,6 @@
 # Header analysis — missing security headers, version disclosure
 suite: web
-emulates: header_analysis
+emulates: web_header_analysis
 target: "localhost"
 disposition: missing_headers
 

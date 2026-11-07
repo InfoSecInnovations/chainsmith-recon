@@ -1,7 +1,7 @@
 # simulations/network/dns_exception.yaml
 # Smoke test: DNS resolution error (exercises framework error handling)
 suite: network
-emulates: dns_enumeration
+emulates: network_dns_enumeration
 target: "unreachable.example.local"
 disposition: error
 

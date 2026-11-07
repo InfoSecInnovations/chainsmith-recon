@@ -144,13 +144,23 @@ class RAGMultimodalInjectionCheck(ServiceIteratingCheck):
         cfg = HttpConfig(timeout_seconds=12.0, verify_ssl=False)
         candidate = self.create_candidate(host=service.host, target=service, target_url=service.url)
 
-        def record(resp, method: str, *, body: str = "", jbody: dict | None = None) -> None:
+        def record(
+            resp,
+            method: str,
+            *,
+            data: Any = None,
+            jbody: dict | None = None,
+            headers: dict | None = None,
+        ) -> None:
+            # Exactly what was handed to the client (B-8), so this copy hashes
+            # the same as the one the capture interceptor stored.
             kwargs: dict[str, Any] = {"method": method}
             if jbody is not None:
                 kwargs["request_headers"] = JSON_HEADERS
                 kwargs["request_json"] = jbody
             else:
-                kwargs["request_body"] = body
+                kwargs["request_headers"] = dict(headers or {})
+                kwargs["request_data"] = data
             candidate.attach(
                 exchange_from_response(
                     resp, check_name=self.name, scan_id=scan_id, host=service.host, **kwargs
@@ -187,19 +197,16 @@ class RAGMultimodalInjectionCheck(ServiceIteratingCheck):
             if not opt.error and opt.status_code not in (404, 502, 503):
                 return url
             post = await client.post(url, data=b"", headers={})
-            record(post, "POST", body="")
+            record(post, "POST", data=b"")
             if not post.error and post.status_code in (400, 415, 422):
                 return url
         return None
 
     async def _run_test(self, client, record, upload_url: str, query_url, test: dict) -> None:
         body = self._multipart_body(test)
-        resp = await client.post(
-            upload_url,
-            data=body,
-            headers={"Content-Type": f"multipart/form-data; boundary={BOUNDARY}"},
-        )
-        record(resp, "POST", body=body.decode("latin-1"))
+        headers = {"Content-Type": f"multipart/form-data; boundary={BOUNDARY}"}
+        resp = await client.post(upload_url, data=body, headers=headers)
+        record(resp, "POST", data=body, headers=headers)
         if resp.error or resp.status_code >= 400:
             return
         if query_url:

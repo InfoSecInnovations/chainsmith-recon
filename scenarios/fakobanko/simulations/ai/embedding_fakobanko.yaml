@@ -2,7 +2,7 @@
 # Fakobanko scenario: Embedding endpoint discovery
 
 suite: ai
-emulates: embedding_endpoint_discovery
+emulates: ai_embedding_endpoint_discovery
 target: "chat.fakobanko.local"
 disposition: endpoint_found
 

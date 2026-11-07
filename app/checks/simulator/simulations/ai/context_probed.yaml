@@ -1,5 +1,5 @@
 suite: ai
-emulates: context_window_check
+emulates: ai_context_window_check
 target: "chat.example.local"
 disposition: context_measured
 

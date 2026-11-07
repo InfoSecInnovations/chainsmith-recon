@@ -2,7 +2,7 @@
 # Fakobanko scenario: Multi-turn prompt injection
 
 suite: ai
-emulates: multiturn_injection
+emulates: ai_multi_turn_injection
 target: "chat.fakobanko.local"
 disposition: injection_success
 

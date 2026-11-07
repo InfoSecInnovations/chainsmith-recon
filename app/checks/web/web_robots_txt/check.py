@@ -37,7 +37,7 @@ class RobotsTxtCheck(ServiceIteratingCheck):
 
     conditions = [CheckCondition("services", "truthy")]
     produces = ["robots_paths"]
-    service_types = ["http", "html", "api"]
+    service_types = ["http", "html", "api", "ai"]
 
     reason = "robots.txt often reveals hidden paths that admins want to keep from search engines"
     references = ["OWASP WSTG-INFO-03", "RFC 9309"]

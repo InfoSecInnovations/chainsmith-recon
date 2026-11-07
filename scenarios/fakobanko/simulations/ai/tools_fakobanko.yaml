@@ -2,7 +2,7 @@
 # Fakobanko scenario: Tool/function calling capabilities discovered
 
 suite: ai
-emulates: tool_discovery
+emulates: ai_tool_discovery
 target: "chat.fakobanko.local"
 disposition: tools_found
 

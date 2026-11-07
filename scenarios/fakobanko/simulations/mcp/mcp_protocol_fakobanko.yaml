@@ -2,7 +2,7 @@
 # Fakobanko scenario: Protocol version check
 
 suite: mcp
-emulates: protocol_version
+emulates: mcp_protocol_version
 target: "mcp.fakobanko.local"
 disposition: version_found
 

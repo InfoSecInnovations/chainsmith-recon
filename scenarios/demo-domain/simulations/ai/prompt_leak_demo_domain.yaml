@@ -1,6 +1,6 @@
 # Prompt leakage — system prompt extracted
 suite: ai
-emulates: prompt_leakage
+emulates: ai_prompt_leakage
 target: "localhost"
 disposition: prompt_leaked
 

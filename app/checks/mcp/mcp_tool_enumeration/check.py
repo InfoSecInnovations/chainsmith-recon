@@ -63,6 +63,11 @@ TOOL_RISK_PATTERNS = {
         r"powershell",
         r"cmd",
         r"terminal",
+        # Raw SQL and money movement (lab backport 3b): the range's `run_sql` and
+        # `execute_transfer` read as low or info risk without these.
+        r"(run|exec(ute)?|eval)_?(sql|query)",
+        r"(^|_)sql(_|$)",
+        r"(transfer|wire|payment|payout|remit|refund|withdraw|disburse)",
     ],
     "high": [
         r"(read|write|delete|create)(_|\s)?file",
@@ -155,7 +160,12 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
     ]
     techniques = ["API enumeration", "capability mapping", "attack surface analysis"]
 
-    # Paths to probe for tools/list
+    # JSON-RPC endpoints. `tools/list` is a JSON-RPC *method*: a real MCP server
+    # takes it in the body of a POST to one endpoint, usually `/mcp` (lab
+    # backport 3a). These are tried first.
+    RPC_ENDPOINTS = ["/mcp", "/rpc", "/jsonrpc", "/messages", "/"]
+
+    # Paths to probe for tools/list as a REST-style URL (fallback)
     TOOL_LIST_PATHS = [
         "/tools/list",
         "/mcp/tools/list",
@@ -230,18 +240,38 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
 
         Stops at the first answer `_listing_from` can read, so the recorded
         exchanges end with the one the grader will parse.
-        """
 
-        # Try direct path first
+        First the JSON-RPC endpoints (the discovered server path, then the
+        common ones), each with one POST of the `tools/list` method. Then, if
+        none answered with a listing, the REST-style `/tools/list` paths.
+        """
+        payload = {"jsonrpc": "2.0", "method": "tools/list", "id": 1}
+        exchanges: list[Exchange] = []
+
+        rpc_paths = list(dict.fromkeys([p for p in [base_path] if p] + self.RPC_ENDPOINTS))
+        for path in rpc_paths:
+            resp = await client.post(service.with_path(path), json=payload, headers=JSON_HEADERS)
+            exchange = exchange_from_response(
+                resp,
+                check_name=self.name,
+                scan_id=scan_id,
+                host=service.host,
+                method="POST",
+                request_headers=JSON_HEADERS,
+                request_json=payload,
+            )
+            exchanges.append(exchange)
+            if self._answered(exchange) and self._parse_tools_response(exchange) is not None:
+                return exchanges
+
+        # Fallback: tools/list as a URL path
         paths_to_try = [f"{base_path.rstrip('/')}/tools/list"] if base_path else []
         paths_to_try.extend(self.TOOL_LIST_PATHS)
 
-        exchanges: list[Exchange] = []
         for path in paths_to_try:
             url = service.with_path(path)
 
             # Try JSON-RPC style request
-            payload = {"jsonrpc": "2.0", "method": "tools/list", "id": 1}
             resp = await client.post(url, json=payload, headers=JSON_HEADERS)
             exchange = exchange_from_response(
                 resp,
@@ -366,6 +396,14 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
         try:
             data = json.loads(exchange.response_body)
 
+            # Direct array response
+            if isinstance(data, list):
+                return data
+            # A JSON scalar (`null`, a number) is not a listing; `"result" in 5`
+            # would raise, and posting to `/` makes such answers more likely.
+            if not isinstance(data, dict):
+                return None
+
             # JSON-RPC response
             if "result" in data:
                 result = data["result"]
@@ -373,10 +411,6 @@ class MCPToolEnumerationCheck(ServiceIteratingCheck):
                     return result["tools"]
                 elif isinstance(result, list):
                     return result
-
-            # Direct array response
-            if isinstance(data, list):
-                return data
 
             # Direct tools key
             if "tools" in data:

@@ -70,17 +70,32 @@ def scoped_observation_id(scan_id: str, raw_id: str) -> str:
     return f"{scan_id[:8]}-{raw_id}"
 
 
+def observation_host(obs: dict) -> str:
+    """The host a stored row records for a check-shaped observation dict."""
+    return obs.get("target_host") or obs.get("host") or obs.get("target_url", "") or ""
+
+
+def observation_fingerprint(obs: dict) -> str:
+    """The fingerprint a stored row gets for this observation dict.
+
+    One definition, used by the row builder and by `scratch-to-db`'s dedupe. The
+    importer used to compute the host as `host or target_url` while rows used
+    `target_host` first, so a duplicate whose dict lacked `host` was not seen.
+    """
+    return _generate_fingerprint(
+        check_name=obs.get("check_name", obs.get("check", "")),
+        host=observation_host(obs),
+        title=obs.get("title", ""),
+        evidence=obs.get("evidence", ""),
+    )
+
+
 def _observation_row(scan_id: str, obs: dict) -> ObservationRecord:
     """Build one observations-table row from a check-shaped observation dict."""
     raw_id = obs.get("id")
     observation_id = scoped_observation_id(scan_id, raw_id) if raw_id else uuid.uuid4().hex[:12]
-    host = obs.get("target_host") or obs.get("host") or obs.get("target_url", "")
-    fingerprint = _generate_fingerprint(
-        check_name=obs.get("check_name", obs.get("check", "")),
-        host=host,
-        title=obs.get("title", ""),
-        evidence=obs.get("evidence", ""),
-    )
+    host = observation_host(obs)
+    fingerprint = observation_fingerprint(obs)
     return ObservationRecord(
         id=observation_id,
         scan_id=scan_id,

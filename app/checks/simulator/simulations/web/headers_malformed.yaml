@@ -1,7 +1,7 @@
 # simulations/web/headers_malformed.yaml
 # Smoke test: malformed output for framework validation testing
 suite: web
-emulates: header_analysis
+emulates: web_header_analysis
 target: "buggy.example.local"
 disposition: error
 

@@ -43,7 +43,7 @@ from app.grading.models import (
     GradingTier,
     Verdict,
 )
-from app.grading.record import record_grading
+from app.grading.record import check_config_of, record_grading
 
 if TYPE_CHECKING:
     from app.capture.models import Exchange
@@ -101,7 +101,9 @@ async def grade_result(
     # Written before grading, so a grader that raises still leaves something a
     # fixed grader can replay later. No-op when the scan is not capturing.
     if persist:
-        record_grading(scan_id, check_name, candidates, context)
+        record_grading(
+            scan_id, check_name, candidates, context, check_config=check_config_of(check)
+        )
 
     bindings: list[tuple[str, list[str]]] = []
 

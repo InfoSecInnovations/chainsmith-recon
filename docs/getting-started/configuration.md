@@ -7,6 +7,7 @@
 | `LLM_PROFILE` | Docker stack LLM profile (openai, anthropic, ollama, litellm) — set in `.env` | openai |
 | `CHAINSMITH_LLM_PROVIDER` | LLM provider for the server process (anthropic, openai, litellm, none) | auto-detect |
 | `CHAINSMITH_WORKSPACE` | Workspace directory (database, evidence, reports, logs) | `~/chainsmith/default` |
+| `CHAINSMITH_STORAGE_EVIDENCE_RETENTION_DAYS` | Prune captured evidence older than this many days, at server start and daily (`storage.evidence_retention_days`; also `chainsmith evidence prune`). Scans and observations stay | 0 (keep for the workspace's lifetime) |
 | `CHAINSMITH_SCENARIOS_DIR` | Custom scenarios directory | ./scenarios |
 | `CHAINSMITH_PORT` | Host port the Docker stack publishes | 8100 |
 | `ANTHROPIC_API_KEY` | Anthropic API key | - |
@@ -43,6 +44,25 @@ chainsmith scan "*.example.com"  # Wildcard
 ```bash
 chainsmith scan example.com --exclude admin.example.com --exclude internal.example.com
 ```
+
+### Scope File
+
+Exclusions, a scan window and proof-of-scope settings can come from a YAML or JSON file. The scope is
+sent with the scan request itself, so another client changing scope cannot affect this scan.
+
+```yaml
+# scope.yaml
+target: example.com              # optional; must match TARGET if given
+exclude: [admin.example.com]
+scan_window: {start: "2026-11-07T09:00:00Z", end: "2026-11-07T17:00:00Z"}
+proof_of_scope: {traffic_logging: true, block_exclusions: true, log_violations: true}
+```
+
+```bash
+chainsmith scan example.com --scope scope.yaml
+```
+
+An unknown key is an error, not ignored.
 
 ## Check Selection
 
@@ -151,9 +171,10 @@ chainsmith scan example.com --no-llm
 ```
 
 > `--provider` and `--no-llm` set `CHAINSMITH_LLM_PROVIDER` in the CLI's own
-> process. LLM work happens on the server, so when the CLI talks to a
-> separately running server (including the Docker stack), configure the
-> server instead — via `.env`, its environment, or `prefs`.
+> process. A server the CLI starts inherits it. When the CLI talks to a
+> separately running server (including the Docker stack) the flags cannot
+> apply, and the CLI says so; configure the server instead, via `.env`, its
+> environment, or `chainsmith prefs set llm.provider <name|none>`.
 
 **Per-session (environment variables, for a native `chainsmith serve`):**
 

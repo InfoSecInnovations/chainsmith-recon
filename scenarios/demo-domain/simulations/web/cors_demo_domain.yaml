@@ -1,6 +1,6 @@
 # CORS check — wildcard CORS on api and chat
 suite: web
-emulates: cors_check
+emulates: web_cors
 target: "localhost"
 disposition: cors_wildcard
 

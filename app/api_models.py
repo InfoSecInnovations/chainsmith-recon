@@ -22,8 +22,11 @@ class ScopeInput(BaseModel):
 class ScanWindowInput(BaseModel):
     """Time window for authorized testing."""
 
-    start: str  # ISO format
-    end: str  # ISO format
+    # Either end may be open, as `ScanWindow` allows ("not before" / "not after").
+    # Both were required, so the web form's one-sided window failed validation;
+    # through the old scope route that failure was silent and the window was lost.
+    start: str | None = None  # ISO format
+    end: str | None = None  # ISO format
 
 
 class ProofSettingsInput(BaseModel):
@@ -32,6 +35,11 @@ class ProofSettingsInput(BaseModel):
     traffic_logging: bool = True
     screenshot_observations: bool = False
     hash_responses: bool = True
+    # Sent by the web UI's scope form. They were dropped by validation before,
+    # and the scope route then read them back with `hasattr`, which was never
+    # true, so these two settings never took effect from the UI.
+    block_exclusions: bool = True
+    log_violations: bool = True
 
 
 class OnCriticalSettings(BaseModel):
@@ -109,8 +117,21 @@ class CaptureInput(BaseModel):
 
 
 class ScanStartInput(BaseModel):
-    """Optional body for POST /api/scan with check/suite filtering."""
+    """Body for POST /api/v1/scan.
 
+    **Scope is per scan and travels with the request** (B-1, concurrent-scans
+    §2.1). `target` is required. A scan never reads the operator's scope prep
+    (`POST /api/v1/scope`), so two clients setting scope and starting scans at
+    once cannot start a scan with the other's scope.
+    """
+
+    target: str | None = None  # required; validated by the route for a clear 400
+    exclude: list[str] = Field(default_factory=list)
+    techniques: list[str] = Field(default_factory=list)  # empty = the default allowlist
+    scan_window: ScanWindowInput | None = None
+    proof_of_scope: ProofSettingsInput | None = None
+    # Persistent preference, applied the way POST /api/v1/scope applied it.
+    scan_behavior: ScanBehaviorSettings | None = None
     checks: list[str] = Field(default_factory=list)  # Run only these check names
     suites: list[str] = Field(default_factory=list)  # Run only checks from these suites
     port_profile: Literal["web", "ai", "full", "lab"] | None = None

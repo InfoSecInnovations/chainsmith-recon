@@ -1,7 +1,7 @@
 # simulations/ai/tools_fakobanko.yaml
 # Fakobanko scenario: chatbot reveals account lookup and transfer tools
 suite: ai
-emulates: tool_discovery
+emulates: ai_tool_discovery
 target: "chat.fakobanko.local"
 disposition: tools_found
 

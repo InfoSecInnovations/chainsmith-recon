@@ -2,7 +2,7 @@
 # Fakobanko scenario: Training data extraction
 
 suite: ai
-emulates: training_data
+emulates: ai_training_data_extraction
 target: "chat.fakobanko.local"
 disposition: data_extracted
 

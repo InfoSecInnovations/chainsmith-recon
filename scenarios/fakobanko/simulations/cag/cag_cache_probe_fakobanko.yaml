@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_cache_probe
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: cache_probed
 
 behavior:
@@ -15,7 +15,7 @@ output:
   hit_ratio: 0.67
 
 findings:
-  - title: "Cache probing reveals 142 entries on cache.fakobanko.local"
+  - title: "Cache probing reveals 142 entries on ml.fakobanko.local"
     description: "Timing analysis identified 142 cached entries with 67% hit ratio, revealing frequently asked questions and common queries."
     severity: "medium"
     evidence: |

@@ -79,7 +79,7 @@ class RedirectChainCheck(ServiceIteratingCheck):
 
     conditions = [CheckCondition("services", "truthy")]
     produces = ["redirect_info"]
-    service_types = ["http", "html", "api"]
+    service_types = ["http", "html", "api", "ai"]
 
     reason = (
         "Missing HTTPS redirects expose traffic to interception; open redirects enable phishing"

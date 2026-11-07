@@ -2,7 +2,7 @@
 # Fakobanko scenario: Banner grabbing reveals server versions
 
 suite: network
-emulates: banner_grab
+emulates: network_banner_grab
 target: "fakobanko.local"
 disposition: banners_found
 

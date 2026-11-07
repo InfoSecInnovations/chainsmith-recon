@@ -88,9 +88,29 @@ If you want Chainsmith to find specific vulnerabilities in simulated mode,
 create YAML files in `app/checks/simulator/simulations/` that reference
 your scenario's hosts.
 
-## Randomization (Optional)
+## Planted observations and randomization
 
-To support `--randomize`, create `randomize.json`:
+Services plant a vulnerability behind a gate, `is_observation_active("<id>")`
+(from `app.scenario_services.common.config`). Which ids are active is decided
+per **session**, from `scenario.json`:
+
+```json
+"observations": {
+  "certain": ["missing_headers_www"],
+  "random_pool": ["cors_wildcard", "debug_endpoints_enabled", "stack_trace_leak"],
+  "random_count": {"min": 1, "max": 2}
+}
+```
+
+A session activates every `certain` id, a sample of `random_pool` sized within
+`random_count`, and the `required_findings` of each chain package it selected.
+The sample is seeded by the session id, so every container derives the same list
+from the same `data/session.json` without coordinating, and a session id
+reproduces its range. Every id in these lists must be a gate a service actually
+checks: `tests/scanning/test_range_observation_ids.py` enforces that for
+scenarios that run `app.scenario_services`.
+
+To support `--randomize`, add `randomize.json` with chain packages:
 
 ```json
 {
@@ -100,21 +120,18 @@ To support `--randomize`, create `randomize.json`:
       "chain_name": "My Attack Chain",
       "severity": "high",
       "required_services": ["api", "chat"],
-      "required_findings": ["api_exposed", "chat_injection"]
+      "required_findings": ["cors_wildcard", "stack_trace_leak"]
     }
   ],
-  "random_findings_pool": [
-    "extra_finding_1",
-    "extra_finding_2"
-  ],
-  "selection_rules": {
-    "min_chains": 1,
-    "max_chains": 2,
-    "extra_findings_min": 0,
-    "extra_findings_max": 2
-  }
+  "selection_rules": {"min_chains": 1, "max_chains": 2}
 }
 ```
+
+`range/start-range.sh` writes `data/session.json` (the session id, the selected
+chains and the services they need) before any container starts. An existing
+session is **resumed**, not re-rolled; run `./range/reset-range.sh <scenario>`
+to roll a new one. Older `random_findings_pool` / `extra_findings_*` keys are no
+longer read.
 
 ## Testing
 

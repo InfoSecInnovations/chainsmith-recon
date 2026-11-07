@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_discovery
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: cag_found
 
 behavior:
@@ -16,7 +16,7 @@ output:
   cache_type: "semantic"
 
 findings:
-  - title: "CAG system discovered on cache.fakobanko.local"
+  - title: "CAG system discovered on ml.fakobanko.local"
     description: "Cache-Augmented Generation system found with semantic cache. Query and stats endpoints publicly accessible."
     severity: "info"
     evidence: |

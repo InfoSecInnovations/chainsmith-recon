@@ -2,7 +2,7 @@
 # Fakobanko scenario: Vector store analysis
 
 suite: rag
-emulates: rag_vector_store
+emulates: rag_vector_store_access
 target: "vector.fakobanko.local"
 disposition: store_exposed
 

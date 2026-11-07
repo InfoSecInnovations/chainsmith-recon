@@ -2,7 +2,7 @@
 # Fakobanko scenario: Debug endpoints accessible
 
 suite: web
-emulates: debug_endpoints
+emulates: web_debug_endpoints
 target: "api.fakobanko.local"
 disposition: debug_found
 

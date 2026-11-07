@@ -1,6 +1,6 @@
 # Cookie security — insecure cookies on www
 suite: web
-emulates: cookie_security
+emulates: web_cookie_security
 target: "localhost"
 disposition: insecure_cookies
 

@@ -2,7 +2,7 @@
 # Fakobanko scenario: Missing SRI on scripts
 
 suite: web
-emulates: sri_check
+emulates: web_sri
 target: "www.fakobanko.local"
 disposition: missing_sri
 

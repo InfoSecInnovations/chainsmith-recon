@@ -2,7 +2,7 @@
 # Fakobanko scenario: Semantic cache detected
 
 suite: ai
-emulates: cache_detect
+emulates: ai_response_caching
 target: "chat.fakobanko.local"
 disposition: cache_detected
 

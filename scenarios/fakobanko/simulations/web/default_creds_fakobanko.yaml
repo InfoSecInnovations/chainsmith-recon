@@ -2,7 +2,7 @@
 # Fakobanko scenario: Default credentials work
 
 suite: web
-emulates: default_creds
+emulates: web_default_creds
 target: "admin.fakobanko.local"
 disposition: creds_found
 

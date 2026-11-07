@@ -14,10 +14,23 @@ import httpx
 class ChainsmithAPIError(Exception):
     """Raised when an API call returns an error status."""
 
-    def __init__(self, status_code: int, detail: str):
+    def __init__(self, status_code: int, detail: str, retry_after: int | None = None):
         self.status_code = status_code
         self.detail = detail
+        # Seconds from a `Retry-After` header, e.g. on a 429 at the scan cap.
+        self.retry_after = retry_after
         super().__init__(f"API error {status_code}: {detail}")
+
+
+def _retry_after(resp: httpx.Response) -> int | None:
+    """`Retry-After` in seconds, when the server sent the delta-seconds form."""
+    value = resp.headers.get("Retry-After")
+    if value is None:
+        return None
+    try:
+        return max(0, int(value.strip()))
+    except ValueError:
+        return None
 
 
 class ChainsmithClient:
@@ -39,7 +52,7 @@ class ChainsmithClient:
                 detail = body.get("detail", detail)
             except Exception:
                 pass
-            raise ChainsmithAPIError(resp.status_code, detail)
+            raise ChainsmithAPIError(resp.status_code, detail, _retry_after(resp))
         return resp.json()
 
     def _request_raw(self, method: str, path: str, **kwargs) -> httpx.Response:
@@ -52,7 +65,7 @@ class ChainsmithClient:
                 detail = body.get("detail", detail)
             except Exception:
                 pass
-            raise ChainsmithAPIError(resp.status_code, detail)
+            raise ChainsmithAPIError(resp.status_code, detail, _retry_after(resp))
         return resp
 
     # ─── Health ───────────────────────────────────────────────
@@ -65,6 +78,8 @@ class ChainsmithClient:
     def set_scope(
         self, target: str, exclude: list[str] = None, techniques: list[str] = None
     ) -> dict:
+        """Set the operator's scope prep (planning input for the advisor and
+        chat). It does not affect scans: pass the scope to `start_scan`."""
         return self._request(
             "POST",
             "/api/v1/scope",
@@ -103,13 +118,29 @@ class ChainsmithClient:
 
     def start_scan(
         self,
+        target: str,
+        exclude: list[str] = None,
         checks: list[str] = None,
         suites: list[str] = None,
         port_profile: str = None,
         preset: str = None,
         capture: dict = None,
+        techniques: list[str] = None,
+        scan_window: dict = None,
+        proof_of_scope: dict = None,
+        acknowledge_outside_window: bool = False,
     ) -> dict:
-        body: dict = {}
+        """Start a scan. The scope goes in the same request (B-1); there is no
+        separate "set scope" step that another client could interleave with."""
+        body: dict = {"target": target, "exclude": list(exclude or [])}
+        if techniques:
+            body["techniques"] = techniques
+        if scan_window:
+            body["scan_window"] = scan_window
+        if proof_of_scope:
+            body["proof_of_scope"] = proof_of_scope
+        if acknowledge_outside_window:
+            body["acknowledge_outside_window"] = True
         if checks:
             body["checks"] = checks
         if suites:
@@ -120,7 +151,7 @@ class ChainsmithClient:
             body["preset"] = preset
         if capture:
             body["capture"] = capture
-        return self._request("POST", "/api/v1/scan", json=body if body else None)
+        return self._request("POST", "/api/v1/scan", json=body)
 
     def get_scan_presets(self) -> dict:
         return self._request("GET", "/api/v1/scan/presets")

@@ -2,7 +2,7 @@
 # Fakobanko scenario: System prompt injection
 
 suite: ai
-emulates: system_prompt_injection
+emulates: ai_system_prompt_injection
 target: "chat.fakobanko.local"
 disposition: injection_success
 

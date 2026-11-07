@@ -34,6 +34,12 @@ class ServerManager:
         self._start(host, port)
         return base_url
 
+    @property
+    def started_server(self) -> bool:
+        """True when this manager launched the server, so it inherited the
+        CLI process's environment (e.g. `CHAINSMITH_LLM_PROVIDER`)."""
+        return self._process is not None
+
     def shutdown(self):
         """Terminate the managed subprocess if we started one."""
         if self._process and self._process.poll() is None:

@@ -65,7 +65,7 @@
       "description": "Error messages leak API keys and secrets",
       "severity": "critical",
       "required_services": ["api", "ml"],
-      "required_findings": ["verbose_errors", "model_config_exposed"]
+      "required_findings": ["stack_trace_disclosure", "model_config_exposed"]
     },
     {
       "id": "embedding_theft",
@@ -112,8 +112,8 @@
       "chain_name": "CAG Timing Surveillance",
       "description": "Cache timing side-channel reveals user queries",
       "severity": "medium",
-      "required_services": ["cache"],
-      "required_findings": ["cache_timing_leak", "side_channel_cag"]
+      "required_services": ["ml"],
+      "required_findings": ["cache_timing_leak"]
     },
     {
       "id": "rag_cross_collection",
@@ -121,7 +121,7 @@
       "description": "Collection enumeration and broken isolation enables lateral access",
       "severity": "high",
       "required_services": ["vector"],
-      "required_findings": ["collection_enumeration_rag", "cross_collection_rag"]
+      "required_findings": ["namespace_leak"]
     },
     {
       "id": "ssrf_agent_callback",
@@ -160,43 +160,13 @@
       "chain_name": "Infrastructure-Informed AI Attack",
       "description": "Config exposure reveals API keys for targeted AI framework attacks",
       "severity": "medium",
-      "required_services": ["www"],
-      "required_findings": ["config_exposure", "model_fingerprint_exposed"]
+      "required_services": ["www", "admin", "ml"],
+      "required_findings": ["config_dump_endpoint", "model_version_leak"]
     }
-  ],
-
-  "random_findings_pool": [
-    "jwt_shared_secret",
-    "session_fixation",
-    "path_traversal_hint",
-    "header_injection",
-    "timing_leak",
-    "version_mismatch",
-    "backup_file_exposed",
-    "swagger_ui_exposed",
-    "graphql_introspection",
-    "websocket_no_auth",
-    "internal_announcement_tool",
-    "customer_lookup_tool",
-    "employee_directory_exposed",
-    "namespace_leak",
-    "resource_list_exposed",
-    "webdav_enabled",
-    "favicon_default",
-    "http2_enabled",
-    "hsts_preload_missing",
-    "sri_missing",
-    "redirect_chain_open",
-    "error_page_info_leak",
-    "cookie_security_missing",
-    "directory_listing",
-    "auth_detection_basic"
   ],
 
   "selection_rules": {
     "min_chains": 2,
-    "max_chains": 4,
-    "extra_findings_min": 3,
-    "extra_findings_max": 7
+    "max_chains": 4
   }
 }

@@ -2,7 +2,7 @@
 # Fakobanko scenario: Output format manipulation
 
 suite: ai
-emulates: output_format
+emulates: ai_output_format_manipulation
 target: "chat.fakobanko.local"
 disposition: format_manipulated
 

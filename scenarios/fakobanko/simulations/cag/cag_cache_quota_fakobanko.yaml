@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_cache_quota
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: quota_exhausted
 
 behavior:
@@ -15,7 +15,7 @@ output:
   no_per_user_quota: true
 
 findings:
-  - title: "Cache quota exhaustion on cache.fakobanko.local"
+  - title: "Cache quota exhaustion on ml.fakobanko.local"
     description: "Global cache is 98.5% full with no per-user quotas. Single user can exhaust remaining capacity, degrading performance for all users."
     severity: "medium"
     evidence: |

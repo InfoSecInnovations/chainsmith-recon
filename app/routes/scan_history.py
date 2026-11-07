@@ -291,7 +291,25 @@ async def delete_scan(scan_id: str):
     deleted = await _scan_repo.delete_scan(scan_id)
     if not deleted:
         raise HTTPException(404, f"Scan '{scan_id}' not found")
-    return {"message": f"Scan '{scan_id}' deleted", "deleted": True}
+    # The evidence index rows cascade with the scan row, but the captured
+    # request/response documents live on disk in the workspace. Deleting the
+    # scan must delete them too: they are the raw client traffic.
+    from app.capture.store import EvidenceStore
+
+    evidence_removed = 0
+    try:
+        evidence_removed = EvidenceStore().delete_scan(scan_id)
+    except OSError:
+        logger.warning(
+            "Scan %s deleted but its evidence documents could not be removed",
+            scan_id,
+            exc_info=True,
+        )
+    return {
+        "message": f"Scan '{scan_id}' deleted",
+        "deleted": True,
+        "evidence_removed": evidence_removed,
+    }
 
 
 @router.get("/api/v1/scans/{scan_a_id}/compare/{scan_b_id}")

@@ -1,7 +1,7 @@
 # simulations/network/dns_timeout.yaml
 # Smoke test: DNS resolver timeout (exercises framework timeout handling)
 suite: network
-emulates: dns_enumeration
+emulates: network_dns_enumeration
 target: "slow-resolver.example.local"
 disposition: error
 

@@ -55,7 +55,7 @@ class DebugEndpointCheck(ServiceIteratingCheck):
 
     conditions = [CheckCondition("services", "truthy")]
     produces = ["debug_observations"]
-    service_types = ["http", "html", "api"]
+    service_types = ["http", "html", "api", "ai"]
 
     reason = "Debug endpoints frequently expose environment variables, connection strings, and internal IPs"
     references = ["OWASP WSTG-CONF-05", "CWE-215"]

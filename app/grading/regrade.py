@@ -49,6 +49,7 @@ from app.grading.models import PLACEHOLDER_STATES, GradingState
 from app.grading.record import (
     READABLE_VERSIONS,
     candidate_from_dict,
+    check_config_of,
     context_from_record,
     restore_context,
 )
@@ -114,6 +115,20 @@ class SkippedCandidate:
 
 
 @dataclass
+class ConfigDrift:
+    """A check whose config differs from the one its scan graded under."""
+
+    check_name: str
+    #: attribute -> (at scan time, now)
+    fields: dict[str, tuple[Any, Any]]
+
+    @property
+    def affects_grading(self) -> bool:
+        """`severity` is the only recorded value a grader reads."""
+        return "severity" in self.fields
+
+
+@dataclass
 class RegradeReport:
     scan_id: str
     #: Checks at least one candidate of which was re-graded.
@@ -121,6 +136,10 @@ class RegradeReport:
     changes: list[ObservationChange] = field(default_factory=list)
     skipped: list[SkippedCandidate] = field(default_factory=list)
     records_found: int = 0
+    #: Checks graded under a different config than the scan's. A re-grade uses
+    #: today's config, so a CHANGED row may come from the contract rather than
+    #: the grader; this says which checks to read that way.
+    config_drift: list[ConfigDrift] = field(default_factory=list)
 
     def of_kind(self, kind: str) -> list[ObservationChange]:
         return [change for change in self.changes if change.kind == kind]
@@ -158,6 +177,14 @@ class RegradeReport:
                     "after": change.after,
                 }
                 for change in self.changes
+            ],
+            "config_drift": [
+                {
+                    "check_name": drift.check_name,
+                    "affects_grading": drift.affects_grading,
+                    "fields": {name: list(pair) for name, pair in drift.fields.items()},
+                }
+                for drift in self.config_drift
             ],
             "skipped": [
                 {
@@ -239,6 +266,17 @@ async def regrade_scan(
                 )
             )
             continue
+
+        recorded_config = record.get("check_config")
+        if isinstance(recorded_config, dict):
+            current_config = check_config_of(check)
+            drift = {
+                key: (recorded_config.get(key), current_config.get(key))
+                for key in sorted(set(recorded_config) | set(current_config))
+                if recorded_config.get(key) != current_config.get(key)
+            }
+            if drift:
+                report.config_drift.append(ConfigDrift(name, drift))
 
         stored = [exchange for exchange in corpus if exchange.check_name == name]
         by_hash = {exchange.content_hash: exchange for exchange in stored if exchange.content_hash}
@@ -524,6 +562,18 @@ def render_report(report: RegradeReport, *, show_unchanged: bool = False) -> str
                 lines.append("    by " + (", ".join(change.superseded_by) or "no verdict"))
             elif change.note:
                 lines.append(f"    {change.note}")
+
+    for drift in report.config_drift:
+        lines.append(
+            f"{'CONFIG DRIFT':<16}{drift.check_name}"
+            + (
+                "  (severity changed: verdicts may differ for that reason)"
+                if drift.affects_grading
+                else ""
+            )
+        )
+        for name, (old, new) in drift.fields.items():
+            lines.append(f"    {name}: {_short(old)} -> {_short(new)}")
 
     for skip in report.skipped:
         lines.append(f"{'SKIPPED':<16}{skip.check_name}  {skip.candidate_id or '(whole check)'}")

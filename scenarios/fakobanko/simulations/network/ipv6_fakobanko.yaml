@@ -2,7 +2,7 @@
 # Fakobanko scenario: IPv6 addresses discovered
 
 suite: network
-emulates: ipv6_discovery
+emulates: network_ipv6_discovery
 target: "fakobanko.local"
 disposition: ipv6_found
 

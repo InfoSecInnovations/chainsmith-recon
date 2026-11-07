@@ -1,6 +1,6 @@
 # Lab Edition Backports
 
-**Status:** Partial. §1 and §2 done 2026-11-07, plus 4c (vendored d3) and 4f (D-6). §3 and the rest of §4 remain. Not yet validated on the VM
+**Status:** Nearly done. §1, §2, 3a–3d, §4 and the §5 tests marked below are done (2026-11-07). Left: 3e (needs the live range), and VM validation of all of it
 **Track:** Range / checks correctness
 **Depends on:** nothing
 **Related:** [`lab-edition.md`](lab-edition.md), which is the longer-term fix: generating the lab from main so this drift cannot recur
@@ -57,29 +57,30 @@ container instead, see that doc.
 
 | Item | Problem in main | Fix |
 |---|---|---|
-| 3a | `mcp_tool_enumeration` POSTs to `/tools/list`-style URL paths. `tools/list` is a JSON-RPC *method*; the range serves only POST `/mcp`. | POST the JSON-RPC `tools/list` payload to `/mcp`, `/rpc`, `/jsonrpc`, `/messages` and `/` first, then fall back to the path probes. |
-| 3b | `mcp_tool_enumeration` risk patterns have nothing for SQL or money movement, which are the range's `run_sql` and `execute_transfer`. | Add critical patterns `(run\|exec(ute)?\|eval)_?(sql\|query)`, `(^\|_)sql(_\|$)`, and `(transfer\|wire\|payment\|payout\|remit\|refund\|withdraw\|disburse)`. |
-| 3c | `web_robots_txt`, plus about nine other web checks, leave `ai` out of `service_types`, so they never run on a vLLM host. | Add `ai` to `check.py` and `contract.yaml`. Add a test that a vLLM header classifies as `ai` and robots still runs. |
-| 3d | `cag_discovery` lists five paths in both `_PATH_TO_TYPE` and `CAG_PATHS`, so `cag_endpoints` gets duplicates. | Skip the second entry for a path already added. |
+| 3a | **Done 2026-11-07.** `mcp_tool_enumeration` POSTs to `/tools/list`-style URL paths. `tools/list` is a JSON-RPC *method*; the range serves only POST `/mcp`. | POST the JSON-RPC `tools/list` payload to `/mcp`, `/rpc`, `/jsonrpc`, `/messages` and `/` first, then fall back to the path probes. |
+| 3b | **Done 2026-11-07.** `mcp_tool_enumeration` risk patterns have nothing for SQL or money movement, which are the range's `run_sql` and `execute_transfer`. | Add critical patterns `(run\|exec(ute)?\|eval)_?(sql\|query)`, `(^\|_)sql(_\|$)`, and `(transfer\|wire\|payment\|payout\|remit\|refund\|withdraw\|disburse)`. |
+| 3c | **Done 2026-11-07** (12 checks; `web_favicon`/`web_sri` stay HTML-only). `web_robots_txt`, plus about nine other web checks, leave `ai` out of `service_types`, so they never run on a vLLM host. | Add `ai` to `check.py` and `contract.yaml`. Add a test that a vLLM header classifies as `ai` and robots still runs. |
+| 3d | **Done 2026-11-07.** `cag_discovery` lists five paths in both `_PATH_TO_TYPE` and `CAG_PATHS`, so `cag_endpoints` gets duplicates. | Skip the second entry for a path already added. |
 | 3e | `agent_discovery` paths leave out the agent's GET routes (`/config`, `/sessions`, `/memory`, `/tools`). | Verify against the live range, and add them if needed. |
 
 ## 4. Engine and operator UX
 
 | Item | Problem in main | Fix |
 |---|---|---|
-| 4a | `check_launcher._run_check` never logs `result.errors`. Only the swarm path forwards them. | After `execute`, log the count and the first error. |
-| 4b | Rule-based chains are saved only after the LLM chain pass, which has no timeout. A slow model hides every chain. | Save the rule chains and set `chain_status="rules_done"` before `detect_llm_chains`. Wrap the LLM call in `asyncio.wait_for`. |
+| 4a | **Done 2026-11-07.** `check_launcher._run_check` never logged `result.errors`. Only the swarm path forwarded them. | Logs a warning with the count and the first error. |
+| 4b | **Done 2026-11-07.** Rule-based chains were saved only after the LLM chain pass, which had no timeout. A slow model hid every chain. | Rule chains are saved first, and the DB status is `rules_done` (the in-memory session stays `analyzing`, the routes' guard). The LLM pass is bounded by `chains.llm_timeout_seconds` (default 300). A timeout is a retryable failure, so the scan ends `partial`. The UI shows `rules_done` as "Rules only". |
 | 4c | `observations.html` and `trend.html` load D3 from a CDN, so they break offline (classrooms, air-gapped engagements). | Vendor `d3.v7.min.js` and `d3-sankey.min.js` under `static/js/vendor/`. |
-| 4d | Observation references render as plain text (`static/js/api.js`). | Render them as links. |
-| 4e | `scan.html` never shows `skip_reason` (the API sends it), and `determineCurrentPhase` does not count `skipped` as reached. | Show the reason in the check row, and treat skipped as reached. |
+| 4d | **Done 2026-11-07.** Observation references render as plain text (`static/js/api.js`). | Render them as links. |
+| 4e | **Done 2026-11-07.** `scan.html` never shows `skip_reason` (the API sends it), and `determineCurrentPhase` does not count `skipped` as reached. | Show the reason in the check row, and treat skipped as reached. |
 | 4f | **Done 2026-11-07 (D-6).** A custom check that fails to import, or fails its contract, used to stop **all** discovery. | `discover_components` now logs and skips the bad `custom` check. A custom check that reuses a built-in name or UUID is the one skipped. Built-in failures still raise. |
 
 ## 5. Tests the lab has and main lacks
 
-- Session file round-trip (the active observations are non-empty).
-- Service-type coverage (every web check runs on `ai` hosts).
-- Expected observations are reachable.
-- `known_hosts` matches the compose hostnames.
+- Session file round-trip (the active observations are non-empty). **Done:** `tests/scanning/test_range_backports.py`.
+- Service-type coverage (every web check runs on `ai` hosts). **Done:** `tests/checks/test_web_service_types.py`.
+- Expected observations are reachable. Needs a recorded scan; not done.
+- `known_hosts` matches the compose hostnames. **Done.**
+- (Added) every listed observation id is a gate: `tests/scanning/test_range_observation_ids.py`, `test_demo_domain_range.py`.
 - Chain rules fire against a recorded real scan.
 
 ## Found while doing §1–2 (not in the lab)
@@ -91,6 +92,8 @@ container instead, see that doc.
   `customer_lookup_tool`, `namespace_leak`, …) should move into `scenario.json`'s `random_pool`. Needs
   a reconciliation pass and a test that every pool id gates something.
 - Simulation YAMLs still name `rag.`/`cache.` hosts (part of B-9).
+
+Also: `mcp_sampling_abuse`'s "missing" corpus exchange is its `local` capabilities record. `local` is not captured by default, so this is expected (like `mcp_server_fingerprint`).
 
 ## Not fixed in either edition
 

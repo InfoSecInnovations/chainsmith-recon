@@ -597,3 +597,61 @@ class TestIdCollisionGuard:
 
         assert _kinds(report) == ["unchanged", "unchanged"]
         assert report.has_changes is False
+
+
+# ── scan-time check config (phase 57 item) ───────────────────────────
+
+
+class ConfiguredCheck(FakeCheck):
+    def __init__(self, *, severity_default="low", timeout=30.0, **kw):
+        super().__init__(**kw)
+        self.severity = {"model": "fixed", "default": severity_default}
+        self.timeout_seconds = timeout
+
+
+class TestCheckConfigDrift:
+    async def test_the_record_keeps_the_scan_time_config(self):
+        await _scan(ConfiguredCheck(timeout=12.0))
+
+        [record] = EvidenceStore().read_grading_records(SCAN)
+        assert record["check_config"]["timeout_seconds"] == 12.0
+        assert record["check_config"]["severity"] == {"model": "fixed", "default": "low"}
+
+    async def test_an_unchanged_config_reports_no_drift(self):
+        check = ConfiguredCheck()
+        stored = await _scan(check)
+
+        report = await _regrade(check, stored)
+
+        assert report.config_drift == []
+        assert "config_drift" in report.to_dict()
+
+    async def test_a_changed_severity_block_is_named_as_drift(self):
+        stored = await _scan(ConfiguredCheck(severity_default="low", timeout=30.0))
+
+        report = await _regrade(ConfiguredCheck(severity_default="info", timeout=10.0), stored)
+
+        [drift] = report.config_drift
+        assert drift.check_name == "web_regrade"
+        assert drift.affects_grading is True
+        assert set(drift.fields) == {"severity", "timeout_seconds"}
+        rendered = render_report(report)
+        assert "CONFIG DRIFT" in rendered and "severity changed" in rendered
+
+    async def test_a_tunable_only_change_does_not_claim_to_affect_grading(self):
+        stored = await _scan(ConfiguredCheck(timeout=30.0))
+        report = await _regrade(ConfiguredCheck(timeout=5.0), stored)
+        [drift] = report.config_drift
+        assert drift.affects_grading is False
+
+    async def test_a_record_from_before_check_config_reports_no_drift(self):
+        check = ConfiguredCheck()
+        stored = await _scan(check)
+        store = EvidenceStore()
+        [record] = store.read_grading_records(SCAN)
+        record.pop("check_config")
+        store.write_grading_record(SCAN, record["check_name"], record)
+
+        report = await _regrade(ConfiguredCheck(severity_default="info"), stored)
+
+        assert report.config_drift == []

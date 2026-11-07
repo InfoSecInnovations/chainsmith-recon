@@ -26,9 +26,9 @@ Size runs XS–L.
 |---|---|---|---|---|---|
 | Correctness | [open-issues.md](open-issues.md) | Live | — | — | Bugs and pending decisions |
 | Range / checks | [lab-backports.md](lab-backports.md) | Ready | M | — | Fixes made in the SEC536 lab snapshot that main still needs. The range currently plants almost nothing |
-| Reproducibility | [phase57-evidence-and-capture.md](phase57-evidence-and-capture.md) | Partial | M left | — | Workspaces, evidence capture, probe/grade split. Remaining: hash mismatches, retention, 57.5 encryption |
+| Reproducibility | [phase57-evidence-and-capture.md](phase57-evidence-and-capture.md) | Partial | M left | — | Workspaces, evidence capture, probe/grade split. Remaining: 57.5 encryption (retention and the hash mismatches done 2026-11-07) |
 | Reproducibility | [phase58-ai-grading.md](phase58-ai-grading.md) | Proposed | L | phase 57 | Grader agent, repeated-trial sampling, grade cache, Adjudicator as a second opinion |
-| Concurrency | [concurrent-scans.md](concurrent-scans.md) | Partial | M | — | Inline scope on `/scan`, finish the scan selector UI, per-scan swarm coordinators |
+| Concurrency | [concurrent-scans.md](concurrent-scans.md) | Partial | M | — | Inline scope done 2026-11-07; left: finish the scan selector UI, per-scan swarm coordinators |
 | Swarm | [phase54-swarm-enhancements.md](phase54-swarm-enhancements.md) | Backlog | M each | concurrent-scans §2.3 | Cross-process bus, OPSEC, telemetry, recovery, capabilities |
 | Modules | [module-system-design.md](module-system-design.md) | Ready | L | — | External `modules/` root, manifests, extension points, licensing |
 | Modules | [phase55-terminal-dashboard-stream-client.md](phase55-terminal-dashboard-stream-client.md) | Ready | S | — | CLI SSE client and `--stream` |

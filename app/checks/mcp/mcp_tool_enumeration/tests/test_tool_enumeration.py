@@ -407,3 +407,110 @@ class TestMCPToolEnumerationCheck:
         assert len(result.observations) == 0
         assert result.outputs.get("mcp_tools") is None
         assert result.outputs.get("high_risk_tools") is None
+
+
+class TestJsonRpcEndpointAndRiskPatterns:
+    """Lab backports 3a/3b: `tools/list` POSTed as a JSON-RPC method to `/mcp`
+    first, and raw-SQL / money-movement tools classified critical."""
+
+    RANGE_TOOLS = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "tools": [
+                    {"name": "run_sql", "description": "Run a query", "inputSchema": {}},
+                    {"name": "execute_transfer", "description": "Move funds", "inputSchema": {}},
+                    {"name": "get_customer", "description": "Look up", "inputSchema": {}},
+                ]
+            },
+        }
+    )
+
+    @pytest.mark.asyncio
+    async def test_posts_the_method_to_the_rpc_endpoint_first(self, sample_service):
+        check = MCPToolEnumerationCheck()
+        context = {
+            "mcp_servers": [
+                {
+                    "url": "http://mcp.example.com:8080",
+                    "path": "",
+                    "service": sample_service.to_dict(),
+                }
+            ]
+        }
+        posted: list[str] = []
+
+        async def post(url, json=None, headers=None):
+            posted.append(url)
+            if url.endswith("/mcp") and json == {"jsonrpc": "2.0", "method": "tools/list", "id": 1}:
+                return make_response(body=self.RANGE_TOOLS, url=url)
+            return make_response(status_code=404, url=url)
+
+        client = AsyncMock()
+        client.post = AsyncMock(side_effect=post)
+        client.get = AsyncMock(return_value=make_response(status_code=404))
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "app.checks.mcp.mcp_tool_enumeration.check.AsyncHttpClient", return_value=client
+        ):
+            result = await probe_and_grade(check, sample_service, context)
+
+        assert posted == ["http://mcp.example.com:8080/mcp"]  # found on the first try
+        assert {t["name"] for t in result.outputs["mcp_tools"]} == {
+            "run_sql",
+            "execute_transfer",
+            "get_customer",
+        }
+        severities = {
+            o.title.split(":")[1].split("(")[0].strip(): o.severity for o in result.observations
+        }
+        assert severities["run_sql"] == "critical"
+        assert severities["execute_transfer"] == "critical"
+        assert severities["get_customer"] != "critical"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_the_path_probes(self, sample_service, mcp_server_context):
+        check = MCPToolEnumerationCheck()
+
+        async def post(url, json=None, headers=None):
+            if url.endswith("/tools/list"):
+                return make_response(body=self.RANGE_TOOLS, url=url)
+            return make_response(status_code=404, url=url)
+
+        client = AsyncMock()
+        client.post = AsyncMock(side_effect=post)
+        client.get = AsyncMock(return_value=make_response(status_code=404))
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "app.checks.mcp.mcp_tool_enumeration.check.AsyncHttpClient", return_value=client
+        ):
+            result = await probe_and_grade(check, sample_service, mcp_server_context)
+
+        assert len(result.outputs["mcp_tools"]) == 3
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "run_sql",
+            "execute_query",
+            "eval_sql",
+            "sql_console",
+            "wire_funds",
+            "issue_refund",
+            "payout",
+        ],
+    )
+    def test_new_critical_patterns(self, name):
+        assert MCPToolEnumerationCheck()._classify_risk(name, "", {}) == "critical"
+
+    @pytest.mark.parametrize("body", ["null", "5", '"text"', "<html></html>"])
+    def test_non_object_bodies_are_not_listings(self, body):
+        from app.grading import exchange_from_response
+
+        ex = exchange_from_response(make_response(body=body), check_name="mcp_tool_enumeration")
+        assert MCPToolEnumerationCheck()._parse_tools_response(ex) is None

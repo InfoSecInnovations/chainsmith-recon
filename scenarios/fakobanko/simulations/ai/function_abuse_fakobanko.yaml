@@ -2,7 +2,7 @@
 # Fakobanko scenario: Function calling abuse
 
 suite: ai
-emulates: function_abuse
+emulates: ai_function_calling_abuse
 target: "chat.fakobanko.local"
 disposition: function_abused
 

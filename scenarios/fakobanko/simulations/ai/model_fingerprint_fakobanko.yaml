@@ -2,7 +2,7 @@
 # Fakobanko scenario: Model fingerprinting
 
 suite: ai
-emulates: model_fingerprint
+emulates: ai_model_behavior_fingerprint
 target: "chat.fakobanko.local"
 disposition: model_identified
 

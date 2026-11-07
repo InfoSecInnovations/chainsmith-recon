@@ -1,6 +1,6 @@
 # TLS analysis on localhost — weak/missing TLS
 suite: network
-emulates: tls_analysis
+emulates: network_tls_analysis
 target: "localhost"
 disposition: tls_weak
 

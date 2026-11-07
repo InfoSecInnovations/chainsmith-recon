@@ -32,19 +32,23 @@ where they disagree with the log, the log wins.
 
 **Still to do** (also tracked in [`open-issues.md`](open-issues.md)):
 
-1. **Hash mismatches** that make two checks unreproducible from the corpus:
+1. **Hash mismatches: fixed 2026-11-07** (B-8; not yet re-measured on the VM). Two checks were unreproducible from the corpus:
    `rag_corpus_poisoning` and `rag_multimodal_injection` (the interceptor records bytes as `str(data)`).
    The fix is mechanical: one shared bytes-decoding rule, and pass the headers actually sent.
    `web_mass_assignment` is **fixed (D-3 option A, 2026-11-07)**. It no longer sets an
    `x-chainsmith-injected-field` header in memory. `grade()` reads the injected field back as the
    recorded request body's last key. Not yet re-measured on the VM.
 2. **`web_favicon` grader crash** on non-latin-1 bodies.
-3. **Retention.** `EvidenceStore.delete_scan` / `EvidenceRepository.delete_scan` exist; nothing schedules
-   them. Capture stays off by default until this lands.
+3. **Retention: built 2026-11-07.** `storage.evidence_retention_days` (0 = keep for the workspace's lifetime,
+   the D-5 default) is applied at server start and daily, and by `chainsmith evidence prune`. Deleting a scan
+   now deletes its evidence documents too (it left them on disk). Turning capture on by default is
+   unblocked, and is your decision.
 4. **Criterion 7** is unverified: no scan has yet traced an agent verdict to its own `llm` exchange.
-5. Grading records do not save check config, so a re-grade uses today's config.
-6. Smaller items: compact exchange JSON (drop `indent=2`), the `mcp_sampling_abuse` missing exchange, a test
-   for the scratch import's superseded-row dedupe, and `TrafficLogger.log_request`, which has no callers.
+5. **Done 2026-11-07:** grading records save the check's config (`check_config`), and `dev regrade` reports
+   `CONFIG DRIFT`, flagging when the severity block changed (the one value a grader reads).
+6. **Done 2026-11-07:** exchange JSON is compact; the `mcp_sampling_abuse` missing exchange is its `local`
+   record (not captured by default, expected); the scratch import has tests (and two bugs fixed);
+   `TrafficLogger.log_request` now has callers (B-2).
 
 **Closed:** criterion 6 (D-4, 2026-11-07). It is accepted on the 2026-09-15 `--capture-failures` pair,
 where it held both as written and over completed probes. A pair that includes a transient failure was

@@ -2,7 +2,7 @@
 # Fakobanko scenario: Agent infinite loop
 
 suite: agent
-emulates: agent_loop
+emulates: agent_loop_detection
 target: "agent.fakobanko.local"
 disposition: loop_triggered
 

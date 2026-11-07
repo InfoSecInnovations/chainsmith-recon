@@ -1,6 +1,6 @@
 # OpenAPI spec exposed on api and agent
 suite: web
-emulates: openapi_discovery
+emulates: web_openapi_discovery
 target: "localhost"
 disposition: spec_exposed
 

@@ -93,6 +93,7 @@ def exchange_from_response(
     request_headers: dict[str, str] | None = None,
     request_body: str = "",
     request_json: Any | None = None,
+    request_data: Any | None = None,
 ) -> Exchange:
     """
     Build an in-memory `Exchange` from an HTTP response a probe already holds.
@@ -111,12 +112,17 @@ def exchange_from_response(
     leaving each of the five LLM-facing suites to re-derive that detail and one
     of them to get it wrong. `request_headers` matters for the same reason:
     hand over what was passed to the client, not the merged set.
+
+    `request_data` is the same idea for a `data=` body (B-8): pass exactly what
+    was handed to the client, bytes included, and it is turned into text by the
+    interceptor's own rule (`app.lib.http.request_body_text`).
     """
-    import json as _json
     from urllib.parse import urlparse
 
-    if request_json is not None:
-        request_body = _json.dumps(request_json, ensure_ascii=False)
+    from app.lib.http import request_body_text
+
+    if request_json is not None or request_data is not None:
+        request_body = request_body_text(request_json, request_data)
 
     url = response.url or ""
     exchange = Exchange(

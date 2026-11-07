@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_side_channel
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: side_channel_found
 
 behavior:
@@ -15,7 +15,7 @@ output:
   accuracy: 0.95
 
 findings:
-  - title: "Cache timing side channel on cache.fakobanko.local"
+  - title: "Cache timing side channel on ml.fakobanko.local"
     description: "Timing differences between cache hits (~5ms) and misses (~800ms) allow 95% accurate inference of whether specific queries were previously asked."
     severity: "medium"
     evidence: |

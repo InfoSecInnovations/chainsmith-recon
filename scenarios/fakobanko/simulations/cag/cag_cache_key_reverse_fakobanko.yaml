@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_cache_key_reverse
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: keys_reversed
 
 behavior:
@@ -15,7 +15,7 @@ output:
   keys_recovered: 25
 
 findings:
-  - title: "Cache keys reverse-engineered on cache.fakobanko.local"
+  - title: "Cache keys reverse-engineered on ml.fakobanko.local"
     description: "Cache keys use SHA256 of embedding vectors. With known embedding model, keys are predictable and 25 were recovered."
     severity: "medium"
     evidence: |

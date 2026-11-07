@@ -2,7 +2,7 @@
 # Fakobanko scenario: Insecure cookie flags
 
 suite: web
-emulates: cookie_security
+emulates: web_cookie_security
 target: "www.fakobanko.local"
 disposition: insecure_cookies
 

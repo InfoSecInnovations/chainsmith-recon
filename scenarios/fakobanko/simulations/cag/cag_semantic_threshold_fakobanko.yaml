@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_semantic_threshold
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: threshold_mapped
 
 behavior:
@@ -15,7 +15,7 @@ output:
   exploitable: true
 
 findings:
-  - title: "Semantic threshold too permissive on cache.fakobanko.local"
+  - title: "Semantic threshold too permissive on ml.fakobanko.local"
     description: "Cache similarity threshold of 0.85 produces 12% false positive rate. Semantically different queries return incorrect cached responses."
     severity: "medium"
     evidence: |

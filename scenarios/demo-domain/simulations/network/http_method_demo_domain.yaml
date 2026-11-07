@@ -1,6 +1,6 @@
 # HTTP method enumeration — extra methods on API
 suite: network
-emulates: http_method_enum
+emulates: network_http_method_enum
 target: "localhost"
 disposition: extra_methods
 

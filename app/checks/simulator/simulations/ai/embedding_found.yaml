@@ -1,5 +1,5 @@
 suite: ai
-emulates: embedding_endpoint_discovery
+emulates: ai_embedding_endpoint_discovery
 target: "chat.example.local"
 disposition: endpoints_found
 

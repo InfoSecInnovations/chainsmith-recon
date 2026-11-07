@@ -2,7 +2,7 @@
 # Fakobanko scenario: Tool invocation testing
 
 suite: mcp
-emulates: tool_invocation
+emulates: mcp_tool_invocation
 target: "mcp.fakobanko.local"
 disposition: invocation_unsafe
 

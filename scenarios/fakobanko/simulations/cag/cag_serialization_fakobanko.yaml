@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_serialization
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: deserialization_vuln
 
 behavior:
@@ -15,7 +15,7 @@ output:
   rce_possible: true
 
 findings:
-  - title: "Unsafe pickle deserialization in cache on cache.fakobanko.local"
+  - title: "Unsafe pickle deserialization in cache on ml.fakobanko.local"
     description: "Cache uses Python pickle serialization. Crafted cache entries can achieve remote code execution via pickle deserialization."
     severity: "critical"
     evidence: |

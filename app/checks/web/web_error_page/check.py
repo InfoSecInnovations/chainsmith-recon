@@ -192,7 +192,7 @@ class ErrorPageCheck(ServiceIteratingCheck):
 
     conditions = [CheckCondition("services", "truthy")]
     produces = ["error_page_info"]
-    service_types = ["http", "html", "api"]
+    service_types = ["http", "html", "api", "ai"]
 
     reason = "Error pages reveal framework identity and debug mode, enabling targeted attacks"
     references = ["OWASP WSTG-INFO-08", "CWE-209"]

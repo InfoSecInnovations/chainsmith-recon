@@ -2,7 +2,7 @@
 # Fakobanko scenario: Jailbreak testing
 
 suite: ai
-emulates: jailbreak_testing
+emulates: ai_jailbreak_testing
 target: "chat.fakobanko.local"
 disposition: jailbreak_partial
 

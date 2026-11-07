@@ -1,7 +1,7 @@
 # simulations/ai/model_info_fakobanko.yaml
 # Fakobanko scenario: /v1/models exposes model ID, admin endpoint leaks system prompt ref
 suite: ai
-emulates: model_info_check
+emulates: ai_model_info_check
 target: "api.fakobanko.local"
 disposition: info_exposed
 

@@ -2,7 +2,7 @@
 # Fakobanko scenario: WebSocket transport analysis
 
 suite: mcp
-emulates: websocket_transport
+emulates: mcp_websocket_transport
 target: "mcp.fakobanko.local"
 disposition: ws_insecure
 

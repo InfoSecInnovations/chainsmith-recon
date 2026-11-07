@@ -1,6 +1,6 @@
 # DNS enumeration discovers 7 services on localhost
 suite: network
-emulates: dns_enumeration
+emulates: network_dns_enumeration
 target: "localhost"
 disposition: hosts_found
 

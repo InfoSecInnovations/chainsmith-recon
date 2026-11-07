@@ -2,7 +2,7 @@
 # Fakobanko scenario: MCP prompt injection
 
 suite: mcp
-emulates: prompt_injection
+emulates: mcp_prompt_injection
 target: "mcp.fakobanko.local"
 disposition: injection_success
 

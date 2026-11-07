@@ -26,6 +26,8 @@ from app.config import get_config
 from app.db.repositories import CheckLogRepository
 from app.engine.scanner import AVAILABLE_CHECKS, get_check_info, run_scan
 from app.gates.guardian import Guardian
+from app.lib.timeutils import iso_utc
+from app.proof_of_scope import ProofOfScopeSettings, ScanWindow
 from app.scan_context import resolve_session
 from app.scan_presets import get_preset, list_presets, preset_names
 from app.scan_registry import get_registry
@@ -46,14 +48,26 @@ _scan_lock = asyncio.Lock()
 
 @router.post("/api/v1/scan", status_code=202)
 async def start_scan(body: ScanStartInput = ScanStartInput()):
-    """Start the web reconnaissance scan.
+    """Start a scan. The scope travels with the request (B-1).
 
-    Optional body fields:
-      - checks: list of check names to run (empty = all)
-      - suites: list of suite names to run (empty = all)
+    Required: `target`. Optional scope fields: `exclude`, `techniques`,
+    `scan_window`, `proof_of_scope`, `scan_behavior`. Plus the run selection:
+    `checks`, `suites`, `port_profile`, `preset`, `check_overrides`, `capture`,
+    `acknowledge_outside_window`.
+
+    The scan is built from this body alone. It never reads the operator's scope
+    prep (`POST /api/v1/scope`), so a second client changing scope cannot change
+    what this scan targets.
     """
-    if not state.target:
-        raise HTTPException(400, "Scope not set. POST to /api/scope first.")
+    target = (body.target or "").strip()
+    if not target:
+        raise HTTPException(
+            400,
+            "`target` is required: scope is part of the scan request "
+            "(POST /api/v1/scan with target, exclude, scan_window, ...).",
+        )
+    exclude = list(body.exclude or [])
+    techniques = list(body.techniques) or list(state.settings.get("default_techniques") or [])
 
     # Validate the preset name up front so an unknown name is a clean 400 rather
     # than a silently-ignored scan. Resolution itself happens in run_scan.
@@ -63,22 +77,40 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
             f"Unknown preset '{body.preset}'. Available: {', '.join(preset_names())}",
         )
 
-    # Scan-window gate: delegated to Guardian so all scan allow/block
-    # decisions remain in a single chokepoint. Uses a per-scan acknowledgment
-    # from the request body rather than a sticky setting.
-    gate_guardian = Guardian.from_scope(state.target, exclude=state.exclude)
+    # This scan's own proof-of-scope settings, from the request. Fresh, never a
+    # copy of the operator's prep, which another client may be changing.
+    proof_settings = ProofOfScopeSettings()
+    if body.scan_window:
+        proof_settings.scan_window = ScanWindow(
+            start=body.scan_window.start, end=body.scan_window.end
+        )
+    if body.proof_of_scope:
+        proof_settings.traffic_logging = body.proof_of_scope.traffic_logging
+        proof_settings.block_exclusions = body.proof_of_scope.block_exclusions
+        proof_settings.log_violations = body.proof_of_scope.log_violations
+
+    scan_id = uuid.uuid4().hex[:16]
+
+    # Scan-window gate: delegated to Guardian so all scan allow/block decisions
+    # stay in one chokepoint. Stamped with the scan id, so an acknowledged or
+    # blocked window is on this scan's compliance record.
+    gate_guardian = Guardian.from_scope(target, exclude=exclude, scan_id=scan_id)
     allowed, reason = gate_guardian.check_scan_window(
-        state.proof_settings.scan_window,
+        proof_settings.scan_window,
         acknowledged=body.acknowledge_outside_window,
     )
     if not allowed:
         raise HTTPException(409, reason)
-    # Record this scan's ack value (overwrites prior — gate input is always
-    # the current request body, never a sticky flag) for compliance report.
-    state.proof_settings.outside_window_acknowledged = body.acknowledge_outside_window
+    proof_settings.outside_window_acknowledged = body.acknowledge_outside_window
+    if body.acknowledge_outside_window:
+        proof_settings.outside_window_acknowledged_at = iso_utc()
 
-    # Concurrent-scan cap: Phase C replaces the single-scan 409 with a
-    # configurable limit. Returns 429 when the cap is reached (caller retries).
+    if body.scan_behavior:
+        from app.routes.scope import apply_scan_behavior
+
+        apply_scan_behavior(body.scan_behavior)
+
+    # Concurrent-scan cap. Returns 429 when the cap is reached (caller retries).
     # Pre-register the session under the cap-hold so the scan_id is visible
     # to pollers before the background task starts — this closes the race
     # where scan.html polled during the gap between create_task() and
@@ -86,22 +118,17 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
     # (or a previous scan's state) and leave the UI frozen.
     cfg = get_config()
     max_scans = cfg.concurrency.max_concurrent_scans
-    scan_id = uuid.uuid4().hex[:16]
-    guardian = Guardian.from_scope(state.target, exclude=state.exclude, scan_id=scan_id)
+    guardian = Guardian.from_scope(target, exclude=exclude, scan_id=scan_id)
     session = ScanSession(
         id=scan_id,
-        target=state.target or "",
-        exclude=list(state.exclude or []),
-        techniques=list(state.techniques or []),
+        target=target,
+        exclude=exclude,
+        techniques=techniques,
         status="queued",
         phase="queued",
         guardian=guardian,
         settings=dict(state.settings),
-        # Deep copy, not a reference: proof_settings is mutated per scan start
-        # (outside_window_acknowledged above), and sharing one object across
-        # concurrent sessions would let a later scan rewrite an earlier scan's
-        # compliance record.
-        proof_settings=state.proof_settings.model_copy(deep=True),
+        proof_settings=proof_settings,
         operator_session_id=state.session_id,
     )
     async with _scan_lock:
@@ -116,6 +143,13 @@ async def start_scan(body: ScanStartInput = ScanStartInput()):
                 headers={"Retry-After": str(max(1, cfg.concurrency.retry_after_seconds))},
             )
         get_registry().register(session)
+
+    # Mirror this scan's scope into the operator prep, which chat and the scan
+    # planner advisor read as "the current scope". Display only: no scan reads
+    # it (see the docstring).
+    state.target = target
+    state.exclude = exclude
+    state.techniques = techniques
 
     # Launch scan in background with the pre-registered session.
     asyncio.create_task(

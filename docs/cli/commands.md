@@ -44,6 +44,7 @@ chainsmith scan TARGET [OPTIONS]
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--exclude` | `-e` | Exclude domains from scope (repeatable) |
+| `--scope` | | YAML/JSON scope file (exclude, techniques, scan_window, proof_of_scope), sent with the scan |
 | `--checks` | `-c` | Run specific checks by name (repeatable) |
 | `--suite` | `-s` | Run checks from suite (repeatable) |
 | `--scenario` | | Load scenario for simulated scanning |

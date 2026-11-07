@@ -2,7 +2,7 @@
 # Fakobanko scenario: API parameter injection
 
 suite: ai
-emulates: api_parameter_injection
+emulates: ai_api_parameter_injection
 target: "chat.fakobanko.local"
 disposition: param_injected
 

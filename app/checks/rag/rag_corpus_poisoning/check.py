@@ -104,13 +104,18 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
         canary_id = f"chainsmith-canary-{uuid.uuid4().hex[:8]}"
         candidate = self.create_candidate(host=service.host, target=service, target_url=service.url)
 
-        def record(resp, body: str = "", jbody: dict | None = None) -> None:
+        def record(
+            resp, *, data: Any = None, jbody: dict | None = None, headers: dict | None = None
+        ) -> None:
+            # Exactly what was handed to the client (B-8), so this copy hashes
+            # the same as the one the capture interceptor stored.
             kwargs: dict[str, Any] = {"method": "POST"}
             if jbody is not None:
                 kwargs["request_headers"] = JSON_HEADERS
                 kwargs["request_json"] = jbody
             else:
-                kwargs["request_body"] = body
+                kwargs["request_headers"] = dict(headers or {})
+                kwargs["request_data"] = data
             candidate.attach(
                 exchange_from_response(
                     resp, check_name=self.name, scan_id=scan_id, host=service.host, **kwargs
@@ -154,13 +159,10 @@ class RAGCorpusPoisoningCheck(ServiceIteratingCheck):
             if classified:
                 return classified
 
-        body = self._multipart_body(canary_id)
-        resp = await client.post(
-            url,
-            data=body.encode("utf-8"),
-            headers={"Content-Type": f"multipart/form-data; boundary={self._boundary(canary_id)}"},
-        )
-        record(resp, body=body)
+        data = self._multipart_body(canary_id).encode("utf-8")
+        headers = {"Content-Type": f"multipart/form-data; boundary={self._boundary(canary_id)}"}
+        resp = await client.post(url, data=data, headers=headers)
+        record(resp, data=data, headers=headers)
         if resp.error:
             return None
         return self._classify_multipart(path, resp.status_code, canary_id)

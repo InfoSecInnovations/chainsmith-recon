@@ -1,7 +1,7 @@
 # simulations/ai/prompt_leak_fakobanko.yaml
 # Fakobanko scenario: chat service leaks system prompt details on direct questioning
 suite: ai
-emulates: prompt_leakage
+emulates: ai_prompt_leakage
 target: "chat.fakobanko.local"
 disposition: leak_found
 

@@ -2,7 +2,7 @@
 # Fakobanko scenario: LLM endpoint discovered
 
 suite: ai
-emulates: llm_endpoint_discovery
+emulates: ai_llm_endpoint_discovery
 target: "chat.fakobanko.local"
 disposition: endpoint_found
 

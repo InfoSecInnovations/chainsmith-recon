@@ -2,7 +2,7 @@
 # Fakobanko scenario: Dangerous HTTP methods allowed
 
 suite: network
-emulates: http_method_enum
+emulates: network_http_method_enum
 target: "api.fakobanko.local"
 disposition: extra_methods
 

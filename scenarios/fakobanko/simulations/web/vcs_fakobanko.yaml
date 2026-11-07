@@ -2,7 +2,7 @@
 # Fakobanko scenario: .git directory exposed
 
 suite: web
-emulates: vcs_exposure
+emulates: web_vcs_exposure
 target: "docs.fakobanko.local"
 disposition: vcs_found
 

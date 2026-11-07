@@ -83,7 +83,7 @@ class SitemapCheck(ServiceIteratingCheck):
 
     conditions = [CheckCondition("services", "truthy")]
     produces = ["sitemap_paths"]
-    service_types = ["http", "html", "api"]
+    service_types = ["http", "html", "api", "ai"]
 
     reason = "Sitemaps reveal full URL structure including internal tools, API versioning, and AI/ML endpoints"
     references = ["OWASP WSTG-INFO-03"]

@@ -1,6 +1,6 @@
 # Model info check — model metadata exposed
 suite: ai
-emulates: model_info_check
+emulates: ai_model_info_check
 target: "localhost"
 disposition: model_exposed
 

@@ -2,7 +2,7 @@
 # Fakobanko scenario: Directory listing enabled on docs
 
 suite: web
-emulates: directory_listing
+emulates: web_directory_listing
 target: "docs.fakobanko.local"
 disposition: listing_enabled
 

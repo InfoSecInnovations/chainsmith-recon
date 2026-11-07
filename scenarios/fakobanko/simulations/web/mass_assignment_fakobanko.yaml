@@ -2,7 +2,7 @@
 # Fakobanko scenario: Mass assignment on user profile
 
 suite: web
-emulates: mass_assignment
+emulates: web_mass_assignment
 target: "api.fakobanko.local"
 disposition: writable_field
 

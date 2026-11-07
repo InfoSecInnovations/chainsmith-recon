@@ -4,7 +4,7 @@
 
 suite: cag
 emulates: cag_cache_probe
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: vulnerable
 
 output:
@@ -80,7 +80,7 @@ observations:
       Found in other session: true
       Risk: User data exposure across sessions
     check_name: "cag_cache_probe"
-    target_url: "http://cache.fakobanko.local:8080/cache"
+    target_url: "http://ml.fakobanko.local:8080/cache"
     references:
       - "CWE-524: Use of Cache Containing Sensitive Information"
 
@@ -92,7 +92,7 @@ observations:
       Accessible IDs: 1, admin, test
       Admin context: Previous banking assistant configuration leaked
     check_name: "cag_cache_probe"
-    target_url: "http://cache.fakobanko.local:8080/cache"
+    target_url: "http://ml.fakobanko.local:8080/cache"
     references:
       - "CWE-639: Authorization Bypass Through User-Controlled Key"
 
@@ -105,7 +105,7 @@ observations:
       Cached request: 12ms
       Speedup: 95%
     check_name: "cag_cache_probe"
-    target_url: "http://cache.fakobanko.local:8080/cache"
+    target_url: "http://ml.fakobanko.local:8080/cache"
     references:
       - "CWE-208: Observable Timing Discrepancy"
 
@@ -117,4 +117,4 @@ observations:
       Identical responses: true
       Risk: Cache poisoning possible
     check_name: "cag_cache_probe"
-    target_url: "http://cache.fakobanko.local:8080/cache"
+    target_url: "http://ml.fakobanko.local:8080/cache"

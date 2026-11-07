@@ -2,7 +2,7 @@
 # Fakobanko scenario: Template injection
 
 suite: mcp
-emulates: template_injection
+emulates: mcp_template_injection
 target: "mcp.fakobanko.local"
 disposition: template_injected
 

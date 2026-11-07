@@ -2,7 +2,7 @@
 # Fakobanko scenario: DNS enumeration discovers 8 hosts
 # DNS only outputs hostnames and IP mappings — no Services or ports
 suite: network
-emulates: dns_enumeration
+emulates: network_dns_enumeration
 target: "fakobanko.local"
 disposition: hosts_found
 
@@ -15,8 +15,8 @@ output:
     - docs.fakobanko.local
     - mcp.fakobanko.local
     - agent.fakobanko.local
-    - rag.fakobanko.local
-    - cache.fakobanko.local
+    - vector.fakobanko.local
+    - ml.fakobanko.local
   dns_records:
     www.fakobanko.local: "10.0.1.10"
     chat.fakobanko.local: "10.0.1.11"
@@ -24,8 +24,8 @@ output:
     docs.fakobanko.local: "10.0.1.13"
     mcp.fakobanko.local: "10.0.1.14"
     agent.fakobanko.local: "10.0.1.15"
-    rag.fakobanko.local: "10.0.1.16"
-    cache.fakobanko.local: "10.0.1.17"
+    vector.fakobanko.local: "10.0.1.16"
+    ml.fakobanko.local: "10.0.1.17"
 
 observations:
   - title: "DNS enumeration: 8 hosts discovered"
@@ -39,6 +39,6 @@ observations:
         - docs.fakobanko.local (10.0.1.13)
         - mcp.fakobanko.local (10.0.1.14)
         - agent.fakobanko.local (10.0.1.15)
-        - rag.fakobanko.local (10.0.1.16)
-        - cache.fakobanko.local (10.0.1.17)
+        - vector.fakobanko.local (10.0.1.16)
+        - ml.fakobanko.local (10.0.1.17)
     check_name: "dns_enumeration"

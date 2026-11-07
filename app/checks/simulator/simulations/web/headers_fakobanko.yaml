@@ -1,7 +1,7 @@
 # simulations/web/headers_fakobanko.yaml
 # Fakobanko scenario: www service missing several security headers
 suite: web
-emulates: header_analysis
+emulates: web_header_analysis
 target: "www.fakobanko.local"
 disposition: headers_analyzed
 

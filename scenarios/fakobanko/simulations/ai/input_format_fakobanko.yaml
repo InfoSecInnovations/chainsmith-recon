@@ -2,7 +2,7 @@
 # Fakobanko scenario: Input format injection
 
 suite: ai
-emulates: input_format_injection
+emulates: ai_input_format_injection
 target: "chat.fakobanko.local"
 disposition: format_bypass
 

@@ -2,7 +2,7 @@
 # Fakobanko scenario: Undeclared capabilities
 
 suite: mcp
-emulates: undeclared_capabilities
+emulates: mcp_undeclared_capabilities
 target: "mcp.fakobanko.local"
 disposition: undeclared_found
 

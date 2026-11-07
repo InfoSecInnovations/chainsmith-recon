@@ -2,7 +2,7 @@
 # Fakobanko scenario: Basic auth detected
 
 suite: web
-emulates: auth_detection
+emulates: web_auth_detection
 target: "internal.fakobanko.local"
 disposition: auth_found
 

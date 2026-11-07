@@ -1,7 +1,7 @@
 # simulations/web/cors_fakobanko.yaml
 # Fakobanko scenario: API reflects arbitrary origin with credentials
 suite: web
-emulates: cors_check
+emulates: web_cors
 target: "api.fakobanko.local"
 disposition: cors_misconfiguration
 

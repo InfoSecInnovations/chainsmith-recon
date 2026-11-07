@@ -188,12 +188,17 @@ class CAGDiscoveryCheck(ServiceIteratingCheck):
                     result.candidates.append(candidate)
 
                     # Build the produced outputs off the same exchange.
+                    listed = False
                     if path in _PATH_TO_TYPE:
                         infra_info = self._infra_from(exchange, service)
                         if infra_info and infra_info["cache_type"] not in cache_infra:
                             cache_infra.add(infra_info["cache_type"])
                             cag_endpoints.append(infra_info)
-                    if path in CAG_PATHS:
+                            listed = True
+                    # Five paths are in both tables (`/cache`, `/v1/cache`, ...).
+                    # One URL is one endpoint for the downstream CAG checks, so
+                    # list it once; otherwise they probe it twice (lab backport 3d).
+                    if path in CAG_PATHS and not listed:
                         endpoint_info = self._analyze_cag_response(exchange, path, service)
                         if endpoint_info:
                             cag_endpoints.append(endpoint_info)

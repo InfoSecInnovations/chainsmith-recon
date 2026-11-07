@@ -2,7 +2,7 @@
 # Fakobanko scenario: HTTP/2 enabled
 
 suite: web
-emulates: http2_detection
+emulates: web_http2_detection
 target: "www.fakobanko.local"
 disposition: http2_enabled
 

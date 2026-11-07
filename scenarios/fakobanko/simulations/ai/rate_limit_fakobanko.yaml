@@ -2,7 +2,7 @@
 # Fakobanko scenario: No rate limiting on LLM endpoint
 
 suite: ai
-emulates: rate_limit_check
+emulates: ai_rate_limit_check
 target: "chat.fakobanko.local"
 disposition: no_rate_limit
 

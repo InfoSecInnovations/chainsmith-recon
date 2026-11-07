@@ -2,7 +2,7 @@
 # Fakobanko scenario: WHOIS lookup reveals registration info
 
 suite: network
-emulates: whois_lookup
+emulates: network_whois_lookup
 target: "fakobanko.local"
 disposition: registration_found
 

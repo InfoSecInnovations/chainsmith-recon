@@ -121,10 +121,31 @@ async def lifespan(app: FastAPI):
 
     reaper_task = _asyncio.create_task(_reaper())
 
+    # Evidence retention (phase 57, D-5): off unless an operator sets
+    # storage.evidence_retention_days. Runs once now, then daily, so a
+    # long-lived server keeps to the period too.
+    retention_task = None
+    if cfg.storage.evidence_retention_days > 0:
+        from app.capture.retention import prune_evidence
+
+        async def _evidence_retention():
+            while True:
+                try:
+                    await prune_evidence(cfg.storage.evidence_retention_days)
+                except _asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.warning("Evidence retention pass failed", exc_info=True)
+                await _asyncio.sleep(86400)
+
+        retention_task = _asyncio.create_task(_evidence_retention())
+
     try:
         yield
     finally:
         reaper_task.cancel()
+        if retention_task is not None:
+            retention_task.cancel()
         with suppress(_asyncio.CancelledError, Exception):
             await reaper_task
         await close_db()

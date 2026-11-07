@@ -1,7 +1,7 @@
 # simulations/network/service_probe_latency.yaml
 # Smoke test: Slow service probe (exercises latency handling)
 suite: network
-emulates: service_probe
+emulates: network_service_probe
 target: "slow.example.local"
 disposition: services_fingerprinted
 

@@ -1037,16 +1037,19 @@
             // Gather scan behavior settings
             const scanBehavior = gatherScanBehavior();
 
-            // Set scope with all options
-            await api.setScope(target, exclusions, techniques, {
+            // The scope goes with the scan request (B-1): there is no separate
+            // "set scope" call that another tab or client could interleave with.
+            const startBody = {
+                target,
+                exclude: exclusions,
+                techniques,
                 scan_window: scanWindow,
                 proof_of_scope: proofSettings,
-                outside_window_acknowledged: outsideWindow,
                 scan_behavior: scanBehavior,
-            });
+                acknowledge_outside_window: !!outsideWindow,
+            };
 
             // Layer-6 scan-time inputs: a named preset + per-check overrides (6b).
-            const startBody = {};
             const presetVal = document.getElementById('preset-select')?.value;
             if (presetVal) startBody.preset = presetVal;
             if (Object.keys(PENDING_OVERRIDES).length) startBody.check_overrides = PENDING_OVERRIDES;

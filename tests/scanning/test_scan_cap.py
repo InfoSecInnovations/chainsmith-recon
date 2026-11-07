@@ -39,7 +39,7 @@ async def test_a_scan_over_the_cap_gets_429_with_retry_after(at_cap, monkeypatch
     monkeypatch.setattr(get_config().concurrency, "retry_after_seconds", 45)
 
     with pytest.raises(HTTPException) as caught:
-        await scan_route.start_scan(ScanStartInput())
+        await scan_route.start_scan(ScanStartInput(target="example.com"))
 
     assert caught.value.status_code == 429
     assert caught.value.headers == {"Retry-After": "45"}
@@ -50,6 +50,6 @@ async def test_retry_after_is_never_below_one_second(at_cap, monkeypatch):
     monkeypatch.setattr(get_config().concurrency, "retry_after_seconds", 0)
 
     with pytest.raises(HTTPException) as caught:
-        await scan_route.start_scan(ScanStartInput())
+        await scan_route.start_scan(ScanStartInput(target="example.com"))
 
     assert caught.value.headers == {"Retry-After": "1"}

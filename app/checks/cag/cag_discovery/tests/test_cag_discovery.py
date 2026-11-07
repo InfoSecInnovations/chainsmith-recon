@@ -336,3 +336,29 @@ class TestCAGDiscoveryCheck:
         for ep in non_infra_endpoints:
             # Every cag_endpoint must have at least one indicator
             assert len(ep.get("indicators", [])) > 0
+
+
+@pytest.mark.asyncio
+async def test_a_path_in_both_tables_is_listed_once(sample_service):
+    """Lab backport 3d: `/cache` is a signature path and a CAG path, and used to
+    land in `cag_endpoints` twice, so downstream checks probed it twice."""
+    mock_client = AsyncMock()
+
+    async def mock_get(url, **kwargs):
+        if url == "http://cag.example.com:8080/cache":
+            return make_response(
+                headers={"x-gptcache-hit": "false", "x-cache": "MISS"},
+                body='{"backend": "gptcache", "cache_status": "ready", "ttl": 60}',
+            )
+        return make_response(status_code=404)
+
+    mock_client.get = _stamped(mock_get)
+    mock_client.post = _stamped(AsyncMock(return_value=make_response(status_code=404)))
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("app.checks.cag.cag_discovery.check.AsyncHttpClient", return_value=mock_client):
+        result = await CAGDiscoveryCheck().check_service(sample_service, {})
+
+    urls = [ep["url"] for ep in result.outputs["cag_endpoints"]]
+    assert len(urls) == len(set(urls)) == 1

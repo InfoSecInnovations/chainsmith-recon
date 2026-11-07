@@ -2,8 +2,8 @@
 # Fakobanko scenario: Multi-layer cache analysis
 
 suite: cag
-emulates: cag_multi_layer
-target: "cache.fakobanko.local"
+emulates: cag_multi_layer_cache
+target: "ml.fakobanko.local"
 disposition: layers_found
 
 behavior:
@@ -16,7 +16,7 @@ output:
     - {layer: "L3", type: "disk", ttl: 86400}
 
 findings:
-  - title: "3-layer cache hierarchy on cache.fakobanko.local"
+  - title: "3-layer cache hierarchy on ml.fakobanko.local"
     description: "Cache has 3 layers: L1 in-memory (60s), L2 Redis (1h), L3 disk (24h). Poisoning L3 persists for 24 hours."
     severity: "low"
     evidence: |

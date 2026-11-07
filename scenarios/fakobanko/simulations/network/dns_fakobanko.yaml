@@ -4,7 +4,7 @@
 # DNS only outputs hostnames and IP mappings — no Services or ports
 
 suite: network
-emulates: dns_enumeration
+emulates: network_dns_enumeration
 target: "fakobanko.local"
 disposition: hosts_found
 

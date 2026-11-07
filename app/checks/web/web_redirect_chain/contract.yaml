@@ -15,6 +15,7 @@ service_types:
 - http
 - html
 - api
+- ai
 parallel_safe: false
 outputs:
   observations:

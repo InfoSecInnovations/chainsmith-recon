@@ -2,7 +2,7 @@
 # Fakobanko scenario: Model information disclosed
 
 suite: ai
-emulates: model_info_check
+emulates: ai_model_info_check
 target: "chat.fakobanko.local"
 disposition: model_info_found
 

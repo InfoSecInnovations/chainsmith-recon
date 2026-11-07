@@ -1,5 +1,5 @@
 suite: ai
-emulates: model_info_check
+emulates: ai_model_info_check
 target: "api.example.local"
 disposition: info_exposed
 

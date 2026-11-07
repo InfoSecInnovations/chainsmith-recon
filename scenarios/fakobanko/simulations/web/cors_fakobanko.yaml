@@ -2,7 +2,7 @@
 # Fakobanko scenario: CORS reflects arbitrary origin
 
 suite: web
-emulates: cors_check
+emulates: web_cors
 target: "api.fakobanko.local"
 disposition: cors_misconfigured
 

@@ -1,6 +1,6 @@
 # Service probe identifies FastAPI services
 suite: network
-emulates: service_probe
+emulates: network_service_probe
 target: "localhost"
 disposition: services_identified
 

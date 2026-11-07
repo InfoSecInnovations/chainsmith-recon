@@ -4,12 +4,12 @@
 
 suite: cag
 emulates: cag_discovery
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: semantic_cache_found
 
 output:
   cag_endpoints:
-    - url: "http://cache.fakobanko.local:8080/cache"
+    - url: "http://ml.fakobanko.local:8080/cache"
       path: "/cache"
       cache_type: "semantic_cache"
       status_code: 200
@@ -19,14 +19,14 @@ output:
         - "header:x-semantic-cache"
         - "body:cache_status"
       service:
-        url: "http://cache.fakobanko.local:8080"
-        host: "cache.fakobanko.local"
+        url: "http://ml.fakobanko.local:8080"
+        host: "ml.fakobanko.local"
         port: 8080
         scheme: "http"
         service_type: "ai"
       endpoint_type: "cache_infrastructure"
 
-    - url: "http://cache.fakobanko.local:8080/cache/stats"
+    - url: "http://ml.fakobanko.local:8080/cache/stats"
       path: "/cache/stats"
       cache_type: "semantic_cache"
       status_code: 200
@@ -36,14 +36,14 @@ output:
         - "body:total_queries"
         - "body:cached_responses"
       service:
-        url: "http://cache.fakobanko.local:8080"
-        host: "cache.fakobanko.local"
+        url: "http://ml.fakobanko.local:8080"
+        host: "ml.fakobanko.local"
         port: 8080
         scheme: "http"
         service_type: "ai"
       endpoint_type: "cache_status"
 
-    - url: "http://cache.fakobanko.local:8080/cache/clear"
+    - url: "http://ml.fakobanko.local:8080/cache/clear"
       path: "/cache/clear"
       cache_type: "semantic_cache"
       status_code: 200
@@ -51,8 +51,8 @@ output:
       indicators:
         - "body:cleared"
       service:
-        url: "http://cache.fakobanko.local:8080"
-        host: "cache.fakobanko.local"
+        url: "http://ml.fakobanko.local:8080"
+        host: "ml.fakobanko.local"
         port: 8080
         scheme: "http"
         service_type: "ai"
@@ -88,7 +88,7 @@ observations:
       Auth: not required
       Headers: x-cache, x-semantic-cache
     check_name: "cag_discovery"
-    target_url: "http://cache.fakobanko.local:8080/cache"
+    target_url: "http://ml.fakobanko.local:8080/cache"
 
   - title: "Cache statistics endpoint exposed"
     description: "Cache statistics endpoint /cache/stats exposes hit rates, query counts, and cached response metrics."
@@ -97,7 +97,7 @@ observations:
       Path: /cache/stats
       Exposed: hit_rate, total_queries, cached_responses
     check_name: "cag_discovery"
-    target_url: "http://cache.fakobanko.local:8080/cache/stats"
+    target_url: "http://ml.fakobanko.local:8080/cache/stats"
 
   - title: "Cache clear endpoint accessible"
     description: "Cache clear endpoint /cache/clear accessible without authentication. Could be used for cache denial-of-service."
@@ -107,7 +107,7 @@ observations:
       Auth: not required
       Risk: Cache invalidation attacks
     check_name: "cag_discovery"
-    target_url: "http://cache.fakobanko.local:8080/cache/clear"
+    target_url: "http://ml.fakobanko.local:8080/cache/clear"
 
   - title: "Prompt caching on LLM endpoint"
     description: "Chat endpoint shows prompt caching headers. May enable timing attacks or cross-session leakage."

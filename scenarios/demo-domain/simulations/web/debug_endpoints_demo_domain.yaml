@@ -1,6 +1,6 @@
 # Debug endpoints — /_debug on api
 suite: web
-emulates: debug_endpoints
+emulates: web_debug_endpoints
 target: "localhost"
 disposition: debug_found
 

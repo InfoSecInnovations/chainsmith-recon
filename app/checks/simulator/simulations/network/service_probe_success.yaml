@@ -1,7 +1,7 @@
 # simulations/network/service_probe_success.yaml
 # Smoke test: Service probe finds web + API + AI services
 suite: network
-emulates: service_probe
+emulates: network_service_probe
 target: "api.example.local"
 disposition: services_fingerprinted
 

@@ -2,7 +2,7 @@
 # Fakobanko scenario: Transport security check
 
 suite: mcp
-emulates: transport_security
+emulates: mcp_transport_security
 target: "mcp.fakobanko.local"
 disposition: transport_weak
 

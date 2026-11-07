@@ -1,6 +1,6 @@
 # Auth detection — basic auth on API
 suite: web
-emulates: auth_detection
+emulates: web_auth_detection
 target: "localhost"
 disposition: basic_auth
 

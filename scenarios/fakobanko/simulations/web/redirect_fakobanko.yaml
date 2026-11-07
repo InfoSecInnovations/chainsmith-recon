@@ -2,7 +2,7 @@
 # Fakobanko scenario: Open redirect vulnerability
 
 suite: web
-emulates: redirect_chain
+emulates: web_redirect_chain
 target: "www.fakobanko.local"
 disposition: open_redirect
 

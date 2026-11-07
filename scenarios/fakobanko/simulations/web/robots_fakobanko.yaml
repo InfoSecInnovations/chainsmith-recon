@@ -2,7 +2,7 @@
 # Fakobanko scenario: robots.txt discloses sensitive paths
 
 suite: web
-emulates: robots_txt
+emulates: web_robots_txt
 target: "www.fakobanko.local"
 disposition: sensitive_paths
 

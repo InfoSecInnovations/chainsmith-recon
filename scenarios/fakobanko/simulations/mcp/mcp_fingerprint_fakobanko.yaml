@@ -2,7 +2,7 @@
 # Fakobanko scenario: MCP server fingerprint
 
 suite: mcp
-emulates: server_fingerprint
+emulates: mcp_server_fingerprint
 target: "mcp.fakobanko.local"
 disposition: fingerprinted
 

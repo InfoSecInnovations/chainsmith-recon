@@ -2,7 +2,7 @@
 # Fakobanko scenario: Token cost exhaustion possible
 
 suite: ai
-emulates: token_cost_exhaustion
+emulates: ai_token_cost_exhaustion
 target: "chat.fakobanko.local"
 disposition: cost_vulnerable
 

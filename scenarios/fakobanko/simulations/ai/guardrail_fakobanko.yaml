@@ -2,7 +2,7 @@
 # Fakobanko scenario: Guardrail consistency check
 
 suite: ai
-emulates: guardrail_consistency
+emulates: ai_guardrail_consistency
 target: "chat.fakobanko.local"
 disposition: inconsistent_guardrails
 

@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_distributed_cache
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: distributed_found
 
 behavior:

@@ -1,5 +1,5 @@
 suite: ai
-emulates: prompt_leakage
+emulates: ai_prompt_leakage
 target: "chat.example.local"
 disposition: leak_found
 

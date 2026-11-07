@@ -41,7 +41,7 @@
       "description": "Agent endpoints vulnerable to goal override",
       "severity": "high",
       "required_services": ["agent"],
-      "required_findings": ["mcp_endpoint_exposed", "agent_goal_injection"]
+      "required_findings": ["mcp_tools_exposed", "agent_goal_injection"]
     },
     {
       "id": "agent_guardrail_bypass",
@@ -49,7 +49,7 @@
       "description": "Memory extraction and privilege escalation bypass agent controls",
       "severity": "high",
       "required_services": ["agent"],
-      "required_findings": ["agent_memory_extraction", "agent_privilege_escalation"]
+      "required_findings": ["cross_session_memory", "agent_privilege_escalation"]
     },
     {
       "id": "credential_compromise",
@@ -69,26 +69,9 @@
     }
   ],
 
-  "random_findings_pool": [
-    "unauthed_docs",
-    "cookie_security_missing",
-    "config_exposure",
-    "directory_listing",
-    "http_method_extra",
-    "tls_weak",
-    "multiturn_injectable",
-    "jailbreak_susceptible",
-    "guardrail_inconsistent",
-    "history_leak_detected",
-    "rag_source_attribution",
-    "rag_corpus_poisoning",
-    "cache_stale_context"
-  ],
 
   "selection_rules": {
     "min_chains": 2,
-    "max_chains": 4,
-    "extra_findings_min": 2,
-    "extra_findings_max": 5
+    "max_chains": 4
   }
 }

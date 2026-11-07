@@ -2,7 +2,7 @@
 # Fakobanko scenario: Missing security headers
 
 suite: web
-emulates: header_analysis
+emulates: web_header_analysis
 target: "api.fakobanko.local"
 disposition: missing_headers
 

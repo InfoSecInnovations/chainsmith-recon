@@ -1,6 +1,6 @@
 # Config exposure — .env accessible on www
 suite: web
-emulates: config_exposure
+emulates: web_config_exposure
 target: "localhost"
 disposition: config_exposed
 

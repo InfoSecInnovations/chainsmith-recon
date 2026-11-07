@@ -2,7 +2,7 @@
 # Fakobanko scenario: Streaming analysis
 
 suite: ai
-emulates: streaming_analysis
+emulates: ai_streaming_analysis
 target: "chat.fakobanko.local"
 disposition: streaming_enabled
 

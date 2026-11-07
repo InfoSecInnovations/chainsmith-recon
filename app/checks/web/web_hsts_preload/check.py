@@ -57,7 +57,7 @@ class HSTSPreloadCheck(ServiceIteratingCheck):
 
     conditions = [CheckCondition("services", "truthy")]
     produces = ["hsts_preload_info"]
-    service_types = ["http", "html", "api"]
+    service_types = ["http", "html", "api", "ai"]
 
     reason = "Domains not on the HSTS preload list are vulnerable to SSL stripping on first visit"
     references = ["RFC 6797", "hstspreload.org"]

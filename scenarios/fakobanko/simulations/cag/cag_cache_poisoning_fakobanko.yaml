@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_cache_poisoning
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: cache_poisoned
 
 behavior:
@@ -15,7 +15,7 @@ output:
   subsequent_users_affected: true
 
 findings:
-  - title: "Cache poisoning on cache.fakobanko.local"
+  - title: "Cache poisoning on ml.fakobanko.local"
     description: "Injected malicious response for 'transfer limits' query persists in cache and is served to all subsequent users."
     severity: "critical"
     evidence: |

@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_provider_caching
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: provider_cache_found
 
 behavior:

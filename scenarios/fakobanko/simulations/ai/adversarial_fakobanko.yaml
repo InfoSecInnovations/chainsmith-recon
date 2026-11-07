@@ -2,7 +2,7 @@
 # Fakobanko scenario: Adversarial input testing
 
 suite: ai
-emulates: adversarial_input
+emulates: ai_adversarial_input
 target: "chat.fakobanko.local"
 disposition: adversarial_success
 

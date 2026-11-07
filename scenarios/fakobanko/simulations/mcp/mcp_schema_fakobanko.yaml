@@ -2,7 +2,7 @@
 # Fakobanko scenario: Schema leakage
 
 suite: mcp
-emulates: schema_leakage
+emulates: mcp_schema_leakage
 target: "mcp.fakobanko.local"
 disposition: schema_leaked
 

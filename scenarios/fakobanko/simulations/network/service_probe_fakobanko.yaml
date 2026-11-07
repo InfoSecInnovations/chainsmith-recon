@@ -2,7 +2,7 @@
 # Fakobanko scenario: Service probing reveals FastAPI/uvicorn
 
 suite: network
-emulates: service_probe
+emulates: network_service_probe
 target: "fakobanko.local"
 disposition: services_identified
 

@@ -2,7 +2,7 @@
 # Fakobanko scenario: WebDAV methods available
 
 suite: web
-emulates: webdav
+emulates: web_webdav
 target: "docs.fakobanko.local"
 disposition: webdav_found
 

@@ -1,5 +1,5 @@
 suite: ai
-emulates: tool_discovery
+emulates: ai_tool_discovery
 target: "chat.example.local"
 disposition: tools_found
 

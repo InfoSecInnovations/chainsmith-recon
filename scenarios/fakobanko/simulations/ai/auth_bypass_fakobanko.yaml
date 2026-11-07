@@ -2,7 +2,7 @@
 # Fakobanko scenario: Auth bypass on AI endpoint
 
 suite: ai
-emulates: auth_bypass
+emulates: ai_auth_bypass
 target: "chat.fakobanko.local"
 disposition: auth_bypassed
 

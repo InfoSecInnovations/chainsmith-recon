@@ -2,7 +2,7 @@
 # Fakobanko scenario: TLS analysis reveals weak configuration
 
 suite: network
-emulates: tls_analysis
+emulates: network_tls_analysis
 target: "www.fakobanko.local"
 disposition: weak_tls
 

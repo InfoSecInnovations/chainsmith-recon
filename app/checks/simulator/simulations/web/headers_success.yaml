@@ -1,7 +1,7 @@
 # simulations/web/headers_success.yaml
 # Smoke test: all security headers present, no issues
 suite: web
-emulates: header_analysis
+emulates: web_header_analysis
 target: "www.example.local"
 disposition: headers_analyzed
 

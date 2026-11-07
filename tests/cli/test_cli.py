@@ -407,8 +407,12 @@ class TestScanCommand:
             result = runner.invoke(cli, ["scan", "example.com", "--quiet"])
             assert result.exit_code == 0
 
-        client.set_scope.assert_called_once()
+        # Scope travels with the scan request (B-1): no separate scope call.
+        client.set_scope.assert_not_called()
         client.start_scan.assert_called_once()
+        args, kwargs = client.start_scan.call_args
+        assert args[0] == "example.com"
+        assert kwargs["exclude"] == []
 
     def test_scan_with_suite(self, runner):
         """scan --suite passes suite filter to start_scan."""
@@ -418,7 +422,7 @@ class TestScanCommand:
             result = runner.invoke(cli, ["scan", "example.com", "--suite", "network", "--quiet"])
             assert result.exit_code == 0
 
-        # Suite passed to start_scan, not set_scope
+        # Suite passed to start_scan
         call_kwargs = client.start_scan.call_args
         assert call_kwargs[1].get("suites") == ["network"] or (
             call_kwargs[0] and "network" in (call_kwargs[1].get("suites") or [])

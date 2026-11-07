@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_cache_warming
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: cache_warmed
 
 behavior:
@@ -15,7 +15,7 @@ output:
   legitimate_entries_evicted: 120
 
 findings:
-  - title: "Cache warming attack on cache.fakobanko.local"
+  - title: "Cache warming attack on ml.fakobanko.local"
     description: "200 attacker queries filled 85% of cache, evicting 120 legitimate entries. Attacker controls majority of cached responses."
     severity: "high"
     evidence: |

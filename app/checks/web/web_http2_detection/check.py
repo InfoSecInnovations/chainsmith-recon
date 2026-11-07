@@ -54,7 +54,7 @@ class HTTP2DetectionCheck(ServiceIteratingCheck):
 
     conditions = [CheckCondition("services", "truthy")]
     produces = ["http_protocols"]
-    service_types = ["http", "html", "api"]
+    service_types = ["http", "html", "api", "ai"]
 
     reason = (
         "Protocol detection profiles infrastructure maturity and identifies QUIC/HTTP3 endpoints"

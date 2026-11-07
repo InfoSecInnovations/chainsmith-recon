@@ -664,6 +664,27 @@ function renderFrameworkBadges(frameworks, maxVisible = 5) {
         </div>`;
 }
 
+// ─── References ────────────────────────────────────────────────
+// Lab backport 4d: an http(s) reference renders as a link; anything else (e.g.
+// "OWASP API8:2023", "CWE-915") as escaped text. Always escaped, since
+// references come from check contracts and custom checks.
+function escapeRefText(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderReference(ref) {
+    const text = escapeRefText(ref);
+    if (/^https?:\/\/[^\s]+$/i.test(String(ref).trim())) {
+        return `<a href="${escapeRefText(String(ref).trim())}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    }
+    return text;
+}
+
 // ─── Check Modal Content ───────────────────────────────────────
 function getCheckModalContent(check) {
     const simulatedBadge = check.simulated
@@ -688,7 +709,7 @@ function getCheckModalContent(check) {
         <div class="modal-section">
             <div class="modal-section-title">References</div>
             <ul class="modal-list">
-                ${check.references.map(ref => `<li>${ref}</li>`).join('')}
+                ${check.references.map(ref => `<li>${renderReference(ref)}</li>`).join('')}
             </ul>
         </div>` : ''}
         ${renderFrameworkBadges(check.frameworks)}

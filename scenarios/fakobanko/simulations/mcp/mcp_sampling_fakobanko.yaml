@@ -2,7 +2,7 @@
 # Fakobanko scenario: Sampling abuse
 
 suite: mcp
-emulates: sampling_abuse
+emulates: mcp_sampling_abuse
 target: "mcp.fakobanko.local"
 disposition: sampling_abused
 

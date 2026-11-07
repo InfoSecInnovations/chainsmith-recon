@@ -1,7 +1,7 @@
 # simulations/network/service_probe_fakobanko.yaml
 # Fakobanko scenario: All services probed and fingerprinted
 suite: network
-emulates: service_probe
+emulates: network_service_probe
 target: "*.fakobanko.local"
 disposition: services_fingerprinted
 
@@ -60,7 +60,7 @@ output:
       status_code: 200
       response_time_ms: 52
 
-    - host: rag.fakobanko.local
+    - host: vector.fakobanko.local
       port: 8080
       scheme: http
       service_type: ai
@@ -69,7 +69,7 @@ output:
       status_code: 200
       response_time_ms: 48
 
-    - host: cache.fakobanko.local
+    - host: ml.fakobanko.local
       port: 8080
       scheme: http
       service_type: ai

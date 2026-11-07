@@ -38,11 +38,13 @@ def run_scenario_scan(
     suites: list[str] | None = None,
     parallel: bool = False,
 ) -> list[dict]:
-    """Set scope, load the scenario, run a scan to completion, return observations."""
-    client.set_scope(target, [])
+    """Load the scenario, run a scan to completion, return observations.
+
+    The scope goes with the scan request (B-1); there is no separate scope step.
+    """
     client.update_settings(parallel=parallel)
     client.load_scenario(scenario)
-    client.start_scan(suites=suites)
+    client.start_scan(target, exclude=[], suites=suites)
     result = client.poll_scan(interval=1.0)
     if result.get("status") == "error":
         raise RuntimeError(f"Scan errored: {result.get('error', 'unknown')}")

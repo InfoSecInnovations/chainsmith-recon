@@ -1,6 +1,6 @@
 # Rate limit check — no rate limit on chat
 suite: ai
-emulates: rate_limit_check
+emulates: ai_rate_limit_check
 target: "localhost"
 disposition: no_rate_limit
 

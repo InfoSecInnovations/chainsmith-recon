@@ -39,12 +39,58 @@ async def reset():
     return {"status": "ok", "session_id": state.session_id}
 
 
+def apply_scan_behavior(scan_behavior) -> dict:
+    """Persist on_critical / intrusive_web onto the active profile, as the
+    scope form always has. Shared by POST /api/v1/scope and POST /api/v1/scan.
+    Returns the resulting settings."""
+    scan_behavior_response = {"on_critical": "annotate", "intrusive_web": False}
+    if scan_behavior:
+        try:
+            store = get_profile_store()
+            active = store.get_active_profile()
+            prefs = active.resolve()
+
+            # Apply on_critical settings
+            if scan_behavior.on_critical:
+                oc = scan_behavior.on_critical
+                if oc.default in VALID_ON_CRITICAL_VALUES:
+                    prefs.checks.on_critical = oc.default
+                prefs.checks.on_critical_overrides = {
+                    suite: val
+                    for suite, val in oc.overrides.items()
+                    if val in VALID_ON_CRITICAL_VALUES and suite in SUITES_WITH_ON_CRITICAL
+                }
+
+            # Apply intrusive_web
+            prefs.checks.intrusive_web = scan_behavior.intrusive_web
+
+            # Persist to active profile overrides
+            from app.preferences import Preferences, _calculate_overrides
+
+            active.overrides = _calculate_overrides(Preferences(), prefs)
+            save_profile_store(store)
+
+            scan_behavior_response = {
+                "on_critical": prefs.checks.on_critical,
+                "on_critical_overrides": prefs.checks.on_critical_overrides,
+                "intrusive_web": prefs.checks.intrusive_web,
+            }
+        except Exception as e:
+            logger.warning(f"Failed to apply scan_behavior settings: {e}")
+    return scan_behavior_response
+
+
 # ─── Scope ────────────────────────────────────────────────────
 
 
 @router.post("/api/v1/scope")
 async def set_scope(scope: ExtendedScopeInput):
-    """Set the scan scope with optional scan window and proof settings."""
+    """Set the operator's scope *prep*: planning input for the scan planner
+    advisor and chat, and the default the web form shows.
+
+    It no longer affects any scan. A scan takes its scope from the
+    `POST /api/v1/scan` body, where `target` is required (B-1).
+    """
     state.target = scope.target
     state.exclude = scope.exclude
     state.techniques = (
@@ -63,10 +109,8 @@ async def set_scope(scope: ExtendedScopeInput):
     # Handle proof of scope settings
     if scope.proof_of_scope:
         state.proof_settings.traffic_logging = scope.proof_of_scope.traffic_logging
-        if hasattr(scope.proof_of_scope, "block_exclusions"):
-            state.proof_settings.block_exclusions = scope.proof_of_scope.block_exclusions
-        if hasattr(scope.proof_of_scope, "log_violations"):
-            state.proof_settings.log_violations = scope.proof_of_scope.log_violations
+        state.proof_settings.block_exclusions = scope.proof_of_scope.block_exclusions
+        state.proof_settings.log_violations = scope.proof_of_scope.log_violations
 
     # Handle outside window acknowledgment
     if hasattr(scope, "outside_window_acknowledged") and scope.outside_window_acknowledged:
@@ -82,40 +126,7 @@ async def set_scope(scope: ExtendedScopeInput):
             )
 
     # Handle scan behavior settings (on_critical + intrusive)
-    scan_behavior_response = {"on_critical": "annotate", "intrusive_web": False}
-    if scope.scan_behavior:
-        try:
-            store = get_profile_store()
-            active = store.get_active_profile()
-            prefs = active.resolve()
-
-            # Apply on_critical settings
-            if scope.scan_behavior.on_critical:
-                oc = scope.scan_behavior.on_critical
-                if oc.default in VALID_ON_CRITICAL_VALUES:
-                    prefs.checks.on_critical = oc.default
-                prefs.checks.on_critical_overrides = {
-                    suite: val
-                    for suite, val in oc.overrides.items()
-                    if val in VALID_ON_CRITICAL_VALUES and suite in SUITES_WITH_ON_CRITICAL
-                }
-
-            # Apply intrusive_web
-            prefs.checks.intrusive_web = scope.scan_behavior.intrusive_web
-
-            # Persist to active profile overrides
-            from app.preferences import Preferences, _calculate_overrides
-
-            active.overrides = _calculate_overrides(Preferences(), prefs)
-            save_profile_store(store)
-
-            scan_behavior_response = {
-                "on_critical": prefs.checks.on_critical,
-                "on_critical_overrides": prefs.checks.on_critical_overrides,
-                "intrusive_web": prefs.checks.intrusive_web,
-            }
-        except Exception as e:
-            logger.warning(f"Failed to apply scan_behavior settings: {e}")
+    scan_behavior_response = apply_scan_behavior(scope.scan_behavior)
 
     logger.info(
         f"Scope set: target={scope.target}, exclude={scope.exclude}, "

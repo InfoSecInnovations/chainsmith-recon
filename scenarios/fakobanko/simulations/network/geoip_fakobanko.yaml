@@ -2,7 +2,7 @@
 # Fakobanko scenario: GeoIP lookup for target hosts
 
 suite: network
-emulates: geoip
+emulates: network_geoip
 target: "fakobanko.local"
 disposition: location_found
 

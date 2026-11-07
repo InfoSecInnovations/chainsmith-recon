@@ -2,7 +2,7 @@
 # Fakobanko scenario: SSRF indicators on agent host
 
 suite: web
-emulates: ssrf_indicator
+emulates: web_ssrf_indicator
 target: "agent.fakobanko.local"
 disposition: ssrf_potential
 

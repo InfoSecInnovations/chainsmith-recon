@@ -2,7 +2,7 @@
 # Smoke test: DNS enumeration finds common hosts
 # DNS only outputs hostnames and IP mappings — no Services or ports
 suite: network
-emulates: dns_enumeration
+emulates: network_dns_enumeration
 target: "example.local"
 disposition: hosts_found
 

@@ -1,6 +1,6 @@
 # Jailbreak testing — susceptible to jailbreak
 suite: ai
-emulates: jailbreak_testing
+emulates: ai_jailbreak_testing
 target: "localhost"
 disposition: jailbreak_susceptible
 

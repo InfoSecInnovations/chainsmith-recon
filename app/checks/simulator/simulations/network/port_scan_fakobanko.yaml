@@ -3,7 +3,7 @@
 # Converts target_hosts to services with open ports
 
 suite: network
-emulates: port_scan
+emulates: network_port_scan
 target: "fakobanko.local"
 disposition: services_found
 
@@ -42,13 +42,13 @@ output:
       port: 8088
       scheme: "http"
       service_type: "ai"
-    - url: "http://rag.fakobanko.local:8087"
-      host: "rag.fakobanko.local"
+    - url: "http://vector.fakobanko.local:8087"
+      host: "vector.fakobanko.local"
       port: 8087
       scheme: "http"
       service_type: "ai"
-    - url: "http://cache.fakobanko.local:8084"
-      host: "cache.fakobanko.local"
+    - url: "http://ml.fakobanko.local:8084"
+      host: "ml.fakobanko.local"
       port: 8084
       scheme: "http"
       service_type: "ai"
@@ -65,6 +65,6 @@ observations:
         - docs.fakobanko.local:8083 (HTTP)
         - mcp.fakobanko.local:8089 (MCP)
         - agent.fakobanko.local:8088 (Agent)
-        - rag.fakobanko.local:8087 (RAG)
-        - cache.fakobanko.local:8084 (Cache)
+        - vector.fakobanko.local:8087 (RAG)
+        - ml.fakobanko.local:8084 (Cache)
     check_name: "port_scan"

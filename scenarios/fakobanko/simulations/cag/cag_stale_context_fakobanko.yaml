@@ -3,7 +3,7 @@
 
 suite: cag
 emulates: cag_stale_context
-target: "cache.fakobanko.local"
+target: "ml.fakobanko.local"
 disposition: stale_context
 
 behavior:
@@ -15,7 +15,7 @@ output:
   outdated_data_served: true
 
 findings:
-  - title: "Stale cached responses on cache.fakobanko.local"
+  - title: "Stale cached responses on ml.fakobanko.local"
     description: "15 cached entries contain outdated information up to 24 hours old. Users receive stale account data and policy information."
     severity: "medium"
     evidence: |

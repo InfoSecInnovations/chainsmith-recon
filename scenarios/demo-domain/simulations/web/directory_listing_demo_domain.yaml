@@ -1,6 +1,6 @@
 # Directory listing on docs portal
 suite: web
-emulates: directory_listing
+emulates: web_directory_listing
 target: "localhost"
 disposition: listing_enabled
 

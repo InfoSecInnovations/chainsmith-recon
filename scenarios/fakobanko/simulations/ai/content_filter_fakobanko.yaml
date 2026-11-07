@@ -2,7 +2,7 @@
 # Fakobanko scenario: Content filter analysis
 
 suite: ai
-emulates: content_filter_check
+emulates: ai_content_filter_check
 target: "chat.fakobanko.local"
 disposition: filter_weak
 

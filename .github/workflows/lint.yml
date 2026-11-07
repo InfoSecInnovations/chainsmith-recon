@@ -23,7 +23,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install ruff
-        run: pip install ruff
+        # Pinned: an unpinned ruff can fail the format check with no code change.
+        # Keep in step with requirements-dev.txt.
+        run: pip install "ruff==0.15.9"
 
       - name: Run ruff check
         run: ruff check app/ tests/ --output-format=github
