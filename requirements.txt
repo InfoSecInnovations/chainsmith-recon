@@ -6,7 +6,7 @@ python-multipart==0.0.9
 pyyaml==6.0.1
 aiofiles==23.2.1
 click>=8.1.0
-sqlalchemy>=2.0
+sqlalchemy[asyncio]>=2.0  # [asyncio] pulls greenlet; SQLAlchemy 2.1 no longer installs it by default
 alembic>=1.13.0
 aiosqlite>=0.20.0
 dnspython>=2.6.0

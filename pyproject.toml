@@ -44,7 +44,7 @@ dependencies = [
     "pyyaml>=6.0.1",
     "aiofiles>=23.2.1",
     "click>=8.1.0",
-    "sqlalchemy>=2.0",
+    "sqlalchemy[asyncio]>=2.0",  # [asyncio] pulls greenlet (not a default dep since 2.1)
     "alembic>=1.13.0",
     "aiosqlite>=0.20.0",
 ]
